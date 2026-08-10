@@ -2,10 +2,13 @@
 
 #include "gameview.h"
 #include "sound.h"
+#include "draughts/draughtsview.h"
+#include "freecell/freecellview.h"
 #include "hearts/heartsview.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
 #include "pinball/pinballview.h"
+#include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
 #include "spider/spiderview.h"
 
@@ -124,6 +127,21 @@ void reversiTile(QPainter& p, const QRectF& r)
         }
 }
 
+void draughtsTile(QPainter& p, const QRectF& r)
+{
+    // A corner of a chequerboard with two counters on it.
+    const double cell = r.width() / 4.0;
+    for (int row = 0; row < 4; ++row)
+        for (int col = 0; col < 4; ++col)
+            p.fillRect(QRectF(r.left() + col * cell, r.top() + row * cell, cell, cell),
+                       ((row + col) % 2) ? QColor(0x6b, 0x46, 0x2c) : QColor(0xd9, 0xbe, 0x96));
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(0xb5, 0x3a, 0x30));
+    p.drawEllipse(QPointF(r.left() + cell * 1.5, r.top() + cell * 2.5), cell * 0.34, cell * 0.34);
+    p.setBrush(QColor(0xef, 0xe9, 0xdd));
+    p.drawEllipse(QPointF(r.left() + cell * 2.5, r.top() + cell * 1.5), cell * 0.34, cell * 0.34);
+}
+
 void minesweeperTile(QPainter& p, const QRectF& r)
 {
     QPainterPath path;
@@ -192,6 +210,32 @@ void klondikeTile(QPainter& p, const QRectF& r)
                     { QStringLiteral("♦"), true } }, 16);
 }
 
+void freecellTile(QPainter& p, const QRectF& r)
+{
+    cardFan(p, r, { { QStringLiteral("A"), false }, { QStringLiteral("2"), true },
+                    { QStringLiteral("3"), false } }, 14);
+}
+
+void pyramidTile(QPainter& p, const QRectF& r)
+{
+    drawFelt(p, r, QColor(0x1c, 0x6b, 0x7e), QColor(0x0d, 0x40, 0x4e));
+    // A little stack of three rows, which is the game at a glance.
+    const double w = r.width() * 0.24;
+    const double h = w * 1.4;
+    for (int row = 0; row < 3; ++row) {
+        for (int i = 0; i <= row; ++i) {
+            const double rowWidth = w * 0.56 * row + w;
+            const QRectF card(r.center().x() - rowWidth / 2 + i * w * 0.56,
+                              r.top() + r.height() * 0.16 + row * h * 0.46, w, h);
+            QPainterPath path;
+            path.addRoundedRect(card, 2, 2);
+            p.fillPath(path, QColor(0xfa, 0xfa, 0xf7));
+            p.setPen(QPen(QColor(0, 0, 0, 60), 1));
+            p.drawPath(path);
+        }
+    }
+}
+
 void spiderTile(QPainter& p, const QRectF& r)
 {
     cardFan(p, r, { { QStringLiteral("K"), false }, { QStringLiteral("Q"), false },
@@ -252,12 +296,18 @@ void HubWindow::buildEntries()
     m_entries = {
         { QStringLiteral("Reversi"), QStringLiteral("Flip the board"), reversiTile,
           [] { return new ReversiView; } },
+        { QStringLiteral("Draughts"), QStringLiteral("Checkers, with kings"), draughtsTile,
+          [] { return new DraughtsView; } },
         { QStringLiteral("Minesweeper"), QStringLiteral("Clear the field"), minesweeperTile,
           [] { return new MinesweeperView; } },
         { QStringLiteral("Solitaire"), QStringLiteral("Klondike"), klondikeTile,
           [] { return new KlondikeView; } },
         { QStringLiteral("Spider"), QStringLiteral("Solitaire, harder"), spiderTile,
           [] { return new SpiderView; } },
+        { QStringLiteral("FreeCell"), QStringLiteral("Solitaire, solvable"), freecellTile,
+          [] { return new FreeCellView; } },
+        { QStringLiteral("Pyramid"), QStringLiteral("Pairs make 13"), pyramidTile,
+          [] { return new PyramidView; } },
         { QStringLiteral("Hearts"), QStringLiteral("Avoid the tricks"), heartsTile,
           [] { return new HeartsView; } },
         { QStringLiteral("Pinball"), QStringLiteral("Keep it alive"), pinballTile,

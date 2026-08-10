@@ -210,7 +210,10 @@ int main(int argc, char* argv[])
     check(status != nullptr, "the hub has a status line");
 
     const QList<QPushButton*> tiles = hub.findChildren<QPushButton*>();
-    check(tiles.size() == 6, "the hub shows six game tiles");
+    // One tile per registered game, whatever the count has grown to.
+    const int expected = hub.gameNames().size();
+    std::printf("      hub registers %d games\n", expected);
+    check(tiles.size() == expected, "the hub shows a tile for every game");
 
     int opened = 0;
     for (QPushButton* tile : tiles) {
@@ -223,7 +226,7 @@ int main(int argc, char* argv[])
         Q_UNUSED(view);
         ++opened;
     }
-    check(opened == 6, "every tile opens without crashing");
+    check(opened == expected, "every tile opens without crashing");
 
     // Pinball runs a physics timer; let it spin so a bad step would surface.
     for (QPushButton* tile : tiles)

@@ -3,6 +3,7 @@
 
 #include "cards/card.h"
 #include "hearts/heartsengine.h"
+#include "draughts/draughtsboard.h"
 #include "minesweeper/minefield.h"
 #include "pinball/pinballtable.h"
 #include "reversi/ai.h"
@@ -10,6 +11,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <algorithm>
 #include <map>
 #include <random>
 
@@ -328,6 +330,127 @@ void heartsMoonShot()
 }
 
 // ---------------------------------------------------------------------------
+// Draughts
+// ---------------------------------------------------------------------------
+
+void draughtsRules()
+{
+    const DraughtsBoard b;
+    check(b.count(Side::Red) == 12 && b.count(Side::White) == 12,
+          "draughts: both sides start with twelve pieces");
+
+    const std::vector<DraughtsMove> opening = b.legalMoves(Side::Red);
+    check(opening.size() == 7, "draughts: red has seven opening moves");
+    bool allForward = true;
+    for (const DraughtsMove& m : opening)
+        if (m.destination().row >= m.from.row)
+            allForward = false;
+    check(allForward, "draughts: men only move forwards");
+
+    // Every move must land on a dark square.
+    bool onDark = true;
+    for (const DraughtsMove& m : opening)
+        if (!DraughtsBoard::isPlayable(m.destination().row, m.destination().col))
+            onDark = false;
+    check(onDark, "draughts: play stays on the dark squares");
+}
+
+// Taking is compulsory, and a chain of jumps must be played to its end.
+void draughtsCaptures()
+{
+    std::mt19937 rng { 4242 };
+    bool sawCapture = false;
+    bool sawMultiJump = false;
+    bool captureForced = false;
+
+    for (int game = 0; game < 60; ++game) {
+        DraughtsBoard b;
+        Side side = Side::Red;
+        int plies = 0;
+
+        while (plies < 300) {
+            const std::vector<DraughtsMove> moves = b.legalMoves(side);
+            if (moves.empty())
+                break;
+
+            // If any capture exists, legalMoves must return captures only.
+            const bool anyCapture = std::any_of(moves.begin(), moves.end(),
+                                                [](const DraughtsMove& m) { return m.isCapture(); });
+            if (anyCapture) {
+                sawCapture = true;
+                const bool allCaptures = std::all_of(
+                    moves.begin(), moves.end(), [](const DraughtsMove& m) { return m.isCapture(); });
+                if (!allCaptures) {
+                    check(false, "draughts: a quiet move was offered while a capture existed");
+                    return;
+                }
+                captureForced = true;
+            }
+            for (const DraughtsMove& m : moves)
+                if (m.captured.size() > 1)
+                    sawMultiJump = true;
+
+            std::uniform_int_distribution<std::size_t> pick(0, moves.size() - 1);
+            const DraughtsMove chosen = moves[pick(rng)];
+
+            // A capture must remove exactly as many pieces as it claims.
+            const int before = b.count(other(side));
+            b.apply(chosen);
+            const int after = b.count(other(side));
+            if (before - after != int(chosen.captured.size())) {
+                check(false, "draughts: a capture removed the wrong number of pieces");
+                return;
+            }
+
+            side = other(side);
+            ++plies;
+        }
+    }
+
+    check(sawCapture && captureForced, "draughts: captures occur and are compulsory");
+    check(sawMultiJump, "draughts: multi-jump chains are generated");
+}
+
+void draughtsEngine()
+{
+    // The engine should beat random play convincingly.
+    std::mt19937 rng { 77 };
+    int wins = 0;
+    constexpr int kGames = 8;
+
+    for (int game = 0; game < kGames; ++game) {
+        DraughtsBoard b;
+        Side side = Side::Red;
+        const Side engine = (game % 2 == 0) ? Side::Red : Side::White;
+        int plies = 0;
+        Side loser = Side::Red;
+
+        while (plies < 300) {
+            const std::vector<DraughtsMove> moves = b.legalMoves(side);
+            if (moves.empty()) {
+                loser = side;
+                break;
+            }
+            if (side == engine) {
+                DraughtsMove m;
+                chooseDraughtsMove(b, side, DraughtsLevel::Medium, m);
+                b.apply(m);
+            } else {
+                std::uniform_int_distribution<std::size_t> pick(0, moves.size() - 1);
+                b.apply(moves[pick(rng)]);
+            }
+            side = other(side);
+            ++plies;
+        }
+        if (plies < 300 && loser != engine)
+            ++wins;
+    }
+
+    std::printf("      engine won %d of %d against random play\n", wins, kGames);
+    check(wins >= kGames - 1, "draughts: the engine beats random play");
+}
+
+// ---------------------------------------------------------------------------
 // Pinball
 // ---------------------------------------------------------------------------
 
@@ -419,6 +542,11 @@ int main()
     section("Minesweeper");
     minesweeperRules();
     minesweeperWinAndLoss();
+
+    section("Draughts");
+    draughtsRules();
+    draughtsCaptures();
+    draughtsEngine();
 
     section("Pinball");
     pinballLaunch();
