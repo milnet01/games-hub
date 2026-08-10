@@ -7,6 +7,9 @@
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
+    // QSettings derives its file from these, so best scores land in a stable
+    // place across launches.
+    app.setOrganizationName(QStringLiteral("GamesHub"));
     app.setApplicationName(QStringLiteral("Games"));
     app.setApplicationDisplayName(QStringLiteral("Games"));
     app.setApplicationVersion(QStringLiteral(GAMESHUB_VERSION));

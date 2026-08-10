@@ -5,9 +5,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# AUTORCC compiles sounds.qrc into whichever target lists it as a source.
+set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Multimedia)
 qt_standard_project_setup()
+
 
 # Every game's rules live in a Qt-free core plus a QWidget view. The core files
 # are listed separately so the headless self-test can link them without Qt
@@ -26,6 +29,9 @@ set(GAME_VIEW_SOURCES
     src/hubwindow.cpp
     src/reversi/reversiview.cpp
     src/minesweeper/minesweeperview.cpp
+    src/theme.cpp
+    src/sound.cpp
+    src/scores.cpp
     src/cards/cardart.cpp
     src/klondike/klondikeview.cpp
     src/spider/spiderview.cpp
@@ -35,12 +41,13 @@ set(GAME_VIEW_SOURCES
 
 qt_add_executable(gameshub
     src/main.cpp
+    sounds.qrc
     ${GAME_CORE_SOURCES}
     ${GAME_VIEW_SOURCES}
 )
 target_include_directories(gameshub PRIVATE src)
 target_compile_definitions(gameshub PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
-target_link_libraries(gameshub PRIVATE Qt6::Widgets)
+target_link_libraries(gameshub PRIVATE Qt6::Widgets Qt6::Multimedia)
 
 # Console harness for every game's rules. No UI dependency, so it needs no
 # display and runs in milliseconds.
@@ -54,12 +61,13 @@ target_link_libraries(gameshub_selftest PRIVATE Qt6::Core)
 # Drives real game widgets offscreen to check they build, paint and respond.
 qt_add_executable(gameshub_uitest
     tests/uitest.cpp
+    sounds.qrc
     ${GAME_CORE_SOURCES}
     ${GAME_VIEW_SOURCES}
 )
 target_include_directories(gameshub_uitest PRIVATE src)
 target_compile_definitions(gameshub_uitest PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
-target_link_libraries(gameshub_uitest PRIVATE Qt6::Widgets)
+target_link_libraries(gameshub_uitest PRIVATE Qt6::Widgets Qt6::Multimedia)
 
 enable_testing()
 add_test(NAME selftest COMMAND gameshub_selftest)

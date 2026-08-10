@@ -1,0 +1,21 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/sounds">
+    <file alias="boom.wav">assets/sounds/boom.wav</file>
+    <file alias="bumper.wav">assets/sounds/bumper.wav</file>
+    <file alias="card_deal.wav">assets/sounds/card_deal.wav</file>
+    <file alias="card_place.wav">assets/sounds/card_place.wav</file>
+    <file alias="dig.wav">assets/sounds/dig.wav</file>
+    <file alias="disc_flip.wav">assets/sounds/disc_flip.wav</file>
+    <file alias="disc_place.wav">assets/sounds/disc_place.wav</file>
+    <file alias="drain.wav">assets/sounds/drain.wav</file>
+    <file alias="flag.wav">assets/sounds/flag.wav</file>
+    <file alias="flipper.wav">assets/sounds/flipper.wav</file>
+    <file alias="launch.wav">assets/sounds/launch.wav</file>
+    <file alias="lose.wav">assets/sounds/lose.wav</file>
+    <file alias="shuffle.wav">assets/sounds/shuffle.wav</file>
+    <file alias="slingshot.wav">assets/sounds/slingshot.wav</file>
+    <file alias="ui_back.wav">assets/sounds/ui_back.wav</file>
+    <file alias="ui_click.wav">assets/sounds/ui_click.wav</file>
+    <file alias="win.wav">assets/sounds/win.wav</file>
+</qresource>
+</RCC>

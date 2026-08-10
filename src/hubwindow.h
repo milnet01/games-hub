@@ -47,6 +47,9 @@ private:
     QWidget* m_menuPage = nullptr;
     QToolBar* m_toolBar = nullptr;
     QAction* m_backAction = nullptr;
+    QAction* m_soundAction = nullptr;
+    // Marks where game actions are inserted, keeping the sound toggle last.
+    QAction* m_soundSeparator = nullptr;
     QLabel* m_status = nullptr;
     QList<QAction*> m_gameActions;
     QList<Entry> m_entries;

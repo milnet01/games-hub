@@ -1,6 +1,9 @@
 #include "heartsview.h"
 
+#include "scores.h"
+#include "sound.h"
 #include "cards/cardart.h"
+#include "theme.h"
 
 #include <QMessageBox>
 #include <QPushButton>
@@ -11,8 +14,6 @@
 #include <algorithm>
 
 namespace {
-constexpr QColor kFeltTop { 0x2a, 0x3c, 0x66 };
-constexpr QColor kFeltBottom { 0x16, 0x20, 0x3c };
 
 // Seats are drawn clockwise from the player: 0 bottom, 1 left, 2 top, 3 right.
 const char* kSeatNames[HeartsEngine::kPlayers] = { "You", "West", "North", "East" };
@@ -61,6 +62,7 @@ void HeartsView::buildActions()
 void HeartsView::newGame()
 {
     m_engine.newGame();
+    Sound::instance().play(Sound::kShuffle);
     m_selected.clear();
     m_awaitingCollect = false;
     m_announced = false;
@@ -118,6 +120,7 @@ void HeartsView::step()
     }
 
     m_engine.playCard(seat, m_engine.chooseAiCard(seat));
+    Sound::instance().play(Sound::kCardPlace);
     update();
     refresh();
 
@@ -131,6 +134,7 @@ void HeartsView::finishTrick()
 {
     m_awaitingCollect = false;
     m_engine.collectTrick();
+    Sound::instance().play(Sound::kCardDeal);
     update();
     refresh();
 
@@ -152,6 +156,9 @@ void HeartsView::announceHand()
 
     QTimer::singleShot(300, this, [this] {
         const bool over = m_engine.phase() == HeartsEngine::Phase::GameOver;
+        // A win is recorded by the total you finished on — lower is better.
+        const bool newBest = over && m_engine.winner() == 0
+            && Scores::instance().recordLow(Scores::heartsBestScore(), m_engine.total(0));
 
         QString detail;
         for (int p = 0; p < HeartsEngine::kPlayers; ++p) {
@@ -170,6 +177,11 @@ void HeartsView::announceHand()
         } else {
             box.setText(QStringLiteral("Hand complete."));
         }
+        if (newBest)
+            detail += QStringLiteral("\nA new best — your lowest winning score yet!");
+        else if (over && Scores::instance().has(Scores::heartsBestScore()))
+            detail += QStringLiteral("\nBest winning score: %1.")
+                          .arg(Scores::instance().best(Scores::heartsBestScore()));
         box.setInformativeText(detail.trimmed());
 
         QAbstractButton* go = box.addButton(over ? QStringLiteral("New Game")
@@ -299,10 +311,7 @@ void HeartsView::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    QLinearGradient felt(rect().topLeft(), rect().bottomLeft());
-    felt.setColorAt(0, kFeltTop);
-    felt.setColorAt(1, kFeltBottom);
-    p.fillRect(rect(), felt);
+    Theme::paintFelt(p, rect(), Theme::kFeltBlueTop, Theme::kFeltBlueBottom);
 
     // Opponents: a fanned stack of backs plus a name and card count.
     for (int seat = 1; seat < HeartsEngine::kPlayers; ++seat) {
@@ -398,6 +407,7 @@ void HeartsView::mousePressEvent(QMouseEvent* event)
         if (m_engine.phase() == HeartsEngine::Phase::Playing && m_engine.currentPlayer() == 0) {
             if (!m_engine.playCard(0, card))
                 return;
+            Sound::instance().play(Sound::kCardPlace);
             update();
             refresh();
             if (m_engine.trickComplete()) {

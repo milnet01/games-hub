@@ -5,6 +5,9 @@
 
 #include <QPointF>
 
+#include <vector>
+
+class QPainter;
 class QTimer;
 
 // Draws PinballTable and feeds it input. All the physics lives in the table.
@@ -34,6 +37,20 @@ private:
     void refresh();
     void announceGameOver();
 
+    void paintFlipper(QPainter& p, const PinballTable::Flipper& f) const;
+    void paintPlayfieldArt(QPainter& p) const;
+    void paintLamps(QPainter& p) const;
+    void buildLamps();
+
+    // Painted light inserts. They are decoration only — the table's physics
+    // knows nothing about them — so they live here rather than in the model.
+    struct Lamp {
+        QPointF at;      // table units
+        QColor colour;
+        int group = 0;   // lamps in a group light together in the chase
+        double radius = 7.0;
+    };
+
     // Table units -> widget pixels.
     double scale() const;
     QPointF toScreen(QPointF p) const;
@@ -41,6 +58,12 @@ private:
     QList<QAction*> m_actions;
     QTimer* m_timer = nullptr;
     PinballTable m_table;
+    std::vector<Lamp> m_lamps;
+    double m_animSeconds = 0.0;
+    // Rises to 1 whenever the score moves and decays away, driving the
+    // everything-flashes moment after a hit.
+    double m_celebrate = 0.0;
+    int m_lastScore = 0;
     bool m_plungerHeld = false;
     bool m_announced = false;
 };

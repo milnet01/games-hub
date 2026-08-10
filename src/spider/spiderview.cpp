@@ -1,6 +1,9 @@
 #include "spiderview.h"
 
+#include "scores.h"
+#include "sound.h"
 #include "cards/cardart.h"
+#include "theme.h"
 
 #include <QActionGroup>
 #include <QMessageBox>
@@ -13,8 +16,6 @@
 #include <cmath>
 
 namespace {
-constexpr QColor kFeltTop { 0x1c, 0x5c, 0x6e };
-constexpr QColor kFeltBottom { 0x0e, 0x3a, 0x46 };
 constexpr double kMargin = 12.0;
 constexpr double kDragThreshold = 4.0;
 }
@@ -72,6 +73,7 @@ void SpiderView::newGame()
     // Spider uses two full decks; the suit count only limits which suits appear.
     std::vector<Card> deck = makeDeck(2, m_suits);
     shuffleCards(deck, m_rng);
+    Sound::instance().play(Sound::kShuffle);
 
     for (auto& c : m_columns)
         c.clear();
@@ -209,6 +211,7 @@ void SpiderView::dealRow()
     }
 
     pushUndo();
+    Sound::instance().play(Sound::kCardDeal);
     for (int col = 0; col < kColumns && !m_stock.empty(); ++col) {
         Card c = m_stock.back();
         m_stock.pop_back();
@@ -248,13 +251,19 @@ void SpiderView::checkWin()
     if (m_completed < 8 || m_won)
         return;
     m_won = true;
+    Sound::instance().play(Sound::kWin);
+    const bool newBest = Scores::instance().recordLow(Scores::spiderBestMoves(m_suits), m_moves);
     refresh();
 
-    QTimer::singleShot(200, this, [this] {
+    QTimer::singleShot(200, this, [this, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("Solved"));
         box.setText(QStringLiteral("All eight runs complete!"));
-        box.setInformativeText(QStringLiteral("Moves: %1.").arg(m_moves));
+        box.setInformativeText(
+            newBest ? QStringLiteral("Moves: %1 — a new best!").arg(m_moves)
+                    : QStringLiteral("Moves: %1.   Best: %2.")
+                          .arg(m_moves)
+                          .arg(Scores::instance().best(Scores::spiderBestMoves(m_suits))));
         QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
         box.exec();
@@ -280,10 +289,7 @@ void SpiderView::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    QLinearGradient felt(rect().topLeft(), rect().bottomLeft());
-    felt.setColorAt(0, kFeltTop);
-    felt.setColorAt(1, kFeltBottom);
-    p.fillRect(rect(), felt);
+    Theme::paintFelt(p, rect(), Theme::kFeltTealTop, Theme::kFeltTealBottom);
 
     for (int col = 0; col < kColumns; ++col) {
         const std::vector<Card>& column = m_columns[std::size_t(col)];
@@ -419,7 +425,11 @@ void SpiderView::mouseReleaseEvent(QMouseEvent* event)
             source.back().faceUp = true;
 
         ++m_moves;
+        Sound::instance().play(Sound::kCardPlace);
+        const int before = m_completed;
         harvest(target);
+        if (m_completed != before)
+            Sound::instance().play(Sound::kWin);
     } else {
         std::vector<Card>& source = m_columns[std::size_t(m_dragFrom)];
         for (const Card& c : m_drag)

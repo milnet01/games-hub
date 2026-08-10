@@ -1,5 +1,9 @@
 #include "reversiview.h"
 
+#include "scores.h"
+#include "sound.h"
+#include "theme.h"
+
 #include <QActionGroup>
 #include <QLinearGradient>
 #include <QMessageBox>
@@ -162,6 +166,7 @@ void ReversiView::playEngineMove()
     }
 
     m_board.play(m_toMove, *m);
+    Sound::instance().play(Sound::kDiscPlace);
     m_lastMove = m;
     m_toMove = opponent(m_toMove);
     advance();
@@ -203,10 +208,24 @@ void ReversiView::announceResult()
     else
         headline = QStringLiteral("A draw.");
 
+    Sound::instance().play(mine > theirs ? Sound::kWin : Sound::kLose);
+
+    // Only a win counts towards the record, and the record is how many discs
+    // you finished with — a 40-24 win beats a 33-31 one.
+    bool newBest = false;
+    if (mine > theirs)
+        newBest = Scores::instance().recordHigh(Scores::reversiBest(int(m_difficulty)), mine);
+
     QMessageBox box(this);
     box.setWindowTitle(QStringLiteral("Game over"));
     box.setText(headline);
-    box.setInformativeText(QStringLiteral("Final score %1 – %2.").arg(mine).arg(theirs));
+    const int record = Scores::instance().best(Scores::reversiBest(int(m_difficulty)));
+    QString detail = QStringLiteral("Final score %1 – %2.").arg(mine).arg(theirs);
+    if (newBest)
+        detail += QStringLiteral("\nA new best win at this level!");
+    else if (record > 0)
+        detail += QStringLiteral("\nYour best win here: %1 discs.").arg(record);
+    box.setInformativeText(detail);
     QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
     box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
     box.exec();
@@ -251,17 +270,8 @@ void ReversiView::paintEvent(QPaintEvent*)
     const double cell = r.width() / double(kSize);
 
     // Wooden frame, then the felt playing surface inside it.
-    const QRect frame = r.adjusted(-kFrameWidth, -kFrameWidth, kFrameWidth, kFrameWidth);
-    QPainterPath framePath;
-    framePath.addRoundedRect(frame, 6, 6);
-    p.fillPath(framePath, kFrame);
-    p.setPen(QPen(kFrameEdge, 1));
-    p.drawPath(framePath);
-
-    QLinearGradient felt(r.topLeft(), r.bottomLeft());
-    felt.setColorAt(0.0, kFeltTop);
-    felt.setColorAt(1.0, kFeltBottom);
-    p.fillRect(r, felt);
+    Theme::paintWoodFrame(p, r, kFrameWidth, 7);
+    Theme::paintFelt(p, r, Theme::kFeltGreenTop, Theme::kFeltGreenBottom);
 
     p.setPen(QPen(kGrid, 1));
     for (int i = 1; i < kSize; ++i) {
@@ -301,9 +311,7 @@ void ReversiView::paintEvent(QPaintEvent*)
 
             // Contact shadow — it is what makes the counter sit on the board
             // rather than float above it.
-            p.setPen(Qt::NoPen);
-            p.setBrush(QColor(0, 0, 0, 55));
-            p.drawEllipse(centre + QPointF(radius * 0.10, radius * 0.14), radius, radius);
+            Theme::paintContactShadow(p, centre, radius);
 
             // A soft radial fill reads as a physical counter rather than a dot.
             QRadialGradient g(centre - QPointF(radius * 0.3, radius * 0.35), radius * 1.6);
@@ -336,7 +344,10 @@ void ReversiView::mousePressEvent(QMouseEvent* event)
     m_history.push_back({ m_board, m_toMove, m_lastMove });
     m_undoAction->setEnabled(true);
 
-    m_board.play(m_human, *m);
+    const int flipped = m_board.play(m_human, *m);
+    Sound::instance().play(Sound::kDiscPlace);
+    if (flipped > 2)
+        Sound::instance().play(Sound::kDiscFlip);
     m_lastMove = m;
     m_toMove = opponent(m_toMove);
     advance();

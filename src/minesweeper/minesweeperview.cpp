@@ -1,9 +1,12 @@
 #include "minesweeperview.h"
 
+#include "scores.h"
+#include "sound.h"
 #include <QActionGroup>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QMouseEvent>
+#include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
 #include <QTimer>
@@ -142,24 +145,38 @@ void MinesweeperView::refresh()
         break;
     }
 
-    Q_EMIT statusChanged(QStringLiteral("%1   Mines left %2   Time %3s")
-                             .arg(state)
-                             .arg(m_field->minesRemaining())
-                             .arg(seconds));
+    QString line = QStringLiteral("%1   Mines left %2   Time %3s")
+                       .arg(state)
+                       .arg(m_field->minesRemaining())
+                       .arg(seconds);
+    if (Scores::instance().has(Scores::minesweeperBestTime(m_level)))
+        line += QStringLiteral("   Best %1s")
+                    .arg(Scores::instance().best(Scores::minesweeperBestTime(m_level)));
+    Q_EMIT statusChanged(line);
 
     if (m_field->state() != Minefield::State::Playing) {
         m_tick->stop();
         if (!m_announced) {
             m_announced = true;
             const bool won = m_field->state() == Minefield::State::Won;
+            Sound::instance().play(won ? Sound::kWin : Sound::kBoom);
+            const bool newBest =
+                won && Scores::instance().recordLow(Scores::minesweeperBestTime(m_level), seconds);
             // Queued so the final board paints before the dialog covers it.
-            QTimer::singleShot(won ? 250 : 600, this, [this, won, seconds] {
+            QTimer::singleShot(won ? 250 : 600, this, [this, won, seconds, newBest] {
                 QMessageBox box(this);
                 box.setWindowTitle(won ? QStringLiteral("Cleared") : QStringLiteral("Boom"));
                 box.setText(won ? QStringLiteral("You cleared the field!")
                                 : QStringLiteral("You hit a mine."));
-                if (won)
-                    box.setInformativeText(QStringLiteral("Time: %1 seconds.").arg(seconds));
+                if (won) {
+                    const int record = Scores::instance().best(
+                        Scores::minesweeperBestTime(m_level), seconds);
+                    box.setInformativeText(
+                        newBest ? QStringLiteral("Time: %1 seconds — a new best!").arg(seconds)
+                                : QStringLiteral("Time: %1 seconds.   Best: %2.")
+                                      .arg(seconds)
+                                      .arg(record));
+                }
                 QAbstractButton* again = box.addButton(QStringLiteral("Play Again"),
                                                        QMessageBox::AcceptRole);
                 box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
@@ -196,11 +213,27 @@ void MinesweeperView::paintEvent(QPaintEvent*)
             const QRectF inner = c.adjusted(1, 1, -1, -1);
 
             if (!s.revealed) {
-                p.fillRect(inner, kCovered);
-                // Two bright edges give the raised look without a full bevel.
-                p.setPen(QPen(kCoveredEdge, 1));
-                p.drawLine(inner.topLeft(), inner.topRight());
-                p.drawLine(inner.topLeft(), inner.bottomLeft());
+                QLinearGradient tile(inner.topLeft(), inner.bottomRight());
+                tile.setColorAt(0.0, kCovered.lighter(116));
+                tile.setColorAt(1.0, kCovered.darker(112));
+                p.fillRect(inner, tile);
+
+                // A real bevel: bright along the top-left, dark along the
+                // bottom-right, which is what makes the tile look raised.
+                const double bevel = std::max(1.0, cell * 0.09);
+                p.setPen(Qt::NoPen);
+                p.setBrush(kCoveredEdge);
+                p.drawPolygon(QPolygonF { inner.topLeft(), inner.topRight(),
+                                          inner.topRight() - QPointF(bevel, -bevel),
+                                          inner.topLeft() + QPointF(bevel, bevel),
+                                          inner.bottomLeft() - QPointF(-bevel, bevel),
+                                          inner.bottomLeft() });
+                p.setBrush(QColor(0x39, 0x3f, 0x46));
+                p.drawPolygon(QPolygonF { inner.bottomRight(), inner.bottomLeft(),
+                                          inner.bottomLeft() + QPointF(bevel, -bevel),
+                                          inner.bottomRight() - QPointF(bevel, bevel),
+                                          inner.topRight() + QPointF(-bevel, bevel),
+                                          inner.topRight() });
 
                 if (s.flagged) {
                     const QPointF base(c.center().x() - cell * 0.02, c.bottom() - cell * 0.22);
@@ -216,7 +249,11 @@ void MinesweeperView::paintEvent(QPaintEvent*)
                 continue;
             }
 
-            p.fillRect(inner, kDug);
+            QLinearGradient hole(inner.topLeft(), inner.bottomRight());
+            hole.setColorAt(0.0, kDug.darker(118));
+            hole.setColorAt(0.5, kDug);
+            hole.setColorAt(1.0, kDug.lighter(108));
+            p.fillRect(inner, hole);
             p.setPen(QPen(QColor(0x45, 0x4b, 0x52), 1));
             // drawRect fills with the current brush as well as outlining, and
             // the flag above leaves that brush red — without this every dug
@@ -262,6 +299,7 @@ void MinesweeperView::mousePressEvent(QMouseEvent* event)
 
     if (event->button() == Qt::RightButton) {
         m_field->toggleFlag(row, col);
+        Sound::instance().play(Sound::kFlag);
     } else if (event->button() == Qt::MiddleButton) {
         m_field->chord(row, col);
     } else if (event->button() == Qt::LeftButton) {
@@ -276,6 +314,8 @@ void MinesweeperView::mousePressEvent(QMouseEvent* event)
             m_field->chord(row, col);
         else
             m_field->reveal(row, col);
+        if (m_field->state() != Minefield::State::Lost)
+            Sound::instance().play(Sound::kDig);
     } else {
         return;
     }

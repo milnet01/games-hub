@@ -72,10 +72,14 @@ public:
 
     int score() const { return m_score; }
     int ballsLeft() const { return m_ballsLeft; }
-    int best() const { return m_best; }
     bool gameOver() const { return m_gameOver; }
     // True on the frame a ball was lost, so the view can react once.
     bool takeBallLost() { const bool v = m_ballLost; m_ballLost = false; return v; }
+
+    // Hit counts since the last call. The table stays free of any audio
+    // dependency; the view drains these each frame and makes the noise.
+    int takeBumperHits() { const int v = m_bumperHits; m_bumperHits = 0; return v; }
+    int takeSlingHits() { const int v = m_slingHits; m_slingHits = 0; return v; }
 
     const std::vector<Wall>& walls() const { return m_walls; }
     const std::vector<Bumper>& bumpers() const { return m_bumpers; }
@@ -109,7 +113,8 @@ private:
     double m_plunger = 0.0;
     int m_ballsLeft = 3;
     int m_score = 0;
-    int m_best = 0;
     bool m_gameOver = false;
     bool m_ballLost = false;
+    int m_bumperHits = 0;
+    int m_slingHits = 0;
 };

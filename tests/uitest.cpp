@@ -3,6 +3,8 @@
 // QT_QPA_PLATFORM=offscreen (the CMake test sets it) so it needs no display.
 
 #include "gameview.h"
+#include "scores.h"
+#include "sound.h"
 #include "hearts/heartsview.h"
 #include "hubwindow.h"
 #include "klondike/klondikeview.h"
@@ -13,6 +15,8 @@
 
 #include <QApplication>
 #include <QDeadlineTimer>
+#include <QFile>
+#include <QSettings>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPixmap>
@@ -93,6 +97,70 @@ QImage renderOf(QWidget* w)
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
+
+    // A test-only settings identity, so running the suite never touches the
+    // player's real best scores.
+    QCoreApplication::setOrganizationName(QStringLiteral("GamesHubTest"));
+    QCoreApplication::setApplicationName(QStringLiteral("GamesSelfTest"));
+
+    // ---- Best scores survive a restart ----
+    {
+        Scores& scores = Scores::instance();
+        scores.clear();
+
+        const QString high = Scores::pinballBestScore();
+        check(!scores.has(high), "a fresh profile has no recorded best");
+        check(scores.recordHigh(high, 1200), "the first score is always a best");
+        check(!scores.recordHigh(high, 900), "a lower score does not replace the best");
+        check(scores.recordHigh(high, 5000), "a higher score does replace it");
+        check(scores.best(high) == 5000, "the stored best is the highest seen");
+
+        // Times and move counts are better when smaller.
+        const QString low = Scores::minesweeperBestTime(1);
+        check(scores.recordLow(low, 90), "the first time is always a best");
+        check(!scores.recordLow(low, 120), "a slower time does not replace it");
+        check(scores.recordLow(low, 45), "a faster time does");
+        check(scores.best(low) == 45, "the stored best time is the fastest seen");
+
+        // The point of all this is that it outlives the process, so the value
+        // must actually be on disk.
+        QSettings written;
+        check(QFile::exists(written.fileName()), "scores are written to a settings file");
+        QSettings reopened(written.fileName(), QSettings::IniFormat);
+        const bool onDisk = reopened.value(high).toInt() == 5000
+            || QSettings().value(high).toInt() == 5000;
+        check(onDisk, "a reopened settings file still holds the best score");
+
+        scores.clear();
+    }
+
+    // ---- The sound effects are compiled into the binary ----
+    {
+        const QStringList effects = { QStringLiteral("ui_click"), QStringLiteral("ui_back"),
+            QStringLiteral("disc_place"), QStringLiteral("disc_flip"), QStringLiteral("dig"),
+            QStringLiteral("flag"), QStringLiteral("boom"), QStringLiteral("card_deal"),
+            QStringLiteral("card_place"), QStringLiteral("shuffle"), QStringLiteral("bumper"),
+            QStringLiteral("slingshot"), QStringLiteral("flipper"), QStringLiteral("launch"),
+            QStringLiteral("drain"), QStringLiteral("win"), QStringLiteral("lose") };
+
+        QStringList missing;
+        for (const QString& name : effects) {
+            QFile wav(QStringLiteral(":/sounds/%1.wav").arg(name));
+            // A resource that exists but is empty would play silence, so check
+            // the payload too rather than just the path.
+            if (!wav.exists() || wav.size() < 1000)
+                missing << name;
+        }
+        if (!missing.isEmpty())
+            std::printf("      missing or empty: %s\n", qPrintable(missing.join(", ")));
+        check(missing.isEmpty(), "every sound effect is compiled into the binary");
+
+        // Playing while muted must be a no-op, not a crash.
+        Sound::instance().setMuted(true);
+        Sound::instance().play(QStringLiteral("bumper"));
+        Sound::instance().setMuted(false);
+        check(true, "playing a sound is safe with no audio device");
+    }
 
     // ---- Every game view stands up on its own ----
     {

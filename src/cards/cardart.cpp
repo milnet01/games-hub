@@ -1,107 +1,254 @@
 #include "cardart.h"
 
+#include "theme.h"
+
+#include <QLinearGradient>
 #include <QPainterPath>
 
 #include <algorithm>
+#include <array>
 
 namespace {
-constexpr QColor kFace { 0xfa, 0xfa, 0xf6 };
-constexpr QColor kFaceEdge { 0x00, 0x00, 0x00 };
-constexpr QColor kRed { 0xc4, 0x2d, 0x2d };
-constexpr QColor kBlack { 0x1e, 0x21, 0x24 };
-constexpr QColor kBackInk { 0x2c, 0x4c, 0x8f };
-constexpr QColor kBackPaper { 0xe8, 0xed, 0xf6 };
 
-double corner(const QRectF& r) { return std::max(2.0, r.width() * 0.08); }
+constexpr QColor kFaceTop { 0xff, 0xff, 0xfd };
+constexpr QColor kFaceBottom { 0xef, 0xed, 0xe4 };
+constexpr QColor kRed { 0xc0, 0x28, 0x28 };
+constexpr QColor kBlack { 0x1c, 0x1f, 0x22 };
+constexpr QColor kBackInk { 0x27, 0x46, 0x86 };
+constexpr QColor kBackInkDark { 0x18, 0x2c, 0x58 };
+constexpr QColor kBackPaper { 0xf2, 0xf4, 0xf9 };
+
+double corner(const QRectF& r) { return std::max(2.0, r.width() * 0.075); }
+
+struct Pip {
+    double x;
+    double y;
+};
+
+// The traditional pip arrangements. Columns sit at 0.28 / 0.5 / 0.72 and the
+// rows are spaced so each count reads at a glance, exactly as on a real deck.
+std::vector<Pip> pipLayout(int rank)
+{
+    // Columns sit clear of the corner indices; rows run between them.
+    constexpr double L = 0.32;
+    constexpr double C = 0.50;
+    constexpr double R = 0.68;
+
+    // Rows run the full height of the pip field. Ranks 2-8 use three rows,
+    // 9 and 10 use four, and the odd pip sits on a line between them — the
+    // arrangement a real deck uses.
+    constexpr double T = 0.00;
+    constexpr double M = 0.50;
+    constexpr double B = 1.00;
+
+    switch (rank) {
+    case 2:  return { { C, T }, { C, B } };
+    case 3:  return { { C, T }, { C, M }, { C, B } };
+    case 4:  return { { L, T }, { R, T }, { L, B }, { R, B } };
+    case 5:  return { { L, T }, { R, T }, { C, M }, { L, B }, { R, B } };
+    case 6:  return { { L, T }, { R, T }, { L, M }, { R, M }, { L, B }, { R, B } };
+    case 7:  return { { L, T }, { R, T }, { C, 0.25 }, { L, M }, { R, M },
+                      { L, B }, { R, B } };
+    case 8:  return { { L, T }, { R, T }, { C, 0.25 }, { L, M }, { R, M },
+                      { C, 0.75 }, { L, B }, { R, B } };
+    case 9:  return { { L, T }, { R, T }, { L, 0.32 }, { R, 0.32 }, { C, M },
+                      { L, 0.68 }, { R, 0.68 }, { L, B }, { R, B } };
+    case 10: return { { L, T }, { R, T }, { C, 0.16 }, { L, 0.32 }, { R, 0.32 },
+                      { L, 0.68 }, { R, 0.68 }, { C, 0.84 }, { L, B }, { R, B } };
+    default: return {};
+    }
 }
+
+// Draws a suit glyph centred on `centre`. Real decks invert the lower pips,
+// but an upside-down heart reads as a spade at this size, so these stay
+// upright — clearer, and still reads as a proper card.
+void drawPip(QPainter& p, const QPointF& centre, double size, const QString& suit)
+{
+    p.save();
+    p.translate(centre);
+    QFont f = p.font();
+    f.setPointSizeF(size);
+    p.setFont(f);
+    const QRectF box(-size * 1.2, -size * 1.2, size * 2.4, size * 2.4);
+    p.drawText(box, Qt::AlignCenter, suit);
+    p.restore();
+}
+
+// A court card gets a ruled panel rather than figure art: it reads as a face
+// card at any size and never turns to mush when the cards are small.
+void drawCourt(QPainter& p, const QRectF& r, const QString& rank, const QString& suit,
+               const QColor& ink)
+{
+    const QRectF panel = r.adjusted(r.width() * 0.24, r.height() * 0.14,
+                                    -r.width() * 0.24, -r.height() * 0.14);
+
+    QColor tint = ink;
+    tint.setAlpha(18);
+    QPainterPath path;
+    path.addRoundedRect(panel, r.width() * 0.05, r.width() * 0.05);
+    p.fillPath(path, tint);
+
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(Theme::kGold, std::max(1.0, r.width() * 0.018)));
+    p.drawPath(path);
+    p.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 110),
+                  std::max(0.8, r.width() * 0.012)));
+    p.drawRoundedRect(panel.adjusted(r.width() * 0.028, r.height() * 0.02,
+                                     -r.width() * 0.028, -r.height() * 0.02),
+                      r.width() * 0.03, r.width() * 0.03);
+
+    // Suit above and below, letter through the middle.
+    const double pip = r.width() * 0.15;
+    p.setPen(ink);
+    drawPip(p, QPointF(panel.center().x(), panel.top() + panel.height() * 0.15), pip, suit);
+    drawPip(p, QPointF(panel.center().x(), panel.bottom() - panel.height() * 0.15), pip, suit);
+
+    QFont f = p.font();
+    f.setPointSizeF(r.width() * 0.30);
+    f.setBold(true);
+    p.setFont(f);
+    p.drawText(panel, Qt::AlignCenter, rank);
+}
+
+} // namespace
 
 namespace CardArt {
 
 void paintFace(QPainter& p, const QRectF& r, const Card& c)
 {
+    Theme::paintDropShadow(p, r, corner(r), std::max(1.5, r.width() * 0.035));
+
     QPainterPath path;
     path.addRoundedRect(r, corner(r), corner(r));
-    p.fillPath(path, kFace);
-    p.setPen(QPen(QColor(kFaceEdge.red(), kFaceEdge.green(), kFaceEdge.blue(), 70), 1));
+
+    QLinearGradient face(r.topLeft(), r.bottomLeft());
+    face.setColorAt(0.0, kFaceTop);
+    face.setColorAt(1.0, kFaceBottom);
+    p.fillPath(path, face);
+
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(QColor(0, 0, 0, 60), 1));
     p.drawPath(path);
 
     const QColor ink = isRed(c) ? kRed : kBlack;
     const QString rank = rankLabel(c.rank);
     const QString suit = suitSymbol(c.suit);
-
-    // Corner index, top-left. Small cards get the index only — a big central
-    // pip on a 40px-wide card is unreadable mush.
-    QFont indexFont = p.font();
-    indexFont.setBold(true);
-    indexFont.setPointSizeF(std::max(6.0, r.width() * 0.30));
-    p.setFont(indexFont);
     p.setPen(ink);
 
+    // Corner index, top-left upright and bottom-right inverted, as on a real
+    // card — it is what makes a fanned hand readable.
     const double pad = r.width() * 0.08;
-    // The box has to take a two-character rank: at half the card width, "10"
-    // was being clipped to a stray stroke.
-    const QRectF corner(r.left() + pad, r.top() + pad * 0.6, r.width() - 2 * pad,
-                        r.height() * 0.34);
-    p.drawText(corner, Qt::AlignLeft | Qt::AlignTop, rank);
+    const double indexSize = std::max(6.0, r.width() * 0.17);
 
-    QFont suitFont = p.font();
-    suitFont.setPointSizeF(std::max(6.0, r.width() * 0.26));
-    p.setFont(suitFont);
-    p.drawText(QRectF(corner.left(), corner.top() + r.height() * 0.19,
-                      corner.width(), r.height() * 0.25),
-               Qt::AlignLeft | Qt::AlignTop, suit);
+    for (int i = 0; i < 2; ++i) {
+        const bool inverted = (i == 1);
+        p.save();
+        if (inverted) {
+            p.translate(r.center());
+            p.rotate(180);
+            p.translate(-r.center());
+        }
+        QFont f = p.font();
+        f.setBold(true);
+        f.setPointSizeF(indexSize);
+        p.setFont(f);
+        // A narrow column: wide enough for "10", narrow enough to leave the
+        // middle of the card free for the pips.
+        const QRectF box(r.left() + pad, r.top() + pad * 0.4, r.width() * 0.24, r.height() * 0.20);
+        p.drawText(box, Qt::AlignLeft | Qt::AlignTop, rank);
 
-    // Centre pip, only when there is room for it to read.
-    if (r.width() >= 46) {
-        QFont big = p.font();
-        big.setPointSizeF(r.width() * 0.46);
-        p.setFont(big);
-        p.setPen(QColor(ink.red(), ink.green(), ink.blue(), 210));
-        p.drawText(r.adjusted(r.width() * 0.18, r.height() * 0.22, -r.width() * 0.06, -r.height() * 0.06),
-                   Qt::AlignCenter, suit);
+        f.setBold(false);
+        f.setPointSizeF(indexSize * 0.88);
+        p.setFont(f);
+        p.drawText(QRectF(box.left(), box.top() + r.height() * 0.125, box.width(), r.height() * 0.18),
+                   Qt::AlignLeft | Qt::AlignTop, suit);
+        p.restore();
     }
+
+    // Below this width the middle of the card is too small for pips to read,
+    // so the corner index carries the card on its own.
+    if (r.width() < 46)
+        return;
+
+    if (c.rank == kJack || c.rank == kQueen || c.rank == kKing) {
+        drawCourt(p, r, rank, suit, ink);
+        return;
+    }
+
+    if (c.rank == kAce) {
+        QFont f = p.font();
+        f.setPointSizeF(r.width() * 0.44);
+        p.setFont(f);
+        p.drawText(r, Qt::AlignCenter, suit);
+        return;
+    }
+
+    // Pip columns are fractions of the card; the rows run between the two
+    // indices rather than over them.
+    const double pipSize = r.width() * 0.125;
+    const double top = r.top() + r.height() * 0.145;
+    const double span = r.height() * 0.71;
+    for (const Pip& pip : pipLayout(c.rank))
+        drawPip(p, QPointF(r.left() + r.width() * pip.x, top + span * pip.y), pipSize, suit);
 }
 
 void paintBack(QPainter& p, const QRectF& r)
 {
+    Theme::paintDropShadow(p, r, corner(r), std::max(1.5, r.width() * 0.035));
+
     QPainterPath path;
     path.addRoundedRect(r, corner(r), corner(r));
     p.fillPath(path, kBackPaper);
-    p.setPen(QPen(QColor(0, 0, 0, 70), 1));
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(QColor(0, 0, 0, 60), 1));
     p.drawPath(path);
 
-    const QRectF inner = r.adjusted(r.width() * 0.10, r.height() * 0.07,
-                                    -r.width() * 0.10, -r.height() * 0.07);
+    const QRectF inner = r.adjusted(r.width() * 0.09, r.height() * 0.065,
+                                    -r.width() * 0.09, -r.height() * 0.065);
     QPainterPath innerPath;
-    innerPath.addRoundedRect(inner, corner(r) * 0.6, corner(r) * 0.6);
-    p.fillPath(innerPath, kBackInk);
+    innerPath.addRoundedRect(inner, corner(r) * 0.55, corner(r) * 0.55);
 
-    // A lattice, clipped to the inner panel — cheap and reads as a card back.
+    QLinearGradient ink(inner.topLeft(), inner.bottomRight());
+    ink.setColorAt(0.0, kBackInk);
+    ink.setColorAt(1.0, kBackInkDark);
+    p.fillPath(innerPath, ink);
+
+    // Diagonal lattice, clipped to the panel.
     p.save();
     p.setClipPath(innerPath);
-    p.setPen(QPen(QColor(255, 255, 255, 45), 1));
-    const double step = std::max(4.0, r.width() * 0.16);
-    for (double x = inner.left() - inner.height(); x < inner.right(); x += step) {
+    p.setPen(QPen(QColor(255, 255, 255, 42), std::max(0.7, r.width() * 0.012)));
+    const double step = std::max(4.0, r.width() * 0.155);
+    for (double x = inner.left() - inner.height(); x < inner.right() + inner.height(); x += step) {
         p.drawLine(QPointF(x, inner.top()), QPointF(x + inner.height(), inner.bottom()));
         p.drawLine(QPointF(x + inner.height(), inner.top()), QPointF(x, inner.bottom()));
     }
+    // A centre medallion stops the lattice reading as pure texture.
+    if (r.width() >= 40) {
+        p.setPen(QPen(QColor(255, 255, 255, 70), std::max(0.8, r.width() * 0.016)));
+        p.setBrush(QColor(kBackInkDark.red(), kBackInkDark.green(), kBackInkDark.blue(), 200));
+        p.drawEllipse(inner.center(), r.width() * 0.17, r.width() * 0.17);
+    }
     p.restore();
+
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(QColor(255, 255, 255, 90), 1));
+    p.drawPath(innerPath);
 }
 
 void paintSlot(QPainter& p, const QRectF& r, const QString& glyph)
 {
     QPainterPath path;
     path.addRoundedRect(r, corner(r), corner(r));
-    p.fillPath(path, QColor(255, 255, 255, 18));
-    p.setPen(QPen(QColor(255, 255, 255, 70), 1.5, Qt::DashLine));
+    p.fillPath(path, QColor(0, 0, 0, 40));
     p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(QColor(255, 255, 255, 60), 1.4, Qt::DashLine));
     p.drawPath(path);
 
     if (!glyph.isEmpty()) {
         QFont f = p.font();
-        f.setPointSizeF(std::max(8.0, r.width() * 0.40));
+        f.setPointSizeF(std::max(8.0, r.width() * 0.38));
         p.setFont(f);
-        p.setPen(QColor(255, 255, 255, 90));
+        p.setPen(QColor(255, 255, 255, 70));
         p.drawText(r, Qt::AlignCenter, glyph);
     }
 }

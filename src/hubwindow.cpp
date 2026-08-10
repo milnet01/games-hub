@@ -1,6 +1,7 @@
 #include "hubwindow.h"
 
 #include "gameview.h"
+#include "sound.h"
 #include "hearts/heartsview.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
@@ -14,6 +15,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStyleOption>
@@ -285,7 +287,10 @@ void HubWindow::buildChrome()
     for (int i = 0; i < m_entries.size(); ++i) {
         const Entry& e = m_entries[i];
         auto* tile = new GameTile(e.name, e.blurb, e.paintTile, m_menuPage);
-        connect(tile, &QPushButton::clicked, this, [this, i] { openGame(i); });
+        connect(tile, &QPushButton::clicked, this, [this, i] {
+            Sound::instance().play(Sound::kClick);
+            openGame(i);
+        });
         grid->addWidget(tile, i / 3, i % 3);
     }
     outer->addLayout(grid);
@@ -299,8 +304,29 @@ void HubWindow::buildChrome()
 
     m_backAction = new QAction(QStringLiteral("← All Games"), this);
     m_backAction->setShortcut(QKeySequence(Qt::Key_Escape));
-    connect(m_backAction, &QAction::triggered, this, &HubWindow::showMenu);
+    connect(m_backAction, &QAction::triggered, this, [this] {
+        Sound::instance().play(Sound::kBack);
+        showMenu();
+    });
     m_toolBar->addAction(m_backAction);
+
+    // One sound switch for the whole collection, kept at the far end of the
+    // toolbar so it never moves when a game swaps its own actions in.
+    auto* spacer = new QWidget(this);
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_soundSeparator = m_toolBar->addWidget(spacer);
+
+    m_soundAction = new QAction(QStringLiteral("🔊 Sound"), this);
+    m_soundAction->setCheckable(true);
+    m_soundAction->setChecked(true);
+    m_soundAction->setToolTip(QStringLiteral("Turn game sounds on or off"));
+    connect(m_soundAction, &QAction::toggled, this, [this](bool on) {
+        Sound::instance().setMuted(!on);
+        m_soundAction->setText(on ? QStringLiteral("🔊 Sound") : QStringLiteral("🔇 Muted"));
+        if (on)
+            Sound::instance().play(Sound::kClick);
+    });
+    m_toolBar->addAction(m_soundAction);
 
     m_status = new QLabel(this);
     statusBar()->addWidget(m_status, 1);
@@ -362,5 +388,5 @@ void HubWindow::setGameActions(GameView* view)
 
     m_gameActions = view->gameActions();
     for (QAction* a : m_gameActions)
-        m_toolBar->addAction(a);
+        m_toolBar->insertAction(m_soundSeparator, a);
 }

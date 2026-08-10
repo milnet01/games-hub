@@ -1,6 +1,9 @@
 #include "klondikeview.h"
 
+#include "scores.h"
+#include "sound.h"
 #include "cards/cardart.h"
+#include "theme.h"
 
 #include <QActionGroup>
 #include <QMessageBox>
@@ -12,8 +15,6 @@
 #include <algorithm>
 
 namespace {
-constexpr QColor kFeltTop { 0x1e, 0x6b, 0x46 };
-constexpr QColor kFeltBottom { 0x10, 0x45, 0x2d };
 constexpr double kMargin = 14.0;
 
 // A drag only starts once the pointer has actually moved, so a click that
@@ -66,6 +67,7 @@ void KlondikeView::newGame()
 {
     std::vector<Card> deck = makeDeck(1, 4);
     shuffleCards(deck, m_rng);
+    Sound::instance().play(Sound::kShuffle);
 
     for (auto& f : m_foundations)
         f.clear();
@@ -268,6 +270,7 @@ void KlondikeView::dealFromStock()
             m_waste.push_back(c);
         }
     }
+    Sound::instance().play(Sound::kCardDeal);
     update();
     refresh();
 }
@@ -311,12 +314,18 @@ void KlondikeView::checkWin()
         return;
 
     m_won = true;
+    Sound::instance().play(Sound::kWin);
+    const bool newBest = Scores::instance().recordHigh(Scores::klondikeBestScore(), m_score);
     refresh();
-    QTimer::singleShot(200, this, [this] {
+    QTimer::singleShot(200, this, [this, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("Solved"));
         box.setText(QStringLiteral("You cleared the table!"));
-        box.setInformativeText(QStringLiteral("Score: %1.").arg(m_score));
+        box.setInformativeText(
+            newBest ? QStringLiteral("Score: %1 — a new best!").arg(m_score)
+                    : QStringLiteral("Score: %1.   Best: %2.")
+                          .arg(m_score)
+                          .arg(Scores::instance().best(Scores::klondikeBestScore())));
         QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
         box.exec();
@@ -331,11 +340,14 @@ void KlondikeView::refresh()
     for (const auto& f : m_foundations)
         done += int(f.size());
 
-    Q_EMIT statusChanged(QStringLiteral("%1   Foundations %2/52   Stock %3   Score %4")
-                             .arg(m_won ? QStringLiteral("Solved!") : QStringLiteral("Klondike"))
-                             .arg(done)
-                             .arg(m_stock.size())
-                             .arg(m_score));
+    QString line = QStringLiteral("%1   Foundations %2/52   Stock %3   Score %4")
+                       .arg(m_won ? QStringLiteral("Solved!") : QStringLiteral("Klondike"))
+                       .arg(done)
+                       .arg(m_stock.size())
+                       .arg(m_score);
+    if (Scores::instance().has(Scores::klondikeBestScore()))
+        line += QStringLiteral("   Best %1").arg(Scores::instance().best(Scores::klondikeBestScore()));
+    Q_EMIT statusChanged(line);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,10 +359,7 @@ void KlondikeView::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    QLinearGradient felt(rect().topLeft(), rect().bottomLeft());
-    felt.setColorAt(0, kFeltTop);
-    felt.setColorAt(1, kFeltBottom);
-    p.fillRect(rect(), felt);
+    Theme::paintFelt(p, rect(), Theme::kFeltGreenTop, Theme::kFeltGreenBottom);
 
     // Stock: a back if there are cards, otherwise a recycle marker.
     if (m_stock.empty())
@@ -504,6 +513,7 @@ void KlondikeView::mouseReleaseEvent(QMouseEvent* event)
     }
 
     if (placed) {
+        Sound::instance().play(Sound::kCardPlace);
         // Turn over whatever the run was covering.
         std::vector<Card>& source = pileFor(m_dragFrom.kind, m_dragFrom.pile);
         if (m_dragFrom.kind == PileKind::Tableau && !source.empty() && !source.back().faceUp) {

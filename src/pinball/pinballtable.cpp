@@ -204,7 +204,6 @@ void PinballTable::loseBall()
     m_ballLost = true;
     if (m_ballsLeft <= 0) {
         m_gameOver = true;
-        m_best = std::max(m_best, m_score);
     } else {
         resetBall();
     }
@@ -240,6 +239,7 @@ void PinballTable::collideWall(Wall& w)
         m_velocity += normal * w.kick;
         w.flash = 1.0;
         m_score += w.score;
+        ++m_slingHits;
     }
 }
 
@@ -267,6 +267,7 @@ void PinballTable::collideBumper(Bumper& b)
 
     b.flash = 1.0;
     m_score += b.score;
+    ++m_bumperHits;
 }
 
 void PinballTable::collideFlipper(Flipper& f, double dt)
