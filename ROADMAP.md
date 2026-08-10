@@ -18,6 +18,15 @@ traditional or public-domain; see *Choosing games* below for why each is safe.
 Chess is done; nothing below it is started. The hub currently ships thirteen
 games.
 
+## Deferred, deliberately
+
+**Choosing your colour, in Chess or Draughts.** Both put the human on the side
+that moves first — White and Red — and neither offers a swap or a board flip.
+That is scope, not oversight: it keeps `advance()` a single path with one
+`m_human`, which is the shape every engine game in the hub shares. Worth adding
+one day, but add it to *both* games at once and to that shared shape, rather
+than special-casing Chess. Decided while building Chess on 2026-08-10.
+
 ## Choosing games
 
 **Game rules cannot be copyrighted; names and specific artwork can.** That is
