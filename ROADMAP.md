@@ -18,6 +18,72 @@ traditional or public-domain; see *Choosing games* below for why each is safe.
 Chess is done; nothing below it is started. The hub currently ships thirteen
 games.
 
+## Agreed, not yet scheduled
+
+Asked for by the owner on 2026-08-10, to be built after the queue above unless
+he says otherwise. None of these are started.
+
+### How to play, inside the app
+
+**Every game explains its own rules.** Thirteen games ship with no instructions
+anywhere — a player who has never met Reversi or Canasta has to leave the
+program to learn it. Add a **Rules** action to the toolbar that opens the rules
+for whichever game is on screen.
+
+The shape that fits what is already here: give `GameView` a virtual returning
+the game's rules as rich text, so a game carries its own explanation in its own
+directory and adding a game means writing its rules next to its code. The hub
+shows them in one shared dialog, so all thirteen look the same. Also worth a
+short line of the *controls* — which mouse button, what a click on the stock
+does — because that is what a player actually gets stuck on.
+
+**Standing rule 2 below binds hard here, harder than anywhere else in this
+file.** Rules text is exactly the thing a rulebook author owns. Every word has
+to be written fresh from an understanding of the game. Do not paste from
+Wikipedia, from Bicycle's site, or from a printed rulebook, and do not
+paraphrase one closely enough that the sentence order survives.
+
+Size: medium, and most of it is writing rather than code.
+
+### More card games
+
+The queue above already names Canasta, Gin Rummy, Cribbage, Blackjack, Spades
+and three more solitaires. Beyond those, the traditional card catalogue is
+enormous and entirely free. Worth picking from, roughly cheapest first:
+
+- **War**, **Go Fish**, **Old Maid**, **Beggar-my-neighbour** — trivial rules,
+  and the first genuinely child-friendly games in the hub.
+- **Crazy Eights** — the public-domain game Uno was built from. Free under its
+  own name; do not use Uno's name, colours or card faces.
+- **Sevens** (also called Fan Tan or Domino) — one of the simplest card games
+  that is still worth playing.
+- **Whist** and **Euchre** — both already listed as safe below, and both reuse
+  the Hearts trick-taking shape almost wholesale.
+- **Rummy 500**, **Cassino**, **Pinochle**, **Bezique**, **Scopa**,
+  **Briscola** — bigger, and each needs its own scoring.
+
+Every one of these reuses `src/cards/` for the deck and the drawing. Nothing
+here needs a new asset.
+
+### Board games
+
+Same test, same answer: the classics are ancient and free.
+
+- **Nine Men's Morris**, **Fox and Geese**, **Alquerque** — small, and all
+  three are close in shape to the Draughts board already built.
+- **Gomoku** (five in a row) and **Four in a Row** — the second is Connect
+  Four's game under a generic name, which is the rename trick described below.
+  Both are small.
+- **Backgammon** — needs dice, a doubling cube and a real opponent. Medium to
+  large, and the most likely to be actually played.
+- **Mancala** and **Dominoes** — medium, and neither looks like anything else
+  in the hub, which is worth something on the tile grid.
+- **Snakes and Ladders** (the ancient *Moksha Patam*) and **Pachisi** — pure
+  race games. Small, and the other family that suits children.
+- **Go** — the rules are tiny and the opponent is a research project. Ship it
+  only if a weak opponent is acceptable, and say so on the tile.
+- **Halma**, **Hnefatafl**, **Shogi**, **Xiangqi** — deeper cuts, all free.
+
 ## Deferred, deliberately
 
 **Choosing your colour, in Chess or Draughts.** Both put the human on the side
