@@ -1,0 +1,89 @@
+#pragma once
+
+#include "cards/card.h"
+
+#include <array>
+#include <random>
+#include <utility>
+#include <vector>
+
+// Hearts for four: one human (seat 0) and three computer opponents. No Qt, so
+// the whole rule set is testable headlessly.
+class HeartsEngine
+{
+public:
+    static constexpr int kPlayers = 4;
+    static constexpr int kTargetScore = 100;
+
+    enum class Phase { Passing, Playing, HandOver, GameOver };
+    // Passing rotates left, right, across, then a hand with no pass at all.
+    enum class PassDirection { Left, Right, Across, Hold };
+
+    HeartsEngine();
+
+    void newGame();
+
+    Phase phase() const { return m_phase; }
+    int handNumber() const { return m_hand; }
+    PassDirection passDirection() const;
+    bool heartsBroken() const { return m_heartsBroken; }
+    int currentPlayer() const { return m_current; }
+    int trickLeader() const { return m_leader; }
+    int lastTrickWinner() const { return m_lastWinner; }
+    int tricksPlayed() const { return m_tricksPlayed; }
+
+    const std::vector<Card>& hand(int player) const { return m_hands[std::size_t(player)]; }
+    const std::vector<std::pair<int, Card>>& trick() const { return m_trick; }
+    int total(int player) const { return m_totals[std::size_t(player)]; }
+    int handPoints(int player) const { return m_handPoints[std::size_t(player)]; }
+
+    // Passing phase
+    void setPass(int player, const std::vector<Card>& cards);
+    bool passReady(int player) const { return m_passes[std::size_t(player)].size() == 3; }
+    const std::vector<Card>& pass(int player) const { return m_passes[std::size_t(player)]; }
+    // Moves every player's three cards at once and starts the play phase.
+    void executePass();
+
+    // Play phase
+    std::vector<Card> legalPlays(int player) const;
+    bool isLegal(int player, const Card& c) const;
+    // Plays c for player. Returns false if it is not that player's turn or the
+    // card is not legal. Completing a trick leaves it on the table so the UI
+    // can show it; the next play clears it.
+    bool playCard(int player, const Card& c);
+    bool trickComplete() const { return m_trick.size() == kPlayers; }
+    // Clears a finished trick and hands the lead to its winner.
+    void collectTrick();
+
+    // Computer decisions
+    std::vector<Card> chooseAiPass(int player) const;
+    Card chooseAiCard(int player) const;
+
+    // Starts the next hand after HandOver.
+    void nextHand();
+
+    // Winner once the game is over: the lowest total.
+    int winner() const;
+
+private:
+    void deal();
+    void scoreHand();
+    static int pointsFor(const Card& c);
+    void removeCard(int player, const Card& c);
+    bool hasSuit(int player, Suit s) const;
+
+    std::array<std::vector<Card>, kPlayers> m_hands;
+    std::array<std::vector<Card>, kPlayers> m_passes;
+    std::array<int, kPlayers> m_totals {};
+    std::array<int, kPlayers> m_handPoints {};
+
+    std::vector<std::pair<int, Card>> m_trick;
+    Phase m_phase = Phase::Passing;
+    int m_hand = 0;
+    int m_current = 0;
+    int m_leader = 0;
+    int m_lastWinner = -1;
+    int m_tricksPlayed = 0;
+    bool m_heartsBroken = false;
+    std::mt19937 m_rng { std::random_device {}() };
+};

@@ -1,0 +1,289 @@
+#include "minesweeperview.h"
+
+#include <QActionGroup>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QTimer>
+
+#include <algorithm>
+#include <cmath>
+
+namespace {
+
+// Classic Minesweeper number colours — players read the board by colour as
+// much as by digit, so these are worth matching.
+const QColor kNumberColours[9] = {
+    QColor(0, 0, 0, 0),
+    QColor(0x5c, 0x9d, 0xff), QColor(0x5c, 0xc9, 0x60), QColor(0xf2, 0x6b, 0x6b),
+    QColor(0x9b, 0x79, 0xdb), QColor(0xff, 0xa7, 0x2b), QColor(0x35, 0xd0, 0xe0),
+    QColor(0xff, 0x6f, 0xa5), QColor(0xd0, 0xd6, 0xdc),
+};
+
+constexpr QColor kCovered { 0x6b, 0x74, 0x7d };
+constexpr QColor kCoveredEdge { 0x92, 0x9d, 0xa7 };
+constexpr QColor kDug { 0x33, 0x38, 0x3d };
+constexpr QColor kBezel { 0x22, 0x26, 0x2a };
+
+const MinesweeperView::Level kLevels[] = {
+    { "Beginner", 9, 9, 10 },
+    { "Intermediate", 16, 16, 40 },
+    { "Expert", 30, 16, 99 },
+};
+
+} // namespace
+
+MinesweeperView::MinesweeperView(QWidget* parent)
+    : GameView(parent)
+{
+    setMinimumSize(minimumSizeHint());
+    setMouseTracking(false);
+
+    m_tick = new QTimer(this);
+    m_tick->setInterval(500);
+    connect(m_tick, &QTimer::timeout, this, &MinesweeperView::refresh);
+
+    buildActions();
+    newGame(m_level);
+}
+
+void MinesweeperView::buildActions()
+{
+    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    newAction->setShortcut(QKeySequence::New);
+    connect(newAction, &QAction::triggered, this, [this] { newGame(m_level); });
+    m_actions.append(newAction);
+
+    auto* separator = new QAction(this);
+    separator->setSeparator(true);
+    m_actions.append(separator);
+
+    auto* group = new QActionGroup(this);
+    group->setExclusive(true);
+    for (int i = 0; i < int(std::size(kLevels)); ++i) {
+        auto* a = new QAction(QString::fromUtf8(kLevels[i].name), this);
+        a->setCheckable(true);
+        a->setChecked(i == m_level);
+        group->addAction(a);
+        connect(a, &QAction::triggered, this, [this, i] { newGame(i); });
+        m_actions.append(a);
+    }
+}
+
+void MinesweeperView::newGame(int levelIndex)
+{
+    m_level = std::clamp(levelIndex, 0, int(std::size(kLevels)) - 1);
+    const Level& l = kLevels[m_level];
+    m_field = std::make_unique<Minefield>(l.width, l.height, l.mines);
+    m_started = false;
+    m_announced = false;
+    m_tick->stop();
+    update();
+    refresh();
+}
+
+void MinesweeperView::activate()
+{
+    refresh();
+}
+
+double MinesweeperView::cellSize() const
+{
+    if (!m_field)
+        return 0;
+    // One square size for the whole grid, so cells stay square at any window
+    // shape; the grid is then centred in whatever space is left.
+    const double byWidth = (width() - 24.0) / m_field->width();
+    const double byHeight = (height() - 24.0) / m_field->height();
+    return std::max(8.0, std::floor(std::min(byWidth, byHeight)));
+}
+
+QRect MinesweeperView::fieldRect() const
+{
+    if (!m_field)
+        return {};
+    const double cell = cellSize();
+    const int w = int(cell * m_field->width());
+    const int h = int(cell * m_field->height());
+    return { (width() - w) / 2, (height() - h) / 2, w, h };
+}
+
+bool MinesweeperView::cellAt(QPointF pos, int& row, int& col) const
+{
+    if (!m_field)
+        return false;
+    const QRect r = fieldRect();
+    if (!r.contains(pos.toPoint()))
+        return false;
+    const double cell = cellSize();
+    col = int((pos.x() - r.x()) / cell);
+    row = int((pos.y() - r.y()) / cell);
+    return m_field->inBounds(row, col);
+}
+
+void MinesweeperView::refresh()
+{
+    if (!m_field)
+        return;
+
+    const int seconds = m_started ? int(m_clock.elapsed() / 1000) : 0;
+    QString state;
+    switch (m_field->state()) {
+    case Minefield::State::Playing:
+        state = m_started ? QStringLiteral("Digging…") : QStringLiteral("Click anywhere to start.");
+        break;
+    case Minefield::State::Won:
+        state = QStringLiteral("Field cleared!");
+        break;
+    case Minefield::State::Lost:
+        state = QStringLiteral("Boom.");
+        break;
+    }
+
+    Q_EMIT statusChanged(QStringLiteral("%1   Mines left %2   Time %3s")
+                             .arg(state)
+                             .arg(m_field->minesRemaining())
+                             .arg(seconds));
+
+    if (m_field->state() != Minefield::State::Playing) {
+        m_tick->stop();
+        if (!m_announced) {
+            m_announced = true;
+            const bool won = m_field->state() == Minefield::State::Won;
+            // Queued so the final board paints before the dialog covers it.
+            QTimer::singleShot(won ? 250 : 600, this, [this, won, seconds] {
+                QMessageBox box(this);
+                box.setWindowTitle(won ? QStringLiteral("Cleared") : QStringLiteral("Boom"));
+                box.setText(won ? QStringLiteral("You cleared the field!")
+                                : QStringLiteral("You hit a mine."));
+                if (won)
+                    box.setInformativeText(QStringLiteral("Time: %1 seconds.").arg(seconds));
+                QAbstractButton* again = box.addButton(QStringLiteral("Play Again"),
+                                                       QMessageBox::AcceptRole);
+                box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+                box.exec();
+                if (box.clickedButton() == again)
+                    newGame(m_level);
+            });
+        }
+    }
+}
+
+void MinesweeperView::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.fillRect(rect(), palette().window());
+
+    if (!m_field)
+        return;
+
+    const QRect r = fieldRect();
+    const double cell = cellSize();
+
+    p.fillRect(r.adjusted(-6, -6, 6, 6), kBezel);
+
+    QFont numberFont = font();
+    numberFont.setBold(true);
+    numberFont.setPointSizeF(std::max(7.0, cell * 0.46));
+
+    for (int row = 0; row < m_field->height(); ++row) {
+        for (int col = 0; col < m_field->width(); ++col) {
+            const Minefield::Square& s = m_field->at(row, col);
+            const QRectF c(r.x() + col * cell, r.y() + row * cell, cell, cell);
+            const QRectF inner = c.adjusted(1, 1, -1, -1);
+
+            if (!s.revealed) {
+                p.fillRect(inner, kCovered);
+                // Two bright edges give the raised look without a full bevel.
+                p.setPen(QPen(kCoveredEdge, 1));
+                p.drawLine(inner.topLeft(), inner.topRight());
+                p.drawLine(inner.topLeft(), inner.bottomLeft());
+
+                if (s.flagged) {
+                    const QPointF base(c.center().x() - cell * 0.02, c.bottom() - cell * 0.22);
+                    p.setPen(QPen(QColor(0xd0, 0xd6, 0xdc), std::max(1.5, cell * 0.07)));
+                    p.drawLine(base, QPointF(base.x(), c.top() + cell * 0.20));
+                    p.setPen(Qt::NoPen);
+                    p.setBrush(QColor(0xe5, 0x3d, 0x3d));
+                    const QPointF tip(base.x(), c.top() + cell * 0.20);
+                    const QPolygonF flag { tip, tip + QPointF(cell * 0.30, cell * 0.13),
+                                           tip + QPointF(0, cell * 0.26) };
+                    p.drawPolygon(flag);
+                }
+                continue;
+            }
+
+            p.fillRect(inner, kDug);
+            p.setPen(QPen(QColor(0x45, 0x4b, 0x52), 1));
+            // drawRect fills with the current brush as well as outlining, and
+            // the flag above leaves that brush red — without this every dug
+            // square painted after the first flag came out red.
+            p.setBrush(Qt::NoBrush);
+            p.drawRect(inner);
+
+            if (s.mine) {
+                const QPointF centre = c.center();
+                const double rad = cell * 0.20;
+                const bool detonated = m_field->state() == Minefield::State::Lost;
+                p.setPen(QPen(detonated ? QColor(0xff, 0x8a, 0x80) : QColor(0xcf, 0xd6, 0xe0),
+                              std::max(1.0, cell * 0.06)));
+                for (int i = 0; i < 4; ++i) {
+                    const double a = i * M_PI / 4;
+                    p.drawLine(centre - QPointF(std::cos(a), std::sin(a)) * rad * 1.7,
+                               centre + QPointF(std::cos(a), std::sin(a)) * rad * 1.7);
+                }
+                p.setPen(Qt::NoPen);
+                p.setBrush(detonated ? QColor(0xe5, 0x3d, 0x3d) : QColor(0xcf, 0xd6, 0xe0));
+                p.drawEllipse(centre, rad, rad);
+                continue;
+            }
+
+            if (s.neighbours > 0) {
+                p.setFont(numberFont);
+                p.setPen(kNumberColours[std::clamp(s.neighbours, 0, 8)]);
+                p.drawText(c, Qt::AlignCenter, QString::number(s.neighbours));
+            }
+        }
+    }
+}
+
+void MinesweeperView::mousePressEvent(QMouseEvent* event)
+{
+    if (!m_field || m_field->state() != Minefield::State::Playing)
+        return;
+
+    int row = 0;
+    int col = 0;
+    if (!cellAt(event->position(), row, col))
+        return;
+
+    if (event->button() == Qt::RightButton) {
+        m_field->toggleFlag(row, col);
+    } else if (event->button() == Qt::MiddleButton) {
+        m_field->chord(row, col);
+    } else if (event->button() == Qt::LeftButton) {
+        if (!m_started) {
+            m_started = true;
+            m_clock.start();
+            m_tick->start();
+        }
+        // A left click on an already-open number chords, which is what most
+        // players expect from a modern Minesweeper.
+        if (m_field->at(row, col).revealed)
+            m_field->chord(row, col);
+        else
+            m_field->reveal(row, col);
+    } else {
+        return;
+    }
+
+    update();
+    refresh();
+}
+
+void MinesweeperView::mouseReleaseEvent(QMouseEvent*)
+{
+}

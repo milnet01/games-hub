@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Games
+GenericName=Game Collection
+Comment=Reversi, Minesweeper, Solitaire, Spider, Hearts and Pinball
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/gameshub
+Icon=gameshub
+Terminal=false
+Categories=Game;BoardGame;
+Keywords=games;reversi;othello;minesweeper;solitaire;klondike;spider;hearts;pinball;cards;
+StartupNotify=true
+StartupWMClass=gameshub

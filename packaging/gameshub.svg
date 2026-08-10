@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>Games</title>
+  <defs>
+    <linearGradient id="frame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b4660"/>
+      <stop offset="1" stop-color="#1d2434"/>
+    </linearGradient>
+    <linearGradient id="felt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a9160"/>
+      <stop offset="1" stop-color="#16663f"/>
+    </linearGradient>
+    <linearGradient id="table" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#31406e"/>
+      <stop offset="1" stop-color="#1a2140"/>
+    </linearGradient>
+    <radialGradient id="ball" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#7d8794"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="3" y="3" width="122" height="122" rx="19" fill="url(#frame)"/>
+
+  <!-- Four quadrants, one per game family: board, cards, minesweeper, pinball.
+       A collection reads better as a grid than as one crowded scene. -->
+  <g>
+    <rect x="10" y="10" width="52" height="52" rx="9" fill="url(#felt)"/>
+    <circle cx="29" cy="29" r="10" fill="#f4f3ee"/>
+    <circle cx="45" cy="45" r="10" fill="#20242a"/>
+  </g>
+
+  <g>
+    <rect x="66" y="10" width="52" height="52" rx="9" fill="#f5f3ec"/>
+    <path d="M92 51c-9-7-15-12-15-19a7.5 7.5 0 0 1 15-4 7.5 7.5 0 0 1 15 4c0 7-6 12-15 19z" fill="#cf3535"/>
+  </g>
+
+  <g>
+    <rect x="10" y="66" width="52" height="52" rx="9" fill="#5d666f"/>
+    <g stroke="#1b1e22" stroke-width="4" stroke-linecap="round">
+      <path d="M36 78v32M20 92h32M25 81l22 22M47 81L25 103"/>
+    </g>
+    <circle cx="36" cy="92" r="10" fill="#1b1e22"/>
+    <circle cx="32" cy="88" r="3" fill="#8b939c"/>
+  </g>
+
+  <g>
+    <rect x="66" y="66" width="52" height="52" rx="9" fill="url(#table)"/>
+    <circle cx="82" cy="82" r="8" fill="#e8514f"/>
+    <circle cx="102" cy="94" r="6" fill="#f2b13c"/>
+    <g stroke="#cfd6e0" stroke-width="5" stroke-linecap="round">
+      <path d="M75 110l9-5M109 110l-9-5"/>
+    </g>
+    <circle cx="92" cy="100" r="6" fill="url(#ball)"/>
+  </g>
+</svg>

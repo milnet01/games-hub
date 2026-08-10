@@ -1,0 +1,83 @@
+cmake_minimum_required(VERSION 3.20)
+project(gameshub VERSION 0.2.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
+qt_standard_project_setup()
+
+# Every game's rules live in a Qt-free core plus a QWidget view. The core files
+# are listed separately so the headless self-test can link them without Qt
+# Widgets.
+set(GAME_CORE_SOURCES
+    src/reversi/board.cpp
+    src/reversi/ai.cpp
+    src/minesweeper/minefield.cpp
+    src/cards/card.cpp
+    src/hearts/heartsengine.cpp
+    src/pinball/pinballtable.cpp
+)
+
+set(GAME_VIEW_SOURCES
+    src/gameview.cpp
+    src/hubwindow.cpp
+    src/reversi/reversiview.cpp
+    src/minesweeper/minesweeperview.cpp
+    src/cards/cardart.cpp
+    src/klondike/klondikeview.cpp
+    src/spider/spiderview.cpp
+    src/hearts/heartsview.cpp
+    src/pinball/pinballview.cpp
+)
+
+qt_add_executable(gameshub
+    src/main.cpp
+    ${GAME_CORE_SOURCES}
+    ${GAME_VIEW_SOURCES}
+)
+target_include_directories(gameshub PRIVATE src)
+target_compile_definitions(gameshub PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
+target_link_libraries(gameshub PRIVATE Qt6::Widgets)
+
+# Console harness for every game's rules. No UI dependency, so it needs no
+# display and runs in milliseconds.
+add_executable(gameshub_selftest
+    tests/selftest.cpp
+    ${GAME_CORE_SOURCES}
+)
+target_include_directories(gameshub_selftest PRIVATE src)
+target_link_libraries(gameshub_selftest PRIVATE Qt6::Core)
+
+# Drives real game widgets offscreen to check they build, paint and respond.
+qt_add_executable(gameshub_uitest
+    tests/uitest.cpp
+    ${GAME_CORE_SOURCES}
+    ${GAME_VIEW_SOURCES}
+)
+target_include_directories(gameshub_uitest PRIVATE src)
+target_compile_definitions(gameshub_uitest PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
+target_link_libraries(gameshub_uitest PRIVATE Qt6::Widgets)
+
+enable_testing()
+add_test(NAME selftest COMMAND gameshub_selftest)
+add_test(NAME uitest COMMAND gameshub_uitest)
+set_tests_properties(uitest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# ---------------------------------------------------------------------------
+# Desktop integration. `cmake --install build` puts the hub in the application
+# menu; the .desktop file needs the absolute Exec path because ~/.local/bin is
+# not always on the desktop session's PATH.
+# ---------------------------------------------------------------------------
+include(GNUInstallDirs)
+
+configure_file(packaging/gameshub.desktop.in
+               ${CMAKE_CURRENT_BINARY_DIR}/gameshub.desktop @ONLY)
+
+install(TARGETS gameshub RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/gameshub.desktop
+        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+install(FILES packaging/gameshub.svg
+        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps)
