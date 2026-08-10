@@ -6,12 +6,14 @@
 #include "draughts/draughtsboard.h"
 #include "minesweeper/minefield.h"
 #include "pinball/pinballtable.h"
+#include "sudoku/sudokugrid.h"
 #include "reversi/ai.h"
 #include "reversi/board.h"
 
 #include <chrono>
 #include <cstdio>
 #include <algorithm>
+#include <array>
 #include <map>
 #include <random>
 
@@ -451,6 +453,82 @@ void draughtsEngine()
 }
 
 // ---------------------------------------------------------------------------
+// Sudoku
+// ---------------------------------------------------------------------------
+
+// A generated puzzle is only worth playing if it has exactly one solution —
+// otherwise it cannot be reasoned out, only guessed at.
+void sudokuGeneration()
+{
+    const struct { const char* name; SudokuGrid::Level level; } kLevels[] = {
+        { "easy", SudokuGrid::Level::Easy },
+        { "medium", SudokuGrid::Level::Medium },
+        { "hard", SudokuGrid::Level::Hard },
+    };
+
+    for (const auto& entry : kLevels) {
+        SudokuGrid grid;
+        grid.generate(entry.level);
+
+        int clues = 0;
+        std::array<int, SudokuGrid::kCells> puzzle {};
+        bool cluesMatchSolution = true;
+        for (int r = 0; r < SudokuGrid::kSize; ++r) {
+            for (int c = 0; c < SudokuGrid::kSize; ++c) {
+                const int g = grid.given(r, c);
+                puzzle[std::size_t(SudokuGrid::index(r, c))] = g;
+                if (g != 0) {
+                    ++clues;
+                    if (g != grid.solution(r, c))
+                        cluesMatchSolution = false;
+                }
+            }
+        }
+
+        std::printf("      %s: %d clues\n", entry.name, clues);
+        if (!cluesMatchSolution) {
+            check(false, "sudoku: a clue disagreed with the solution");
+            return;
+        }
+        if (SudokuGrid::countSolutions(puzzle, 3) != 1) {
+            check(false, "sudoku: a generated puzzle did not have a unique solution");
+            return;
+        }
+    }
+    check(true, "sudoku: every difficulty generates a puzzle with one solution");
+
+    // The solution grid itself must be a valid, complete Sudoku.
+    SudokuGrid grid;
+    grid.generate(SudokuGrid::Level::Medium);
+    bool valid = true;
+    for (int i = 0; i < SudokuGrid::kSize && valid; ++i) {
+        int rowSeen = 0;
+        int colSeen = 0;
+        for (int j = 0; j < SudokuGrid::kSize; ++j) {
+            rowSeen |= 1 << grid.solution(i, j);
+            colSeen |= 1 << grid.solution(j, i);
+        }
+        // Bits 1..9 all set, and nothing in bit 0 (an empty cell).
+        if (rowSeen != 0b1111111110 || colSeen != 0b1111111110)
+            valid = false;
+    }
+    check(valid, "sudoku: the solution has every digit once per row and column");
+
+    // Clues are locked; player entries are not.
+    int lockedRow = -1;
+    int lockedCol = -1;
+    for (int r = 0; r < SudokuGrid::kSize && lockedRow < 0; ++r)
+        for (int c = 0; c < SudokuGrid::kSize && lockedRow < 0; ++c)
+            if (grid.isClue(r, c)) {
+                lockedRow = r;
+                lockedCol = c;
+            }
+    const int before = grid.value(lockedRow, lockedCol);
+    grid.set(lockedRow, lockedCol, before == 1 ? 2 : 1);
+    check(grid.value(lockedRow, lockedCol) == before, "sudoku: a clue cannot be overwritten");
+}
+
+// ---------------------------------------------------------------------------
 // Pinball
 // ---------------------------------------------------------------------------
 
@@ -547,6 +625,9 @@ int main()
     draughtsRules();
     draughtsCaptures();
     draughtsEngine();
+
+    section("Sudoku");
+    sudokuGeneration();
 
     section("Pinball");
     pinballLaunch();

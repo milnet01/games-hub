@@ -1,0 +1,340 @@
+#include "sudokuview.h"
+
+#include "scores.h"
+#include "sound.h"
+#include "theme.h"
+
+#include <QActionGroup>
+#include <QKeyEvent>
+#include <QMessageBox>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPushButton>
+#include <QTimer>
+
+#include <algorithm>
+#include <cmath>
+
+namespace {
+constexpr QColor kPaper { 0xf6, 0xf3, 0xe8 };
+constexpr QColor kPaperAlt { 0xe9, 0xe4, 0xd4 };
+constexpr QColor kClueInk { 0x22, 0x26, 0x2b };
+constexpr QColor kOwnInk { 0x1f, 0x6f, 0xb2 };
+constexpr QColor kErrorInk { 0xc2, 0x39, 0x39 };
+constexpr QColor kGridLine { 0x9a, 0x93, 0x82 };
+constexpr QColor kGridHeavy { 0x3c, 0x38, 0x30 };
+constexpr int kFrameWidth = 9;
+
+QString levelKey(SudokuGrid::Level level)
+{
+    switch (level) {
+    case SudokuGrid::Level::Easy:   return QStringLiteral("sudoku/best_time_easy");
+    case SudokuGrid::Level::Medium: return QStringLiteral("sudoku/best_time_medium");
+    case SudokuGrid::Level::Hard:   return QStringLiteral("sudoku/best_time_hard");
+    }
+    return {};
+}
+}
+
+SudokuView::SudokuView(QWidget* parent)
+    : GameView(parent)
+{
+    setMinimumSize(minimumSizeHint());
+    setFocusPolicy(Qt::StrongFocus);
+
+    m_tick = new QTimer(this);
+    m_tick->setInterval(500);
+    connect(m_tick, &QTimer::timeout, this, [this] { refresh(); });
+
+    buildActions();
+    newGame(m_level);
+}
+
+void SudokuView::buildActions()
+{
+    auto* newAction = new QAction(QStringLiteral("New Puzzle"), this);
+    newAction->setShortcut(QKeySequence::New);
+    connect(newAction, &QAction::triggered, this, [this] { newGame(m_level); });
+    m_actions.append(newAction);
+
+    auto* restart = new QAction(QStringLiteral("Restart"), this);
+    connect(restart, &QAction::triggered, this, [this] {
+        m_grid.restart();
+        m_solved = false;
+        m_announced = false;
+        m_clock.restart();
+        update();
+        refresh();
+    });
+    m_actions.append(restart);
+
+    auto* pencil = new QAction(QStringLiteral("Pencil"), this);
+    pencil->setCheckable(true);
+    pencil->setShortcut(QKeySequence(Qt::Key_P));
+    connect(pencil, &QAction::toggled, this, [this](bool on) {
+        m_pencil = on;
+        refresh();
+    });
+    m_actions.append(pencil);
+
+    auto* errors = new QAction(QStringLiteral("Show Errors"), this);
+    errors->setCheckable(true);
+    errors->setChecked(true);
+    connect(errors, &QAction::toggled, this, [this](bool on) {
+        m_highlightErrors = on;
+        update();
+    });
+    m_actions.append(errors);
+
+    auto* sep = new QAction(this);
+    sep->setSeparator(true);
+    m_actions.append(sep);
+
+    auto* group = new QActionGroup(this);
+    group->setExclusive(true);
+    const struct { const char* name; SudokuGrid::Level level; } kLevels[] = {
+        { "Easy", SudokuGrid::Level::Easy },
+        { "Medium", SudokuGrid::Level::Medium },
+        { "Hard", SudokuGrid::Level::Hard },
+    };
+    for (const auto& entry : kLevels) {
+        auto* a = new QAction(QString::fromUtf8(entry.name), this);
+        a->setCheckable(true);
+        a->setChecked(entry.level == m_level);
+        group->addAction(a);
+        const SudokuGrid::Level level = entry.level;
+        connect(a, &QAction::triggered, this, [this, level] { newGame(level); });
+        m_actions.append(a);
+    }
+}
+
+void SudokuView::newGame(SudokuGrid::Level level)
+{
+    m_level = level;
+    m_grid.generate(level);
+    m_solved = false;
+    m_announced = false;
+    m_row = 4;
+    m_col = 4;
+    m_clock.start();
+    m_tick->start();
+    setFocus();
+    update();
+    refresh();
+}
+
+void SudokuView::activate()
+{
+    setFocus();
+    refresh();
+}
+
+double SudokuView::cellSize() const
+{
+    const int available = std::min(width(), height()) - 2 * (kFrameWidth + 6);
+    return std::max(12.0, std::floor(available / double(SudokuGrid::kSize)));
+}
+
+QRect SudokuView::boardRect() const
+{
+    const int side = int(cellSize()) * SudokuGrid::kSize;
+    return { (width() - side) / 2, (height() - side) / 2, side, side };
+}
+
+void SudokuView::enter(int digit)
+{
+    if (m_solved || m_grid.isClue(m_row, m_col))
+        return;
+
+    if (m_pencil && digit != 0) {
+        m_grid.toggleMark(m_row, m_col, digit);
+        Sound::instance().play(Sound::kDig);
+    } else {
+        m_grid.set(m_row, m_col, digit);
+        Sound::instance().play(digit == 0 ? Sound::kBack : Sound::kDiscPlace);
+    }
+
+    update();
+    refresh();
+    checkSolved();
+}
+
+void SudokuView::checkSolved()
+{
+    if (!m_grid.solved() || m_solved)
+        return;
+
+    m_solved = true;
+    m_tick->stop();
+    const int seconds = int(m_clock.elapsed() / 1000);
+    Sound::instance().play(Sound::kWin);
+    const bool newBest = Scores::instance().recordLow(levelKey(m_level), seconds);
+    refresh();
+
+    if (m_announced)
+        return;
+    m_announced = true;
+    QTimer::singleShot(200, this, [this, seconds, newBest] {
+        QMessageBox box(this);
+        box.setWindowTitle(QStringLiteral("Solved"));
+        box.setText(QStringLiteral("Puzzle complete!"));
+        box.setInformativeText(
+            newBest ? QStringLiteral("Time: %1 seconds — a new best!").arg(seconds)
+                    : QStringLiteral("Time: %1 seconds.   Best: %2.")
+                          .arg(seconds)
+                          .arg(Scores::instance().best(levelKey(m_level), seconds)));
+        QAbstractButton* again = box.addButton(QStringLiteral("New Puzzle"), QMessageBox::AcceptRole);
+        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+        box.exec();
+        if (box.clickedButton() == again)
+            newGame(m_level);
+    });
+}
+
+void SudokuView::refresh(const QString& message)
+{
+    const int seconds = int(m_clock.elapsed() / 1000);
+    QString line = message.isEmpty()
+        ? QStringLiteral("%1   Empty %2   Time %3s%4")
+              .arg(m_solved ? QStringLiteral("Solved!") : QStringLiteral("Sudoku"))
+              .arg(m_grid.emptyCount())
+              .arg(seconds)
+              .arg(m_pencil ? QStringLiteral("   Pencil mode") : QString())
+        : message;
+    if (Scores::instance().has(levelKey(m_level)))
+        line += QStringLiteral("   Best %1s").arg(Scores::instance().best(levelKey(m_level)));
+    Q_EMIT statusChanged(line);
+}
+
+// ---------------------------------------------------------------------------
+// Painting
+// ---------------------------------------------------------------------------
+
+void SudokuView::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.fillRect(rect(), palette().window());
+
+    const QRect r = boardRect();
+    const double cell = cellSize();
+    Theme::paintWoodFrame(p, r, kFrameWidth, 6);
+    p.fillRect(r, kPaper);
+
+    // Shade alternate 3x3 boxes so the structure reads without heavy lines.
+    for (int br = 0; br < 3; ++br)
+        for (int bc = 0; bc < 3; ++bc)
+            if ((br + bc) % 2 == 0)
+                p.fillRect(QRectF(r.x() + bc * 3 * cell, r.y() + br * 3 * cell, cell * 3, cell * 3),
+                           kPaperAlt);
+
+    const int selected = m_grid.value(m_row, m_col);
+
+    for (int row = 0; row < SudokuGrid::kSize; ++row) {
+        for (int col = 0; col < SudokuGrid::kSize; ++col) {
+            const QRectF box(r.x() + col * cell, r.y() + row * cell, cell, cell);
+
+            // Highlight the row, column and box of the cursor, plus every cell
+            // holding the same digit — the two hints that make scanning quick.
+            const bool sameLine = row == m_row || col == m_col
+                || ((row / 3 == m_row / 3) && (col / 3 == m_col / 3));
+            if (sameLine)
+                p.fillRect(box, QColor(0x1f, 0x6f, 0xb2, 22));
+            if (selected != 0 && m_grid.value(row, col) == selected)
+                p.fillRect(box, QColor(0xff, 0xd5, 0x4f, 55));
+        }
+    }
+
+    const QRectF cursor(r.x() + m_col * cell, r.y() + m_row * cell, cell, cell);
+    p.fillRect(cursor, QColor(0x1f, 0x6f, 0xb2, 45));
+
+    p.setPen(QPen(kGridLine, 1));
+    for (int i = 1; i < SudokuGrid::kSize; ++i) {
+        if (i % 3 == 0)
+            continue;
+        p.drawLine(QPointF(r.x() + i * cell, r.y()), QPointF(r.x() + i * cell, r.bottom()));
+        p.drawLine(QPointF(r.x(), r.y() + i * cell), QPointF(r.right(), r.y() + i * cell));
+    }
+    p.setPen(QPen(kGridHeavy, std::max(2.0, cell * 0.06)));
+    for (int i = 0; i <= SudokuGrid::kSize; i += 3) {
+        p.drawLine(QPointF(r.x() + i * cell, r.y()), QPointF(r.x() + i * cell, r.bottom()));
+        p.drawLine(QPointF(r.x(), r.y() + i * cell), QPointF(r.right(), r.y() + i * cell));
+    }
+
+    QFont digitFont = font();
+    digitFont.setPointSizeF(cell * 0.52);
+    QFont markFont = font();
+    markFont.setPointSizeF(cell * 0.20);
+
+    for (int row = 0; row < SudokuGrid::kSize; ++row) {
+        for (int col = 0; col < SudokuGrid::kSize; ++col) {
+            const QRectF box(r.x() + col * cell, r.y() + row * cell, cell, cell);
+            const int v = m_grid.value(row, col);
+
+            if (v != 0) {
+                const bool clue = m_grid.isClue(row, col);
+                const bool bad = m_highlightErrors && !clue && m_grid.conflicts(row, col);
+                digitFont.setBold(clue);
+                p.setFont(digitFont);
+                p.setPen(bad ? kErrorInk : (clue ? kClueInk : kOwnInk));
+                p.drawText(box, Qt::AlignCenter, QString::number(v));
+                continue;
+            }
+
+            const std::uint16_t marks = m_grid.marks(row, col);
+            if (marks == 0)
+                continue;
+            p.setFont(markFont);
+            p.setPen(QColor(0x6d, 0x6a, 0x5e));
+            for (int d = 1; d <= 9; ++d) {
+                if (!(marks & (1u << (d - 1))))
+                    continue;
+                const int mr = (d - 1) / 3;
+                const int mc = (d - 1) % 3;
+                p.drawText(QRectF(box.x() + mc * cell / 3, box.y() + mr * cell / 3, cell / 3, cell / 3),
+                           Qt::AlignCenter, QString::number(d));
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------------
+
+void SudokuView::mousePressEvent(QMouseEvent* event)
+{
+    const QRect r = boardRect();
+    if (!r.contains(event->position().toPoint()))
+        return;
+    const double cell = cellSize();
+    m_col = std::clamp(int((event->position().x() - r.x()) / cell), 0, SudokuGrid::kSize - 1);
+    m_row = std::clamp(int((event->position().y() - r.y()) / cell), 0, SudokuGrid::kSize - 1);
+    setFocus();
+    update();
+    refresh();
+}
+
+void SudokuView::keyPressEvent(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_Left:  m_col = std::max(0, m_col - 1); break;
+    case Qt::Key_Right: m_col = std::min(SudokuGrid::kSize - 1, m_col + 1); break;
+    case Qt::Key_Up:    m_row = std::max(0, m_row - 1); break;
+    case Qt::Key_Down:  m_row = std::min(SudokuGrid::kSize - 1, m_row + 1); break;
+    case Qt::Key_Backspace:
+    case Qt::Key_Delete:
+    case Qt::Key_0:
+        enter(0);
+        return;
+    default:
+        if (event->key() >= Qt::Key_1 && event->key() <= Qt::Key_9) {
+            enter(event->key() - Qt::Key_0);
+            return;
+        }
+        GameView::keyPressEvent(event);
+        return;
+    }
+    update();
+    refresh();
+}

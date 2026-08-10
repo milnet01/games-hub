@@ -10,14 +10,26 @@ beside whatever you are actually working on.
 | Game | What it is |
 |------|------------|
 | **Reversi** | The classic disc-flipping board game, against the computer, with three difficulty levels. |
+| **Draughts** | Checkers against the computer — compulsory captures, multi-jumps and kings. |
 | **Minesweeper** | Beginner, Intermediate and Expert fields. |
 | **Solitaire** | Klondike, draw one or draw three. |
 | **Spider** | Spider solitaire in one, two or four suits. |
+| **FreeCell** | Four free cells, everything face up, almost always solvable. |
+| **Pyramid** | Clear the pyramid by taking pairs that add to 13. |
+| **Sudoku** | Generated puzzles at three difficulties, with pencil marks. |
 | **Hearts** | Four-handed Hearts against three computer players, to 100. |
+| **Snake** | Eat, grow, and don't run into anything. |
+| **2048** | Slide the tiles, merge the numbers. |
 | **Pinball** | One table, three balls, two flippers. |
 
 Pick a game from the grid; **← All Games** (or `Esc`) goes back. Each game puts
-its own buttons — New Game, Undo, difficulty — on the toolbar beside it.
+its own buttons — New Game, Undo, difficulty — on the toolbar beside it, and
+the **Sound** switch at the right mutes the lot.
+
+Best scores are kept between sessions: discs won at each Reversi level, fastest
+Minesweeper and Sudoku clears, top Klondike score, fewest Spider and FreeCell
+moves, lowest winning Hearts total, and the Snake, 2048 and Pinball high
+scores.
 
 ## Playing
 

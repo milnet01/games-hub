@@ -20,6 +20,7 @@ set(GAME_CORE_SOURCES
     src/reversi/ai.cpp
     src/minesweeper/minefield.cpp
     src/draughts/draughtsboard.cpp
+    src/sudoku/sudokugrid.cpp
     src/cards/card.cpp
     src/hearts/heartsengine.cpp
     src/pinball/pinballtable.cpp
@@ -38,6 +39,9 @@ set(GAME_VIEW_SOURCES
     src/freecell/freecellview.cpp
     src/pyramid/pyramidview.cpp
     src/draughts/draughtsview.cpp
+    src/sudoku/sudokuview.cpp
+    src/snake/snakeview.cpp
+    src/twenty48/twenty48view.cpp
     src/spider/spiderview.cpp
     src/hearts/heartsview.cpp
     src/pinball/pinballview.cpp

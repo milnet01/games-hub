@@ -11,6 +11,9 @@
 #include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
 #include "spider/spiderview.h"
+#include "snake/snakeview.h"
+#include "sudoku/sudokuview.h"
+#include "twenty48/twenty48view.h"
 
 #include <QApplication>
 #include <QGridLayout>
@@ -236,6 +239,34 @@ void pyramidTile(QPainter& p, const QRectF& r)
     }
 }
 
+void sudokuTile(QPainter& p, const QRectF& r)
+{
+    p.fillRect(r, QColor(0xf6, 0xf3, 0xe8));
+    const double cell = r.width() / 3.0;
+    for (int br = 0; br < 3; ++br)
+        for (int bc = 0; bc < 3; ++bc)
+            if ((br + bc) % 2 == 0)
+                p.fillRect(QRectF(r.left() + bc * cell, r.top() + br * cell, cell, cell),
+                           QColor(0xe9, 0xe4, 0xd4));
+    p.setPen(QPen(QColor(0x3c, 0x38, 0x30), 2));
+    for (int i = 0; i <= 3; ++i) {
+        p.drawLine(QPointF(r.left() + i * cell, r.top()), QPointF(r.left() + i * cell, r.bottom()));
+        p.drawLine(QPointF(r.left(), r.top() + i * cell), QPointF(r.right(), r.top() + i * cell));
+    }
+    QFont f = p.font();
+    f.setBold(true);
+    f.setPointSizeF(cell * 0.42);
+    p.setFont(f);
+    const char* digits[9] = { "5", "", "9", "", "7", "", "2", "", "6" };
+    for (int i = 0; i < 9; ++i) {
+        if (!*digits[i])
+            continue;
+        p.setPen(i % 2 ? QColor(0x1f, 0x6f, 0xb2) : QColor(0x22, 0x26, 0x2b));
+        p.drawText(QRectF(r.left() + (i % 3) * cell, r.top() + (i / 3) * cell, cell, cell),
+                   Qt::AlignCenter, QString::fromUtf8(digits[i]));
+    }
+}
+
 void spiderTile(QPainter& p, const QRectF& r)
 {
     cardFan(p, r, { { QStringLiteral("K"), false }, { QStringLiteral("Q"), false },
@@ -248,6 +279,52 @@ void heartsTile(QPainter& p, const QRectF& r)
     // whole identity.
     cardFan(p, r, { { QStringLiteral("♠"), false }, { QStringLiteral("Q"), false },
                     { QStringLiteral("♥"), true } }, 15);
+}
+
+void snakeTile(QPainter& p, const QRectF& r)
+{
+    const double cell = r.width() / 5.0;
+    for (int x = 0; x < 5; ++x)
+        for (int y = 0; y < 5; ++y)
+            p.fillRect(QRectF(r.left() + x * cell, r.top() + y * cell, cell, cell),
+                       ((x + y) % 2) ? QColor(0x18, 0x38, 0x28) : QColor(0x14, 0x30, 0x22));
+    p.setPen(Qt::NoPen);
+    const QPoint body[5] = { { 1, 3 }, { 1, 2 }, { 2, 2 }, { 3, 2 }, { 3, 1 } };
+    for (int i = 0; i < 5; ++i) {
+        p.setBrush(QColor::fromHsvF(0.33, 0.55, 0.85 - i * 0.07));
+        p.drawRoundedRect(QRectF(r.left() + body[i].x() * cell + cell * 0.08,
+                                 r.top() + body[i].y() * cell + cell * 0.08,
+                                 cell * 0.84, cell * 0.84),
+                          cell * 0.26, cell * 0.26);
+    }
+    p.setBrush(QColor(0xe8, 0x51, 0x4f));
+    p.drawEllipse(QPointF(r.left() + cell * 3.5, r.top() + cell * 3.5), cell * 0.28, cell * 0.28);
+}
+
+void twenty48Tile(QPainter& p, const QRectF& r)
+{
+    QPainterPath path;
+    path.addRoundedRect(r, 8, 8);
+    p.fillPath(path, QColor(0xbb, 0xad, 0xa0));
+
+    const double gap = r.width() * 0.05;
+    const double cell = (r.width() - gap * 3) / 2.0;
+    const int values[4] = { 2, 4, 8, 16 };
+    const QColor colours[4] = { QColor(0xee, 0xe4, 0xda), QColor(0xed, 0xe0, 0xc8),
+                                QColor(0xf2, 0xb1, 0x79), QColor(0xf5, 0x95, 0x63) };
+    QFont f = p.font();
+    f.setBold(true);
+    f.setPointSizeF(cell * 0.36);
+    p.setFont(f);
+    for (int i = 0; i < 4; ++i) {
+        const QRectF box(r.left() + gap + (i % 2) * (cell + gap),
+                         r.top() + gap + (i / 2) * (cell + gap), cell, cell);
+        QPainterPath tile;
+        tile.addRoundedRect(box, 5, 5);
+        p.fillPath(tile, colours[i]);
+        p.setPen(values[i] <= 4 ? QColor(0x77, 0x6e, 0x65) : QColor(0xf9, 0xf6, 0xf2));
+        p.drawText(box, Qt::AlignCenter, QString::number(values[i]));
+    }
 }
 
 void pinballTile(QPainter& p, const QRectF& r)
@@ -308,8 +385,14 @@ void HubWindow::buildEntries()
           [] { return new FreeCellView; } },
         { QStringLiteral("Pyramid"), QStringLiteral("Pairs make 13"), pyramidTile,
           [] { return new PyramidView; } },
+        { QStringLiteral("Sudoku"), QStringLiteral("Fill the grid"), sudokuTile,
+          [] { return new SudokuView; } },
         { QStringLiteral("Hearts"), QStringLiteral("Avoid the tricks"), heartsTile,
           [] { return new HeartsView; } },
+        { QStringLiteral("Snake"), QStringLiteral("Eat and grow"), snakeTile,
+          [] { return new SnakeView; } },
+        { QStringLiteral("2048"), QStringLiteral("Slide and merge"), twenty48Tile,
+          [] { return new Twenty48View; } },
         { QStringLiteral("Pinball"), QStringLiteral("Keep it alive"), pinballTile,
           [] { return new PinballView; } },
     };
@@ -388,7 +471,7 @@ void HubWindow::showMenu()
     m_backAction->setVisible(false);
     m_stack->setCurrentWidget(m_menuPage);
     setWindowTitle(QStringLiteral("Games"));
-    m_status->setText(QStringLiteral("Six games. Pick one."));
+    m_status->setText(QStringLiteral("%1 games. Pick one.").arg(m_entries.size()));
 }
 
 void HubWindow::openGame(int index)
