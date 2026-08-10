@@ -106,6 +106,25 @@ a card wide clipped "10" to a stray stroke and cut the tail off "Q".
 **`pkill -f <pattern>` will kill this session's own shell** when the pattern
 appears in the command line being run. Use `pkill -x gameshub`.
 
+**`qt_add_resources(<target> <file>.qrc)` silently compiles an EMPTY resource.**
+That signature expects a resource name plus a `FILES` list, so handing it a
+`.qrc` gives no error, no warning and no content — every sound lookup then
+fails at runtime. Sounds are embedded by listing `sounds.qrc` as a target
+source with `CMAKE_AUTORCC ON`. The binary is ~800 KB with the audio and
+~425 KB without, which is the quickest check; `tests/uitest.cpp` asserts every
+effect is present and non-trivial in size.
+
+**QPainter's `drawRect` fills with the current brush as well as outlining it.**
+A brush set for one thing leaks into everything drawn after it: the flag's red
+brush turned every dug Minesweeper square red, and only from the first flag
+onward, because painting runs row by row. Set the brush — or `Qt::NoBrush` —
+immediately before a shape call rather than trusting what came before.
+
+**Sounds are generated, never sampled.** `tools/make_sounds.py` synthesises all
+17 effects from a fixed seed, so re-running it is byte-identical. That is a
+licensing decision rather than a stylistic one — see `ROADMAP.md` § Choosing
+games before adding any asset.
+
 ## Testing notes
 
 Wayland blocks synthetic clicks and no injection tool is installed, so GUI
