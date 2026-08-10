@@ -7,7 +7,7 @@ traditional or public-domain; see *Choosing games* below for why each is safe.
 
 | Game | Notes | Size |
 |------|-------|------|
-| **Chess** | Full rules — castling, en passant, promotion, check/checkmate/stalemate, the draw rules — plus an opponent that plays sensibly. | Large. Bigger than any single game currently in the hub. |
+| ~~**Chess**~~ | **Shipped 2026-08-10.** Full rules, an opponent at three strengths, and a move generator proven against the published node counts for four reference positions. | Large. Bigger than any single game currently in the hub. |
 | **Canasta** | Partnerships (2v2), melds, wild cards, red threes, freezing and taking the discard pile, going out, full scoring table. | Large. Most complex card game on the list. |
 | **Gin Rummy** | Two-handed against the computer: knocking, deadwood, gin, undercut. | Medium. |
 | **Cribbage** | Two-handed with the pegging board, the crib, and the show. | Medium. |
@@ -15,7 +15,8 @@ traditional or public-domain; see *Choosing games* below for why each is safe.
 | **Spades** | Four-handed partnership trick-taking with bidding. Reuses the Hearts shape. | Medium. |
 | **TriPeaks / Golf / Yukon** | Three more solitaires. Cheapest of all — they reuse the card engine and drag-and-drop wholesale. | Small each. |
 
-Nothing here is started. The hub currently ships twelve games.
+Chess is done; nothing below it is started. The hub currently ships thirteen
+games.
 
 ## Choosing games
 

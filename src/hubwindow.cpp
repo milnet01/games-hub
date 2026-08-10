@@ -2,6 +2,8 @@
 
 #include "gameview.h"
 #include "sound.h"
+#include "chess/chessart.h"
+#include "chess/chessview.h"
 #include "draughts/draughtsview.h"
 #include "freecell/freecellview.h"
 #include "hearts/heartsview.h"
@@ -128,6 +130,21 @@ void reversiTile(QPainter& p, const QRectF& r)
             p.setBrush(white[k] ? QColor(0xf4, 0xf3, 0xee) : QColor(0x22, 0x24, 0x26));
             p.drawEllipse(QPointF(r.left() + col * cell, r.top() + row * cell), rad, rad);
         }
+}
+
+void chessTile(QPainter& p, const QRectF& r)
+{
+    // A corner of the board with the two pieces that read fastest at this size.
+    const double cell = r.width() / 4.0;
+    for (int row = 0; row < 4; ++row)
+        for (int col = 0; col < 4; ++col)
+            p.fillRect(QRectF(r.left() + col * cell, r.top() + row * cell, cell, cell),
+                       ((row + col) % 2) ? ChessArt::kDarkSquare : ChessArt::kLightSquare);
+
+    ChessArt::paintPiece(p, QRectF(r.left() + cell * 0.55, r.top() + cell * 1.55, cell, cell),
+                         chess::PieceType::King, chess::Colour::White);
+    ChessArt::paintPiece(p, QRectF(r.left() + cell * 2.45, r.top() + cell * 0.55, cell, cell),
+                         chess::PieceType::Knight, chess::Colour::Black);
 }
 
 void draughtsTile(QPainter& p, const QRectF& r)
@@ -371,6 +388,8 @@ HubWindow::HubWindow(QWidget* parent)
 void HubWindow::buildEntries()
 {
     m_entries = {
+        { QStringLiteral("Chess"), QStringLiteral("The full game"), chessTile,
+          [] { return new ChessView; } },
         { QStringLiteral("Reversi"), QStringLiteral("Flip the board"), reversiTile,
           [] { return new ReversiView; } },
         { QStringLiteral("Draughts"), QStringLiteral("Checkers, with kings"), draughtsTile,

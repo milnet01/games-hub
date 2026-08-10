@@ -20,6 +20,8 @@ set(GAME_CORE_SOURCES
     src/reversi/ai.cpp
     src/minesweeper/minefield.cpp
     src/draughts/draughtsboard.cpp
+    src/chess/chessboard.cpp
+    src/chess/chessai.cpp
     src/sudoku/sudokugrid.cpp
     src/cards/card.cpp
     src/hearts/heartsengine.cpp
@@ -35,6 +37,8 @@ set(GAME_VIEW_SOURCES
     src/sound.cpp
     src/scores.cpp
     src/cards/cardart.cpp
+    src/chess/chessart.cpp
+    src/chess/chessview.cpp
     src/klondike/klondikeview.cpp
     src/freecell/freecellview.cpp
     src/pyramid/pyramidview.cpp

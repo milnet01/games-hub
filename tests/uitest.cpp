@@ -5,6 +5,7 @@
 #include "gameview.h"
 #include "scores.h"
 #include "sound.h"
+#include "chess/chessview.h"
 #include "hearts/heartsview.h"
 #include "hubwindow.h"
 #include "klondike/klondikeview.h"
@@ -186,6 +187,37 @@ int main(int argc, char* argv[])
         const double share = 100.0 * red / (shot.width() * shot.height());
         std::printf("      flag red covers %.2f%% of the board\n", share);
         check(share < 2.0, "minesweeper: flag red does not bleed into dug squares");
+
+        // Chess is driven by clicking one square then another, so the check is
+        // that a real pawn move lands and the engine answers it — the whole
+        // loop, not just that the widget paints.
+        ChessView chess;
+        check(paints(&chess), "chess view paints");
+        check(!chess.gameActions().isEmpty(), "chess view offers toolbar actions");
+
+        QString chessStatus;
+        QObject::connect(&chess, &GameView::statusChanged,
+                         [&chessStatus](const QString& text) { chessStatus = text; });
+
+        chess.resize(640, 640);
+        // Mirrors ChessView::boardRect: a square board centred in the widget,
+        // inside an 18px frame and a 4px margin.
+        const auto square = [](const QWidget* w, int row, int col) {
+            const int side = ((std::min(w->width(), w->height()) - 2 * (18 + 4)) / 8) * 8;
+            const double cell = side / 8.0;
+            return QPointF((w->width() - side) / 2.0 + (col + 0.5) * cell,
+                           (w->height() - side) / 2.0 + (row + 0.5) * cell);
+        };
+
+        clickAt(&chess, square(&chess, 6, 4), Qt::LeftButton);   // the pawn on e2
+        const QImage selected = renderOf(&chess);
+        clickAt(&chess, square(&chess, 4, 4), Qt::LeftButton);   // push it to e4
+        pump(1500);                                              // let the engine reply
+        const QImage replied = renderOf(&chess);
+
+        check(selected != replied, "chess: playing a move redraws the board");
+        check(chessStatus.contains(QStringLiteral("Computer played")),
+              "chess: the engine answers the player's move");
 
         KlondikeView klondike;
         check(paints(&klondike), "klondike view paints");

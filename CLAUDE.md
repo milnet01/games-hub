@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Qt 6 Widgets game collection — a hub window holding Reversi, Minesweeper,
-Klondike, Spider, Hearts and Pinball. Started 2026-08-10 as a single Reversi
-game and expanded the same day; there is no git repo, ROADMAP or CHANGELOG yet.
+A Qt 6 Widgets game collection — a hub window holding thirteen games: Chess,
+Reversi, Draughts, Minesweeper, Klondike, Spider, FreeCell, Pyramid, Sudoku,
+Hearts, Snake, 2048 and Pinball. Started 2026-08-10 as a single Reversi game
+and expanded the same day. `ROADMAP.md` holds the queue of games still to come.
 
 ## Commands
 
@@ -58,6 +59,14 @@ display, and it is the rule to preserve when adding a game.
 
 ### Per game
 
+- **Chess** — `chess/chessboard.*` is the rule set, wrapped in `namespace chess`
+  because the draughts core already owns `Side`, `Piece` and `Square` at global
+  scope and the self-test includes both. `Board` is the position alone —
+  fixed-size, heap-free, copied per search node — while `ChessGame` adds the
+  position history that threefold repetition needs, so the search never carries
+  it. `chess/chessai.*` is negamax with alpha-beta, quiescence and iterative
+  deepening. `chess/chessart.*` paints the pieces and is shared with the hub
+  tile. `ChessView::advance()` is the single point that moves the game on.
 - **Reversi** — `reversi/board.*` is the rule set, funnelled through
   `Board::ray()`, which walks one of eight directions and returns how many
   discs are bracketed. `reversi/ai.*` is negamax with alpha-beta over copied
@@ -87,6 +96,26 @@ display, and it is the rule to preserve when adding a game.
   only draws it and feeds input.
 
 ## Traps worth knowing
+
+**Alpha-beta only resolves the BEST move's score exactly.** Every other root
+move comes back as an upper bound, and a bad move whose search fails low can be
+reported level with the best one. Chess's Easy and Medium levels pick at random
+among moves within a few centipawns of the best, so they searched a full window
+at the root (`rootScores`'s `exact` flag) — without it, Hard was playing
+`Nf3-g1` from a normal opening because a fail-low tie sorted to the front. The
+observable symptom is an engine that is strong in tactics and absurd in quiet
+positions, which reads as a bad evaluation rather than a bad window.
+
+**A chess move generator is proved by perft, not by eyeballing.** Counting
+every leaf to a fixed depth and matching the published totals for a handful of
+reference positions catches castling-through-check, en-passant and pin bugs
+that no amount of playing will surface reliably. `chessMoveGeneration()` in the
+self-test checks four positions and runs in about 20 ms.
+
+**The engine searches on the GUI thread, so it is bounded by a node budget
+rather than by depth alone.** `planFor()` in `chessai.cpp` sets one per level;
+Hard's worst observed middlegame answer is about 1.2 s. Raising the depth
+without raising the budget does nothing, and raising both freezes the window.
 
 **Pinball's launch is calibrated, not guessed.** `minimumLaunchSpeed()` derives
 the weakest plunger from the dome height above the lane, so even a limp launch

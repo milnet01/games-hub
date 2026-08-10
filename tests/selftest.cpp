@@ -2,6 +2,8 @@
 // gameshub_selftest directly; exits non-zero on the first failure.
 
 #include "cards/card.h"
+#include "chess/chessai.h"
+#include "chess/chessboard.h"
 #include "hearts/heartsengine.h"
 #include "draughts/draughtsboard.h"
 #include "minesweeper/minefield.h"
@@ -453,6 +455,249 @@ void draughtsEngine()
 }
 
 // ---------------------------------------------------------------------------
+// Chess
+// ---------------------------------------------------------------------------
+
+// Counting every leaf of the move tree to a fixed depth is the standard way to
+// prove a move generator: one wrong castling, en-passant or pin rule and the
+// totals stop matching the published numbers for these positions.
+long long perft(const chess::Board& board, int depth)
+{
+    if (depth == 0)
+        return 1;
+    long long total = 0;
+    for (const chess::Move& m : board.legalMoves()) {
+        chess::Board next = board;
+        next.apply(m);
+        total += perft(next, depth - 1);
+    }
+    return total;
+}
+
+chess::Board fen(const char* text)
+{
+    chess::Board b;
+    if (!b.setFromFen(text))
+        check(false, "chess: a test position failed to parse");
+    return b;
+}
+
+// Finds a move by the squares it runs between, so the checks below read like
+// chess rather than like array indices.
+bool play(chess::ChessGame& game, const char* from, const char* to,
+          chess::PieceType promotion = chess::PieceType::None)
+{
+    for (const chess::Move& m : game.legalMoves()) {
+        if (chess::squareName(m.from) == from && chess::squareName(m.to) == to
+            && m.promotion == promotion) {
+            game.play(m);
+            return true;
+        }
+    }
+    return false;
+}
+
+void chessMoveGeneration()
+{
+    const auto start = std::chrono::steady_clock::now();
+
+    const chess::Board opening;
+    check(perft(opening, 1) == 20, "chess: twenty opening moves");
+    check(perft(opening, 2) == 400, "chess: 400 positions after one move each");
+    check(perft(opening, 3) == 8902, "chess: 8,902 positions at depth three");
+    check(perft(opening, 4) == 197281, "chess: 197,281 positions at depth four");
+
+    // A middlegame with both castlings, pins and a capturable en passant.
+    const chess::Board tangled =
+        fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
+    check(perft(tangled, 1) == 48, "chess: 48 moves in a tangled middlegame");
+    check(perft(tangled, 2) == 2039, "chess: 2,039 at depth two there");
+    check(perft(tangled, 3) == 97862, "chess: 97,862 at depth three there");
+
+    // An endgame that turns on en passant and a promotion race.
+    const chess::Board race = fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1");
+    check(perft(race, 3) == 2812, "chess: 2,812 in the promotion race");
+    check(perft(race, 4) == 43238, "chess: 43,238 at depth four there");
+
+    // Promotions under check, with both sides able to queen.
+    const chess::Board promotions =
+        fen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1");
+    check(perft(promotions, 3) == 9467, "chess: 9,467 with promotions available");
+
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+    std::printf("      move generation checked in %lld ms\n", (long long)ms);
+}
+
+void chessSpecialMoves()
+{
+    // Castling, both sides, with the rook landing beside the king.
+    chess::Board b = fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
+    int castles = 0;
+    for (const chess::Move& m : b.legalMoves())
+        if (m.castle)
+            ++castles;
+    check(castles == 2, "chess: both castlings are offered when nothing is in the way");
+
+    for (const chess::Move& m : b.legalMoves()) {
+        if (!m.castle || chess::squareName(m.to) != "g1")
+            continue;
+        chess::Board after = b;
+        after.apply(m);
+        check(after.at(7, 6).type == chess::PieceType::King
+                  && after.at(7, 5).type == chess::PieceType::Rook
+                  && after.at(7, 7).empty(),
+              "chess: castling moves the rook as well as the king");
+        check(!after.canCastle(chess::Colour::White, true)
+                  && !after.canCastle(chess::Colour::White, false),
+              "chess: castling gives up both rights");
+    }
+
+    // Castling out of, through, or into check is all illegal.
+    check(fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").legalMoves().size()
+              > fen("r3k2r/8/8/8/4r3/8/8/R3K2R w KQkq - 0 1").legalMoves().size(),
+          "chess: a checked king may not castle");
+    int throughCheck = 0;
+    for (const chess::Move& m : fen("r3k2r/8/8/8/5r2/8/8/R3K2R w KQkq - 0 1").legalMoves())
+        if (m.castle && chess::squareName(m.to) == "g1")
+            ++throughCheck;
+    check(throughCheck == 0, "chess: a king may not castle through an attacked square");
+
+    // En passant, taken the move after the double step and not later.
+    chess::ChessGame game;
+    game.setFromFen("4k3/8/8/8/4p3/8/3P4/4K3 w - - 0 1");
+    check(play(game, "d2", "d4"), "chess: a pawn may open with a double step");
+    check(chess::squareName(game.board().enPassantTarget()) == "d3",
+          "chess: the double step leaves an en passant square");
+    check(play(game, "e4", "d3"), "chess: en passant is available the move after");
+    check(game.board().at(4, 3).empty() && game.board().at(5, 3).type == chess::PieceType::Pawn,
+          "chess: en passant removes the pawn that ran past");
+
+    // Promotion offers all four pieces.
+    const chess::Board promoting = fen("4k3/P7/8/8/8/8/8/4K3 w - - 0 1");
+    int promotions = 0;
+    for (const chess::Move& m : promoting.legalMoves())
+        if (m.promotion != chess::PieceType::None)
+            ++promotions;
+    check(promotions == 4, "chess: a promoting pawn may become any of four pieces");
+
+    chess::ChessGame promotion;
+    promotion.setFromFen("4k3/P7/8/8/8/8/8/4K3 w - - 0 1");
+    check(play(promotion, "a7", "a8", chess::PieceType::Knight),
+          "chess: underpromotion is playable");
+    check(promotion.board().at(0, 0).type == chess::PieceType::Knight,
+          "chess: the promoted pawn becomes the piece chosen");
+}
+
+void chessEndings()
+{
+    check(fen("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 0 1").isCheckmate(),
+          "chess: checkmate is recognised");
+    check(fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1").isStalemate(),
+          "chess: stalemate is recognised, and is not mate");
+    check(!fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1").isCheckmate(),
+          "chess: a stalemated king is not in check");
+
+    check(fen("4k3/8/8/8/8/8/8/4K3 w - - 0 1").insufficientMaterial(),
+          "chess: bare kings cannot mate");
+    check(fen("4k3/8/8/8/8/8/8/4KB2 w - - 0 1").insufficientMaterial(),
+          "chess: king and bishop cannot mate");
+    check(fen("4k3/8/8/8/8/8/8/4KN2 w - - 0 1").insufficientMaterial(),
+          "chess: king and knight cannot mate");
+    check(!fen("4k3/8/8/8/8/8/8/4KR2 w - - 0 1").insufficientMaterial(),
+          "chess: king and rook can mate");
+    check(!fen("4k1n1/8/8/8/8/8/8/4KN2 w - - 0 1").insufficientMaterial(),
+          "chess: two knights are not an automatic draw");
+
+    // Threefold repetition: shuffle the knights back to where they started.
+    chess::ChessGame game;
+    const char* shuffle[8][2] = { { "g1", "f3" }, { "g8", "f6" }, { "f3", "g1" }, { "f6", "g8" },
+                                 { "g1", "f3" }, { "g8", "f6" }, { "f3", "g1" }, { "f6", "g8" } };
+    bool played = true;
+    for (const auto& step : shuffle)
+        played = played && play(game, step[0], step[1]);
+    check(played, "chess: the knights can shuffle back and forth");
+    check(game.repetitionCount() == 3, "chess: the opening position has now occurred three times");
+    check(game.result() == chess::Result::Draw
+              && game.drawReason() == chess::DrawReason::Repetition,
+          "chess: threefold repetition is a draw");
+
+    chess::ChessGame fifty;
+    fifty.setFromFen("4k3/8/8/8/8/8/4R3/4K3 w - - 100 60");
+    check(fifty.result() == chess::Result::Draw
+              && fifty.drawReason() == chess::DrawReason::FiftyMove,
+          "chess: a hundred quiet plies is a draw");
+
+    chess::ChessGame mate;
+    mate.setFromFen("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 0 1");
+    check(mate.result() == chess::Result::BlackWins, "chess: the mated side loses");
+
+    // Undo has to put the position back exactly, rights and clocks included.
+    chess::ChessGame undone;
+    const std::string before = undone.board().fen();
+    check(play(undone, "e2", "e4"), "chess: e4 is legal");
+    check(undone.undo() && undone.board().fen() == before,
+          "chess: undo restores the position exactly");
+}
+
+void chessEngine()
+{
+    const auto start = std::chrono::steady_clock::now();
+
+    // A back-rank mate in one: anything but Re8 is a wasted move.
+    chess::Move found;
+    int score = 0;
+    check(chess::searchBestMove(fen("6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1"), 2, found, &score),
+          "chess: the engine returns a move");
+    check(chess::squareName(found.from) == "e1" && chess::squareName(found.to) == "e8",
+          "chess: the engine finds mate in one");
+
+    // It must also see the mate coming and stop it.
+    check(chess::searchBestMove(fen("6k1/5ppp/8/8/8/8/6PP/4R1K1 b - - 0 1"), 3, found, &score),
+          "chess: the engine answers as Black");
+    check(chess::squareName(found.to) != "h6" || score < 0,
+          "chess: the engine does not walk into mate on the back rank");
+
+    // And it should take a free queen.
+    check(chess::searchBestMove(fen("4k3/8/8/3q4/4B3/8/8/4K3 w - - 0 1"), 2, found, &score),
+          "chess: the engine returns a capture");
+    check(chess::squareName(found.from) == "e4" && chess::squareName(found.to) == "d5",
+          "chess: the engine takes an undefended queen");
+
+    // Against random play it should win, not merely survive.
+    std::mt19937 rng { 20260810 };
+    int wins = 0;
+    constexpr int kGames = 4;
+    for (int game = 0; game < kGames; ++game) {
+        chess::ChessGame g;
+        const chess::Colour engine = (game % 2 == 0) ? chess::Colour::White : chess::Colour::Black;
+        while (!g.isOver() && g.history().size() < 250) {
+            const std::vector<chess::Move> moves = g.legalMoves();
+            if (g.toMove() == engine) {
+                chess::Move m;
+                chess::searchBestMove(g.board(), 3, m);
+                g.play(m);
+            } else {
+                std::uniform_int_distribution<std::size_t> pick(0, moves.size() - 1);
+                g.play(moves[pick(rng)]);
+            }
+        }
+        const chess::Result want =
+            engine == chess::Colour::White ? chess::Result::WhiteWins : chess::Result::BlackWins;
+        if (g.result() == want)
+            ++wins;
+        else if (g.result() != chess::Result::Draw)
+            check(false, "chess: the engine lost to random play");
+    }
+
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+    std::printf("      engine won %d of %d against random play in %lld ms\n", wins, kGames,
+                (long long)ms);
+    check(wins >= kGames - 1, "chess: the engine beats random play");
+}
+
+// ---------------------------------------------------------------------------
 // Sudoku
 // ---------------------------------------------------------------------------
 
@@ -625,6 +870,12 @@ int main()
     draughtsRules();
     draughtsCaptures();
     draughtsEngine();
+
+    section("Chess");
+    chessMoveGeneration();
+    chessSpecialMoves();
+    chessEndings();
+    chessEngine();
 
     section("Sudoku");
     sudokuGeneration();
