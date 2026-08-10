@@ -8,15 +8,15 @@ traditional or public-domain; see *Choosing games* below for why each is safe.
 | Game | Notes | Size |
 |------|-------|------|
 | ~~**Chess**~~ | **Shipped 2026-08-10.** Full rules, an opponent at three strengths, and a move generator proven against the published node counts for four reference positions. | Large. Bigger than any single game currently in the hub. |
-| **Canasta** | Partnerships (2v2), melds, wild cards, red threes, freezing and taking the discard pile, going out, full scoring table. | Large. Most complex card game on the list. |
+| ~~**Canasta**~~ | **Shipped 2026-08-10.** Partnerships (2v2), melds, wild cards, red threes, freezing and taking the discard pile, going out and the full scoring table — plus a second, editable rule set for the owner's family's house rules. | Large. Most complex card game on the list. |
 | **Gin Rummy** | Two-handed against the computer: knocking, deadwood, gin, undercut. | Medium. |
 | **Cribbage** | Two-handed with the pegging board, the crib, and the show. | Medium. |
 | **Blackjack** | Traditional twenty-one against a dealer. | Small. |
 | **Spades** | Four-handed partnership trick-taking with bidding. Reuses the Hearts shape. | Medium. |
 | **TriPeaks / Golf / Yukon** | Three more solitaires. Cheapest of all — they reuse the card engine and drag-and-drop wholesale. | Small each. |
 
-Chess is done; nothing below it is started. The hub currently ships thirteen
-games.
+Chess and Canasta are done; nothing below them is started. The hub currently
+ships fourteen games.
 
 ## Agreed, not yet scheduled
 
@@ -85,6 +85,21 @@ Same test, same answer: the classics are ancient and free.
 - **Halma**, **Hnefatafl**, **Shogi**, **Xiangqi** — deeper cuts, all free.
 
 ## Deferred, deliberately
+
+**Cutting the pack, in Canasta.** At a table the cut stops the dealer stacking
+the deck and breaks up cards left clumped from the last hand. Neither can
+happen here — every deal is a fresh random ordering — so a cut would be an
+animation that changes nothing, and putting one on screen implies it matters.
+What *does* rotate is the deal: each hand a different seat deals and the player
+to their left leads, so the advantage moves round the table as it should. If a
+cut is ever wanted it belongs in the house-rules dialog as honest decoration,
+labelled as such. Decided with the owner on 2026-08-10.
+
+**Saving a game in progress.** No game in the hub survives closing the window,
+and Canasta to 5000 is the first one long enough for that to hurt. The stopgap
+is the toolbar's shorter targets (1000 / 2000 / 3000). Doing it properly means
+serialising the engine — hands, melds, pile, stock, the lot — which is a new
+mechanism no other game needs, so it waits until a second game wants it.
 
 **Choosing your colour, in Chess or Draughts.** Both put the human on the side
 that moves first — White and Red — and neither offers a swap or a board flip.

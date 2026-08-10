@@ -25,6 +25,8 @@ set(GAME_CORE_SOURCES
     src/sudoku/sudokugrid.cpp
     src/cards/card.cpp
     src/hearts/heartsengine.cpp
+    src/canasta/canastaengine.cpp
+    src/canasta/canastaai.cpp
     src/pinball/pinballtable.cpp
 )
 
@@ -48,6 +50,7 @@ set(GAME_VIEW_SOURCES
     src/twenty48/twenty48view.cpp
     src/spider/spiderview.cpp
     src/hearts/heartsview.cpp
+    src/canasta/canastaview.cpp
     src/pinball/pinballview.cpp
 )
 

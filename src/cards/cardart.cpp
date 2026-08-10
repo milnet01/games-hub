@@ -16,6 +16,8 @@ constexpr QColor kRed { 0xc0, 0x28, 0x28 };
 constexpr QColor kBlack { 0x1c, 0x1f, 0x22 };
 constexpr QColor kBackInk { 0x27, 0x46, 0x86 };
 constexpr QColor kBackInkDark { 0x18, 0x2c, 0x58 };
+constexpr QColor kBackInkRed { 0x9c, 0x27, 0x33 };
+constexpr QColor kBackInkRedDark { 0x67, 0x16, 0x22 };
 constexpr QColor kBackPaper { 0xf2, 0xf4, 0xf9 };
 
 double corner(const QRectF& r) { return std::max(2.0, r.width() * 0.075); }
@@ -110,6 +112,48 @@ void drawCourt(QPainter& p, const QRectF& r, const QString& rank, const QString&
     p.drawText(panel, Qt::AlignCenter, rank);
 }
 
+// A jester's cap: three lobes on a headband, each with a bell. Drawn rather
+// than lettered because "JOKER" down the middle of a card this small is
+// unreadable, and the silhouette survives being shrunk to a corner of a meld.
+void drawJesterCap(QPainter& p, const QRectF& r, const QColor& ink)
+{
+    const double w = r.width();
+    const QPointF c(r.center().x(), r.center().y() + r.height() * 0.06);
+
+    const double lobe = w * 0.13;
+    const double reach = w * 0.26;
+    const struct { double dx; double dy; } kLobes[3] = {
+        { -reach, -w * 0.16 }, { 0.0, -w * 0.30 }, { reach, -w * 0.16 },
+    };
+
+    QPainterPath cap;
+    cap.moveTo(c.x() - w * 0.30, c.y());
+    for (const auto& l : kLobes) {
+        const QPointF tip(c.x() + l.dx, c.y() + l.dy);
+        cap.quadTo(QPointF(tip.x() - lobe, tip.y()), tip);
+        cap.quadTo(QPointF(tip.x() + lobe, tip.y()), QPointF(tip.x() + lobe * 0.9, c.y()));
+    }
+    cap.lineTo(c.x() + w * 0.30, c.y());
+    cap.closeSubpath();
+
+    QColor fill = ink;
+    fill.setAlpha(190);
+    p.setPen(QPen(ink, std::max(0.8, w * 0.02)));
+    p.setBrush(fill);
+    p.drawPath(cap);
+
+    // Bells, and the headband under the lobes.
+    p.setBrush(Theme::kGold);
+    p.setPen(QPen(ink, std::max(0.6, w * 0.014)));
+    for (const auto& l : kLobes)
+        p.drawEllipse(QPointF(c.x() + l.dx, c.y() + l.dy - lobe * 0.2), w * 0.05, w * 0.05);
+
+    p.setBrush(Theme::kGold);
+    p.drawRoundedRect(QRectF(c.x() - w * 0.32, c.y(), w * 0.64, w * 0.10),
+                      w * 0.05, w * 0.05);
+    p.setBrush(Qt::NoBrush);
+}
+
 } // namespace
 
 namespace CardArt {
@@ -130,9 +174,11 @@ void paintFace(QPainter& p, const QRectF& r, const Card& c)
     p.setPen(QPen(QColor(0, 0, 0, 60), 1));
     p.drawPath(path);
 
+    // A joker carries no suit, so its corner index is the star alone.
+    const bool joker = isJoker(c);
     const QColor ink = isRed(c) ? kRed : kBlack;
     const QString rank = rankLabel(c.rank);
-    const QString suit = suitSymbol(c.suit);
+    const QString suit = joker ? QString() : suitSymbol(c.suit);
     p.setPen(ink);
 
     // Corner index, top-left upright and bottom-right inverted, as on a real
@@ -170,6 +216,11 @@ void paintFace(QPainter& p, const QRectF& r, const Card& c)
     if (r.width() < 46)
         return;
 
+    if (joker) {
+        drawJesterCap(p, r, ink);
+        return;
+    }
+
     if (c.rank == kJack || c.rank == kQueen || c.rank == kKing) {
         drawCourt(p, r, rank, suit, ink);
         return;
@@ -192,8 +243,12 @@ void paintFace(QPainter& p, const QRectF& r, const Card& c)
         drawPip(p, QPointF(r.left() + r.width() * pip.x, top + span * pip.y), pipSize, suit);
 }
 
-void paintBack(QPainter& p, const QRectF& r)
+void paintBack(QPainter& p, const QRectF& r, int deck)
 {
+    const bool red = (deck % 2) != 0;
+    const QColor backInk = red ? kBackInkRed : kBackInk;
+    const QColor backInkDark = red ? kBackInkRedDark : kBackInkDark;
+
     Theme::paintDropShadow(p, r, corner(r), std::max(1.5, r.width() * 0.035));
 
     QPainterPath path;
@@ -209,8 +264,8 @@ void paintBack(QPainter& p, const QRectF& r)
     innerPath.addRoundedRect(inner, corner(r) * 0.55, corner(r) * 0.55);
 
     QLinearGradient ink(inner.topLeft(), inner.bottomRight());
-    ink.setColorAt(0.0, kBackInk);
-    ink.setColorAt(1.0, kBackInkDark);
+    ink.setColorAt(0.0, backInk);
+    ink.setColorAt(1.0, backInkDark);
     p.fillPath(innerPath, ink);
 
     // Diagonal lattice, clipped to the panel.
@@ -225,7 +280,7 @@ void paintBack(QPainter& p, const QRectF& r)
     // A centre medallion stops the lattice reading as pure texture.
     if (r.width() >= 40) {
         p.setPen(QPen(QColor(255, 255, 255, 70), std::max(0.8, r.width() * 0.016)));
-        p.setBrush(QColor(kBackInkDark.red(), kBackInkDark.green(), kBackInkDark.blue(), 200));
+        p.setBrush(QColor(backInkDark.red(), backInkDark.green(), backInkDark.blue(), 200));
         p.drawEllipse(inner.center(), r.width() * 0.17, r.width() * 0.17);
     }
     p.restore();

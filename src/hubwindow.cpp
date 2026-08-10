@@ -6,6 +6,7 @@
 #include "chess/chessview.h"
 #include "draughts/draughtsview.h"
 #include "freecell/freecellview.h"
+#include "canasta/canastaview.h"
 #include "hearts/heartsview.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
@@ -298,6 +299,13 @@ void heartsTile(QPainter& p, const QRectF& r)
                     { QStringLiteral("♥"), true } }, 15);
 }
 
+void canastaTile(QPainter& p, const QRectF& r)
+{
+    // A meld with a joker in it: the one card no other game in the hub has.
+    cardFan(p, r, { { QStringLiteral("K"), false }, { QStringLiteral("K"), true },
+                    { QStringLiteral("★"), false } }, 14);
+}
+
 void snakeTile(QPainter& p, const QRectF& r)
 {
     const double cell = r.width() / 5.0;
@@ -408,6 +416,8 @@ void HubWindow::buildEntries()
           [] { return new SudokuView; } },
         { QStringLiteral("Hearts"), QStringLiteral("Avoid the tricks"), heartsTile,
           [] { return new HeartsView; } },
+        { QStringLiteral("Canasta"), QStringLiteral("Melds and partners"), canastaTile,
+          [] { return new CanastaView; } },
         { QStringLiteral("Snake"), QStringLiteral("Eat and grow"), snakeTile,
           [] { return new SnakeView; } },
         { QStringLiteral("2048"), QStringLiteral("Slide and merge"), twenty48Tile,

@@ -13,7 +13,11 @@ namespace CardArt {
 constexpr double kAspect = 1.4;
 
 void paintFace(QPainter& p, const QRectF& r, const Card& c);
-void paintBack(QPainter& p, const QRectF& r);
+
+// `deck` picks the colourway: 0 is blue, 1 is red. Games dealt from a single
+// pack take the default and are all blue; Canasta shuffles two packs together,
+// so its stock shows both backs mixed, the way a real table does.
+void paintBack(QPainter& p, const QRectF& r, int deck = 0);
 
 // Dashed outline for an empty pile.
 void paintSlot(QPainter& p, const QRectF& r, const QString& glyph = {});

@@ -16,6 +16,8 @@ inline constexpr QColor kFeltTealTop { 0x1c, 0x6b, 0x7e };
 inline constexpr QColor kFeltTealBottom { 0x0d, 0x40, 0x4e };
 inline constexpr QColor kFeltBlueTop { 0x2e, 0x40, 0x6e };
 inline constexpr QColor kFeltBlueBottom { 0x18, 0x22, 0x40 };
+inline constexpr QColor kFeltClaretTop { 0x6b, 0x24, 0x30 };
+inline constexpr QColor kFeltClaretBottom { 0x3a, 0x11, 0x1a };
 
 inline constexpr QColor kWood { 0x3a, 0x27, 0x19 };
 inline constexpr QColor kWoodLight { 0x5c, 0x40, 0x28 };

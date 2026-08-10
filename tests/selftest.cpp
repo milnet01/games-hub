@@ -1,6 +1,8 @@
 // Headless checks for every game's rules. Run via `ctest` or by executing
 // gameshub_selftest directly; exits non-zero on the first failure.
 
+#include "canasta/canastaai.h"
+#include "canasta/canastaengine.h"
 #include "cards/card.h"
 #include "chess/chessai.h"
 #include "chess/chessboard.h"
@@ -853,6 +855,588 @@ void pinballScoring()
     check(scored >= 8, "pinball: a launched ball reliably reaches the scoring area");
 }
 
+// ---------------------------------------------------------------------------
+// Canasta
+// ---------------------------------------------------------------------------
+
+namespace ca = canasta;
+
+Card cd(Suit s, int rank) { return Card { s, rank, false, 0 }; }
+Card joker(bool red) { return Card { red ? Suit::Hearts : Suit::Spades, kJoker, false, 0 }; }
+
+// Builds a stock that deals exactly `hands` to the four seats. Cards come off
+// the back, so the deal order is reversed onto the tail; `up` becomes the first
+// card of the discard pile and `below` is what is left to draw.
+std::vector<Card> canastaStock(const std::array<std::vector<Card>, 4>& hands, int dealer,
+                              const std::vector<Card>& below, const Card& up)
+{
+    const int first = (dealer + 1) % ca::kSeats;
+    std::vector<Card> order;
+    for (std::size_t i = 0; i < hands[std::size_t(first)].size(); ++i)
+        for (int s = 0; s < ca::kSeats; ++s)
+            order.push_back(hands[std::size_t((first + s) % ca::kSeats)][i]);
+
+    std::vector<Card> stock = below;
+    stock.push_back(up);
+    stock.insert(stock.end(), order.rbegin(), order.rend());
+    return stock;
+}
+
+// Eleven cards of no interest, for the seats a check is not about.
+std::vector<Card> filler(int rank)
+{
+    std::vector<Card> v;
+    for (int i = 0; i < 11; ++i)
+        v.push_back(cd(i % 2 == 0 ? Suit::Clubs : Suit::Spades, rank));
+    return v;
+}
+
+void canastaDeckAndValues()
+{
+    const std::vector<Card> deck = makeDeck(2, 4, 4);
+    check(deck.size() == 108, "canasta: the pack is 108 cards");
+    check(std::count_if(deck.begin(), deck.end(), isJoker) == 4, "canasta: four jokers");
+
+    int red = 0;
+    int blue = 0;
+    for (const Card& c : deck)
+        (c.deck == 0 ? blue : red)++;
+    check(red == 54 && blue == 54, "canasta: two packs of 54, one red-backed and one blue");
+    check(std::count_if(deck.begin(), deck.end(),
+                        [](const Card& c) { return isJoker(c) && c.deck == 1; })
+              == 2,
+          "canasta: each pack brings its own two jokers");
+
+    // Every other game must be untouched by jokers existing at all.
+    const std::vector<Card> plain = makeDeck(1, 4);
+    check(plain.size() == 52 && std::none_of(plain.begin(), plain.end(), isJoker),
+          "canasta: a single pack still has no jokers in it");
+
+    const ca::Rules r;
+    check(ca::cardValue(joker(true), r) == 50, "canasta: a joker is 50");
+    check(ca::cardValue(cd(Suit::Spades, 2), r) == 20, "canasta: a two is 20");
+    check(ca::cardValue(cd(Suit::Spades, kAce), r) == 20, "canasta: an ace is 20");
+    check(ca::cardValue(cd(Suit::Spades, kKing), r) == 10, "canasta: a king is 10");
+    check(ca::cardValue(cd(Suit::Spades, 8), r) == 10, "canasta: an eight is 10");
+    check(ca::cardValue(cd(Suit::Spades, 7), r) == 5, "canasta: a seven is 5");
+    check(ca::cardValue(cd(Suit::Spades, 4), r) == 5, "canasta: a four is 5");
+    check(ca::cardValue(cd(Suit::Spades, 3), r) == 5, "canasta: a black three is 5");
+    check(ca::cardValue(cd(Suit::Hearts, 3), r) == 100, "canasta: a red three is 100");
+
+    check(ca::isWild(joker(false)) && ca::isWild(cd(Suit::Clubs, 2)),
+          "canasta: jokers and twos are the wild cards");
+    check(!ca::isWild(cd(Suit::Clubs, kAce)), "canasta: an ace is not wild");
+    check(ca::isRedThree(cd(Suit::Diamonds, 3)) && !ca::isRedThree(cd(Suit::Clubs, 3)),
+          "canasta: only the red threes are red threes");
+}
+
+void canastaOpeningBands()
+{
+    const ca::Rules r;
+    check(ca::openRequirementFor(-200, r) == 15, "canasta: a side in the red opens on 15");
+    check(ca::openRequirementFor(0, r) == 50, "canasta: from nothing you open on 50");
+    check(ca::openRequirementFor(1495, r) == 50, "canasta: 1495 still opens on 50");
+    check(ca::openRequirementFor(1500, r) == 90, "canasta: 1500 opens on 90");
+    check(ca::openRequirementFor(2995, r) == 90, "canasta: 2995 still opens on 90");
+    check(ca::openRequirementFor(3000, r) == 120, "canasta: 3000 opens on 120");
+    check(ca::openRequirementFor(9000, r) == 120, "canasta: the top band does not keep rising");
+}
+
+void canastaMeldShapes()
+{
+    const ca::Rules r;
+
+    ca::Meld natural { kKing, { cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing),
+                                cd(Suit::Clubs, kKing), cd(Suit::Diamonds, kKing),
+                                cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing),
+                                cd(Suit::Clubs, kKing) } };
+    check(natural.isCanasta(r) && natural.isNatural(r),
+          "canasta: seven kings with no wilds is a natural canasta");
+    check(natural.value(r) == 70, "canasta: seven kings are worth 70 in card values");
+
+    ca::Meld mixed = natural;
+    mixed.cards.back() = joker(true);
+    check(mixed.isCanasta(r) && !mixed.isNatural(r),
+          "canasta: a joker in the seven makes it a mixed canasta");
+    check(mixed.wilds() == 1 && mixed.naturals() == 6, "canasta: wilds and naturals are counted");
+
+    ca::Meld blacks { 3, { cd(Suit::Spades, 3), cd(Suit::Clubs, 3), cd(Suit::Spades, 3),
+                           cd(Suit::Clubs, 3), cd(Suit::Spades, 3), cd(Suit::Clubs, 3),
+                           cd(Suit::Spades, 3) } };
+    check(!blacks.isCanasta(r), "canasta: black threes never make a canasta");
+
+    ca::Team t;
+    t.melds = { natural };
+    check(t.hasCanasta(r), "canasta: a team with a canasta knows it");
+    check(t.meldOfRank(kKing) != nullptr && t.meldOfRank(5) == nullptr,
+          "canasta: melds are found by rank");
+}
+
+void canastaScoringTable()
+{
+    const ca::Rules r;
+
+    ca::Team t;
+    t.opened = true;
+    // A natural canasta of aces: 7 x 20 in card values, plus the 500 bonus.
+    t.melds = { ca::Meld { kAce,
+                           { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                             cd(Suit::Clubs, kAce), cd(Suit::Diamonds, kAce),
+                             cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                             cd(Suit::Clubs, kAce) } } };
+    check(ca::handScoreFor(t, {}, {}, false, false, r) == 640,
+          "canasta: a natural ace canasta scores 140 plus the 500 bonus");
+
+    // The same seven with a joker in it: 6 x 20 + 50 in cards, 300 bonus.
+    ca::Team mixedTeam = t;
+    mixedTeam.melds[0].cards.back() = joker(false);
+    check(ca::handScoreFor(mixedTeam, {}, {}, false, false, r) == 470,
+          "canasta: swapping a card for a joker gives the mixed bonus instead");
+
+    // Red threes: a bonus to a side that opened, the same against one that did not.
+    ca::Team reds;
+    reds.opened = true;
+    reds.redThrees = { cd(Suit::Hearts, 3), cd(Suit::Diamonds, 3) };
+    check(ca::handScoreFor(reds, {}, {}, false, false, r) == 200,
+          "canasta: two red threes are worth 200 to a side that melded");
+    reds.opened = false;
+    check(ca::handScoreFor(reds, {}, {}, false, false, r) == -200,
+          "canasta: the same two count against a side that never melded");
+
+    reds.opened = true;
+    reds.redThrees.push_back(cd(Suit::Hearts, 3));
+    reds.redThrees.push_back(cd(Suit::Diamonds, 3));
+    check(ca::handScoreFor(reds, {}, {}, false, false, r) == 800,
+          "canasta: all four red threes are 800, not 400");
+
+    // Going out, concealed or not, and cards left in hand coming off.
+    ca::Team out = t;
+    check(ca::handScoreFor(out, {}, {}, true, false, r) == 740,
+          "canasta: going out adds 100");
+    check(ca::handScoreFor(out, {}, {}, true, true, r) == 840,
+          "canasta: going out concealed adds 200 instead");
+    check(ca::handScoreFor(out, { cd(Suit::Spades, kKing) }, { joker(true) }, false, false, r)
+              == 640 - 10 - 50,
+          "canasta: cards still in either partner's hand are deducted");
+}
+
+// Enough spare cards under the up-card that the pack still totals 108, so the
+// card-conservation checks mean what they say.
+const int kBelowCount = 63;
+
+std::vector<Card> spare() { return std::vector<Card>(kBelowCount, cd(Suit::Clubs, 9)); }
+
+// Taking the pile: what it costs, and the two things that stop you.
+void canastaPileRules()
+{
+    // Seat 1 leads when seat 0 deals. Two sevens to match the up-card, and
+    // three aces so the take clears the 50 needed to open.
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    hands[1] = { cd(Suit::Spades, 7), cd(Suit::Hearts, 7), cd(Suit::Spades, kAce),
+                 cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce), cd(Suit::Clubs, 4),
+                 cd(Suit::Clubs, 5), cd(Suit::Clubs, 6), cd(Suit::Clubs, 8),
+                 cd(Suit::Spades, 10), cd(Suit::Spades, 2) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 7)), 0);
+    check(e.currentSeat() == 1, "canasta: the player left of the dealer starts");
+    check(e.phase() == ca::Engine::Phase::Draw, "canasta: a turn opens on the draw");
+    check(e.cardsInPlay() == 108, "canasta: the deal accounts for all 108 cards");
+    check(!e.pileFrozen(), "canasta: an ordinary up-card does not freeze the pile");
+
+    check(!e.canTakePile({ cd(Suit::Spades, 7) }),
+          "canasta: one matching card is not enough to take the pile");
+    // Three sevens is 15, well short of the 50 this side needs to open.
+    check(!e.canTakePile({ cd(Suit::Spades, 7), cd(Suit::Hearts, 7) }),
+          "canasta: a take that does not reach the opening minimum is refused");
+    // The same take with three aces alongside is 15 + 60.
+    const std::vector<Card> opening { cd(Suit::Spades, 7), cd(Suit::Hearts, 7),
+                                      cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                                      cd(Suit::Clubs, kAce) };
+    check(e.canTakePile(opening), "canasta: laying aces alongside makes the same take legal");
+
+    check(e.takePile(opening), "canasta: taking the pile to open succeeds");
+    check(e.cardsInPlay() == 108, "canasta: taking the pile loses no cards");
+    check(e.team(1).opened, "canasta: the side is now open");
+    check(e.pile().empty(), "canasta: the pile is gone once taken");
+    check(e.team(1).meldOfRank(7) != nullptr && e.team(1).meldOfRank(7)->size() == 3,
+          "canasta: the top card joined the meld it was taken with");
+    check(e.team(1).meldOfRank(kAce) != nullptr, "canasta: the aces went down as well");
+
+    check(e.discard(cd(Suit::Spades, 2)), "canasta: a wild card can be discarded");
+    check(e.pileFrozen(), "canasta: discarding a wild freezes the pile");
+    check(e.currentSeat() == 2, "canasta: the turn passes to the left");
+    check(e.drawFromStock(), "canasta: the next seat draws");
+    check(!e.canTakePileAtAll(),
+          "canasta: a wild card on top cannot be melded, so the pile is safe");
+
+    // A black three blocks the pile without freezing it.
+    std::array<std::vector<Card>, 4> blackTop = hands;
+    ca::Engine blocked;
+    blocked.newGameFromStock(canastaStock(blackTop, 0, spare(), cd(Suit::Spades, 3)), 0);
+    check(!blocked.pileFrozen(), "canasta: a black three does not freeze the pile");
+    check(!blocked.canTakePileAtAll(), "canasta: but a black three on top blocks it");
+}
+
+// Frozen and unfrozen, from identical positions. The only difference between
+// the two runs is whether seat 1 threw a wild card or an ordinary one.
+void canastaFrozenPile()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(kQueen);
+    // Seat 1 opens with four aces, then throws either a two or a four.
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), cd(Suit::Spades, 2), cd(Suit::Clubs, 4),
+                 cd(Suit::Clubs, 5), cd(Suit::Clubs, 6), cd(Suit::Clubs, 8),
+                 cd(Suit::Spades, 9), cd(Suit::Spades, kJack) };
+    // Seat 2 has a ten to throw and nothing else of interest.
+    hands[2] = { cd(Suit::Diamonds, 10), cd(Suit::Spades, kQueen), cd(Suit::Spades, kQueen),
+                 cd(Suit::Spades, kQueen), cd(Suit::Hearts, kQueen), cd(Suit::Hearts, kQueen),
+                 cd(Suit::Hearts, kQueen), cd(Suit::Clubs, kQueen), cd(Suit::Clubs, kQueen),
+                 cd(Suit::Clubs, kQueen), cd(Suit::Diamonds, kQueen) };
+    // Seat 3 is seat 1's partner, so its side is already open. Two tens and a
+    // joker: enough to take an unfrozen pile, not enough for a frozen one.
+    hands[3] = { cd(Suit::Spades, 10), cd(Suit::Hearts, 10), joker(true),
+                 cd(Suit::Spades, kJack), cd(Suit::Spades, kJack), cd(Suit::Spades, kJack),
+                 cd(Suit::Hearts, kJack), cd(Suit::Hearts, kJack), cd(Suit::Hearts, kJack),
+                 cd(Suit::Clubs, kJack), cd(Suit::Clubs, kJack) };
+
+    for (int frozen = 0; frozen < 2; ++frozen) {
+        ca::Engine e;
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+
+        e.drawFromStock();
+        const bool opened = e.meldCards({ cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                                          cd(Suit::Clubs, kAce), cd(Suit::Diamonds, kAce) });
+        e.discard(frozen ? cd(Suit::Spades, 2) : cd(Suit::Clubs, 4));
+        e.drawFromStock();
+        e.discard(cd(Suit::Diamonds, 10));
+
+        // Seat 3 is left on its draw, because taking the pile IS the draw.
+        const bool ready = opened && e.currentSeat() == 3 && e.team(1).opened
+            && e.phase() == ca::Engine::Phase::Draw && !e.pile().empty()
+            && e.pile().back().rank == 10 && e.pileFrozen() == (frozen != 0);
+        check(ready, frozen ? "canasta: reached a frozen pile with a ten on top"
+                            : "canasta: reached an open pile with a ten on top");
+
+        const std::vector<Card> pair { cd(Suit::Spades, 10), cd(Suit::Hearts, 10) };
+        const std::vector<Card> oneAndWild { cd(Suit::Spades, 10), joker(true) };
+
+        check(!e.canTakePile({ cd(Suit::Spades, 10) }),
+              frozen ? "canasta: frozen, one card cannot take the pile"
+                     : "canasta: open, one card still cannot take the pile");
+        check(e.canTakePile(pair) == true,
+              frozen ? "canasta: frozen, two matching cards take it"
+                     : "canasta: open, two matching cards take it");
+        // This is the whole difference freezing makes.
+        check(e.canTakePile(oneAndWild) == (frozen == 0),
+              frozen ? "canasta: frozen, a card plus a wild is NOT enough"
+                     : "canasta: open, a card plus a wild is enough");
+    }
+}
+
+void canastaWildCardRules()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), cd(Suit::Spades, kQueen), cd(Suit::Hearts, kQueen),
+                 cd(Suit::Spades, 2), joker(true), cd(Suit::Hearts, 2), cd(Suit::Clubs, 2),
+                 cd(Suit::Spades, 3) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 5)), 0);
+    check(e.drawFromStock(), "canasta: seat one draws");
+
+    // A wild card has no rank of its own, so on its own it is not a meld and
+    // in a two-rank selection there is no way to tell where it belongs.
+    check(!e.canMeldCards({ cd(Suit::Spades, 2) }),
+          "canasta: a wild card alone is not a meld");
+    check(!e.canMeldCards({ cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                            cd(Suit::Clubs, kAce), cd(Suit::Spades, kQueen),
+                            cd(Suit::Hearts, kQueen), cd(Suit::Spades, 2) }),
+          "canasta: a wild card across two ranks is ambiguous and refused");
+
+    check(e.meldCards({ cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                        cd(Suit::Diamonds, kAce) }),
+          "canasta: four aces are 80, enough to open on 50");
+    check(e.team(1).meldOfRank(kAce)->size() == 4, "canasta: the meld holds four");
+
+    check(e.meldCards({ cd(Suit::Spades, 2) }, kAce),
+          "canasta: a wild card joins a meld when you say which one");
+    check(e.team(1).meldOfRank(kAce)->size() == 5 && e.team(1).meldOfRank(kAce)->wilds() == 1,
+          "canasta: the wild card landed on the aces");
+
+    check(e.meldCards({ joker(true), cd(Suit::Hearts, 2) }, kAce),
+          "canasta: two more wilds bring it to seven");
+    check(e.team(1).meldOfRank(kAce)->isCanasta(e.rules()), "canasta: seven cards is a canasta");
+    check(!e.team(1).meldOfRank(kAce)->isNatural(e.rules()),
+          "canasta: with three wilds in it, a mixed one");
+
+    check(!e.canMeldCards({ cd(Suit::Clubs, 2) }, kAce),
+          "canasta: a meld never holds more than three wild cards");
+    check(!e.canMeldCards({ cd(Suit::Spades, kQueen), cd(Suit::Hearts, kQueen) }),
+          "canasta: two of a rank is not a meld");
+    check(!e.canMeldCards({ cd(Suit::Spades, 3) }),
+          "canasta: a black three cannot be melded on an ordinary turn");
+}
+
+void canastaRedThrees()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    hands[1] = { cd(Suit::Hearts, 3), cd(Suit::Diamonds, 3), cd(Suit::Clubs, kKing),
+                 cd(Suit::Hearts, kKing), cd(Suit::Diamonds, kKing), cd(Suit::Spades, 2),
+                 cd(Suit::Clubs, 4), cd(Suit::Clubs, 5), cd(Suit::Clubs, 6), cd(Suit::Clubs, 8),
+                 cd(Suit::Spades, 10) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+
+    check(e.team(1).redThrees.size() == 2, "canasta: red threes dealt go down at once");
+    check(e.hand(1).size() == 11, "canasta: each is replaced, keeping the hand at eleven");
+    check(std::none_of(e.hand(1).begin(), e.hand(1).end(), ca::isRedThree),
+          "canasta: no red three is left in a hand");
+    check(e.cardsInPlay() == 108, "canasta: placing red threes loses no cards");
+
+    // A red three can never be thrown away.
+    check(e.drawFromStock() && !e.canDiscard(cd(Suit::Hearts, 3)),
+          "canasta: a red three is never discardable");
+}
+
+void canastaGoingOut()
+{
+    // Seven kings is both the opening and the canasta; four fours and the drawn
+    // card are what is left to clear.
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    hands[1] = { cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing), cd(Suit::Clubs, kKing),
+                 cd(Suit::Diamonds, kKing), cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing),
+                 cd(Suit::Clubs, kKing), cd(Suit::Spades, 4), cd(Suit::Hearts, 4),
+                 cd(Suit::Clubs, 4), cd(Suit::Diamonds, 4) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+    check(e.drawFromStock(), "canasta: seat one draws");
+
+    check(e.meldCards({ cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing), cd(Suit::Clubs, kKing),
+                        cd(Suit::Diamonds, kKing), cd(Suit::Spades, kKing),
+                        cd(Suit::Hearts, kKing), cd(Suit::Clubs, kKing) }),
+          "canasta: seven kings go down in one opening");
+    check(e.team(1).hasCanasta(e.rules()), "canasta: that is a canasta");
+
+    check(e.meldCards({ cd(Suit::Spades, 4), cd(Suit::Hearts, 4), cd(Suit::Clubs, 4),
+                        cd(Suit::Diamonds, 4) }),
+          "canasta: the fours go down too");
+    check(e.hand(1).size() == 1, "canasta: one card left in hand");
+    check(e.discard(e.hand(1).front()), "canasta: discarding the last card goes out");
+    check(e.phase() == ca::Engine::Phase::HandOver || e.phase() == ca::Engine::Phase::GameOver,
+          "canasta: going out ends the hand");
+    check(e.wentOutSeat() == 1, "canasta: the seat that went out is recorded");
+    check(e.wasConcealed(), "canasta: laying the whole hand down in one turn is concealed");
+    check(e.team(1).handScore > e.team(0).handScore,
+          "canasta: the side that went out beat the side left holding cards");
+    check(e.cardsInPlay() == 108, "canasta: the pack survived the whole hand");
+
+    // Without a canasta you may not strip your hand to one card either: there
+    // would be nothing legal left to do with it.
+    std::array<std::vector<Card>, 4> poor = hands;
+    poor[1] = { cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing), cd(Suit::Clubs, kKing),
+                cd(Suit::Spades, kQueen), cd(Suit::Hearts, kQueen), cd(Suit::Clubs, kQueen),
+                cd(Suit::Spades, 5), cd(Suit::Hearts, 5), cd(Suit::Clubs, 5),
+                cd(Suit::Diamonds, 5), cd(Suit::Spades, 5) };
+    ca::Engine p;
+    p.newGameFromStock(canastaStock(poor, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+    check(p.drawFromStock(), "canasta: seat one draws");
+    check(p.meldCards({ cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing), cd(Suit::Clubs, kKing),
+                        cd(Suit::Spades, kQueen), cd(Suit::Hearts, kQueen),
+                        cd(Suit::Clubs, kQueen) }),
+          "canasta: kings and queens are 60, enough to open");
+    check(!p.canMeldCards({ cd(Suit::Spades, 5), cd(Suit::Hearts, 5), cd(Suit::Clubs, 5),
+                            cd(Suit::Diamonds, 5), cd(Suit::Spades, 5) }),
+          "canasta: without a canasta you must keep a card to discard");
+}
+
+// Full games at every level, all four seats on autopilot. This is the check
+// that matters: it proves the rules never deadlock, never lose a card, and
+// always reach a winner.
+void canastaFullGames()
+{
+    const ca::Level levels[3] = { ca::Level::Easy, ca::Level::Medium, ca::Level::Hard };
+    const char* names[3] = { "easy", "medium", "hard" };
+
+    for (int li = 0; li < 3; ++li) {
+        int completed = 0;
+        int hands = 0;
+        int canastas = 0;
+        int concealed = 0;
+        long turns = 0;
+        int worstHandTurns = 0;
+
+        for (int game = 0; game < 6; ++game) {
+            ca::Engine e;
+            std::array<ca::Ai, ca::kSeats> ai { ca::Ai { levels[li] }, ca::Ai { levels[li] },
+                                                ca::Ai { levels[li] }, ca::Ai { levels[li] } };
+            for (int s = 0; s < ca::kSeats; ++s)
+                ai[std::size_t(s)].seed(unsigned(game * 97 + s * 13 + li));
+            e.newGame(unsigned(game * 7919 + li));
+
+            bool sane = true;
+            int handTurns = 0;
+            // Generous ceiling: a real game is a few hundred turns, so this only
+            // ever trips on a rule that has stopped making progress.
+            for (long guard = 0; guard < 40000; ++guard) {
+                if (e.phase() == ca::Engine::Phase::GameOver)
+                    break;
+                if (e.phase() == ca::Engine::Phase::HandOver) {
+                    ++hands;
+                    worstHandTurns = std::max(worstHandTurns, handTurns);
+                    handTurns = 0;
+                    for (int t = 0; t < ca::kTeams; ++t)
+                        for (const ca::Meld& m : e.team(t).melds)
+                            if (m.isCanasta(e.rules()))
+                                ++canastas;
+                    if (e.wasConcealed())
+                        ++concealed;
+                    e.nextHand();
+                    continue;
+                }
+                if (e.cardsInPlay() != 108) {
+                    sane = false;
+                    break;
+                }
+                const int seat = e.currentSeat();
+                ai[std::size_t(seat)].draw(e);
+                if (e.phase() == ca::Engine::Phase::Play)
+                    ai[std::size_t(seat)].playAndDiscard(e);
+                // A turn must either finish or end the hand; if the seat has not
+                // changed and we are still mid-turn, nothing is progressing.
+                if (e.phase() == ca::Engine::Phase::Play && e.currentSeat() == seat) {
+                    sane = false;
+                    break;
+                }
+                ++turns;
+                ++handTurns;
+            }
+
+            if (!sane)
+                break;
+            if (e.phase() == ca::Engine::Phase::GameOver) {
+                ++completed;
+                const int w = e.winner();
+                if (w < 0 || e.team(w).score < e.rules().targetScore)
+                    completed = -1000;
+            }
+        }
+
+        std::printf("      %-6s %d/6 games finished, %d hands, %ld turns, %d canastas, "
+                    "%d concealed, longest hand %d turns\n",
+                    names[li], completed, hands, turns, canastas, concealed, worstHandTurns);
+        check(completed == 6, "canasta: every game reaches a winner over the target");
+        check(canastas > 0, "canasta: canastas actually get built");
+    }
+}
+
+// The three levels have to be three strengths, not three labels. Hard and Easy
+// play a match; Canasta carries a lot of luck, so the bar is only that Hard
+// comes out ahead over a run of games.
+void canastaLevelsDiffer()
+{
+    int hardWins = 0;
+    long margin = 0;
+    const int games = 24;
+
+    for (int game = 0; game < games; ++game) {
+        ca::Engine e;
+        // Team 0 (seats 0 and 2) plays Hard; team 1 (seats 1 and 3) plays Easy.
+        std::array<ca::Ai, ca::kSeats> ai { ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Easy },
+                                            ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Easy } };
+        for (int s = 0; s < ca::kSeats; ++s)
+            ai[std::size_t(s)].seed(unsigned(game * 31 + s));
+        e.newGame(unsigned(game * 104729 + 7));
+
+        for (long guard = 0; guard < 40000; ++guard) {
+            if (e.phase() == ca::Engine::Phase::GameOver)
+                break;
+            if (e.phase() == ca::Engine::Phase::HandOver) {
+                e.nextHand();
+                continue;
+            }
+            const int seat = e.currentSeat();
+            ai[std::size_t(seat)].draw(e);
+            if (e.phase() == ca::Engine::Phase::Play)
+                ai[std::size_t(seat)].playAndDiscard(e);
+        }
+        if (e.winner() == 0)
+            ++hardWins;
+        margin += e.team(0).score - e.team(1).score;
+    }
+
+    std::printf("      hard won %d of %d against easy, average margin %+ld\n", hardWins, games,
+                margin / games);
+    check(hardWins * 2 > games, "canasta: hard beats easy over a run of games");
+}
+
+// Two rule sets, because the owner's family plays its own. A house set has to
+// drive the engine as well as the classic one does.
+void canastaHouseRules()
+{
+    ca::Rules house;
+    house.name = QStringLiteral("House");
+    house.targetScore = 1500;
+    house.handSize = 13;
+    house.canastaSize = 6;
+    house.openMinUnder1500 = 30;
+    house.naturalCanastaBonus = 400;
+    house.mixedCanastaBonus = 250;
+    house.blackThreeBlocksPile = false;
+    house.requireCanastaToGoOut = false;
+
+    ca::Engine e { house };
+    e.newGame(4242);
+    check(e.rules().handSize == 13, "canasta: a house rule set is what gets dealt");
+    check(e.hand(0).size() == 13, "canasta: thirteen cards each when the house says so");
+    check(e.openRequirement(0) == 30, "canasta: the house opening minimum is used");
+    check(e.cardsInPlay() == 108, "canasta: the pack is still whole");
+
+    std::array<ca::Ai, ca::kSeats> ai { ca::Ai { ca::Level::Medium }, ca::Ai { ca::Level::Medium },
+                                        ca::Ai { ca::Level::Medium }, ca::Ai { ca::Level::Medium } };
+    bool finished = false;
+    for (long guard = 0; guard < 40000 && !finished; ++guard) {
+        if (e.phase() == ca::Engine::Phase::GameOver) {
+            finished = true;
+            break;
+        }
+        if (e.phase() == ca::Engine::Phase::HandOver) {
+            e.nextHand();
+            continue;
+        }
+        if (e.cardsInPlay() != 108)
+            break;
+        const int seat = e.currentSeat();
+        ai[std::size_t(seat)].draw(e);
+        if (e.phase() == ca::Engine::Phase::Play)
+            ai[std::size_t(seat)].playAndDiscard(e);
+    }
+    check(finished, "canasta: a full game plays out under house rules too");
+
+    // Six-card canastas, because the house said six.
+    ca::Meld six { kKing, { cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing),
+                            cd(Suit::Clubs, kKing), cd(Suit::Diamonds, kKing),
+                            cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing) } };
+    check(six.isCanasta(house), "canasta: a house canasta is whatever size the house says");
+    check(!six.isCanasta(ca::Rules::classic()), "canasta: and the classic rules still want seven");
+}
+
 } // namespace
 
 int main()
@@ -892,6 +1476,20 @@ int main()
     heartsRules();
     heartsFullGames();
     heartsMoonShot();
+
+    section("Canasta");
+    canastaDeckAndValues();
+    canastaOpeningBands();
+    canastaMeldShapes();
+    canastaScoringTable();
+    canastaPileRules();
+    canastaFrozenPile();
+    canastaWildCardRules();
+    canastaRedThrees();
+    canastaGoingOut();
+    canastaFullGames();
+    canastaLevelsDiffer();
+    canastaHouseRules();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;

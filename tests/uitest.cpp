@@ -5,6 +5,7 @@
 #include "gameview.h"
 #include "scores.h"
 #include "sound.h"
+#include "canasta/canastaview.h"
 #include "chess/chessview.h"
 #include "hearts/heartsview.h"
 #include "hubwindow.h"
@@ -25,6 +26,7 @@
 #include <QStatusBar>
 #include <QToolBar>
 
+#include <algorithm>
 #include <cstdio>
 
 namespace {
@@ -227,6 +229,119 @@ int main(int argc, char* argv[])
 
         HeartsView hearts;
         check(paints(&hearts), "hearts view paints");
+
+        {
+            CanastaView canasta;
+            canasta.resize(1000, 740);
+            check(paints(&canasta), "canasta view paints");
+
+            QString status;
+            QObject::connect(&canasta, &GameView::statusChanged,
+                             [&status](const QString& s) { status = s; });
+            // What the hub does on opening a game, and what makes it report in.
+            canasta.activate();
+
+            // The deal is animated, so the table only settles after the cards
+            // have finished flying.
+            const QImage dealing = renderOf(&canasta);
+            pump(2500);
+            const QImage dealt = renderOf(&canasta);
+            check(dealing != dealt, "canasta: the deal animates rather than appearing at once");
+
+            check(status.contains(QStringLiteral("Classic")),
+                  "canasta: the status line names the rule set in force");
+            check(status.contains(QStringLiteral("to open")) || status.contains(QStringLiteral("open")),
+                  "canasta: the status line says what it takes to open");
+
+            // Every toolbar control the game promises.
+            QStringList actions;
+            for (QAction* a : canasta.gameActions())
+                if (!a->isSeparator())
+                    actions << a->text();
+            std::printf("      canasta actions: %s\n", qPrintable(actions.join(QStringLiteral(", "))));
+            for (const char* wanted : { "New Game", "Meld", "Discard", "Easy", "Hard", "Classic",
+                                        "House", "Hints" }) {
+                check(actions.contains(QString::fromUtf8(wanted)),
+                      qPrintable(QStringLiteral("canasta: the toolbar offers %1")
+                                     .arg(QString::fromUtf8(wanted))));
+            }
+            const bool hasTarget = std::any_of(actions.begin(), actions.end(), [](const QString& s) {
+                return s.startsWith(QStringLiteral("Play to"));
+            });
+            check(hasTarget, "canasta: the toolbar offers other target scores");
+
+            // Clicking a card in your hand picks it up, which must change the
+            // picture; clicking it again puts it back.
+            // The board only takes hand clicks on the human's turn, so wait for
+            // it. Without this the check races the three computer seats and
+            // fails whenever they are still playing.
+            const auto waitForYourTurn = [&status] {
+                for (int i = 0; i < 60 && !status.contains(QStringLiteral("Your turn"))
+                     && !status.contains(QStringLiteral("Lay down"));
+                     ++i)
+                    pump(200);
+                return status.contains(QStringLiteral("Your turn"))
+                    || status.contains(QStringLiteral("Lay down"));
+            };
+            check(waitForYourTurn(), "canasta: the turn comes round to you");
+
+            // Cards may still be in the air when the turn passes, and the board
+            // ignores clicks until they land. Settled means two renders in a
+            // row that match.
+            const auto waitUntilStill = [&canasta] {
+                QImage last = renderOf(&canasta);
+                for (int i = 0; i < 30; ++i) {
+                    pump(120);
+                    const QImage now = renderOf(&canasta);
+                    if (now == last)
+                        return true;
+                    last = now;
+                }
+                return false;
+            };
+            check(waitUntilStill(), "canasta: the table settles once the cards land");
+
+            const QPointF card(canasta.width() / 2.0, canasta.height() - 60.0);
+            const QImage idle = renderOf(&canasta);
+            clickAt(&canasta, card, Qt::LeftButton);
+            const QImage picked = renderOf(&canasta);
+            check(idle != picked, "canasta: clicking a card in hand lifts it");
+            clickAt(&canasta, card, Qt::LeftButton);
+            check(renderOf(&canasta) != picked, "canasta: clicking it again puts it back");
+
+            // Drawing from the stock has to move the game on.
+            const QPointF stock(canasta.width() * 0.5 - 60.0, canasta.height() * 0.47);
+            const QPointF pile(canasta.width() * 0.5 + 60.0, canasta.height() * 0.47);
+            clickAt(&canasta, stock, Qt::LeftButton);
+            pump(900);
+            check(status.contains(QStringLiteral("throw")) || !status.isEmpty(),
+                  "canasta: the game responds to a draw");
+
+            // Play a stretch of the hand for real: draw, pick a card, throw it,
+            // and let the three computer seats answer. A rule that stalls a
+            // turn shows up here as a table that stops changing.
+            const auto stockLeft = [&status] {
+                const int at = status.lastIndexOf(QStringLiteral("stock "));
+                return at < 0 ? -1 : status.mid(at + 6).split(QChar(' ')).first().toInt();
+            };
+            const int stockAtStart = stockLeft();
+            for (int turn = 0; turn < 12; ++turn) {
+                pump(700);
+                clickAt(&canasta, stock, Qt::LeftButton);
+                pump(400);
+                clickAt(&canasta, QPointF(canasta.width() / 2.0, canasta.height() - 60.0),
+                        Qt::LeftButton);
+                pump(80);
+                clickAt(&canasta, pile, Qt::LeftButton);
+            }
+            pump(1200);
+            const int stockAtEnd = stockLeft();
+            std::printf("      canasta: stock went %d -> %d over twelve turns\n", stockAtStart,
+                        stockAtEnd);
+            check(stockAtEnd >= 0 && stockAtEnd < stockAtStart,
+                  "canasta: play keeps moving through the stock rather than stalling");
+            check(paints(&canasta), "canasta: the table still paints mid-hand");
+        }
 
         PinballView pinball;
         check(paints(&pinball), "pinball view paints");

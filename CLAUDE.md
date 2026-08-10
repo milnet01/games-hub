@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Qt 6 Widgets game collection — a hub window holding thirteen games: Chess,
+A Qt 6 Widgets game collection — a hub window holding fourteen games: Chess,
 Reversi, Draughts, Minesweeper, Klondike, Spider, FreeCell, Pyramid, Sudoku,
-Hearts, Snake, 2048 and Pinball. Started 2026-08-10 as a single Reversi game
-and expanded the same day. `ROADMAP.md` holds the queue of games still to come.
+Hearts, Canasta, Snake, 2048 and Pinball. Started 2026-08-10 as a single
+Reversi game and expanded the same day. `ROADMAP.md` holds the queue of games
+still to come.
 
 ## Commands
 
@@ -78,9 +79,15 @@ display, and it is the rule to preserve when adding a game.
   reveal*, excluding that square and its neighbours, so the opening click is
   always safe and always opens a blank area. The flood fill is iterative; a
   recursive one overflows the stack on an Expert-sized blank.
-- **Cards** — `cards/card.*` (deck building; `makeDeck(decks, suitsUsed)` is
-  what gives Spider its difficulty) and `cards/cardart.*` (shared drawing, so
-  the three card games look like one deck).
+- **Cards** — `cards/card.*` (deck building; `makeDeck(decks, suitsUsed,
+  jokers)` is what gives Spider its difficulty and Canasta its 108-card pack)
+  and `cards/cardart.*` (shared drawing, so the card games look like one deck).
+  A joker is rank `kJoker` = 0, which sorts below every real rank and so never
+  collides with the arithmetic other games do. `Card::deck` records which pack
+  a card came from and decides only the colour of its back — Canasta shuffles
+  two packs together, so its stock shows red and blue backs mixed the way a
+  real table does. It is deliberately outside `operator==`: two red kings are
+  the same card whichever pack they came from.
 - **Klondike / Spider** — `klondike/`, `spider/`. Both keep piles as
   `std::vector<Card>` and drag by lifting a run off its pile into `m_drag`,
   restoring it on a failed drop. Card width is solved from the row cost
@@ -90,6 +97,16 @@ display, and it is the rule to preserve when adding a game.
   rotation, the forced two-of-clubs lead, following suit, no points on the
   first trick, hearts breaking, and the moon shot (26 to everyone *else*).
   `HeartsView` is presentation and timers only.
+- **Canasta** — `canasta/canastaengine.*` is the rule set, in `namespace
+  canasta` because `Meld`, `Team` and `Phase` are far too common to leave at
+  global scope. **Every number the game plays by lives in one `Rules` struct**
+  — card values, opening minimums, canasta bonuses, what freezes the pile —
+  because house rules are the norm with Canasta rather than the exception. The
+  game ships two sets: `Rules::classic()`, which is never edited, and a House
+  set the player edits in a dialog and which is saved via QSettings. Adding a
+  house variation should be a new field there, not a branch in the engine.
+  `canasta/canastaai.*` is judgement rather than search, so unlike Chess it
+  needs no work budget. `canasta/canastaview.*` is presentation and timing.
 - **Pinball** — `pinball/pinballtable.*` is the simulation in fixed table units
   (400×720), scaled to the widget so resizing never changes the physics.
   Everything collides as a circle against a fat line segment. `PinballView`
@@ -132,6 +149,35 @@ bug, not a theory.
 **Card corner text needs room for two characters and a descender.** A box half
 a card wide clipped "10" to a stray stroke and cut the tail off "Q".
 
+**`slots` is a Qt keyword macro and expands to nothing.** A local named
+`slots` compiles as `const int = ...` and the error points at the `=`, which
+reads as a parser bug rather than a name collision. `signals` and `emit` are
+the same. Canasta's meld layout hit this.
+
+**`CardArt::paintFace` stops drawing the face below 46 pixels wide** and leaves
+only the corner index, because pips are unreadable smaller than that. Anything
+drawing cards at reduced scale — Canasta's melds are 0.62 — gets a stack of
+slivers rather than cards, and has to name them some other way. The melds carry
+a "K ×5" badge for exactly this reason. Check the width before assuming a face.
+
+**Canasta can reach a position with no legal move, and the engine has to refuse
+the move that gets there.** Down to one card with no canasta, you may not go
+out, and discarding your last card *is* going out — so nothing is legal and the
+turn cannot end. The guard is in `keepsADiscard()`, which refuses a lay-down
+leaving fewer than two cards unless a canasta comes with it. Without it the
+self-test's full games hang rather than fail, which is a much worse symptom.
+
+**A card game with animation must not let the model and the picture disagree.**
+Each flight carries where it is going, and the destination skips drawing that
+card until it lands (`suppressed()`); otherwise a card in the air is also drawn
+at its destination and the eye sees it twice. The matching one-per-flight, so
+several cards arriving at once each get their own slot.
+
+**A UI check that clicks a Canasta card has to wait twice** — once for the turn
+to come round to the human, and again for the cards to land, since the board
+ignores clicks while anything is animating. Testing only the first produced a
+suite that failed about one run in three.
+
 **`pkill -f <pattern>` will kill this session's own shell** when the pattern
 appears in the command line being run. Use `pkill -x gameshub`.
 
@@ -162,5 +208,12 @@ force `paintEvent` through, and click the hub's tiles via `QPushButton::click`.
 Anything needing real pointer input has to be verified by eye instead.
 
 The self-test is where game logic gets proven — it plays 200 random Reversi
-games, 20 full AI Hearts games, and flies pinballs. Prefer adding a check there
-over a UI test.
+games, 20 full AI Hearts games, 18 full AI Canasta games at three strengths,
+and flies pinballs. Prefer adding a check there over a UI test.
+
+Two patterns from Canasta worth reusing. `Engine::newGameFromStock()` deals
+from a stock the caller supplies, so a check can build an exact position
+instead of hunting for a seed that produces one. And the scoring table and the
+opening bands are free functions (`handScoreFor`, `openRequirementFor`) rather
+than private methods, so they can be checked directly on a hand-built position
+rather than one played into existence.

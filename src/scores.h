@@ -14,6 +14,7 @@ public:
     static QString klondikeBestScore() { return QStringLiteral("klondike/best_score"); }
     static QString spiderBestMoves(int suits);
     static QString heartsBestScore() { return QStringLiteral("hearts/best_score"); }
+    static QString canastaBestScore() { return QStringLiteral("canasta/best_score"); }
     static QString pinballBestScore() { return QStringLiteral("pinball/best_score"); }
 
     static Scores& instance();
