@@ -44,6 +44,17 @@ public:
 
     void reset();
 
+    // A game in progress, for saving: the squares in row-major order. The
+    // neighbour counts are deliberately not part of that — restore() works them
+    // out from the mines again, so a saved board cannot disagree with itself
+    // about what a number means.
+    const std::vector<Square>& squares() const { return m_squares; }
+    // Takes a board back, mines already laid. Refuses one that is the wrong
+    // size, carries the wrong number of mines, holds a square that is both dug
+    // and flagged, or is not a game still in progress; this field is left
+    // untouched when it does.
+    bool restore(std::vector<Square> squares);
+
 private:
     void placeMines(int safeRow, int safeCol);
     void countNeighbours();

@@ -207,7 +207,12 @@ Klondike and FreeCell never take a card out of play, so the whole deck must come
 back, nothing missing and nothing doubled. Spider and Pyramid do remove cards
 (a harvested run, a matched pair), so they get `fitsPack` plus a count of their
 own. Without that check a corrupt blob restores into a deal that cannot be won,
-and the player finds out an hour later. **A drag is the other half:** a run
+and the player finds out an hour later. Minesweeper, Reversi, Draughts and 2048
+have no pack at all, so each core's `restore()` is the equivalent and refuses a
+board the game could not have reached: the mine count must match the level and
+the numbers are recomputed rather than read, a Reversi board must hold at least
+the opening four discs, a draughts piece may not stand on a light square, and
+every 2048 tile must be a power of two. **A drag is the other half:** a run
 lifted in mid-drag has been erased from its pile and lives in `m_drag` until it
 is dropped, so each `saveState()` writes it back onto the pile it came from —
 otherwise closing the window with a card in hand loses it, and the pack check

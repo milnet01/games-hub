@@ -7,6 +7,7 @@
 
 #include <memory>
 
+class QActionGroup;
 class QTimer;
 
 class MinesweeperView : public GameView
@@ -19,6 +20,8 @@ public:
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
     void deactivate() override;
+    QByteArray saveState() const override;
+    bool restoreState(const QByteArray& blob) override;
 
     struct Level {
         const char* name;
@@ -44,6 +47,7 @@ private:
 
     QList<QAction*> m_actions;
     QAction* m_pauseAction = nullptr;
+    QActionGroup* m_levelGroup = nullptr;
     std::unique_ptr<Minefield> m_field;
     int m_level = 1;
     QElapsedTimer m_clock;

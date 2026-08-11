@@ -111,11 +111,21 @@ each step against the rules on the way back in.
   Kind: implement.
   Lanes: sudoku.
 
-- 📋 [GHUB-0010] **Minesweeper, Reversi, Draughts and 2048 save and resume.**
+- ✅ [GHUB-0010] **Minesweeper, Reversi, Draughts and 2048 save and resume.**
   Small states, quick wins, worth doing in one pass once the codec above
   exists.
   Layman: The four quick games remember where you were too.
   Kind: implement.
+  Resolved (2026-08-11): all four save and resume through the hub, with no
+  save dialog. None of them keeps a move log, so each writes its board and
+  each core's restore() is what re-checks it on the way back in — the pack
+  check's equivalent. Minesweeper also carries its clock and its pause, and
+  picks the clock up in activate() the way it does when you come back from
+  another game; Draughts carries the last-move marks, because losing them
+  turns a resumed game into a puzzle. Undo history is not saved, matching the
+  solitaires. 12 new rules checks on the refusing paths (a board built
+  deliberately wrong is the only way to reach them) and 30 new UI checks on
+  the round trip. Full suite green: 353 rules checks, 115 UI checks.
 
 ### 🎨 Games agreed and not yet started
 
@@ -177,7 +187,7 @@ open.
 
 ### 🖥 Legibility and accessibility
 
-- 💭 [GHUB-0017] **The other thirteen games have had no legibility pass.** The
+- 📋 [GHUB-0017] **The other thirteen games have had no legibility pass.** The
   owner is partially sighted and reads cards by their pip pattern rather than
   the corner index, which is why Canasta ended up with named discards, a wild
   count on every meld, cards drawn large enough for `CardArt::paintFace` to
@@ -192,6 +202,9 @@ open.
   Layman: Make the other games as easy to read as Canasta now is.
   Kind: accessibility.
   Source: in-session-2026-08-11.
+  Agreed (2026-08-11): owner approved the single hub-owned "Large cards /
+  high contrast" switch as the shape. Moved from considered to planned; not
+  yet started.
 
 ### 🎨 Play
 

@@ -6,6 +6,8 @@
 #include <optional>
 #include <vector>
 
+class QActionGroup;
+
 class DraughtsView : public GameView
 {
     Q_OBJECT
@@ -15,6 +17,8 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    QByteArray saveState() const override;
+    bool restoreState(const QByteArray& blob) override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -44,6 +48,7 @@ private:
 
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;
+    QActionGroup* m_levelGroup = nullptr;
 
     DraughtsBoard m_board;
     Side m_toMove = Side::Red;

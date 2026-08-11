@@ -68,6 +68,13 @@ public:
     int count(Side side) const;
     bool gameOver(Side toMove) const { return legalMoves(toMove).empty(); }
 
+    // The whole board, for saving a game in progress.
+    const std::vector<Piece>& cells() const { return m_cells; }
+    // Takes a board back. Refuses one that is the wrong size, holds something
+    // that is not a piece, stands a piece on a light square, or leaves a side
+    // with nothing at all. Leaves this board untouched when it refuses.
+    bool restore(const std::vector<Piece>& cells);
+
 private:
     void set(int row, int col, Piece p) { m_cells[row * kBoardSize + col] = p; }
     // Walks every capture continuation from a square, depth first.

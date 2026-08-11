@@ -3,6 +3,7 @@
 #include "scores.h"
 #include "sound.h"
 #include <QActionGroup>
+#include <QDataStream>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QMouseEvent>
@@ -83,13 +84,13 @@ void MinesweeperView::buildActions()
     separator->setSeparator(true);
     m_actions.append(separator);
 
-    auto* group = new QActionGroup(this);
-    group->setExclusive(true);
+    m_levelGroup = new QActionGroup(this);
+    m_levelGroup->setExclusive(true);
     for (int i = 0; i < int(std::size(kLevels)); ++i) {
         auto* a = new QAction(QString::fromUtf8(kLevels[i].name), this);
         a->setCheckable(true);
         a->setChecked(i == m_level);
-        group->addAction(a);
+        m_levelGroup->addAction(a);
         connect(a, &QAction::triggered, this, [this, i] { newGame(i); });
         m_actions.append(a);
     }
@@ -391,4 +392,93 @@ void MinesweeperView::mousePressEvent(QMouseEvent* event)
 
 void MinesweeperView::mouseReleaseEvent(QMouseEvent*)
 {
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+// The field, not the clicks that dug it.
+//
+// There is no move log to replay, so what gets written is the board itself, and
+// Minefield::restore() stands in for a rules check on the way back in: the mine
+// count has to match the level, and the numbers are recomputed rather than read,
+// so a tampered save cannot show a 3 next to one mine.
+QByteArray MinesweeperView::saveState() const
+{
+    // Nothing worth coming back to: a field already won or lost, or one nobody
+    // has dug into. An empty state also clears whatever was stored before.
+    if (!m_field || !m_started || m_field->state() != Minefield::State::Playing)
+        return {};
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    // The banked time, not the running clock: elapsedMs() is what the player has
+    // actually spent, and it is what the best-time table will be judged against.
+    out << quint32(1) << qint32(m_level) << qint64(elapsedMs()) << m_paused;
+
+    const std::vector<Minefield::Square>& squares = m_field->squares();
+    out << quint32(squares.size());
+    for (const Minefield::Square& s : squares)
+        out << quint8((s.mine ? 1 : 0) | (s.revealed ? 2 : 0) | (s.flagged ? 4 : 0));
+    return blob;
+}
+
+bool MinesweeperView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    qint32 level = 0;
+    qint64 elapsed = 0;
+    bool paused = false;
+    quint32 count = 0;
+    in >> version >> level >> elapsed >> paused >> count;
+    if (version != 1 || in.status() != QDataStream::Ok)
+        return false;
+    if (level < 0 || level >= int(std::size(kLevels)) || elapsed < 0)
+        return false;
+
+    const Level& l = kLevels[level];
+    if (count != quint32(l.width * l.height))
+        return false;
+
+    std::vector<Minefield::Square> squares(count);
+    for (Minefield::Square& s : squares) {
+        quint8 bits = 0;
+        in >> bits;
+        s.mine = (bits & 1) != 0;
+        s.revealed = (bits & 2) != 0;
+        s.flagged = (bits & 4) != 0;
+    }
+    if (in.status() != QDataStream::Ok)
+        return false;
+
+    // Built to one side, so a blob that turns out to be nonsense leaves the
+    // field already on screen alone.
+    auto field = std::make_unique<Minefield>(l.width, l.height, l.mines);
+    if (!field->restore(std::move(squares)) || field->state() != Minefield::State::Playing)
+        return false;
+
+    m_field = std::move(field);
+    m_level = level;
+    m_elapsedMs = elapsed;
+    m_paused = paused;
+    m_started = true;
+    m_announced = false;
+    // The clock picks up in activate(), exactly the way it does when the player
+    // comes back from another game.
+    m_suspended = true;
+    m_tick->stop();
+
+    // The toolbar has to agree with the board it is now sitting above.
+    if (m_pauseAction != nullptr)
+        m_pauseAction->setChecked(m_paused);
+    if (m_levelGroup != nullptr)
+        m_levelGroup->actions().at(m_level)->setChecked(true);
+
+    update();
+    refresh();
+    return true;
 }

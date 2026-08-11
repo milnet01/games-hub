@@ -10,6 +10,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Minesweeper, Reversi, Draughts and 2048 remember where you left off** (GHUB-0010)
+  Close one of them mid-game and it is exactly as you left it next time you
+  open it — no save dialog, nothing to press. Minesweeper keeps your clock
+  and stays paused if you paused it; Draughts still shows where the computer
+  last moved. A finished game leaves nothing behind, so you never resume onto
+  your own final score.
+
 - **Klondike, Spider, FreeCell and Pyramid save and resume** (GHUB-0008)
   Close a game of patience part way through and it is waiting where you
   left it next time you open it. A shared card codec does all four, and

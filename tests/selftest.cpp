@@ -2376,6 +2376,83 @@ void canastaHandSort()
     check(e.cardsInPlay() == 108, "canasta: the pack is still whole after a sort");
 }
 
+// ---------------------------------------------------------------------------
+// Saved boards
+// ---------------------------------------------------------------------------
+
+// Minesweeper, Reversi and Draughts keep no move log, so there is nothing to
+// replay a save against. What stands in for that is each core's restore(),
+// which is the same job cardcodec's pack check does for the solitaires: it has
+// to refuse a board this game could never have reached. A save round-trip is
+// checked through the widgets in the UI test; what is checked here is the
+// refusing, because those paths need a board built deliberately wrong and no
+// amount of playing produces one.
+void savedBoardsAreRechecked()
+{
+    Minefield field(9, 9, 10);
+    field.reveal(4, 4);
+    std::vector<Minefield::Square> squares = field.squares();
+    check(Minefield(9, 9, 10).restore(squares), "saves: a real minefield is taken back");
+
+    // The numbers are recomputed rather than read, so moving a mine has to move
+    // the count next to it as well.
+    std::vector<Minefield::Square> renumbered = squares;
+    for (Minefield::Square& s : renumbered)
+        s.neighbours = 7;
+    Minefield relaid(9, 9, 10);
+    check(relaid.restore(renumbered) && relaid.at(4, 4).neighbours != 7,
+          "saves: a minefield's numbers are worked out again, not believed");
+
+    std::vector<Minefield::Square> extra = squares;
+    for (Minefield::Square& s : extra)
+        if (!s.mine && !s.revealed) {
+            s.mine = true;
+            break;
+        }
+    check(!Minefield(9, 9, 10).restore(extra),
+          "saves: a minefield with the wrong number of mines is refused");
+    check(!Minefield(9, 9, 10).restore(std::vector<Minefield::Square>(80)),
+          "saves: a minefield of the wrong size is refused");
+
+    std::vector<Minefield::Square> contradictory = squares;
+    contradictory[0].revealed = true;
+    contradictory[0].flagged = true;
+    contradictory[0].mine = false;
+    check(!Minefield(9, 9, 10).restore(contradictory),
+          "saves: a square both dug and flagged is refused");
+
+    Board reversi;
+    check(Board().restore(reversi.cells()), "saves: the opening Reversi board is taken back");
+
+    std::array<Cell, kCells> stripped {};
+    check(!Board().restore(stripped),
+          "saves: a Reversi board with fewer than the opening four discs is refused");
+
+    std::array<Cell, kCells> impossible = reversi.cells();
+    impossible[0] = Cell(9);
+    check(!Board().restore(impossible),
+          "saves: a Reversi square holding something that is not a disc is refused");
+
+    const DraughtsBoard opening;
+    check(DraughtsBoard().restore(opening.cells()),
+          "saves: the opening draughts board is taken back");
+
+    std::vector<Piece> onLight = opening.cells();
+    onLight[0] = Piece::RedMan; // (0,0) is a light square, where nothing ever stands
+    check(!DraughtsBoard().restore(onLight),
+          "saves: a draughts piece on a light square is refused");
+
+    std::vector<Piece> wipedOut = opening.cells();
+    for (Piece& p : wipedOut)
+        if (belongsTo(p, Side::White))
+            p = Piece::Empty;
+    check(!DraughtsBoard().restore(wipedOut),
+          "saves: a draughts board with a side already wiped out is refused");
+
+    check(!DraughtsBoard().restore(std::vector<Piece>(32, Piece::Empty)),
+          "saves: a draughts board of the wrong size is refused");
+}
+
 } // namespace
 
 int main()
@@ -2393,6 +2470,9 @@ int main()
     draughtsRules();
     draughtsCaptures();
     draughtsEngine();
+
+    section("Saved boards");
+    savedBoardsAreRechecked();
 
     section("Chess");
     chessMoveGeneration();

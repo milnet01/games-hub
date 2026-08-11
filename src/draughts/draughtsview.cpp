@@ -5,6 +5,7 @@
 #include "theme.h"
 
 #include <QActionGroup>
+#include <QDataStream>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -50,8 +51,8 @@ void DraughtsView::buildActions()
     sep->setSeparator(true);
     m_actions.append(sep);
 
-    auto* group = new QActionGroup(this);
-    group->setExclusive(true);
+    m_levelGroup = new QActionGroup(this);
+    m_levelGroup->setExclusive(true);
     const struct { const char* name; DraughtsLevel level; } kLevels[] = {
         { "Easy", DraughtsLevel::Easy },
         { "Medium", DraughtsLevel::Medium },
@@ -61,7 +62,7 @@ void DraughtsView::buildActions()
         auto* a = new QAction(QString::fromUtf8(entry.name), this);
         a->setCheckable(true);
         a->setChecked(entry.level == m_level);
-        group->addAction(a);
+        m_levelGroup->addAction(a);
         const DraughtsLevel level = entry.level;
         connect(a, &QAction::triggered, this, [this, level] { m_level = level; });
         m_actions.append(a);
@@ -358,4 +359,132 @@ void DraughtsView::mousePressEvent(QMouseEvent* event)
     m_selected.reset();
     m_selectedMoves.clear();
     refresh();
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+// The board, not the moves that made it — the same shape as Reversi, for the
+// same reason: there is no move log to replay, so DraughtsBoard::restore()
+// stands in for a rules check on the way back in and advance() puts the game
+// back in motion. The undo history is not saved; a resumed game starts a fresh
+// one. The last move is, because the board marks where it went and losing that
+// mark is the difference between coming back to a game and coming back to a
+// puzzle.
+QByteArray DraughtsView::saveState() const
+{
+    // Nothing worth coming back to: a finished game, or one nobody has moved in.
+    // An empty state also clears whatever was stored before.
+    if (m_finished || m_history.empty())
+        return {};
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint8(m_toMove) << qint8(m_human) << qint8(m_level);
+
+    const auto writeSquare = [&out](const Square& s) { out << qint8(s.row) << qint8(s.col); };
+    out << qint8(m_lastMove ? 1 : 0);
+    if (m_lastMove) {
+        writeSquare(m_lastMove->from);
+        out << quint8(m_lastMove->steps.size());
+        for (const Square& s : m_lastMove->steps)
+            writeSquare(s);
+        out << quint8(m_lastMove->captured.size());
+        for (const Square& s : m_lastMove->captured)
+            writeSquare(s);
+    }
+
+    for (Piece p : m_board.cells())
+        out << qint8(p);
+    return blob;
+}
+
+bool DraughtsView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    qint8 toMove = 0;
+    qint8 human = 0;
+    qint8 level = 0;
+    in >> version >> toMove >> human >> level;
+    if (version != 1 || in.status() != QDataStream::Ok)
+        return false;
+    if (toMove < qint8(Side::Red) || toMove > qint8(Side::White))
+        return false;
+    if (human < qint8(Side::Red) || human > qint8(Side::White))
+        return false;
+    if (level < qint8(DraughtsLevel::Easy) || level > qint8(DraughtsLevel::Hard))
+        return false;
+
+    const auto readSquare = [&in](Square& s) {
+        qint8 row = 0;
+        qint8 col = 0;
+        in >> row >> col;
+        s = Square { row, col };
+        return DraughtsBoard::inBounds(row, col);
+    };
+    // A jump chain cannot be longer than the men it takes, so twelve bounds
+    // both lists and stops a nonsense length reserving nonsense memory.
+    const auto readSquares = [&](std::vector<Square>& out, int least) {
+        quint8 count = 0;
+        in >> count;
+        if (count < least || count > 12)
+            return false;
+        out.resize(count);
+        for (Square& s : out)
+            if (!readSquare(s))
+                return false;
+        return true;
+    };
+
+    std::optional<DraughtsMove> lastMove;
+    qint8 hasLast = 0;
+    in >> hasLast;
+    if (hasLast != 0 && hasLast != 1)
+        return false;
+    if (hasLast == 1) {
+        DraughtsMove move;
+        if (!readSquare(move.from) || !readSquares(move.steps, 1)
+            || !readSquares(move.captured, 0))
+            return false;
+        lastMove = move;
+    }
+
+    std::vector<Piece> cells(kBoardCells);
+    for (Piece& p : cells) {
+        qint8 value = 0;
+        in >> value;
+        p = Piece(value);
+    }
+    if (in.status() != QDataStream::Ok)
+        return false;
+
+    // Read into a board of its own, so a blob that turns out to be nonsense
+    // leaves the game already on screen alone.
+    DraughtsBoard board;
+    if (!board.restore(cells))
+        return false;
+    // A side with no move has lost, which is a finished game rather than a
+    // saved one.
+    if (board.gameOver(Side(toMove)))
+        return false;
+
+    m_board = board;
+    m_toMove = Side(toMove);
+    m_human = Side(human);
+    m_level = DraughtsLevel(level);
+    m_selected.reset();
+    m_selectedMoves.clear();
+    m_lastMove = lastMove;
+    m_history.clear();
+    m_thinking = false;
+    m_finished = false;
+    m_undoAction->setEnabled(false);
+    if (m_levelGroup != nullptr)
+        m_levelGroup->actions().at(level)->setChecked(true);
+    advance();
+    return true;
 }

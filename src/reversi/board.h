@@ -55,6 +55,27 @@ public:
     // True once neither side has a legal move — the only way Reversi ends.
     bool gameOver() const { return legalMoves(Player::Black).empty() && legalMoves(Player::White).empty(); }
 
+    // The whole grid, for saving a game in progress.
+    const std::array<Cell, kCells>& cells() const { return m_cells; }
+    // Takes a grid back. Refuses one holding something that is neither a disc
+    // nor an empty square, or fewer discs than the opening four — Reversi never
+    // lifts a disc off, so any real position has at least those. Leaves this
+    // board untouched when it refuses.
+    bool restore(const std::array<Cell, kCells>& cells)
+    {
+        int discs = 0;
+        for (Cell c : cells) {
+            if (c != Cell::Empty && c != Cell::Black && c != Cell::White)
+                return false;
+            if (c != Cell::Empty)
+                ++discs;
+        }
+        if (discs < 4)
+            return false;
+        m_cells = cells;
+        return true;
+    }
+
 private:
     // Number of opponent discs captured from m in direction (dr, dc), or 0 if
     // that ray is not bracketed by one of p's own discs.

@@ -48,6 +48,36 @@ void DraughtsBoard::reset()
                 set(row, col, Piece::RedMan);
 }
 
+bool DraughtsBoard::restore(const std::vector<Piece>& cells)
+{
+    if (cells.size() != std::size_t(kBoardCells))
+        return false;
+
+    int reds = 0;
+    int whites = 0;
+    for (int row = 0; row < kBoardSize; ++row) {
+        for (int col = 0; col < kBoardSize; ++col) {
+            const Piece p = cells[std::size_t(row * kBoardSize + col)];
+            if (p < Piece::Empty || p > Piece::WhiteKing)
+                return false;
+            if (p == Piece::Empty)
+                continue;
+            if (!isPlayable(row, col)) // nothing ever stands on a light square
+                return false;
+            if (belongsTo(p, Side::Red))
+                ++reds;
+            else
+                ++whites;
+        }
+    }
+    // Twelve a side is the whole set, and a side with none has already lost.
+    if (reds < 1 || reds > 12 || whites < 1 || whites > 12)
+        return false;
+
+    m_cells = cells;
+    return true;
+}
+
 int DraughtsBoard::count(Side side) const
 {
     int n = 0;

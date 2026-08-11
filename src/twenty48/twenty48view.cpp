@@ -1,5 +1,7 @@
 #include "twenty48view.h"
 
+#include <QDataStream>
+
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
@@ -311,4 +313,69 @@ void Twenty48View::keyPressEvent(QKeyEvent* event)
     update();
     refresh();
     checkEnd();
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+// The tiles and the score, which is the whole game — 2048 keeps no move log.
+// What stands in for a rules check on the way back in is that every tile has to
+// be a power of two: nothing else can come out of a merge. The single undo step
+// is not saved, the same way every other game here starts a resumed game with a
+// fresh history.
+QByteArray Twenty48View::saveState() const
+{
+    // Nothing worth coming back to: a board already stuck, or the opening two
+    // tiles nobody has pushed yet. An empty state also clears the stored one.
+    if (m_finished || (m_score == 0 && !m_canUndo))
+        return {};
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint32(m_score) << m_reachedTarget;
+    for (int value : m_board)
+        out << qint32(value);
+    return blob;
+}
+
+bool Twenty48View::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    qint32 score = 0;
+    bool reachedTarget = false;
+    in >> version >> score >> reachedTarget;
+    if (version != 1 || in.status() != QDataStream::Ok || score < 0)
+        return false;
+
+    // Read into a board of its own, so a blob that turns out to be nonsense
+    // leaves the game already on screen alone.
+    std::array<int, kCells> board {};
+    int tiles = 0;
+    for (int& cell : board) {
+        qint32 value = 0;
+        in >> value;
+        if (value != 0 && (value < 2 || value > (1 << 20) || (value & (value - 1)) != 0))
+            return false;
+        cell = value;
+        if (value != 0)
+            ++tiles;
+    }
+    if (in.status() != QDataStream::Ok || tiles == 0)
+        return false;
+
+    m_board = board;
+    m_previous = board;
+    m_score = score;
+    m_previousScore = score;
+    m_reachedTarget = reachedTarget;
+    m_canUndo = false;
+    m_finished = false;
+    m_undoAction->setEnabled(false);
+    update();
+    refresh();
+    return true;
 }

@@ -5,6 +5,7 @@
 #include "theme.h"
 
 #include <QActionGroup>
+#include <QDataStream>
 #include <QLinearGradient>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -61,8 +62,8 @@ void ReversiView::buildActions()
     separator->setSeparator(true);
     m_actions.append(separator);
 
-    auto* levels = new QActionGroup(this);
-    levels->setExclusive(true);
+    m_levelGroup = new QActionGroup(this);
+    m_levelGroup->setExclusive(true);
     const struct { const char* name; Difficulty value; } kLevels[] = {
         { "Easy", Difficulty::Easy },
         { "Medium", Difficulty::Medium },
@@ -72,7 +73,7 @@ void ReversiView::buildActions()
         auto* a = new QAction(QString::fromUtf8(entry.name), this);
         a->setCheckable(true);
         a->setChecked(entry.value == m_difficulty);
-        levels->addAction(a);
+        m_levelGroup->addAction(a);
         const Difficulty value = entry.value;
         connect(a, &QAction::triggered, this, [this, value] { m_difficulty = value; });
         m_actions.append(a);
@@ -351,4 +352,85 @@ void ReversiView::mousePressEvent(QMouseEvent* event)
     m_lastMove = m;
     m_toMove = opponent(m_toMove);
     advance();
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+// The board, not the moves that made it. There is no move log to replay, so
+// Board::restore() is what stands in for a rules check on the way back in, and
+// advance() is what puts the game back in motion — including handing straight
+// over to the engine when it was the computer's turn when you left.
+//
+// The undo history is deliberately not saved: a resumed game starts a fresh one.
+QByteArray ReversiView::saveState() const
+{
+    // Nothing worth coming back to: a finished game, or one nobody has moved in.
+    // An empty state also clears whatever was stored before.
+    if (m_finished || m_history.empty())
+        return {};
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint8(m_toMove) << qint8(m_human) << qint8(m_difficulty)
+        << qint8(m_lastMove ? 1 : 0) << qint8(m_lastMove ? m_lastMove->row : 0)
+        << qint8(m_lastMove ? m_lastMove->col : 0);
+    for (Cell c : m_board.cells())
+        out << qint8(c);
+    return blob;
+}
+
+bool ReversiView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    qint8 toMove = 0;
+    qint8 human = 0;
+    qint8 difficulty = 0;
+    qint8 hasLast = 0;
+    qint8 lastRow = 0;
+    qint8 lastCol = 0;
+    in >> version >> toMove >> human >> difficulty >> hasLast >> lastRow >> lastCol;
+    if (version != 1 || in.status() != QDataStream::Ok)
+        return false;
+    if ((toMove != 1 && toMove != -1) || (human != 1 && human != -1))
+        return false;
+    if (difficulty < qint8(Difficulty::Easy) || difficulty > qint8(Difficulty::Hard))
+        return false;
+    if (hasLast != 0 && hasLast != 1)
+        return false;
+    if (hasLast == 1 && !Board::inBounds(lastRow, lastCol))
+        return false;
+
+    std::array<Cell, kCells> cells {};
+    for (Cell& c : cells) {
+        qint8 value = 0;
+        in >> value;
+        c = Cell(value);
+    }
+    if (in.status() != QDataStream::Ok)
+        return false;
+
+    // Read into a board of its own, so a blob that turns out to be nonsense
+    // leaves the game already on screen alone.
+    Board board;
+    if (!board.restore(cells) || board.gameOver())
+        return false;
+
+    m_board = board;
+    m_toMove = Player(toMove);
+    m_human = Player(human);
+    m_difficulty = Difficulty(difficulty);
+    m_lastMove = (hasLast == 1) ? std::optional<Move>(Move { lastRow, lastCol }) : std::nullopt;
+    m_history.clear();
+    m_thinking = false;
+    m_finished = false;
+    m_undoAction->setEnabled(false);
+    if (m_levelGroup != nullptr)
+        m_levelGroup->actions().at(difficulty)->setChecked(true);
+    advance();
+    return true;
 }

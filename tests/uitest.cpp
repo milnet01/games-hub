@@ -7,6 +7,7 @@
 #include "sound.h"
 #include "canasta/canastaview.h"
 #include "chess/chessview.h"
+#include "draughts/draughtsview.h"
 #include "freecell/freecellview.h"
 #include "hearts/heartsview.h"
 #include "hubwindow.h"
@@ -16,12 +17,15 @@
 #include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
 #include "spider/spiderview.h"
+#include "twenty48/twenty48view.h"
 
 #include <QApplication>
+#include <QDataStream>
 #include <QDeadlineTimer>
 #include <QFile>
 #include <QSettings>
 #include <QLabel>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPixmap>
 #include <QPushButton>
@@ -76,6 +80,16 @@ void clickAt(QWidget* w, QPointF pos, Qt::MouseButton button)
     QCoreApplication::sendEvent(w, &press);
     QMouseEvent release(QEvent::MouseButtonRelease, pos, w->mapToGlobal(pos), button,
                         Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(w, &release);
+}
+
+// 2048 is played on the keyboard rather than with the mouse. A synthetic key
+// event reaches the widget the same way a synthetic click does.
+void pressKey(QWidget* w, Qt::Key key)
+{
+    QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+    QCoreApplication::sendEvent(w, &press);
+    QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
     QCoreApplication::sendEvent(w, &release);
 }
 
@@ -374,6 +388,133 @@ int main(int argc, char* argv[])
             check(!resumed.restoreState(QByteArray("thirteen of nothing")),
                   "pyramid: a corrupt save is refused");
             check(renderOf(&resumed) == played, "pyramid: and refusing one changes nothing");
+        }
+
+        // ---- And the four quick games put a board away and pick it up ----
+        //
+        // Same three questions as the solitaires, for the same reason: none of
+        // these four keeps a move log either, so what is written is the board
+        // itself and the render is the proof that it came back whole.
+        {
+            MinesweeperView mines;
+            mines.resize(560, 520);
+            check(mines.saveState().isEmpty(), "minesweeper: an undug field saves nothing");
+
+            // The field is centred in the widget, so the middle is always a
+            // square. The first dig is what lays the mines and starts the clock.
+            clickAt(&mines, QPointF(mines.width() / 2.0, mines.height() / 2.0), Qt::LeftButton);
+            const QImage dug = renderOf(&mines);
+            const QByteArray saved = mines.saveState();
+            check(!saved.isEmpty(), "minesweeper: a field in progress is worth saving");
+
+            MinesweeperView resumed;
+            resumed.resize(mines.size());
+            const QImage brandNew = renderOf(&resumed);
+            check(resumed.restoreState(saved), "minesweeper: and it reads back");
+            check(renderOf(&resumed) == dug, "minesweeper: onto the very same field");
+            check(brandNew != dug, "minesweeper: which is not just a new field by another name");
+
+            check(!resumed.restoreState(QByteArray("no mines here")),
+                  "minesweeper: a corrupt save is refused");
+            check(renderOf(&resumed) == dug, "minesweeper: and refusing one changes nothing");
+        }
+
+        {
+            // Mirrors ReversiView::boardRect, which DraughtsView::boardRect
+            // matches exactly: a frame 10 wide plus 4 of margin, then an 8x8
+            // grid rounded to whole pixels and centred in what is left.
+            const auto cellCentre = [](const QWidget* w, int row, int col) {
+                const int available = std::min(w->width(), w->height()) - 2 * (10 + 4);
+                const int side = std::max(8, (available / 8) * 8);
+                const double cell = side / 8.0;
+                return QPointF((w->width() - side) / 2 + (col + 0.5) * cell,
+                               (w->height() - side) / 2 + (row + 0.5) * cell);
+            };
+
+            ReversiView reversi;
+            reversi.resize(520, 520);
+            check(reversi.saveState().isEmpty(), "reversi: an unplayed game saves nothing");
+
+            clickAt(&reversi, cellCentre(&reversi, 2, 3), Qt::LeftButton); // a legal opening
+            pump(1500);                                                    // and the engine's reply
+            const QImage played = renderOf(&reversi);
+            const QByteArray saved = reversi.saveState();
+            check(!saved.isEmpty(), "reversi: a game in progress is worth saving");
+
+            ReversiView resumed;
+            resumed.resize(reversi.size());
+            const QImage brandNew = renderOf(&resumed);
+            check(resumed.restoreState(saved), "reversi: and it reads back");
+            pump(300);
+            check(renderOf(&resumed) == played, "reversi: onto the very same board");
+            check(brandNew != played, "reversi: which is not just a new game by another name");
+
+            check(!resumed.restoreState(QByteArray("four discs and a prayer")),
+                  "reversi: a corrupt save is refused");
+            check(renderOf(&resumed) == played, "reversi: and refusing one changes nothing");
+
+            DraughtsView draughts;
+            draughts.resize(560, 560);
+            check(draughts.saveState().isEmpty(), "draughts: an unplayed game saves nothing");
+
+            // Red starts at the bottom and moves up: pick up the man on the
+            // third row from the bottom, then step it diagonally forward.
+            clickAt(&draughts, cellCentre(&draughts, 5, 2), Qt::LeftButton);
+            clickAt(&draughts, cellCentre(&draughts, 4, 3), Qt::LeftButton);
+            pump(1500);
+            const QImage moved = renderOf(&draughts);
+            const QByteArray draughtsSave = draughts.saveState();
+            check(!draughtsSave.isEmpty(), "draughts: a game in progress is worth saving");
+
+            DraughtsView draughtsResumed;
+            draughtsResumed.resize(draughts.size());
+            check(draughtsResumed.restoreState(draughtsSave), "draughts: and it reads back");
+            pump(300);
+            // Identical pictures mean the last-move marks came back too, which
+            // is what tells you where the computer just went.
+            check(renderOf(&draughtsResumed) == moved, "draughts: onto the very same board");
+            check(!draughtsResumed.restoreState(QByteArray("twelve men short")),
+                  "draughts: a corrupt save is refused");
+            check(renderOf(&draughtsResumed) == moved,
+                  "draughts: and refusing one changes nothing");
+        }
+
+        {
+            Twenty48View slider;
+            slider.resize(520, 560);
+            check(slider.saveState().isEmpty(), "2048: an untouched board saves nothing");
+
+            // Two tiles always move in at least one of the four directions, and
+            // a direction that moves nothing costs nothing.
+            for (Qt::Key key : { Qt::Key_Left, Qt::Key_Up, Qt::Key_Right, Qt::Key_Down })
+                pressKey(&slider, key);
+            const QImage played = renderOf(&slider);
+            const QByteArray saved = slider.saveState();
+            check(!saved.isEmpty(), "2048: a board in progress is worth saving");
+
+            Twenty48View resumed;
+            resumed.resize(slider.size());
+            const QImage brandNew = renderOf(&resumed);
+            check(resumed.restoreState(saved), "2048: and it reads back");
+            check(renderOf(&resumed) == played, "2048: onto the very same tiles");
+            check(brandNew != played, "2048: which is not just a new board by another name");
+
+            check(!resumed.restoreState(QByteArray("three thousand and forty-eight")),
+                  "2048: a corrupt save is refused");
+            check(renderOf(&resumed) == played, "2048: and refusing one changes nothing");
+
+            // 2048 keeps no core of its own, so the check that stands in for a
+            // pack check lives here: every tile has to be a power of two,
+            // because nothing else can come out of a merge. A well-formed blob
+            // holding a 3 is the only way to reach that path.
+            QByteArray forged;
+            QDataStream out(&forged, QIODevice::WriteOnly);
+            out.setVersion(QDataStream::Qt_6_0);
+            out << quint32(1) << qint32(4) << false;
+            for (int i = 0; i < 16; ++i)
+                out << qint32(i == 0 ? 3 : 0);
+            check(!resumed.restoreState(forged), "2048: a tile that is not a power of two is refused");
+            check(renderOf(&resumed) == played, "2048: and refusing that changes nothing either");
         }
 
         HeartsView hearts;

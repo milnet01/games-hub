@@ -20,6 +20,34 @@ void Minefield::reset()
     m_seed = std::random_device {}();
 }
 
+bool Minefield::restore(std::vector<Square> squares)
+{
+    if (squares.size() != m_squares.size())
+        return false;
+
+    int mines = 0;
+    for (const Square& s : squares) {
+        if (s.revealed && s.flagged)
+            return false;
+        if (s.mine) {
+            if (s.revealed) // a dug mine is a game already lost, not one to resume
+                return false;
+            ++mines;
+        }
+    }
+    if (mines != m_mines)
+        return false;
+
+    m_squares = std::move(squares);
+    m_minesPlaced = true;
+    m_state = State::Playing;
+    countNeighbours();
+    // A board with nothing left to dig is finished rather than in progress, and
+    // the caller checks state() to find out.
+    checkWin();
+    return true;
+}
+
 int Minefield::flagCount() const
 {
     return int(std::count_if(m_squares.begin(), m_squares.end(),
