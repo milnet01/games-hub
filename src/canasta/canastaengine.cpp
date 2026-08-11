@@ -223,7 +223,7 @@ void writeRules(QDataStream& out, const Rules& r)
         << qint32(r.highCardValue) << qint32(r.lowCardValue) << qint32(r.blackThreeValue)
         << r.requireCanastaToGoOut << r.blackThreeBlocksPile << r.wildCardMeldsAllowed
         << r.unfrozenPileTakeableWithWild << r.unfrozenPileTakeableByExtending
-        << r.wildsFewerThanNaturals << r.canastaIsClosed << r.noMeldingFirstRound
+        << r.wildsFewerThanNaturals << r.canastaMakesRankSafe << r.noMeldingFirstRound
         << r.pileMeldCountsToOpen;
 }
 
@@ -262,7 +262,7 @@ Rules readRules(QDataStream& in)
     num(r.blackThreeValue);
     in >> r.requireCanastaToGoOut >> r.blackThreeBlocksPile >> r.wildCardMeldsAllowed
         >> r.unfrozenPileTakeableWithWild >> r.unfrozenPileTakeableByExtending
-        >> r.wildsFewerThanNaturals >> r.canastaIsClosed >> r.noMeldingFirstRound
+        >> r.wildsFewerThanNaturals >> r.canastaMakesRankSafe >> r.noMeldingFirstRound
         >> r.pileMeldCountsToOpen;
     return r;
 }
@@ -638,16 +638,8 @@ bool Engine::validateGroups(int team, const std::vector<Meld>& groups, bool goin
     const Team& t = m_teams[std::size_t(team)];
     for (const Meld& g : groups) {
         Meld merged { g.rank, {} };
-        if (const Meld* existing = t.meldOfRank(g.rank)) {
-            // A closed canasta is finished: it takes nothing more, which is
-            // what makes its rank safe for the other side to throw away.
-            if (m_rules.canastaIsClosed && existing->isCanasta(m_rules)) {
-                error = QStringLiteral("Your %1s are a finished canasta and take no more cards.")
-                            .arg(rankLabel(g.rank));
-                return false;
-            }
+        if (const Meld* existing = t.meldOfRank(g.rank))
             merged.cards = existing->cards;
-        }
         merged.cards.insert(merged.cards.end(), g.cards.begin(), g.cards.end());
 
         if (g.rank == 3) {
@@ -755,13 +747,11 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
         return false;
     }
     const Card top = m_pile.back();
-    if (m_rules.canastaIsClosed) {
+    if (m_rules.canastaMakesRankSafe) {
         const Meld* mine = m_teams[std::size_t(teamOf(m_current))].meldOfRank(top.rank);
         if (mine != nullptr && mine->isCanasta(m_rules)) {
-            // Said here as well as in validateGroups, because from the board's
-            // side this is a rule about the pile rather than about a lay-down.
-            error = QStringLiteral("Your %1s are a finished canasta, so the %1 on top is no use "
-                                   "to you.")
+            error = QStringLiteral("Your side has a canasta in %1s, so a %1 on top is a safe "
+                                   "discard and cannot take the pile.")
                         .arg(rankLabel(top.rank));
             return false;
         }

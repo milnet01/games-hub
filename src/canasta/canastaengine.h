@@ -85,10 +85,11 @@ struct Rules {
     // carry two wilds, and the third wild waits for a fourth six. Stricter
     // than maxWildsPerMeld, which is a flat ceiling rather than a ratio.
     bool wildsFewerThanNaturals = false;
-    // A canasta is finished once it is made: no more cards of that rank can
-    // join it, so the other side can throw that rank away safely and the pile
-    // can no longer be taken with it. The classic game leaves a canasta open.
-    bool canastaIsClosed = false;
+    // Once a side has a canasta in a rank, that rank is a safe discard against
+    // it: the pile can no longer be taken with it. The canasta itself stays
+    // open — its owners go on adding to it — so this is a rule about the pile
+    // and not about the meld. The classic game has no such rule.
+    bool canastaMakesRankSafe = false;
     // Nobody lays anything down until every seat has had a turn, so the first
     // round is pure draw and discard and the pile builds before anyone opens.
     bool noMeldingFirstRound = false;

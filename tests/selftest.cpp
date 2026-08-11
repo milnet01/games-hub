@@ -1546,9 +1546,9 @@ void canastaClosedCanasta()
                                     cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
                                     cd(Suit::Clubs, kAce) };
 
-    for (int closed = 0; closed < 2; ++closed) {
+    for (int safe = 0; safe < 2; ++safe) {
         ca::Rules r = ca::Rules::classic();
-        r.canastaIsClosed = closed != 0;
+        r.canastaMakesRankSafe = safe != 0;
         ca::Engine e { r };
         e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
 
@@ -1563,17 +1563,22 @@ void canastaClosedCanasta()
         const bool ready = e.currentSeat() == 3 && e.pile().back().rank == kAce;
         check(ready, "canasta: an ace is thrown to the side holding the ace canasta");
 
-        // Taking the pile is the draw, so that comes first.
-        check(e.canTakePile({ cd(Suit::Spades, kAce), cd(Suit::Clubs, kAce) }) == (closed == 0),
-              closed ? "canasta: the pile cannot be taken with a closed canasta's rank"
-                     : "canasta: while an open canasta still takes the pile");
+        // Taking the pile is the draw, so that comes first. This is the whole
+        // of the rule: the ace is a safe discard against a side holding an ace
+        // canasta.
+        check(e.canTakePile({ cd(Suit::Spades, kAce), cd(Suit::Clubs, kAce) }) == (safe == 0),
+              safe ? "canasta: a rank your side has a canasta in cannot take the pile"
+                   : "canasta: and without the rule it takes the pile as usual");
 
-        // And the spare aces in hand: worth adding in the classic game, worth
-        // nothing once the canasta is closed.
+        // The canasta itself stays open either way — your own side goes on
+        // adding to it, which is what separates this from closing the meld.
         e.drawFromStock();
-        check(e.canMeldCards({ cd(Suit::Spades, kAce) }, kAce) == (closed == 0),
-              closed ? "canasta: a closed canasta takes no more cards"
-                     : "canasta: an open canasta still takes another card");
+        check(e.canMeldCards({ cd(Suit::Spades, kAce) }, kAce),
+              safe ? "canasta: your own side still adds to that canasta"
+                   : "canasta: a canasta takes another card in the classic game");
+        check(e.meldCards({ cd(Suit::Spades, kAce) }, kAce)
+                  && e.team(1).meldOfRank(kAce)->size() == 8,
+              "canasta: and the canasta grows to eight");
     }
 }
 
@@ -1670,7 +1675,7 @@ void canastaFirstRoundAndPileOpening()
     house.targetScore = 1000;
     house.noMeldingFirstRound = true;
     house.pileMeldCountsToOpen = false;
-    house.canastaIsClosed = true;
+    house.canastaMakesRankSafe = true;
     house.wildsFewerThanNaturals = true;
 
     ca::Engine e { house };
@@ -1680,10 +1685,7 @@ void canastaFirstRoundAndPileOpening()
     bool finished = false;
     bool whole = true;
     bool laidTooEarly = false;
-    bool grewAfterClosing = false;
-    // Meld sizes, the first time each was seen at canasta size or more. A
-    // closed canasta must never grow again.
-    std::map<int, int> closedAt;
+    bool tookASafeRank = false;
     for (long guard = 0; guard < 40000 && !finished; ++guard) {
         if (e.phase() == ca::Engine::Phase::GameOver) {
             finished = true;
@@ -1691,7 +1693,6 @@ void canastaFirstRoundAndPileOpening()
         }
         if (e.phase() == ca::Engine::Phase::HandOver) {
             e.nextHand();
-            closedAt.clear(); // a new hand clears the table
             continue;
         }
         if (e.cardsInPlay() != 108) {
@@ -1700,17 +1701,13 @@ void canastaFirstRoundAndPileOpening()
         }
         if (!e.meldingAllowed() && (!e.team(0).melds.empty() || !e.team(1).melds.empty()))
             laidTooEarly = true;
-        for (int t = 0; t < ca::kTeams; ++t) {
-            for (const ca::Meld& m : e.team(t).melds) {
-                if (!m.isCanasta(house))
-                    continue;
-                const int key = t * 20 + m.rank;
-                const auto it = closedAt.find(key);
-                if (it == closedAt.end())
-                    closedAt.emplace(key, m.size());
-                else if (m.size() != it->second)
-                    grewAfterClosing = true;
-            }
+        // A pile whose top card matches one of your own canastas must never be
+        // takeable — that is the safe-discard rule, watched all game long.
+        const int me = ca::teamOf(e.currentSeat());
+        if (!e.pile().empty() && e.phase() == ca::Engine::Phase::Draw) {
+            const ca::Meld* mine = e.team(me).meldOfRank(e.pile().back().rank);
+            if (mine != nullptr && mine->isCanasta(house) && e.canTakePileAtAll())
+                tookASafeRank = true;
         }
         const int seat = e.currentSeat();
         ai[std::size_t(seat)].draw(e);
@@ -1720,7 +1717,7 @@ void canastaFirstRoundAndPileOpening()
     check(finished, "canasta: a full game plays out under all four house rules");
     check(whole, "canasta: and the pack stays whole all the way through");
     check(!laidTooEarly, "canasta: nothing reached the table during a first round");
-    check(!grewAfterClosing, "canasta: and no canasta took another card once it was made");
+    check(!tookASafeRank, "canasta: and no side could ever take a pile topped by its own canasta");
 }
 
 // A game to 5000 is several sittings, so it has to survive being put away. The
@@ -1730,7 +1727,7 @@ void canastaSaveAndResume()
     ca::Rules house = ca::Rules::classic();
     house.name = QStringLiteral("House");
     house.targetScore = 2000;
-    house.canastaIsClosed = true;
+    house.canastaMakesRankSafe = true;
     house.wildsFewerThanNaturals = true;
 
     ca::Engine e { house };
@@ -1763,7 +1760,7 @@ void canastaSaveAndResume()
     bool same = back.currentSeat() == e.currentSeat() && back.phase() == e.phase()
         && back.stockCount() == e.stockCount() && back.pile().size() == e.pile().size()
         && back.dealer() == e.dealer() && back.pileFrozen() == e.pileFrozen()
-        && back.rules().targetScore == house.targetScore && back.rules().canastaIsClosed
+        && back.rules().targetScore == house.targetScore && back.rules().canastaMakesRankSafe
         && back.openRequirement(0) == e.openRequirement(0);
     for (int s = 0; s < ca::kSeats; ++s)
         same = same && back.hand(s) == e.hand(s);

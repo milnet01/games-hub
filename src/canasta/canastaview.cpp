@@ -135,7 +135,7 @@ void storeHouse(const ca::Rules& r)
     put("blackThreeBlocks", r.blackThreeBlocksPile ? 1 : 0);
     put("wildTake", r.unfrozenPileTakeableWithWild ? 1 : 0);
     put("wildsFewer", r.wildsFewerThanNaturals ? 1 : 0);
-    put("closedCanasta", r.canastaIsClosed ? 1 : 0);
+    put("closedCanasta", r.canastaMakesRankSafe ? 1 : 0);
     put("noMeldFirstRound", r.noMeldingFirstRound ? 1 : 0);
     put("pileOpens", r.pileMeldCountsToOpen ? 1 : 0);
 }
@@ -165,7 +165,7 @@ ca::Rules loadHouse()
     r.blackThreeBlocksPile = get("blackThreeBlocks", 1) != 0;
     r.unfrozenPileTakeableWithWild = get("wildTake", 1) != 0;
     r.wildsFewerThanNaturals = get("wildsFewer", 0) != 0;
-    r.canastaIsClosed = get("closedCanasta", 0) != 0;
+    r.canastaMakesRankSafe = get("closedCanasta", 0) != 0;
     r.noMeldingFirstRound = get("noMeldFirstRound", 0) != 0;
     r.pileMeldCountsToOpen = get("pileOpens", 1) != 0;
     return r;
@@ -223,8 +223,11 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                           rules.unfrozenPileTakeableWithWild);
     auto* wildsFewer = tick(QStringLiteral("A meld keeps more real cards than wild ones"),
                             rules.wildsFewerThanNaturals);
-    auto* closedCanasta = tick(QStringLiteral("A canasta is finished and takes no more cards"),
-                               rules.canastaIsClosed);
+    // Key still reads "closedCanasta" from when this rule was first written the
+    // wrong way round: renaming it would silently untick it for anyone who has
+    // already set it, and the setting itself is the same one.
+    auto* closedCanasta = tick(QStringLiteral("A canasta makes its rank a safe discard"),
+                               rules.canastaMakesRankSafe);
     auto* firstRound = tick(QStringLiteral("Nobody lays down in the first round"),
                             rules.noMeldingFirstRound);
     auto* pileOpens = tick(QStringLiteral("The pile can be part of your opening"),
@@ -265,7 +268,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                          blackBlocks->setChecked(c.blackThreeBlocksPile);
                          wildTake->setChecked(c.unfrozenPileTakeableWithWild);
                          wildsFewer->setChecked(c.wildsFewerThanNaturals);
-                         closedCanasta->setChecked(c.canastaIsClosed);
+                         closedCanasta->setChecked(c.canastaMakesRankSafe);
                          firstRound->setChecked(c.noMeldingFirstRound);
                          pileOpens->setChecked(c.pileMeldCountsToOpen);
                      });
@@ -290,7 +293,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
     rules.blackThreeBlocksPile = blackBlocks->isChecked();
     rules.unfrozenPileTakeableWithWild = wildTake->isChecked();
     rules.wildsFewerThanNaturals = wildsFewer->isChecked();
-    rules.canastaIsClosed = closedCanasta->isChecked();
+    rules.canastaMakesRankSafe = closedCanasta->isChecked();
     rules.noMeldingFirstRound = firstRound->isChecked();
     rules.pileMeldCountsToOpen = pileOpens->isChecked();
     storeHouse(rules);

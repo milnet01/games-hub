@@ -119,8 +119,9 @@ what it scores:
 - *The pile can be part of your opening*, turned off, means the meld that
   captures the top card counts nothing toward the minimum — so the pile can
   never be the thing that opens you.
-- *A canasta is finished and takes no more cards* closes a canasta the moment
-  it is made, which makes that rank safe for the other side to throw away.
+- *A canasta makes its rank a safe discard* stops a side taking the pile with
+  a rank it already has a canasta in. Your own side goes on adding to that
+  canasta as usual — the rule is about the pile, not about the meld.
 - *A meld keeps more real cards than wild ones* means three sixes carry two
   wilds and no more; the third wild waits for a fourth six.
 
