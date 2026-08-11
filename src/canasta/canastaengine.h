@@ -79,6 +79,22 @@ struct Rules {
     bool unfrozenPileTakeableWithWild = true;
     // On an unfrozen pile, take it by adding the top card to a meld you own.
     bool unfrozenPileTakeableByExtending = true;
+    // A meld must always hold more real cards than wild ones — three sixes
+    // carry two wilds, and the third wild waits for a fourth six. Stricter
+    // than maxWildsPerMeld, which is a flat ceiling rather than a ratio.
+    bool wildsFewerThanNaturals = false;
+    // A canasta is finished once it is made: no more cards of that rank can
+    // join it, so the other side can throw that rank away safely and the pile
+    // can no longer be taken with it. The classic game leaves a canasta open.
+    bool canastaIsClosed = false;
+    // Nobody lays anything down until every seat has had a turn, so the first
+    // round is pure draw and discard and the pile builds before anyone opens.
+    bool noMeldingFirstRound = false;
+    // Whether the meld that captures the top card counts toward the opening
+    // minimum. When it does not, the minimum has to be made up entirely of the
+    // other melds laid down in the same move — so the pile can never be what
+    // opens you.
+    bool pileMeldCountsToOpen = true;
 
     static Rules classic() { return {}; }
 };
@@ -200,6 +216,11 @@ public:
 
     // --- Queries, for the board's highlighting. None of them change state. ---
 
+    // False while Rules::noMeldingFirstRound is still holding the first round
+    // open. The board asks so it can say why, since a greyed-out Meld with no
+    // reason given reads as a bug rather than as a rule.
+    bool meldingAllowed() const;
+
     bool canDrawFromStock() const;
     bool canTakePile(const std::vector<Card>& layDown) const;
     // True when some legal way to take the pile exists for the current seat.
@@ -277,6 +298,9 @@ private:
     int m_hand = 0;
     int m_dealer = 0;
     int m_current = 0;
+    // Turns finished this hand. The first round is over once every seat has
+    // had one, which is what Rules::noMeldingFirstRound waits for.
+    int m_turnsTaken = 0;
     int m_outSeat = -1;
     bool m_outConcealed = false;
     bool m_frozen = false;

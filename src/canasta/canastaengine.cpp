@@ -15,11 +15,13 @@ void applyGroups(Team& t, const std::vector<Meld>& groups)
     for (const Meld& g : groups) {
         auto it = std::find_if(t.melds.begin(), t.melds.end(),
                                [&](const Meld& m) { return m.rank == g.rank; });
-        if (it == t.melds.end()) {
-            t.melds.push_back(g);
-            continue;
-        }
+        if (it == t.melds.end())
+            it = t.melds.insert(t.melds.end(), Meld { g.rank, {} });
         it->cards.insert(it->cards.end(), g.cards.begin(), g.cards.end());
+        // Wild cards to the front. Nothing in the rules depends on the order,
+        // but a meld has to say what it is made of at a glance, and a joker
+        // buried between two sixes is exactly what is hard to see.
+        std::stable_sort(it->cards.begin(), it->cards.end(), sortsBefore);
     }
 }
 
@@ -206,6 +208,7 @@ void Engine::dealFrom(std::vector<Card> stock)
     m_pile.clear();
     m_error.clear();
     m_hasMelded.fill(false);
+    m_turnsTaken = 0;
     for (auto& h : m_hands)
         h.clear();
 
@@ -292,8 +295,14 @@ void Engine::advanceSeat()
 
 void Engine::endTurn()
 {
+    ++m_turnsTaken;
     advanceSeat();
     startTurn();
+}
+
+bool Engine::meldingAllowed() const
+{
+    return !m_rules.noMeldingFirstRound || m_turnsTaken >= kSeats;
 }
 
 // ---------------------------------------------------------------------------
@@ -417,8 +426,16 @@ bool Engine::validateGroups(int team, const std::vector<Meld>& groups, bool goin
     const Team& t = m_teams[std::size_t(team)];
     for (const Meld& g : groups) {
         Meld merged { g.rank, {} };
-        if (const Meld* existing = t.meldOfRank(g.rank))
+        if (const Meld* existing = t.meldOfRank(g.rank)) {
+            // A closed canasta is finished: it takes nothing more, which is
+            // what makes its rank safe for the other side to throw away.
+            if (m_rules.canastaIsClosed && existing->isCanasta(m_rules)) {
+                error = QStringLiteral("Your %1s are a finished canasta and take no more cards.")
+                            .arg(rankLabel(g.rank));
+                return false;
+            }
             merged.cards = existing->cards;
+        }
         merged.cards.insert(merged.cards.end(), g.cards.begin(), g.cards.end());
 
         if (g.rank == 3) {
@@ -450,6 +467,15 @@ bool Engine::validateGroups(int team, const std::vector<Meld>& groups, bool goin
                         .arg(m_rules.minNaturalsPerMeld);
             return false;
         }
+        if (m_rules.wildsFewerThanNaturals && g.rank != kJoker
+            && merged.wilds() >= merged.naturals()) {
+            error = QStringLiteral("A meld keeps more real cards than wild ones: that would "
+                                   "leave %1 %2s against %3 wild.")
+                        .arg(merged.naturals())
+                        .arg(rankLabel(g.rank))
+                        .arg(merged.wilds());
+            return false;
+        }
     }
     return true;
 }
@@ -472,6 +498,11 @@ bool Engine::validateMeld(const std::vector<Card>& cards, int targetRank,
     const int seat = m_current;
     const int t = teamOf(seat);
 
+    if (!meldingAllowed()) {
+        error = QStringLiteral("Nobody lays anything down in the first round — every seat "
+                               "plays once first.");
+        return false;
+    }
     if (!handContains(seat, cards)) {
         error = QStringLiteral("Those cards are not in your hand.");
         return false;
@@ -504,7 +535,25 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
         error = QStringLiteral("The discard pile is empty.");
         return false;
     }
+    // Taking the pile always melds the top card, so a rule that stops anyone
+    // laying down in the first round stops the pile being taken as well.
+    if (!meldingAllowed()) {
+        error = QStringLiteral("Nobody lays anything down in the first round — every seat "
+                               "plays once first.");
+        return false;
+    }
     const Card top = m_pile.back();
+    if (m_rules.canastaIsClosed) {
+        const Meld* mine = m_teams[std::size_t(teamOf(m_current))].meldOfRank(top.rank);
+        if (mine != nullptr && mine->isCanasta(m_rules)) {
+            // Said here as well as in validateGroups, because from the board's
+            // side this is a rule about the pile rather than about a lay-down.
+            error = QStringLiteral("Your %1s are a finished canasta, so the %1 on top is no use "
+                                   "to you.")
+                        .arg(rankLabel(top.rank));
+            return false;
+        }
+    }
     if (isWild(top)) {
         error = QStringLiteral("A wild card on top stops the pile being taken.");
         return false;
@@ -578,11 +627,27 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
     if (!team.opened) {
         const int need = m_openReq[std::size_t(t)];
         // Only the top card counts from the pile; the cards under it do not.
-        const int have = layDownValue(combined);
+        int have = layDownValue(combined);
+        if (!m_rules.pileMeldCountsToOpen) {
+            // House rule: the meld that captures the top card is worth nothing
+            // toward opening, so the minimum has to come from the other melds
+            // going down in the same move. The pile can then never be the thing
+            // that opens you.
+            have = 0;
+            for (const Meld& m : groups)
+                if (m.rank != top.rank)
+                    have += layDownValue(m.cards);
+        }
         if (have < need) {
-            error = QStringLiteral("Your side needs %1 to open, and that is only %2.")
-                        .arg(need)
-                        .arg(have);
+            error = m_rules.pileMeldCountsToOpen
+                ? QStringLiteral("Your side needs %1 to open, and that is only %2.")
+                      .arg(need)
+                      .arg(have)
+                : QStringLiteral("Your side needs %1 to open from your other melds — the %2s "
+                                 "taking the pile do not count, and the rest comes to %3.")
+                      .arg(need)
+                      .arg(rankLabel(top.rank))
+                      .arg(have);
             return false;
         }
     }

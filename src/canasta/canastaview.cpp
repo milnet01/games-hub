@@ -129,6 +129,10 @@ void storeHouse(const ca::Rules& r)
     put("requireCanasta", r.requireCanastaToGoOut ? 1 : 0);
     put("blackThreeBlocks", r.blackThreeBlocksPile ? 1 : 0);
     put("wildTake", r.unfrozenPileTakeableWithWild ? 1 : 0);
+    put("wildsFewer", r.wildsFewerThanNaturals ? 1 : 0);
+    put("closedCanasta", r.canastaIsClosed ? 1 : 0);
+    put("noMeldFirstRound", r.noMeldingFirstRound ? 1 : 0);
+    put("pileOpens", r.pileMeldCountsToOpen ? 1 : 0);
 }
 
 ca::Rules loadHouse()
@@ -155,6 +159,10 @@ ca::Rules loadHouse()
     r.requireCanastaToGoOut = get("requireCanasta", 1) != 0;
     r.blackThreeBlocksPile = get("blackThreeBlocks", 1) != 0;
     r.unfrozenPileTakeableWithWild = get("wildTake", 1) != 0;
+    r.wildsFewerThanNaturals = get("wildsFewer", 0) != 0;
+    r.canastaIsClosed = get("closedCanasta", 0) != 0;
+    r.noMeldingFirstRound = get("noMeldFirstRound", 0) != 0;
+    r.pileMeldCountsToOpen = get("pileOpens", 1) != 0;
     return r;
 }
 
@@ -208,6 +216,14 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                              rules.blackThreeBlocksPile);
     auto* wildTake = tick(QStringLiteral("An open pile can be taken with a wild card"),
                           rules.unfrozenPileTakeableWithWild);
+    auto* wildsFewer = tick(QStringLiteral("A meld keeps more real cards than wild ones"),
+                            rules.wildsFewerThanNaturals);
+    auto* closedCanasta = tick(QStringLiteral("A canasta is finished and takes no more cards"),
+                               rules.canastaIsClosed);
+    auto* firstRound = tick(QStringLiteral("Nobody lays down in the first round"),
+                            rules.noMeldingFirstRound);
+    auto* pileOpens = tick(QStringLiteral("The pile can be part of your opening"),
+                           rules.pileMeldCountsToOpen);
 
     auto* layout = new QVBoxLayout(&dlg);
     auto* blurb = new QLabel(
@@ -243,6 +259,10 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                          needCanasta->setChecked(c.requireCanastaToGoOut);
                          blackBlocks->setChecked(c.blackThreeBlocksPile);
                          wildTake->setChecked(c.unfrozenPileTakeableWithWild);
+                         wildsFewer->setChecked(c.wildsFewerThanNaturals);
+                         closedCanasta->setChecked(c.canastaIsClosed);
+                         firstRound->setChecked(c.noMeldingFirstRound);
+                         pileOpens->setChecked(c.pileMeldCountsToOpen);
                      });
 
     if (dlg.exec() != QDialog::Accepted)
@@ -264,6 +284,10 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
     rules.requireCanastaToGoOut = needCanasta->isChecked();
     rules.blackThreeBlocksPile = blackBlocks->isChecked();
     rules.unfrozenPileTakeableWithWild = wildTake->isChecked();
+    rules.wildsFewerThanNaturals = wildsFewer->isChecked();
+    rules.canastaIsClosed = closedCanasta->isChecked();
+    rules.noMeldingFirstRound = firstRound->isChecked();
+    rules.pileMeldCountsToOpen = pileOpens->isChecked();
     storeHouse(rules);
     return true;
 }
@@ -1038,7 +1062,8 @@ void CanastaView::refresh()
     }
 
     m_meldAction->setEnabled(m_engine.phase() == ca::Engine::Phase::Play
-                             && m_engine.currentSeat() == 0 && !m_selected.empty());
+                             && m_engine.currentSeat() == 0 && !m_selected.empty()
+                             && m_engine.meldingAllowed());
     m_discardAction->setEnabled(m_engine.phase() == ca::Engine::Phase::Play
                                 && m_engine.currentSeat() == 0 && m_selected.size() == 1);
 
@@ -1063,9 +1088,13 @@ void CanastaView::refresh()
                                   "first — melding comes after the draw.");
         break;
     case ca::Engine::Phase::Play:
-        what = m_engine.currentSeat() == 0
-            ? QStringLiteral("Lay down what you want, then throw one card away.")
-            : QStringLiteral("%1 is playing.").arg(seatName(m_engine.currentSeat()));
+        if (m_engine.currentSeat() != 0)
+            what = QStringLiteral("%1 is playing.").arg(seatName(m_engine.currentSeat()));
+        else if (!m_engine.meldingAllowed())
+            what = QStringLiteral("First round: nobody lays anything down yet — just throw a "
+                                  "card away.");
+        else
+            what = QStringLiteral("Lay down what you want, then throw one card away.");
         break;
     }
     if (!m_message.isEmpty())

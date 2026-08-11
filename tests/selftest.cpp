@@ -1437,6 +1437,288 @@ void canastaHouseRules()
     check(!six.isCanasta(ca::Rules::classic()), "canasta: and the classic rules still want seven");
 }
 
+// A meld has to be readable at a glance, so wild cards go to the front of it
+// wherever they arrive from. Nothing in the rules depends on the order, which
+// is why this is checked on the meld rather than on the painting.
+void canastaMeldOrder()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Seat 1 opens with four aces, then adds a joker and a two to them.
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), joker(true), cd(Suit::Spades, 2),
+                 cd(Suit::Clubs, 5), cd(Suit::Clubs, 8), cd(Suit::Spades, kJack),
+                 cd(Suit::Hearts, kJack), cd(Suit::Clubs, kQueen) };
+    hands[2] = filler(10);
+    hands[3] = filler(kKing);
+
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+    e.drawFromStock();
+    check(e.meldCards({ cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                        cd(Suit::Diamonds, kAce) }),
+          "canasta: four aces go down");
+    check(e.meldCards({ joker(true), cd(Suit::Spades, 2) }, kAce),
+          "canasta: a joker and a two join them");
+
+    const ca::Meld* m = e.team(1).meldOfRank(kAce);
+    const bool built = m != nullptr && m->size() == 6;
+    check(built, "canasta: the aces meld is six cards");
+    if (built) {
+        check(isJoker(m->cards[0]), "canasta: the joker is at the front of the meld");
+        check(m->cards[1].rank == 2, "canasta: then the two");
+        check(m->cards[2].rank == kAce && m->cards[5].rank == kAce,
+              "canasta: and the real cards follow");
+    }
+}
+
+// A meld holds more real cards than wild ones: three sixes carry two wilds, and
+// the third wild waits for a fourth six. Checked in exactly that shape.
+void canastaWildsFewerThanNaturals()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Four aces to open with, then sixes and wilds to build on.
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), cd(Suit::Spades, 6), cd(Suit::Hearts, 6),
+                 cd(Suit::Clubs, 6), cd(Suit::Diamonds, 6), joker(true), joker(false),
+                 cd(Suit::Spades, 2) };
+    hands[2] = filler(10);
+    hands[3] = filler(kKing);
+
+    const std::vector<Card> threeSixes { cd(Suit::Spades, 6), cd(Suit::Hearts, 6),
+                                         cd(Suit::Clubs, 6) };
+
+    for (int strict = 0; strict < 2; ++strict) {
+        ca::Rules r = ca::Rules::classic();
+        r.wildsFewerThanNaturals = strict != 0;
+        ca::Engine e { r };
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+
+        e.drawFromStock();
+        check(e.meldCards({ cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                            cd(Suit::Clubs, kAce), cd(Suit::Diamonds, kAce) }),
+              "canasta: four aces open the side");
+        check(e.meldCards(threeSixes), "canasta: and three sixes go down beside them");
+
+        // Two wilds onto three sixes is fine either way: three beats two.
+        check(e.meldCards({ joker(true), joker(false) }, 6),
+              "canasta: two wilds join three sixes");
+        // The third would make it three against three.
+        check(e.canMeldCards({ cd(Suit::Spades, 2) }, 6) == (strict == 0),
+              strict ? "canasta: a third wild is refused while the sixes are only three"
+                     : "canasta: the classic game allows the third wild");
+
+        // A fourth six changes the count, and then it is allowed.
+        check(e.meldCards({ cd(Suit::Diamonds, 6) }, 6), "canasta: a fourth six goes down");
+        check(e.canMeldCards({ cd(Suit::Spades, 2) }, 6),
+              "canasta: and now the third wild is welcome");
+    }
+}
+
+// A house rule with teeth: once a canasta is made it is finished, so it takes
+// no more cards and the other side can throw that rank away safely.
+void canastaClosedCanasta()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Seven aces: enough to open and make the canasta in one lay-down.
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                 cd(Suit::Clubs, kAce), cd(Suit::Diamonds, kAce), cd(Suit::Clubs, 5),
+                 cd(Suit::Clubs, 8), cd(Suit::Spades, kQueen) };
+    // Seat 2 throws an ace, which seat 3 — seat 1's partner — would love.
+    hands[2] = { cd(Suit::Hearts, kAce), cd(Suit::Spades, 10), cd(Suit::Hearts, 10),
+                 cd(Suit::Clubs, 10), cd(Suit::Diamonds, 10), cd(Suit::Spades, kJack),
+                 cd(Suit::Hearts, kJack), cd(Suit::Clubs, kJack), cd(Suit::Diamonds, kJack),
+                 cd(Suit::Spades, 9), cd(Suit::Hearts, 9) };
+    hands[3] = { cd(Suit::Spades, kAce), cd(Suit::Clubs, kAce), cd(Suit::Spades, kKing),
+                 cd(Suit::Hearts, kKing), cd(Suit::Clubs, kKing), cd(Suit::Diamonds, kKing),
+                 cd(Suit::Spades, 7), cd(Suit::Hearts, 7), cd(Suit::Clubs, 7),
+                 cd(Suit::Diamonds, 7), cd(Suit::Spades, 8) };
+
+    const std::vector<Card> seven { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                                    cd(Suit::Clubs, kAce), cd(Suit::Diamonds, kAce),
+                                    cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                                    cd(Suit::Clubs, kAce) };
+
+    for (int closed = 0; closed < 2; ++closed) {
+        ca::Rules r = ca::Rules::classic();
+        r.canastaIsClosed = closed != 0;
+        ca::Engine e { r };
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+
+        e.drawFromStock();
+        check(e.meldCards(seven), "canasta: seven aces make a canasta in one go");
+        check(e.team(1).meldOfRank(kAce)->isCanasta(r), "canasta: and it is a canasta");
+        e.discard(cd(Suit::Spades, kQueen));
+
+        // Seat 2 throws the ace onto the pile.
+        e.drawFromStock();
+        e.discard(cd(Suit::Hearts, kAce));
+        const bool ready = e.currentSeat() == 3 && e.pile().back().rank == kAce;
+        check(ready, "canasta: an ace is thrown to the side holding the ace canasta");
+
+        // Taking the pile is the draw, so that comes first.
+        check(e.canTakePile({ cd(Suit::Spades, kAce), cd(Suit::Clubs, kAce) }) == (closed == 0),
+              closed ? "canasta: the pile cannot be taken with a closed canasta's rank"
+                     : "canasta: while an open canasta still takes the pile");
+
+        // And the spare aces in hand: worth adding in the classic game, worth
+        // nothing once the canasta is closed.
+        e.drawFromStock();
+        check(e.canMeldCards({ cd(Suit::Spades, kAce) }, kAce) == (closed == 0),
+              closed ? "canasta: a closed canasta takes no more cards"
+                     : "canasta: an open canasta still takes another card");
+    }
+}
+
+// Two of the owner's family's rules, both off in the classic set.
+//
+// The first holds the whole opening round open: nobody lays anything down until
+// every seat has played once, so the pile has something in it before anyone can
+// take it. The second stops the pile being what opens you — the meld that
+// captures the top card counts nothing toward the minimum, so the minimum has
+// to be made up from the other melds going down beside it.
+void canastaFirstRoundAndPileOpening()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Seat 1 leads, and can open on its very first turn with four aces — worth
+    // 80 against a minimum of 50 — unless the first-round rule stops it.
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), cd(Suit::Diamonds, 6), cd(Suit::Clubs, 5),
+                 cd(Suit::Clubs, 8), cd(Suit::Spades, kJack), cd(Suit::Hearts, kJack),
+                 cd(Suit::Clubs, kJack), cd(Suit::Spades, kQueen) };
+    hands[2] = filler(10);
+    hands[3] = filler(kKing);
+
+    const std::vector<Card> aces { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                                   cd(Suit::Clubs, kAce), cd(Suit::Diamonds, kAce) };
+
+    for (int held = 0; held < 2; ++held) {
+        ca::Rules r = ca::Rules::classic();
+        r.noMeldingFirstRound = held != 0;
+        ca::Engine e { r };
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+
+        check(e.meldingAllowed() == (held == 0),
+              held ? "canasta: the first round starts closed to melding"
+                   : "canasta: classic lets you open on the first turn");
+        e.drawFromStock();
+        check(e.canMeldCards(aces) == (held == 0),
+              held ? "canasta: four aces cannot open in the first round"
+                   : "canasta: four aces open straight away in the classic game");
+
+        // Round the table once. Everyone draws and throws; nobody lays down.
+        e.discard(cd(Suit::Spades, kQueen));
+        for (int i = 0; i < 3; ++i) {
+            const int seat = e.currentSeat();
+            check(e.meldingAllowed() == (held == 0),
+                  held ? "canasta: still closed part way round the first round"
+                       : "canasta: still open part way round the first round");
+            e.drawFromStock();
+            e.discard(e.hand(seat).front());
+        }
+
+        check(e.currentSeat() == 1, "canasta: the first round is back round to the leader");
+        check(e.meldingAllowed(), "canasta: melding is open once every seat has played");
+        e.drawFromStock();
+        check(e.canMeldCards(aces), "canasta: and the aces go down on the second round");
+    }
+
+    // The pile rule, in the shape it was reported: a six is thrown, and the
+    // next seat holds a joker and two sixes against a minimum of 50.
+    hands[2] = { joker(true), cd(Suit::Spades, 6), cd(Suit::Hearts, 6), cd(Suit::Spades, kAce),
+                 cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce), cd(Suit::Diamonds, kAce),
+                 cd(Suit::Clubs, kJack), cd(Suit::Spades, kJack), cd(Suit::Hearts, kJack),
+                 cd(Suit::Clubs, 9) };
+    const std::vector<Card> sixes { joker(true), cd(Suit::Spades, 6), cd(Suit::Hearts, 6) };
+    std::vector<Card> sixesAndAces = sixes;
+    sixesAndAces.insert(sixesAndAces.end(), aces.begin(), aces.end());
+
+    for (int strict = 0; strict < 2; ++strict) {
+        ca::Rules r = ca::Rules::classic();
+        r.pileMeldCountsToOpen = strict == 0;
+        ca::Engine e { r };
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+
+        e.drawFromStock();
+        e.discard(cd(Suit::Diamonds, 6));
+        const bool ready = e.currentSeat() == 2 && e.phase() == ca::Engine::Phase::Draw
+            && !e.pile().empty() && e.pile().back().rank == 6 && !e.team(0).opened;
+        check(ready, "canasta: reached a six on the pile with an unopened side to play");
+
+        // The sixes come to 65 with the top card, which opens you in the classic
+        // game and counts for nothing under the house rule.
+        check(e.canTakePile(sixes) == (strict == 0),
+              strict ? "canasta: the pile meld alone cannot open you"
+                     : "canasta: classic lets the pile meld open you");
+        check(e.canTakePile(sixesAndAces),
+              strict ? "canasta: but four aces beside it open you and the pile comes"
+                     : "canasta: aces alongside take the pile too");
+    }
+
+    // All four house rules at once, played out by four computers, because the
+    // failure that matters here is a hand that cannot legally continue.
+    ca::Rules house = ca::Rules::classic();
+    house.name = QStringLiteral("House");
+    house.targetScore = 1000;
+    house.noMeldingFirstRound = true;
+    house.pileMeldCountsToOpen = false;
+    house.canastaIsClosed = true;
+    house.wildsFewerThanNaturals = true;
+
+    ca::Engine e { house };
+    e.newGame(2718);
+    std::array<ca::Ai, ca::kSeats> ai { ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Hard },
+                                        ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Hard } };
+    bool finished = false;
+    bool whole = true;
+    bool laidTooEarly = false;
+    bool grewAfterClosing = false;
+    // Meld sizes, the first time each was seen at canasta size or more. A
+    // closed canasta must never grow again.
+    std::map<int, int> closedAt;
+    for (long guard = 0; guard < 40000 && !finished; ++guard) {
+        if (e.phase() == ca::Engine::Phase::GameOver) {
+            finished = true;
+            break;
+        }
+        if (e.phase() == ca::Engine::Phase::HandOver) {
+            e.nextHand();
+            closedAt.clear(); // a new hand clears the table
+            continue;
+        }
+        if (e.cardsInPlay() != 108) {
+            whole = false;
+            break;
+        }
+        if (!e.meldingAllowed() && (!e.team(0).melds.empty() || !e.team(1).melds.empty()))
+            laidTooEarly = true;
+        for (int t = 0; t < ca::kTeams; ++t) {
+            for (const ca::Meld& m : e.team(t).melds) {
+                if (!m.isCanasta(house))
+                    continue;
+                const int key = t * 20 + m.rank;
+                const auto it = closedAt.find(key);
+                if (it == closedAt.end())
+                    closedAt.emplace(key, m.size());
+                else if (m.size() != it->second)
+                    grewAfterClosing = true;
+            }
+        }
+        const int seat = e.currentSeat();
+        ai[std::size_t(seat)].draw(e);
+        if (e.phase() == ca::Engine::Phase::Play)
+            ai[std::size_t(seat)].playAndDiscard(e);
+    }
+    check(finished, "canasta: a full game plays out under all four house rules");
+    check(whole, "canasta: and the pack stays whole all the way through");
+    check(!laidTooEarly, "canasta: nothing reached the table during a first round");
+    check(!grewAfterClosing, "canasta: and no canasta took another card once it was made");
+}
+
 // Sorting a hand is cosmetic, so the two things worth proving are that the
 // order is the one a player expects and that nothing is lost on the way.
 void canastaHandSort()
@@ -1533,6 +1815,10 @@ int main()
     canastaFullGames();
     canastaLevelsDiffer();
     canastaHouseRules();
+    canastaMeldOrder();
+    canastaWildsFewerThanNaturals();
+    canastaClosedCanasta();
+    canastaFirstRoundAndPileOpening();
     canastaHandSort();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");

@@ -167,6 +167,13 @@ turn cannot end. The guard is in `keepsADiscard()`, which refuses a lay-down
 leaving fewer than two cards unless a canasta comes with it. Without it the
 self-test's full games hang rather than fail, which is a much worse symptom.
 
+**Card order that the eye depends on belongs in the model, not the painter.**
+A hand fans wild-cards-first and so does every meld, and both orders are made
+by `canasta::sortsBefore` inside the engine. That is not a layering slip: the
+flights index into `Meld::cards` and into the hand to work out where a card is
+flying, so a display order held only in the painter would put the animation in
+one place and the card in another. Sort before the flights are built.
+
 **A card game with animation must not let the model and the picture disagree.**
 Each flight carries where it is going, and the destination skips drawing that
 card until it lands (`suppressed()`); otherwise a card in the air is also drawn

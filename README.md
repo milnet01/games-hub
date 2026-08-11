@@ -90,8 +90,21 @@ is going.
 
 **Rules → House rules…** opens every number the game plays by: the opening
 minimums, the canasta bonuses, what a red three is worth, and whether a canasta
-is really needed to go out. Classic is never edited and is always one click
-away. **Play to** sets how long a game runs.
+is really needed to go out. Four of them change how a hand plays rather than
+what it scores:
+
+- *Nobody lays down in the first round* keeps the table clear until every seat
+  has played once, so the pile has something in it before anyone can open.
+- *The pile can be part of your opening*, turned off, means the meld that
+  captures the top card counts nothing toward the minimum — so the pile can
+  never be the thing that opens you.
+- *A canasta is finished and takes no more cards* closes a canasta the moment
+  it is made, which makes that rank safe for the other side to throw away.
+- *A meld keeps more real cards than wild ones* means three sixes carry two
+  wilds and no more; the third wild waits for a fourth six.
+
+Classic is never edited and is always one click away. **Play to** sets how long
+a game runs.
 
 **Pinball.** Hold `Space` to charge the plunger, release to launch. `Z` and `M`
 (or the arrow keys) work the flippers; clicking the left or right half of the
