@@ -37,11 +37,12 @@ winning Canasta score, and the Snake, 2048 and Pinball high scores.
 separately as well as for the tile menu, so a game you like large opens large
 and the menu comes back where you left it.
 
-**Canasta picks up where you left off.** Close the window mid-game and the
-whole table — every hand, the melds, the pile, the stock, the scores and the
-rule set in force — comes back next time you open it. There is nothing to
-press: New Game is how you start a fresh one instead. The other long games do
-not do this yet.
+**Canasta and Chess pick up where you left off.** Close the window mid-game and
+the whole table — every hand, the melds, the pile, the stock, the scores and the
+rule set in force — comes back next time you open Canasta, and Chess comes back
+to the same board with the same moves behind it, so Undo and threefold
+repetition still work. There is nothing to press: New Game is how you start a
+fresh one instead. The other games do not do this yet.
 
 **Minesweeper and Sudoku can be paused**, which stops the clock and covers the
 board, so walking away costs you nothing. Snake has its own pause on the space

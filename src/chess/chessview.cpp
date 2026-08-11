@@ -6,6 +6,8 @@
 #include "theme.h"
 
 #include <QActionGroup>
+#include <QDataStream>
+#include <QIODevice>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -22,6 +24,17 @@ constexpr int kFrameWidth = 18;
 constexpr int kThinkDelayMs = 260;
 
 const QString kWinsKey = QStringLiteral("chess/wins");
+
+// The toolbar's name for a strength. One list, because a resumed game has to
+// tick the level it was saved at and two lists would drift.
+QString levelName(Level level)
+{
+    switch (level) {
+    case Level::Easy: return QStringLiteral("Easy");
+    case Level::Hard: return QStringLiteral("Hard");
+    default:          return QStringLiteral("Medium");
+    }
+}
 
 QString pieceName(PieceType type)
 {
@@ -79,17 +92,11 @@ void ChessView::buildActions()
 
     auto* group = new QActionGroup(this);
     group->setExclusive(true);
-    const struct { const char* name; Level level; } kLevels[] = {
-        { "Easy", Level::Easy },
-        { "Medium", Level::Medium },
-        { "Hard", Level::Hard },
-    };
-    for (const auto& entry : kLevels) {
-        auto* a = new QAction(QString::fromUtf8(entry.name), this);
+    for (const Level level : { Level::Easy, Level::Medium, Level::Hard }) {
+        auto* a = new QAction(levelName(level), this);
         a->setCheckable(true);
-        a->setChecked(entry.level == m_level);
+        a->setChecked(level == m_level);
         group->addAction(a);
-        const Level level = entry.level;
         connect(a, &QAction::triggered, this, [this, level] { m_level = level; });
         m_actions.append(a);
     }
@@ -129,6 +136,95 @@ void ChessView::undo()
 void ChessView::activate()
 {
     refresh();
+}
+
+// The moves, not the position.
+//
+// A FEN would say where the pieces are and nothing else. Threefold repetition
+// needs every position the game has passed through, and Undo needs the boards
+// behind it — both of which ChessGame keeps privately and rebuilds itself from
+// play(). Replaying the moves therefore restores all three from one list, with
+// no second copy of the history to drift out of step with the first.
+QByteArray ChessView::saveState() const
+{
+    // Nothing worth coming back to: a game already decided, or one nobody has
+    // moved in. An empty state also clears whatever was stored before.
+    if (m_game.isOver() || m_game.history().empty())
+        return {};
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint32(m_level) << qint32(m_game.history().size());
+    for (const chess::Move& m : m_game.history()) {
+        out << qint8(m.from.row) << qint8(m.from.col) << qint8(m.to.row) << qint8(m.to.col)
+            << qint8(m.promotion);
+    }
+    return blob;
+}
+
+bool ChessView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    qint32 level = 0;
+    qint32 count = 0;
+    in >> version >> level >> count;
+    // 1024 plies is far beyond any real game; a count from a corrupt file must
+    // not be trusted into a loop.
+    if (version != 1 || in.status() != QDataStream::Ok || count < 0 || count > 1024)
+        return false;
+
+    // Played into a game of its own, so a stream that turns out to be nonsense
+    // leaves the board already on screen alone.
+    chess::ChessGame game;
+    for (qint32 i = 0; i < count; ++i) {
+        qint8 fromRow = 0;
+        qint8 fromCol = 0;
+        qint8 toRow = 0;
+        qint8 toCol = 0;
+        qint8 promotion = 0;
+        in >> fromRow >> fromCol >> toRow >> toCol >> promotion;
+        if (in.status() != QDataStream::Ok)
+            return false;
+
+        chess::Move wanted;
+        wanted.from = { int(fromRow), int(fromCol) };
+        wanted.to = { int(toRow), int(toCol) };
+        wanted.promotion = chess::PieceType(promotion);
+        // Matched against the legal moves rather than trusted: it proves the
+        // saved game is one this build would play, and the castling and
+        // en-passant flags come back set by the generator rather than by the
+        // file.
+        const std::vector<chess::Move> legal = game.legalMoves();
+        const auto found = std::find(legal.begin(), legal.end(), wanted);
+        if (found == legal.end())
+            return false;
+        game.play(*found);
+    }
+    if (game.isOver())
+        return false; // decided since it was saved; nothing to resume into
+
+    m_game = game;
+    m_level = chess::Level(std::clamp<int>(level, 0, 2));
+    for (QAction* a : m_actions) {
+        if (a->isCheckable())
+            a->setChecked(a->text() == levelName(m_level));
+    }
+
+    m_selected.reset();
+    m_selectedMoves.clear();
+    m_lastMove = m_game.history().empty() ? std::optional<chess::Move> {}
+                                          : std::optional<chess::Move> { m_game.history().back() };
+    m_thinking = false;
+    m_finished = false;
+    m_undoAction->setEnabled(m_game.canUndo());
+    // Not refresh(): if it is the engine's move, the game has to carry on from
+    // where it stopped rather than sit waiting for a click that does nothing.
+    advance();
+    update();
+    return true;
 }
 
 void ChessView::advance()

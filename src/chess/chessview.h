@@ -16,6 +16,10 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    // A game in progress is kept as the moves that made it, and replayed to
+    // restore it — see saveState() for why that beats storing the position.
+    QByteArray saveState() const override;
+    bool restoreState(const QByteArray& blob) override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;

@@ -84,6 +84,55 @@ Same test, same answer: the classics are ancient and free.
   only if a weak opponent is acceptable, and say so on the tile.
 - **Halma**, **Hnefatafl**, **Shogi**, **Xiangqi** — deeper cuts, all free.
 
+## Suggested, not yet agreed
+
+Proposed on 2026-08-11 by the session that built Canasta, and written down at
+the owner's request. Nothing here has been agreed; the order is the order they
+are worth doing.
+
+### Legibility, in the other thirteen games
+
+**The single most valuable item on this page.** The owner is partially sighted
+and reads cards by their pip pattern rather than the corner index, which is why
+Canasta ended up with named discards, a wild count on every meld, cards drawn
+large enough for `CardArt::paintFace` to draw a face at all, and a computer that
+pauses long enough to be followed. **None of that is true anywhere else.**
+
+Expected to be wrong, and worth checking by rendering each game rather than by
+reasoning about it: the four solitaires draw cards far smaller than Canasta
+does, Hearts plays a trick with no record of what was led, Chess and Draughts
+announce nothing, and Sudoku's pencil marks are a third of a cell.
+
+Worth doing as one **Large cards / high contrast** switch the hub owns and every
+game reads, rather than as thirteen separate judgements. Size: large, and most
+of it is looking rather than typing.
+
+### Undo, in Canasta
+
+Chess and Reversi take a move back; Canasta cannot. A mis-clicked discard is
+gone, and it is the game whose cards are hardest to read — the two facts
+compound. One step is enough: the discard, or the last lay-down. Small.
+
+### The rules in force, on screen
+
+`How to play, inside the app` above covers teaching the games. This is the other
+half and is cheaper: Canasta now has six house rules, and the only place any of
+them is described is `README.md` on disk. A **Rules in force** panel that lists
+what is switched on would answer it without the writing the rules screen needs.
+Small.
+
+### A legality check that does not rely on the author's imagination
+
+Four separate bugs this session were positions where a move the player could see
+was legal got refused, all of them in one corner: where wild cards go. Every one
+passed the self-test, because the self-test checks positions somebody thought
+of.
+
+The check that would have caught at least two: over thousands of random
+positions, work out by brute force every legal way to take the pile, and confirm
+the engine agrees with the enumeration. Medium, and it retires a whole class of
+bug rather than one bug.
+
 ## Deferred, deliberately
 
 **Cutting the pack, in Canasta.** At a table the cut stops the dealer stacking
@@ -107,9 +156,17 @@ behind a version number that refuses an older or truncated save rather than
 misreading it, and the self-test proves a resumed table is the same table and
 plays on.
 
+**Chess is done too** (2026-08-11). It keeps the *moves*, not the position: a
+FEN would say where the pieces are and nothing else, while threefold repetition
+needs every position the game has passed through and Undo needs the boards
+behind them. `ChessGame` rebuilds all three from `play()`, so replaying the move
+list restores them from one list with no second copy to drift. Each move is
+matched against `legalMoves()` on the way back in, which both proves the save is
+a game this build would play and lets the generator — not the file — set the
+castling and en-passant flags. **That is the pattern for the games below.**
+
 Still to do, in the order they are worth doing:
 
-- **Chess** — position, history for threefold repetition, level, whose move.
 - **Hearts** — hands, tricks taken, passing direction, running scores.
 - **Klondike, Spider, FreeCell, Pyramid** — piles and stock. A shared card
   codec would do all four at once and is worth writing first.

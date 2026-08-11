@@ -186,6 +186,17 @@ and why the last discard is spelled out in words under the centre of the table
 rather than left to be read off the pile. Anything added here is checked
 against "can this be read slowly?" before "does this look neat?".
 
+**A game's save is the moves that made it, not the position it reached** —
+where the game keeps a history at all. Chess saves its move list and replays it
+through `ChessGame::play()`, which rebuilds the board, the undo stack and the
+position keys threefold repetition counts from one list; storing the position
+instead would need a second copy of each, free to drift. Each move is matched
+against `legalMoves()` on the way back in, so the file supplies from/to/promotion
+and the generator supplies the castling and en-passant flags — a save that is
+not a game this build would play is refused rather than half-loaded. Canasta
+cannot do this (it has no move log, so its engine serialises directly), which is
+why the two look different; prefer Chess's shape when a game offers the choice.
+
 **Card order that the eye depends on belongs in the model, not the painter.**
 A hand fans wild-cards-first and so does every meld, and both orders are made
 by `canasta::sortsBefore` inside the engine. That is not a layering slip: the

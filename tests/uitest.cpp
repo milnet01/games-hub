@@ -221,6 +221,31 @@ int main(int argc, char* argv[])
         check(chessStatus.contains(QStringLiteral("Computer played")),
               "chess: the engine answers the player's move");
 
+        // A game in progress survives being put away. The check is the picture:
+        // a restored board that renders identically is the same position, the
+        // same last move and the same side to play.
+        const QByteArray saved = chess.saveState();
+        check(!saved.isEmpty(), "chess: a game in progress is worth saving");
+
+        ChessView resumed;
+        resumed.resize(chess.size());
+        const QImage fresh = renderOf(&resumed);
+        check(resumed.restoreState(saved), "chess: and it reads back");
+        pump(300);
+        check(renderOf(&resumed) == replied, "chess: onto the very same board");
+        check(fresh != replied, "chess: which is not just a new game by another name");
+
+        // Junk is refused, and refusing it leaves the board alone.
+        const QImage before = renderOf(&resumed);
+        check(!resumed.restoreState(QByteArray("not a chess game")),
+              "chess: a corrupt save is refused");
+        check(renderOf(&resumed) == before, "chess: and refusing one changes nothing");
+
+        // A game nobody has moved in has nothing to come back to, which is what
+        // clears a stale save rather than resuming into it.
+        ChessView untouched;
+        check(untouched.saveState().isEmpty(), "chess: an unplayed game saves nothing");
+
         KlondikeView klondike;
         check(paints(&klondike), "klondike view paints");
 
