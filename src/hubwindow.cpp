@@ -24,6 +24,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QSettings>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -494,30 +495,118 @@ void HubWindow::buildChrome()
     statusBar()->addWidget(m_status, 1);
 }
 
+// ---------------------------------------------------------------------------
+// Remembering where you were
+// ---------------------------------------------------------------------------
+
+namespace {
+
+QString geometryKey(const QString& page)
+{
+    return QStringLiteral("window/geometry/") + (page.isEmpty() ? QStringLiteral("menu") : page);
+}
+
+QString saveKey(const QString& game)
+{
+    return QStringLiteral("saved/") + game;
+}
+
+} // namespace
+
+void HubWindow::rememberPage()
+{
+    // Nothing to remember until a page has actually been on screen: the first
+    // call comes from the constructor, before the window has a size worth
+    // keeping, and it would overwrite the one being restored.
+    if (!m_geometryReady)
+        return;
+
+    // saveGeometry() carries the position, the size and whether the window was
+    // maximised, which is why it is used rather than pos() and size().
+    QSettings().setValue(geometryKey(m_page), saveGeometry());
+
+    for (const Entry& e : m_entries)
+        if (e.view != nullptr && e.name == m_page)
+            storeSave(e);
+}
+
+void HubWindow::applyPageGeometry(const QString& page)
+{
+    const QVariant saved = QSettings().value(geometryKey(page));
+    if (saved.isValid())
+        restoreGeometry(saved.toByteArray());
+    else if (!m_geometryReady)
+        resize(880, 680); // first run, with nothing remembered for anything
+    // Switching to a game that has never been sized keeps the size you are
+    // already looking at, rather than jumping to an arbitrary default.
+    m_page = page;
+    m_geometryReady = true;
+}
+
+void HubWindow::storeSave(const Entry& e) const
+{
+    if (e.view == nullptr)
+        return;
+    const QByteArray state = e.view->saveState();
+    QSettings s;
+    // An empty state means the game has nothing worth coming back to — a
+    // finished hand, or a game that does not offer saving at all. Clearing
+    // rather than keeping stops a stale position outliving the game it came
+    // from.
+    if (state.isEmpty())
+        s.remove(saveKey(e.name));
+    else
+        s.setValue(saveKey(e.name), state);
+}
+
+void HubWindow::closeEvent(QCloseEvent* event)
+{
+    rememberPage();
+    // Every game that has been opened this session, not just the one on screen.
+    for (const Entry& e : m_entries)
+        storeSave(e);
+    QMainWindow::closeEvent(event);
+}
+
 void HubWindow::showMenu()
 {
+    rememberPage();
     setGameActions(nullptr);
     m_backAction->setVisible(false);
     m_stack->setCurrentWidget(m_menuPage);
     setWindowTitle(QStringLiteral("Games"));
     m_status->setText(QStringLiteral("%1 games. Pick one.").arg(m_entries.size()));
+    applyPageGeometry(QString());
 }
 
 void HubWindow::openGame(int index)
 {
     Entry& e = m_entries[index];
+    rememberPage();
+
+    bool resumed = false;
     if (!e.view) {
         e.view = e.create();
         connect(e.view, &GameView::statusChanged, m_status, &QLabel::setText);
         e.pageIndex = m_stack->addWidget(e.view);
+
+        // Pick the game up where it was left, if it kept anything. Done here
+        // rather than in the game's constructor so a game that cannot read an
+        // older save simply keeps the fresh one it just dealt.
+        const QByteArray state = QSettings().value(saveKey(e.name)).toByteArray();
+        if (!state.isEmpty())
+            resumed = e.view->restoreState(state);
     }
 
     setGameActions(e.view);
     m_backAction->setVisible(true);
     m_stack->setCurrentIndex(e.pageIndex);
     setWindowTitle(e.name + QStringLiteral(" — Games"));
+    applyPageGeometry(e.name);
     e.view->activate();
     e.view->setFocus();
+    if (resumed)
+        m_status->setText(QStringLiteral("Carried on from where you left off."));
 }
 
 QStringList HubWindow::gameNames() const

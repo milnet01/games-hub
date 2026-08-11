@@ -62,11 +62,27 @@ void SudokuView::buildActions()
         m_grid.restart();
         m_solved = false;
         m_announced = false;
+        m_elapsedMs = 0;
         m_clock.restart();
         update();
         refresh();
     });
     m_actions.append(restart);
+
+    m_pauseAction = new QAction(QStringLiteral("Pause"), this);
+    m_pauseAction->setCheckable(true);
+    connect(m_pauseAction, &QAction::toggled, this, [this](bool on) {
+        if (on == m_paused)
+            return;
+        if (on)
+            m_elapsedMs = elapsedMs(); // bank it, then stop reading the clock
+        else
+            m_clock.restart();
+        m_paused = on;
+        update();
+        refresh();
+    });
+    m_actions.append(m_pauseAction);
 
     auto* pencil = new QAction(QStringLiteral("Pencil"), this);
     pencil->setCheckable(true);
@@ -108,12 +124,21 @@ void SudokuView::buildActions()
     }
 }
 
+qint64 SudokuView::elapsedMs() const
+{
+    return m_elapsedMs + (m_paused ? 0 : m_clock.elapsed());
+}
+
 void SudokuView::newGame(SudokuGrid::Level level)
 {
     m_level = level;
     m_grid.generate(level);
     m_solved = false;
     m_announced = false;
+    m_paused = false;
+    m_elapsedMs = 0;
+    if (m_pauseAction != nullptr)
+        m_pauseAction->setChecked(false);
     m_row = 4;
     m_col = 4;
     m_clock.start();
@@ -166,7 +191,7 @@ void SudokuView::checkSolved()
 
     m_solved = true;
     m_tick->stop();
-    const int seconds = int(m_clock.elapsed() / 1000);
+    const int seconds = int(elapsedMs() / 1000);
     Sound::instance().play(Sound::kWin);
     const bool newBest = Scores::instance().recordLow(levelKey(m_level), seconds);
     refresh();
@@ -193,7 +218,7 @@ void SudokuView::checkSolved()
 
 void SudokuView::refresh(const QString& message)
 {
-    const int seconds = int(m_clock.elapsed() / 1000);
+    const int seconds = int(elapsedMs() / 1000);
     QString line = message.isEmpty()
         ? QStringLiteral("%1   Empty %2   Time %3s%4")
               .arg(m_solved ? QStringLiteral("Solved!") : QStringLiteral("Sudoku"))
@@ -220,6 +245,19 @@ void SudokuView::paintEvent(QPaintEvent*)
     const double cell = cellSize();
     Theme::paintWoodFrame(p, r, kFrameWidth, 6);
     p.fillRect(r, kPaper);
+
+    // Paused covers the grid: a stopped clock over a puzzle you can still read
+    // is not a pause, it is free thinking time.
+    if (m_paused) {
+        p.fillRect(r, kPaperAlt.darker(112));
+        QFont f = font();
+        f.setBold(true);
+        f.setPointSizeF(std::max(11.0, r.width() * 0.045));
+        p.setFont(f);
+        p.setPen(kClueInk);
+        p.drawText(r, Qt::AlignCenter, QStringLiteral("Paused\nPress Pause again to carry on"));
+        return;
+    }
 
     // Shade alternate 3x3 boxes so the structure reads without heavy lines.
     for (int br = 0; br < 3; ++br)
@@ -304,6 +342,8 @@ void SudokuView::paintEvent(QPaintEvent*)
 
 void SudokuView::mousePressEvent(QMouseEvent* event)
 {
+    if (m_paused)
+        return;
     const QRect r = boardRect();
     if (!r.contains(event->position().toPoint()))
         return;
@@ -317,6 +357,10 @@ void SudokuView::mousePressEvent(QMouseEvent* event)
 
 void SudokuView::keyPressEvent(QKeyEvent* event)
 {
+    if (m_paused) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
     switch (event->key()) {
     case Qt::Key_Left:  m_col = std::max(0, m_col - 1); break;
     case Qt::Key_Right: m_col = std::min(SudokuGrid::kSize - 1, m_col + 1); break;

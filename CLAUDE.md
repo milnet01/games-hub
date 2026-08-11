@@ -53,7 +53,13 @@ display, and it is the rule to preserve when adding a game.
   class's metaobject if its header has a matching source file in the build.
 - `src/hubwindow.*` — the tile grid and one page per game in a `QStackedWidget`.
   Games are constructed lazily on first open. Each tile paints its own
-  miniature; `openGameNamed()` backs the `--game` flag.
+  miniature; `openGameNamed()` backs the `--game` flag. It also owns two things
+  every game inherits: window size and position, kept **per page** so each game
+  reopens the size it was left, and saved games — a game that overrides
+  `GameView::saveState()`/`restoreState()` is stored on close and restored the
+  next time it is opened, with no save dialog anywhere. An empty state means
+  "nothing worth keeping" and clears the stored one, which is how a finished
+  game avoids resuming onto its own final scores.
 - `CMakeLists.txt` splits `GAME_CORE_SOURCES` (Qt-free or QtCore-only) from
   `GAME_VIEW_SOURCES`. `gameshub_selftest` links only the cores, so anything
   that pulls in QtWidgets belongs in the view half.
@@ -166,6 +172,15 @@ out, and discarding your last card *is* going out — so nothing is legal and th
 turn cannot end. The guard is in `keepsADiscard()`, which refuses a lay-down
 leaving fewer than two cards unless a canasta comes with it. Without it the
 self-test's full games hang rather than fail, which is a much worse symptom.
+
+**The owner is partially sighted, and reads cards by their pip pattern rather
+than the corner index.** That is a design constraint, not a preference. It is
+why melds put their wild cards first, why melded cards are drawn at 0.74 rather
+than at the smallest scale that fits (below 46 pixels wide `CardArt::paintFace`
+gives up on the face entirely), why the computer's pause is nearly a second,
+and why the last discard is spelled out in words under the centre of the table
+rather than left to be read off the pile. Anything added here is checked
+against "can this be read slowly?" before "does this look neat?".
 
 **Card order that the eye depends on belongs in the model, not the painter.**
 A hand fans wild-cards-first and so does every meld, and both orders are made

@@ -259,7 +259,12 @@ int main(int argc, char* argv[])
                 if (!a->isSeparator())
                     actions << a->text();
             std::printf("      canasta actions: %s\n", qPrintable(actions.join(QStringLiteral(", "))));
-            for (const char* wanted : { "New Game", "Meld", "Discard", "Sort", "Easy", "Hard",
+            // Meld is deliberately absent: laying cards down is a button on the
+            // table, because the toolbar is the far corner of the window from
+            // the hand you are laying down.
+            check(!actions.contains(QStringLiteral("Meld")),
+                  "canasta: melding is not a toolbar action");
+            for (const char* wanted : { "New Game", "Discard", "Sort", "Easy", "Hard",
                                         "Classic", "House", "Hints" }) {
                 check(actions.contains(QString::fromUtf8(wanted)),
                       qPrintable(QStringLiteral("canasta: the toolbar offers %1")

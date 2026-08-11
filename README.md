@@ -33,6 +33,20 @@ won at each Reversi level, fastest Minesweeper and Sudoku clears, top Klondike
 score, fewest Spider and FreeCell moves, lowest winning Hearts total, highest
 winning Canasta score, and the Snake, 2048 and Pinball high scores.
 
+**The window remembers itself.** Size and position are kept for each game
+separately as well as for the tile menu, so a game you like large opens large
+and the menu comes back where you left it.
+
+**Canasta picks up where you left off.** Close the window mid-game and the
+whole table — every hand, the melds, the pile, the stock, the scores and the
+rule set in force — comes back next time you open it. There is nothing to
+press: New Game is how you start a fresh one instead. The other long games do
+not do this yet.
+
+**Minesweeper and Sudoku can be paused**, which stops the clock and covers the
+board, so walking away costs you nothing. Snake has its own pause on the space
+bar.
+
 ## Playing
 
 **Chess.** You are White and move first. Click a piece to select it — the
@@ -80,9 +94,16 @@ are wild; red threes lay themselves down for a bonus; a black three on top
 stops anyone taking the pile. Click the pile again to throw a card away and end
 your turn. Your side needs a canasta before anyone can go out.
 
-You must draw before you can lay anything down, which is why **Meld** stays
-greyed out until you have. **Sort** keeps your hand fanned the way you would
-arrange it at a table: wild cards first, then aces down to threes.
+Cards are laid down on the table, not from the toolbar: pick them up and a
+**Lay down** button appears on the felt above your hand. You can also just drag
+them — onto one of your own melds to add to it, onto the table to lay them
+down, or onto the discard pile to throw one away. You must draw before you can
+lay anything down. **Sort** keeps your hand fanned the way you would arrange it
+at a table: wild cards first, then aces down to threes.
+
+A strip under the middle of the table says how much stock is left, whether the
+pile is frozen, and **what the last player threw away**, in words, until the
+next card replaces it.
 
 To add a wild card to a meld already on the table, pick the wild card and then
 click that meld — a joker has no rank of its own, so it has to be told where it

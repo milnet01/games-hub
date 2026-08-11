@@ -47,5 +47,11 @@ private:
     bool m_announced = false;
 
     QElapsedTimer m_clock;
+    // Paused: the clock stops and the grid is covered, so a puzzle left on
+    // screen does not quietly cost you your time.
+    bool m_paused = false;
+    qint64 m_elapsedMs = 0; // banked before the current run of the clock
+    qint64 elapsedMs() const;
+    QAction* m_pauseAction = nullptr;
     QTimer* m_tick = nullptr;
 };

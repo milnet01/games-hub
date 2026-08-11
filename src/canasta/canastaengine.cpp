@@ -167,6 +167,218 @@ void Engine::nextHand()
     deal();
 }
 
+// ---------------------------------------------------------------------------
+// Saving a game in progress
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Bumped whenever the shape below changes. An older save is then refused
+// rather than misread, and the player gets a fresh game instead of a wrong one.
+constexpr quint32 kSaveVersion = 1;
+
+void writeCard(QDataStream& out, const Card& c)
+{
+    out << qint8(c.suit) << qint16(c.rank) << c.faceUp << qint8(c.deck);
+}
+
+Card readCard(QDataStream& in)
+{
+    qint8 suit = 0;
+    qint16 rank = 0;
+    bool faceUp = false;
+    qint8 deck = 0;
+    in >> suit >> rank >> faceUp >> deck;
+    return Card { Suit(suit), int(rank), faceUp, int(deck) };
+}
+
+void writeCards(QDataStream& out, const std::vector<Card>& cards)
+{
+    out << qint32(cards.size());
+    for (const Card& c : cards)
+        writeCard(out, c);
+}
+
+std::vector<Card> readCards(QDataStream& in)
+{
+    qint32 n = 0;
+    in >> n;
+    std::vector<Card> cards;
+    // A count from a corrupt file must not be trusted into an allocation; two
+    // packs plus jokers is 108, and nothing here can legitimately exceed that.
+    for (qint32 i = 0; i < n && i < 512 && in.status() == QDataStream::Ok; ++i)
+        cards.push_back(readCard(in));
+    return cards;
+}
+
+void writeRules(QDataStream& out, const Rules& r)
+{
+    out << r.name << qint32(r.targetScore) << qint32(r.handSize) << qint32(r.decks)
+        << qint32(r.jokers) << qint32(r.canastaSize) << qint32(r.minMeldSize)
+        << qint32(r.maxWildsPerMeld) << qint32(r.minNaturalsPerMeld) << qint32(r.openMinBelowZero)
+        << qint32(r.openMinUnder1500) << qint32(r.openMinUnder3000) << qint32(r.openMinAbove3000)
+        << qint32(r.redThreeValue) << qint32(r.allRedThreesValue) << qint32(r.naturalCanastaBonus)
+        << qint32(r.mixedCanastaBonus) << qint32(r.goingOutBonus) << qint32(r.concealedGoingOutBonus)
+        << qint32(r.jokerValue) << qint32(r.wildTwoValue) << qint32(r.aceValue)
+        << qint32(r.highCardValue) << qint32(r.lowCardValue) << qint32(r.blackThreeValue)
+        << r.requireCanastaToGoOut << r.blackThreeBlocksPile << r.wildCardMeldsAllowed
+        << r.unfrozenPileTakeableWithWild << r.unfrozenPileTakeableByExtending
+        << r.wildsFewerThanNaturals << r.canastaIsClosed << r.noMeldingFirstRound
+        << r.pileMeldCountsToOpen;
+}
+
+Rules readRules(QDataStream& in)
+{
+    Rules r;
+    qint32 v = 0;
+    const auto num = [&](int& field) {
+        in >> v;
+        field = int(v);
+    };
+    in >> r.name;
+    num(r.targetScore);
+    num(r.handSize);
+    num(r.decks);
+    num(r.jokers);
+    num(r.canastaSize);
+    num(r.minMeldSize);
+    num(r.maxWildsPerMeld);
+    num(r.minNaturalsPerMeld);
+    num(r.openMinBelowZero);
+    num(r.openMinUnder1500);
+    num(r.openMinUnder3000);
+    num(r.openMinAbove3000);
+    num(r.redThreeValue);
+    num(r.allRedThreesValue);
+    num(r.naturalCanastaBonus);
+    num(r.mixedCanastaBonus);
+    num(r.goingOutBonus);
+    num(r.concealedGoingOutBonus);
+    num(r.jokerValue);
+    num(r.wildTwoValue);
+    num(r.aceValue);
+    num(r.highCardValue);
+    num(r.lowCardValue);
+    num(r.blackThreeValue);
+    in >> r.requireCanastaToGoOut >> r.blackThreeBlocksPile >> r.wildCardMeldsAllowed
+        >> r.unfrozenPileTakeableWithWild >> r.unfrozenPileTakeableByExtending
+        >> r.wildsFewerThanNaturals >> r.canastaIsClosed >> r.noMeldingFirstRound
+        >> r.pileMeldCountsToOpen;
+    return r;
+}
+
+void writeTeam(QDataStream& out, const Team& t)
+{
+    out << qint32(t.melds.size());
+    for (const Meld& m : t.melds) {
+        out << qint32(m.rank);
+        writeCards(out, m.cards);
+    }
+    writeCards(out, t.redThrees);
+    out << qint32(t.score) << qint32(t.handScore) << t.opened;
+}
+
+Team readTeam(QDataStream& in)
+{
+    Team t;
+    qint32 n = 0;
+    in >> n;
+    for (qint32 i = 0; i < n && i < 32 && in.status() == QDataStream::Ok; ++i) {
+        qint32 rank = 0;
+        in >> rank;
+        t.melds.push_back(Meld { int(rank), readCards(in) });
+    }
+    t.redThrees = readCards(in);
+    qint32 score = 0;
+    qint32 handScore = 0;
+    in >> score >> handScore >> t.opened;
+    t.score = int(score);
+    t.handScore = int(handScore);
+    return t;
+}
+
+} // namespace
+
+void Engine::save(QDataStream& out) const
+{
+    out << kSaveVersion;
+    writeRules(out, m_rules);
+    writeRules(out, m_pendingRules);
+    for (const std::vector<Card>& h : m_hands)
+        writeCards(out, h);
+    for (const Team& t : m_teams)
+        writeTeam(out, t);
+    for (const int req : m_openReq)
+        out << qint32(req);
+    for (const bool melded : m_hasMelded)
+        out << melded;
+    out << m_meldedBeforeTurn;
+    writeCards(out, m_stock);
+    writeCards(out, m_pile);
+    out << qint32(m_phase) << qint32(m_hand) << qint32(m_dealer) << qint32(m_current)
+        << qint32(m_turnsTaken) << qint32(m_outSeat) << m_outConcealed << m_frozen;
+}
+
+bool Engine::load(QDataStream& in)
+{
+    quint32 version = 0;
+    in >> version;
+    if (version != kSaveVersion)
+        return false;
+
+    // Read into a copy, so a stream that runs out part way leaves the game that
+    // is already on the table alone.
+    Engine e;
+    e.m_rules = readRules(in);
+    e.m_pendingRules = readRules(in);
+    for (std::vector<Card>& h : e.m_hands)
+        h = readCards(in);
+    for (Team& t : e.m_teams)
+        t = readTeam(in);
+    for (int& req : e.m_openReq) {
+        qint32 v = 0;
+        in >> v;
+        req = int(v);
+    }
+    for (std::size_t i = 0; i < e.m_hasMelded.size(); ++i) {
+        bool melded = false;
+        in >> melded;
+        e.m_hasMelded[i] = melded;
+    }
+    in >> e.m_meldedBeforeTurn;
+    e.m_stock = readCards(in);
+    e.m_pile = readCards(in);
+    qint32 phase = 0;
+    qint32 hand = 0;
+    qint32 dealer = 0;
+    qint32 current = 0;
+    qint32 turns = 0;
+    qint32 outSeat = 0;
+    in >> phase >> hand >> dealer >> current >> turns >> outSeat >> e.m_outConcealed >> e.m_frozen;
+    if (in.status() != QDataStream::Ok)
+        return false;
+    if (phase < 0 || phase > qint32(Phase::GameOver) || current < 0 || current >= kSeats
+        || dealer < 0 || dealer >= kSeats)
+        return false;
+
+    e.m_phase = Phase(phase);
+    e.m_hand = int(hand);
+    e.m_dealer = int(dealer);
+    e.m_current = int(current);
+    e.m_turnsTaken = int(turns);
+    e.m_outSeat = int(outSeat);
+
+    // The pack has to still be whole, which is the one check that catches a
+    // file that parsed cleanly but says something impossible.
+    if (e.cardsInPlay() != e.m_rules.decks * 52 + e.m_rules.jokers)
+        return false;
+
+    const std::mt19937 rng = m_rng; // keep this engine's own shuffle sequence
+    *this = e;
+    m_rng = rng;
+    return true;
+}
+
 void Engine::sortHand(int seat)
 {
     if (seat < 0 || seat >= kSeats)

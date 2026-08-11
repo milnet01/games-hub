@@ -32,12 +32,17 @@ namespace {
 constexpr double kTick = 1.0 / 60.0;
 // Long enough to follow, short enough that three computer seats do not become
 // a wait. Each half-turn gets one of these.
-constexpr double kAiPause = 0.42;
+// Long enough to follow what the other three are doing. It was 0.42, which is
+// fine if you can read a card at a glance and far too fast if you cannot.
+constexpr double kAiPause = 0.95;
 constexpr double kFlourish = 1.3;
 // Melds are drawn smaller than a hand card, but not so small that the face
 // stops being drawn: below about 46 pixels wide CardArt gives up on the pips
 // and leaves only the corner index, which reads as a sliver rather than a card.
-constexpr double kMeldScale = 0.62;
+// Melded cards are drawn smaller than the ones in your hand, but not so small
+// that the shared card art gives up on the face — below 46 pixels wide it draws
+// the corner index alone, and a column of corner indices is unreadable.
+constexpr double kMeldScale = 0.74;
 
 const QColor kInk { 0xf4, 0xea, 0xdd };
 const QColor kInkDim { 0xc9, 0xb6, 0xa2 };
@@ -321,10 +326,14 @@ void CanastaView::buildActions()
     connect(newAction, &QAction::triggered, this, &CanastaView::newGame);
     m_actions.append(newAction);
 
+    // Deliberately NOT in m_actions, so it never reaches the toolbar: laying
+    // cards down belongs on the table, where the Lay down button is. This
+    // keeps the space bar working, and refresh() still uses it to decide
+    // whether the move is available at all.
     m_meldAction = new QAction(QStringLiteral("Meld"), this);
     m_meldAction->setShortcut(Qt::Key_Space);
     connect(m_meldAction, &QAction::triggered, this, [this] { humanMeld(-1); });
-    m_actions.append(m_meldAction);
+    addAction(m_meldAction);
 
     m_discardAction = new QAction(QStringLiteral("Discard"), this);
     m_discardAction->setShortcut(Qt::Key_Return);
@@ -464,6 +473,7 @@ void CanastaView::newGame()
     m_canastasShown = 0;
     m_awaitingContinue = false;
     m_message.clear();
+    m_lastThrownBy = -1;
 
     // Before the deal flies, so each card is aimed at the slot it will keep.
     sortHand();
@@ -471,6 +481,79 @@ void CanastaView::newGame()
     flyTheDeal();
     m_timer->start();
     refresh();
+}
+
+QByteArray CanastaView::saveState() const
+{
+    // A finished game is not worth coming back to; New Game is the answer to
+    // that, and keeping it would resume onto the final scores every time.
+    if (m_engine.phase() == ca::Engine::Phase::GameOver)
+        return {};
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1);
+    m_engine.save(out);
+    out << qint32(m_level) << m_useHouse << qint32(m_target) << m_sortHand;
+    return blob;
+}
+
+bool CanastaView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    in >> version;
+    if (version != 1 || !m_engine.load(in))
+        return false;
+
+    qint32 level = 0;
+    qint32 target = 0;
+    in >> level >> m_useHouse >> target >> m_sortHand;
+    if (in.status() != QDataStream::Ok)
+        return false;
+
+    m_level = ca::Level(std::clamp<int>(level, 0, 2));
+    m_target = target;
+    for (ca::Ai& ai : m_ai)
+        ai.setLevel(m_level);
+
+    // Nothing was in the air when the game was put away, and nothing is now.
+    m_flights.clear();
+    m_selected.clear();
+    m_hover = -1;
+    m_hoverMeld = -1;
+    m_pressIndex = -1;
+    m_dragging = false;
+    m_pause = kAiPause;
+    m_celebrate = 0.0;
+    m_lastThrownBy = -1;
+    m_message.clear();
+    m_canastasShown = canastaCount(m_engine.team(0), m_engine.rules());
+    // A hand that had just been scored is waiting on a click, exactly as it was.
+    m_awaitingContinue = m_engine.phase() == ca::Engine::Phase::HandOver;
+
+    // The toolbar was built before any of this was known.
+    for (QAction* a : m_actions) {
+        if (a->isCheckable() && a->text() == QStringLiteral("Sort"))
+            a->setChecked(m_sortHand);
+        if (a->isCheckable() && a->text() == (m_useHouse ? QStringLiteral("House")
+                                                         : QStringLiteral("Classic")))
+            a->setChecked(true);
+        if (a->isCheckable() && a->text() == QStringLiteral("Play to %1").arg(m_target))
+            a->setChecked(true);
+    }
+    const QString wanted = m_level == ca::Level::Easy    ? QStringLiteral("Easy")
+        : m_level == ca::Level::Medium                   ? QStringLiteral("Medium")
+                                                         : QStringLiteral("Hard");
+    for (QAction* a : m_actions)
+        if (a->isCheckable() && a->text() == wanted)
+            a->setChecked(true);
+
+    refresh();
+    update();
+    return true;
 }
 
 void CanastaView::activate()
@@ -608,6 +691,22 @@ double CanastaView::handAngle(int index, int count) const
         return 0.0;
     const double t = (2.0 * index / (count - 1)) - 1.0;
     return t * 5.0;
+}
+
+QRectF CanastaView::layDownButton() const
+{
+    if (m_engine.currentSeat() != 0 || m_engine.phase() != ca::Engine::Phase::Play
+        || m_selected.empty() || !m_engine.meldingAllowed())
+        return {};
+
+    const QRectF r = tableRect();
+    const double w = std::clamp(r.width() * 0.17, 110.0, 210.0);
+    const double h = std::clamp(r.height() * 0.048, 30.0, 52.0);
+    // In the gap between your melds and your hand: where you are already
+    // looking once you have picked cards up.
+    const double handTop = handCentre(0, 1, true).y() - cardHeight() * 0.5;
+    const double y = std::min((bandFor(0).bottom() + handTop) * 0.5, handTop - h * 0.7);
+    return QRectF(r.center().x() - w * 0.5, y - h * 0.5, w, h);
 }
 
 QPointF CanastaView::seatAnchor(int seat) const
@@ -935,6 +1034,7 @@ void CanastaView::humanTakePile()
     Sound::instance().play(Sound::kCardPlace);
     clearSelection();
     sortHand();
+    m_lastThrownBy = -1; // the pile it named has gone
 
     // Everything converges on the pile and then leaves it, which is exactly
     // what the move is.
@@ -995,6 +1095,8 @@ void CanastaView::humanDiscard()
     Sound::instance().play(Sound::kCardPlace);
     clearSelection();
     flyToPile(c, from);
+    m_lastThrown = c;
+    m_lastThrownBy = 0;
     m_pause = kAiPause;
     refresh();
 }
@@ -1011,6 +1113,8 @@ void CanastaView::aiHalfTurn()
     if (phase == ca::Engine::Phase::Draw) {
         const bool took = m_ai[std::size_t(seat)].draw(m_engine);
         const QPointF source = took ? pileCentre() : stockCentre();
+        if (took)
+            m_lastThrownBy = -1; // the pile it named has gone
         Sound::instance().play(took ? Sound::kCardPlace : Sound::kCardDeal);
 
         double delay = 0.0;
@@ -1026,6 +1130,8 @@ void CanastaView::aiHalfTurn()
         if (m_engine.pile().size() > pileBefore) {
             Sound::instance().play(Sound::kCardPlace);
             flyToPile(m_engine.pile().back(), seatAnchor(seat));
+            m_lastThrown = m_engine.pile().back();
+            m_lastThrownBy = seat;
         }
         m_pause = kAiPause;
     }
@@ -1132,6 +1238,7 @@ void CanastaView::mousePressEvent(QMouseEvent* event)
             m_awaitingContinue = false;
             m_engine.nextHand();
             m_canastasShown = 0;
+            m_lastThrownBy = -1;
             sortHand();
             Sound::instance().play(Sound::kShuffle);
             flyTheDeal();
@@ -1146,16 +1253,20 @@ void CanastaView::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    // A card in your hand: pick it up or put it back.
+    if (layDownButton().contains(pos)) {
+        humanMeld(-1);
+        update();
+        return;
+    }
+
+    // A card in your hand. Whether this picks it up or starts a drag is not
+    // known yet — that is settled when the button comes back up.
     const int index = handIndexAt(pos);
     if (index >= 0) {
-        const auto it = std::find(m_selected.begin(), m_selected.end(), index);
-        if (it == m_selected.end())
-            m_selected.push_back(index);
-        else
-            m_selected.erase(it);
-        Sound::instance().play(Sound::kClick);
-        refresh();
+        m_pressIndex = index;
+        m_pressPos = pos;
+        m_dragPos = pos;
+        m_dragging = false;
         update();
         return;
     }
@@ -1191,12 +1302,92 @@ void CanastaView::mousePressEvent(QMouseEvent* event)
 
 void CanastaView::mouseMoveEvent(QMouseEvent* event)
 {
+    const QPointF pos = event->position();
+
+    // Past a few pixels a press stops being a click and becomes a drag. A card
+    // that was not already picked up is dragged on its own, which is what
+    // grabbing one card off a fan means.
+    if (m_pressIndex >= 0 && !m_dragging
+        && (pos - m_pressPos).manhattanLength() > cardWidth() * 0.14) {
+        if (!isSelected(m_pressIndex)) {
+            m_selected.clear();
+            m_selected.push_back(m_pressIndex);
+        }
+        m_dragging = true;
+        Sound::instance().play(Sound::kClick);
+        refresh();
+    }
+    if (m_dragging) {
+        m_dragPos = pos;
+        m_hoverMeld = meldRankAt(pos);
+        update();
+        return;
+    }
+
     const int wasCard = m_hover;
     const int wasMeld = m_hoverMeld;
-    m_hover = m_engine.currentSeat() == 0 ? handIndexAt(event->position()) : -1;
-    m_hoverMeld = m_selected.empty() ? -1 : meldRankAt(event->position());
-    if (m_hover != wasCard || m_hoverMeld != wasMeld)
+    const bool wasButton = m_overButton;
+    m_hover = m_engine.currentSeat() == 0 ? handIndexAt(pos) : -1;
+    m_hoverMeld = m_selected.empty() ? -1 : meldRankAt(pos);
+    m_overButton = layDownButton().contains(pos);
+    if (m_hover != wasCard || m_hoverMeld != wasMeld || m_overButton != wasButton)
         update();
+}
+
+void CanastaView::mouseReleaseEvent(QMouseEvent* event)
+{
+    const QPointF pos = event->position();
+    const int pressed = m_pressIndex;
+    const bool dragged = m_dragging;
+    m_pressIndex = -1;
+    m_dragging = false;
+
+    if (pressed < 0) {
+        update();
+        return;
+    }
+
+    // A press that never moved is the old click: pick the card up, or put it
+    // back down.
+    if (!dragged) {
+        const auto it = std::find(m_selected.begin(), m_selected.end(), pressed);
+        if (it == m_selected.end())
+            m_selected.push_back(pressed);
+        else
+            m_selected.erase(it);
+        Sound::instance().play(Sound::kClick);
+        refresh();
+        update();
+        return;
+    }
+
+    // Dropped on one of your melds: the cards join that meld, which is how a
+    // wild card is told where it belongs.
+    const int rank = meldRankAt(pos);
+    if (rank >= 0) {
+        humanMeld(rank);
+        update();
+        return;
+    }
+    // Dropped on the discard pile: taking it is the draw, throwing onto it
+    // ends the turn.
+    if (hits(pos, pileCentre(), cardWidth(), cardHeight(), 0.0)) {
+        if (m_engine.phase() == ca::Engine::Phase::Draw)
+            humanTakePile();
+        else
+            humanDiscard();
+        update();
+        return;
+    }
+    // Anywhere else on your own half of the table: lay them down.
+    if (pos.y() < handCentre(0, 1, true).y() - cardHeight() * 0.5) {
+        humanMeld(-1);
+        update();
+        return;
+    }
+
+    // Dropped back on the fan: nothing happens, and the cards stay picked up.
+    update();
 }
 
 void CanastaView::leaveEvent(QEvent* event)
@@ -1243,8 +1434,11 @@ void CanastaView::paintEvent(QPaintEvent* event)
     paintMelds(p);
     paintOpponents(p);
     paintCentre(p);
+    paintCentreStrip(p);
     paintHand(p);
+    paintLayDown(p);
     paintFlights(p);
+    paintDrag(p);
     paintScores(p);
     paintSummary(p);
 }
@@ -1320,8 +1514,8 @@ void CanastaView::paintMelds(QPainter& p)
             // a stack of sevens and a stack of eights look alike from across
             // the table. The badge is what actually names the meld.
             const QPointF last = meldCardCentre(team, int(s), m->size() - 1);
-            const double bw = cardWidth() * scale * 1.05;
-            const double bh = cardWidth() * scale * 0.40;
+            const double bw = cardWidth() * scale * 1.20;
+            const double bh = cardWidth() * scale * 0.52;
             const QRectF badge(last.x() - bw * 0.5, last.y() + cardHeight() * scale * 0.5 + 3.0,
                                bw, bh);
             QPainterPath plate;
@@ -1425,13 +1619,8 @@ void CanastaView::paintCentre(QPainter& p)
             paintCard(p, back, QPointF(stock.x() - i * 0.9, stock.y() - i * 0.9), 0.0, false);
         }
     }
-    QFont f = p.font();
-    f.setPixelSize(std::max(10, int(cw * 0.22)));
-    f.setBold(true);
-    p.setFont(f);
-    p.setPen(kInkDim);
-    p.drawText(QRectF(stock.x() - cw, stock.y() + ch * 0.55, cw * 2.0, cw * 0.5),
-               Qt::AlignCenter, QStringLiteral("stock %1").arg(m_engine.stockCount()));
+    // The stock count, whether the pile is frozen and what was just thrown are
+    // all one strip below the row — see paintCentreStrip.
 
     // Discard pile: squared up, so only the top card shows. A frozen pile keeps
     // the wild card that froze it turned sideways underneath, as at a table.
@@ -1467,10 +1656,70 @@ void CanastaView::paintCentre(QPainter& p)
                                 Theme::kGold);
     }
 
-    if (m_engine.pileFrozen()) {
-        p.setPen(QColor(0x9a, 0xd8, 0xf0));
-        p.drawText(QRectF(pile.x() - cw, pile.y() + ch * 0.55, cw * 2.0, cw * 0.5),
-                   Qt::AlignCenter, QStringLiteral("FROZEN"));
+}
+
+// One strip under the centre row carrying everything about it in words: how
+// much stock is left, whether the pile is frozen, and what was just thrown and
+// by whom. The last of those is the point — three computer seats play faster
+// than a card can be picked out, so the name of it stays on screen until the
+// next card replaces it.
+void CanastaView::paintCentreStrip(QPainter& p)
+{
+    const double cw = cardWidth();
+    const bool haveThrow = m_lastThrownBy >= 0 && !m_engine.pile().empty();
+
+    struct Part {
+        QString text;
+        QColor colour;
+    };
+    std::vector<Part> parts;
+    parts.push_back({ QStringLiteral("stock %1").arg(m_engine.stockCount()), kInkDim });
+    if (m_engine.pileFrozen())
+        parts.push_back({ QStringLiteral("FROZEN"), QColor(0x9a, 0xd8, 0xf0) });
+    if (haveThrow) {
+        parts.push_back({ QStringLiteral("%1 threw").arg(seatName(m_lastThrownBy)), kInkDim });
+        // Suit colours as they are on the card, but lifted off the dark plate:
+        // black ink on claret cannot be read at all.
+        parts.push_back({ isJoker(m_lastThrown)
+                              ? QStringLiteral("Joker")
+                              : QStringLiteral("%1 %2").arg(rankLabel(m_lastThrown.rank),
+                                                            suitSymbol(m_lastThrown.suit)),
+                          isRed(m_lastThrown) ? QColor(0xff, 0x92, 0x92)
+                                              : QColor(0xf4, 0xea, 0xdd) });
+    }
+
+    QFont f = p.font();
+    f.setPixelSize(std::max(12, int(cw * 0.28)));
+    f.setBold(true);
+    const QFontMetricsF fm(f);
+    const double gap = fm.horizontalAdvance(QLatin1Char('0')) * 1.6;
+    const double pad = gap;
+
+    double text = 0.0;
+    for (const Part& part : parts)
+        text += fm.horizontalAdvance(part.text);
+    text += gap * double(parts.size() - 1);
+
+    const double h = fm.height() * 1.45;
+    const QRectF plate(tableRect().center().x() - (text + pad * 2.0) * 0.5,
+                       pileCentre().y() + cardHeight() * 0.55, text + pad * 2.0, h);
+
+    QPainterPath path;
+    path.addRoundedRect(plate, h * 0.32, h * 0.32);
+    p.fillPath(path, kPanel);
+    p.setBrush(Qt::NoBrush);
+    QColor edge = Theme::kGold;
+    edge.setAlpha(haveThrow ? 130 : 60);
+    p.setPen(QPen(edge, 1.2));
+    p.drawPath(path);
+
+    p.setFont(f);
+    double x = plate.left() + pad;
+    for (const Part& part : parts) {
+        const double w = fm.horizontalAdvance(part.text);
+        p.setPen(part.colour);
+        p.drawText(QRectF(x, plate.top(), w, h), Qt::AlignCenter, part.text);
+        x += w + gap;
     }
 }
 
@@ -1488,6 +1737,10 @@ void CanastaView::paintHand(QPainter& p)
             continue;
 
         const bool picked = isSelected(i);
+        // A card being dragged is drawn under the cursor instead, never in
+        // both places at once.
+        if (m_dragging && picked)
+            continue;
         const QPointF centre = handCentre(i, n, picked || i == m_hover);
         const double angle = handAngle(i, n);
         paintCard(p, c, centre, angle, true);
@@ -1503,6 +1756,54 @@ void CanastaView::paintHand(QPainter& p)
         CardArt::paintHighlight(p, r, picked ? Theme::kGold : QColor(0x8f, 0xd0, 0xa8));
         p.restore();
     }
+}
+
+// The button that lays your picked cards down. It lives on the felt rather
+// than in the toolbar because that is where your hand and your eyes are.
+void CanastaView::paintLayDown(QPainter& p)
+{
+    const QRectF r = layDownButton();
+    if (r.isEmpty() || m_dragging)
+        return;
+
+    // Built from the table's own materials — the dark plate and gold edge the
+    // score panels and seat labels use — rather than from a window widget.
+    const bool legal = m_engine.canMeldCards(selectedCards(), -1);
+
+    QPainterPath path;
+    path.addRoundedRect(r, r.height() * 0.30, r.height() * 0.30);
+    Theme::paintDropShadow(p, r, r.height() * 0.30, 5);
+    p.fillPath(path, kPanel);
+    p.setBrush(Qt::NoBrush);
+    QColor edge = legal ? Theme::kGold : QColor(0x8a, 0x6e, 0x48);
+    if (m_overButton)
+        edge = edge.lighter(125);
+    p.setPen(QPen(edge, m_overButton ? 3.0 : 2.0));
+    p.drawPath(path);
+
+    QFont f = p.font();
+    f.setPixelSize(std::max(15, int(r.height() * 0.46)));
+    f.setBold(true);
+    p.setFont(f);
+    p.setPen(legal ? Theme::kGold : kInkDim);
+    p.drawText(r, Qt::AlignCenter,
+               m_selected.size() == 1 ? QStringLiteral("Lay it down")
+                                      : QStringLiteral("Lay down %1").arg(m_selected.size()));
+}
+
+// The cards under the cursor while they are being dragged, fanned the way they
+// sit in your hand.
+void CanastaView::paintDrag(QPainter& p)
+{
+    if (!m_dragging)
+        return;
+
+    const std::vector<Card> cards = selectedCards();
+    const int n = int(cards.size());
+    const double step = cardWidth() * 0.42;
+    const double left = m_dragPos.x() - step * (n - 1) * 0.5;
+    for (int i = 0; i < n; ++i)
+        paintCard(p, cards[std::size_t(i)], QPointF(left + step * i, m_dragPos.y()), 0.0, true);
 }
 
 void CanastaView::paintFlights(QPainter& p)
@@ -1597,39 +1898,24 @@ void CanastaView::paintSummary(QPainter& p)
         return;
 
     const QRectF table = tableRect();
-    const QRectF panel(table.center().x() - table.width() * 0.28,
-                       table.center().y() - table.height() * 0.15, table.width() * 0.56,
-                       table.height() * 0.30);
-    QPainterPath path;
-    path.addRoundedRect(panel, 14, 14);
-    Theme::paintDropShadow(p, panel, 14, 6);
-    p.fillPath(path, kPanel);
-    p.setBrush(Qt::NoBrush);
-    p.setPen(QPen(Theme::kGold, 1.6));
-    p.drawPath(path);
-
     const bool over = m_engine.phase() == ca::Engine::Phase::GameOver;
     const ca::Team& us = m_engine.team(0);
     const ca::Team& them = m_engine.team(1);
 
+    // Sized off the table, not off the panel, because the panel is then sized
+    // off the text. A fixed panel clipped the second team's line.
     QFont heading = p.font();
-    heading.setPointSizeF(std::max(13.0, panel.width() * 0.055));
+    heading.setPixelSize(std::max(20, int(table.height() * 0.046)));
     heading.setBold(true);
     QFont body = p.font();
-    body.setPointSizeF(std::max(9.0, panel.width() * 0.036));
+    body.setPixelSize(std::max(14, int(table.height() * 0.029)));
 
-    p.setFont(heading);
-    p.setPen(kInk);
     QString title;
     if (over)
         title = m_engine.winner() == 0 ? QStringLiteral("You win!") : QStringLiteral("They win");
     else
         title = QStringLiteral("Hand %1").arg(m_engine.handNumber());
-    p.drawText(panel.adjusted(0, panel.height() * 0.08, 0, 0), Qt::AlignHCenter | Qt::AlignTop,
-               title);
 
-    p.setFont(body);
-    p.setPen(kInkDim);
     const QString out = m_engine.wentOutSeat() >= 0
         ? QStringLiteral("%1 went out%2.")
               .arg(seatName(m_engine.wentOutSeat()))
@@ -1646,7 +1932,35 @@ void CanastaView::paintSummary(QPainter& p)
                               .arg(them.score)
                               .arg(over ? QStringLiteral("Click for a new game.")
                                         : QStringLiteral("Click to deal the next hand."));
-    p.drawText(panel.adjusted(panel.width() * 0.08, panel.height() * 0.30, -panel.width() * 0.08,
-                              -panel.height() * 0.06),
+
+    // Measure first, then draw a panel that fits. The text is what decides the
+    // size; the table only caps it.
+    const QFontMetricsF hm(heading);
+    const QFontMetricsF bm(body);
+    const double pad = std::max(16.0, table.width() * 0.025);
+    const QRectF measured = bm.boundingRect(QRectF(0, 0, table.width() * 0.86, table.height()),
+                                            Qt::AlignHCenter | Qt::AlignTop, lines);
+    const double w = std::clamp(std::max(measured.width(), hm.horizontalAdvance(title)) + pad * 2.0,
+                                table.width() * 0.42, table.width() * 0.92);
+    const double h = hm.height() + measured.height() + pad * 2.4;
+    const QRectF panel(table.center().x() - w * 0.5, table.center().y() - h * 0.5, w, h);
+
+    QPainterPath path;
+    path.addRoundedRect(panel, 14, 14);
+    Theme::paintDropShadow(p, panel, 14, 6);
+    p.fillPath(path, kPanel);
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(Theme::kGold, 1.6));
+    p.drawPath(path);
+
+    p.setFont(heading);
+    p.setPen(kInk);
+    p.drawText(QRectF(panel.left(), panel.top() + pad * 0.7, panel.width(), hm.height()),
+               Qt::AlignHCenter | Qt::AlignTop, title);
+
+    p.setFont(body);
+    p.setPen(kInkDim);
+    p.drawText(QRectF(panel.left() + pad, panel.top() + pad * 0.7 + hm.height() + pad * 0.5,
+                      panel.width() - pad * 2.0, measured.height() + pad),
                Qt::AlignHCenter | Qt::AlignTop, lines);
 }

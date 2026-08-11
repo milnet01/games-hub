@@ -20,8 +20,9 @@ int main(int argc, char* argv[])
     QGuiApplication::setDesktopFileName(QStringLiteral("gameshub"));
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("gameshub")));
 
+    // The hub sizes itself: each page's size and position are remembered, and
+    // a first run with nothing remembered gets a sensible default.
     HubWindow window;
-    window.resize(880, 680);
 
     // `--game hearts` opens straight into one game, so a launcher or shortcut
     // can point at a single title rather than the menu.

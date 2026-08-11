@@ -2,6 +2,8 @@
 
 #include "cards/card.h"
 
+#include <QDataStream>
+
 #include <array>
 #include <random>
 #include <vector>
@@ -241,6 +243,18 @@ public:
     // Total cards in play. Every one of the 108 is somewhere; the self-test
     // leans on this to prove no action loses or duplicates a card.
     int cardsInPlay() const;
+
+    // --- Saving a game in progress ---
+    //
+    // The whole position, so a game can be picked up later: every hand, the
+    // melds, the pile, the stock and whose turn it is. Rules are saved with it,
+    // because a hand dealt under one set cannot be finished under another.
+    // Written through QDataStream, so the format is the member order below and
+    // a version number guards it.
+    void save(QDataStream& out) const;
+    // Leaves the engine untouched and returns false if the stream is from a
+    // different version or runs out part way.
+    bool load(QDataStream& in);
 
 private:
     void deal();

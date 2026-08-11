@@ -42,6 +42,17 @@ private:
     void openGame(int index);
     void showMenu();
     void setGameActions(GameView* view);
+    // Window size and position are kept per page, so the hub and each game come
+    // back the size you last left them.
+    void rememberPage();
+    void applyPageGeometry(const QString& page);
+    // A game's position, kept between sessions for the games that offer one.
+    void storeSave(const Entry& e) const;
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
+private:
 
     QStackedWidget* m_stack = nullptr;
     QWidget* m_menuPage = nullptr;
@@ -53,4 +64,8 @@ private:
     QLabel* m_status = nullptr;
     QList<QAction*> m_gameActions;
     QList<Entry> m_entries;
+    // Which page's geometry is currently on screen: a game's name, or empty
+    // for the tile menu.
+    QString m_page;
+    bool m_geometryReady = false;
 };

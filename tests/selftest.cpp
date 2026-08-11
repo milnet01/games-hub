@@ -19,6 +19,10 @@
 #include <algorithm>
 #include <array>
 #include <map>
+
+#include <QByteArray>
+#include <QDataStream>
+#include <QIODevice>
 #include <random>
 
 namespace {
@@ -1719,6 +1723,85 @@ void canastaFirstRoundAndPileOpening()
     check(!grewAfterClosing, "canasta: and no canasta took another card once it was made");
 }
 
+// A game to 5000 is several sittings, so it has to survive being put away. The
+// test is that a position written out and read back is the same position.
+void canastaSaveAndResume()
+{
+    ca::Rules house = ca::Rules::classic();
+    house.name = QStringLiteral("House");
+    house.targetScore = 2000;
+    house.canastaIsClosed = true;
+    house.wildsFewerThanNaturals = true;
+
+    ca::Engine e { house };
+    e.newGame(1234);
+    std::array<ca::Ai, ca::kSeats> ai { ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Hard },
+                                        ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Hard } };
+    // Far enough in that there are melds on the table and a pile to take.
+    for (int turn = 0; turn < 40; ++turn) {
+        if (e.phase() == ca::Engine::Phase::HandOver || e.phase() == ca::Engine::Phase::GameOver)
+            break;
+        const int seat = e.currentSeat();
+        ai[std::size_t(seat)].draw(e);
+        if (e.phase() == ca::Engine::Phase::Play)
+            ai[std::size_t(seat)].playAndDiscard(e);
+    }
+
+    QByteArray blob;
+    {
+        QDataStream out(&blob, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        e.save(out);
+    }
+    check(!blob.isEmpty(), "canasta: a game in progress writes out");
+
+    ca::Engine back;
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    check(back.load(in), "canasta: and reads back");
+
+    bool same = back.currentSeat() == e.currentSeat() && back.phase() == e.phase()
+        && back.stockCount() == e.stockCount() && back.pile().size() == e.pile().size()
+        && back.dealer() == e.dealer() && back.pileFrozen() == e.pileFrozen()
+        && back.rules().targetScore == house.targetScore && back.rules().canastaIsClosed
+        && back.openRequirement(0) == e.openRequirement(0);
+    for (int s = 0; s < ca::kSeats; ++s)
+        same = same && back.hand(s) == e.hand(s);
+    for (int t = 0; t < ca::kTeams; ++t) {
+        same = same && back.team(t).score == e.team(t).score
+            && back.team(t).opened == e.team(t).opened
+            && back.team(t).melds.size() == e.team(t).melds.size()
+            && back.team(t).redThrees.size() == e.team(t).redThrees.size();
+        for (std::size_t i = 0; i < e.team(t).melds.size() && same; ++i)
+            same = same && back.team(t).melds[i].cards == e.team(t).melds[i].cards;
+    }
+    check(same, "canasta: the resumed table is the same table");
+    check(back.cardsInPlay() == 108, "canasta: with the whole pack still in it");
+
+    // And it carries on rather than merely looking right.
+    bool played = false;
+    for (int turn = 0; turn < 20 && !played; ++turn) {
+        if (back.phase() != ca::Engine::Phase::Draw && back.phase() != ca::Engine::Phase::Play)
+            break;
+        const int seat = back.currentSeat();
+        ai[std::size_t(seat)].draw(back);
+        if (back.phase() == ca::Engine::Phase::Play)
+            ai[std::size_t(seat)].playAndDiscard(back);
+        played = back.cardsInPlay() == 108;
+    }
+    check(played, "canasta: and the resumed game plays on");
+
+    // Junk must be refused rather than half-read.
+    ca::Engine fresh;
+    fresh.newGame(99);
+    const std::vector<Card> before = fresh.hand(0);
+    QByteArray rubbish = blob.left(blob.size() / 3);
+    QDataStream bad(rubbish);
+    bad.setVersion(QDataStream::Qt_6_0);
+    check(!fresh.load(bad), "canasta: a truncated save is refused");
+    check(fresh.hand(0) == before, "canasta: and refusing one changes nothing");
+}
+
 // Sorting a hand is cosmetic, so the two things worth proving are that the
 // order is the one a player expects and that nothing is lost on the way.
 void canastaHandSort()
@@ -1820,6 +1903,7 @@ int main()
     canastaClosedCanasta();
     canastaFirstRoundAndPileOpening();
     canastaHandSort();
+    canastaSaveAndResume();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;

@@ -59,6 +59,26 @@ void MinesweeperView::buildActions()
     connect(newAction, &QAction::triggered, this, [this] { newGame(m_level); });
     m_actions.append(newAction);
 
+    m_pauseAction = new QAction(QStringLiteral("Pause"), this);
+    m_pauseAction->setCheckable(true);
+    m_pauseAction->setShortcut(Qt::Key_P);
+    connect(m_pauseAction, &QAction::toggled, this, [this](bool on) {
+        if (on == m_paused)
+            return;
+        // Bank what the clock has run so far, then stop reading it.
+        if (on) {
+            m_elapsedMs = elapsedMs();
+            m_tick->stop();
+        } else if (m_started) {
+            m_clock.restart();
+            m_tick->start();
+        }
+        m_paused = on;
+        update();
+        refresh();
+    });
+    m_actions.append(m_pauseAction);
+
     auto* separator = new QAction(this);
     separator->setSeparator(true);
     m_actions.append(separator);
@@ -75,6 +95,13 @@ void MinesweeperView::buildActions()
     }
 }
 
+qint64 MinesweeperView::elapsedMs() const
+{
+    if (!m_started)
+        return 0;
+    return m_elapsedMs + (m_paused ? 0 : m_clock.elapsed());
+}
+
 void MinesweeperView::newGame(int levelIndex)
 {
     m_level = std::clamp(levelIndex, 0, int(std::size(kLevels)) - 1);
@@ -82,6 +109,10 @@ void MinesweeperView::newGame(int levelIndex)
     m_field = std::make_unique<Minefield>(l.width, l.height, l.mines);
     m_started = false;
     m_announced = false;
+    m_paused = false;
+    m_elapsedMs = 0;
+    if (m_pauseAction != nullptr)
+        m_pauseAction->setChecked(false);
     m_tick->stop();
     update();
     refresh();
@@ -131,11 +162,13 @@ void MinesweeperView::refresh()
     if (!m_field)
         return;
 
-    const int seconds = m_started ? int(m_clock.elapsed() / 1000) : 0;
+    const int seconds = int(elapsedMs() / 1000);
     QString state;
     switch (m_field->state()) {
     case Minefield::State::Playing:
-        state = m_started ? QStringLiteral("Digging…") : QStringLiteral("Click anywhere to start.");
+        state = m_paused ? QStringLiteral("Paused — the clock is stopped.")
+            : m_started  ? QStringLiteral("Digging…")
+                         : QStringLiteral("Click anywhere to start.");
         break;
     case Minefield::State::Won:
         state = QStringLiteral("Field cleared!");
@@ -201,6 +234,19 @@ void MinesweeperView::paintEvent(QPaintEvent*)
     const double cell = cellSize();
 
     p.fillRect(r.adjusted(-6, -6, 6, 6), kBezel);
+
+    // Paused covers the field. A stopped clock over a board you can still study
+    // is not a pause, it is free thinking time.
+    if (m_paused) {
+        p.fillRect(r, kCovered.darker(150));
+        QFont f = font();
+        f.setBold(true);
+        f.setPointSizeF(std::max(11.0, r.width() * 0.045));
+        p.setFont(f);
+        p.setPen(QColor(0xd0, 0xd6, 0xdc));
+        p.drawText(r, Qt::AlignCenter, QStringLiteral("Paused\nPress Pause again to carry on"));
+        return;
+    }
 
     QFont numberFont = font();
     numberFont.setBold(true);
@@ -289,7 +335,7 @@ void MinesweeperView::paintEvent(QPaintEvent*)
 
 void MinesweeperView::mousePressEvent(QMouseEvent* event)
 {
-    if (!m_field || m_field->state() != Minefield::State::Playing)
+    if (!m_field || m_paused || m_field->state() != Minefield::State::Playing)
         return;
 
     int row = 0;
@@ -305,6 +351,7 @@ void MinesweeperView::mousePressEvent(QMouseEvent* event)
     } else if (event->button() == Qt::LeftButton) {
         if (!m_started) {
             m_started = true;
+            m_elapsedMs = 0;
             m_clock.start();
             m_tick->start();
         }

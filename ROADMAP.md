@@ -95,11 +95,27 @@ to their left leads, so the advantage moves round the table as it should. If a
 cut is ever wanted it belongs in the house-rules dialog as honest decoration,
 labelled as such. Decided with the owner on 2026-08-10.
 
-**Saving a game in progress.** No game in the hub survives closing the window,
-and Canasta to 5000 is the first one long enough for that to hurt. The stopgap
-is the toolbar's shorter targets (1000 / 2000 / 3000). Doing it properly means
-serialising the engine — hands, melds, pile, stock, the lot — which is a new
-mechanism no other game needs, so it waits until a second game wants it.
+## Agreed, in progress
+
+**Saving a game in progress — the mechanism is built, most games still need
+their half.** Asked for on 2026-08-11, which retired the entry below that had
+deferred it. `GameView::saveState()` / `restoreState()` are the contract; the
+hub stores whatever a game hands back and gives it straight back the next time
+that game is opened, so there is no save dialog and nothing to remember to
+press. **Canasta is done** — the whole engine writes through `QDataStream`
+behind a version number that refuses an older or truncated save rather than
+misreading it, and the self-test proves a resumed table is the same table and
+plays on.
+
+Still to do, in the order they are worth doing:
+
+- **Chess** — position, history for threefold repetition, level, whose move.
+- **Hearts** — hands, tricks taken, passing direction, running scores.
+- **Klondike, Spider, FreeCell, Pyramid** — piles and stock. A shared card
+  codec would do all four at once and is worth writing first.
+- **Sudoku** — grid, pencil marks, elapsed time. Pause covers the short case.
+- **Minesweeper, Reversi, Draughts, 2048** — small states, quick wins.
+- **Snake, Pinball** — real-time and session-shaped; probably not worth it.
 
 **Choosing your colour, in Chess or Draughts.** Both put the human on the side
 that moves first — White and Red — and neither offers a swap or a board flip.

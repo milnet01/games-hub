@@ -23,11 +23,17 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    // A game to 5000 is several sittings, so the whole table is kept and put
+    // back. Nothing in the air is saved — a restored game shows the position as
+    // it settles, which is where the cards were going anyway.
+    QByteArray saveState() const override;
+    bool restoreState(const QByteArray& blob) override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
     void leaveEvent(QEvent* event) override;
     QSize sizeHint() const override { return { 1000, 740 }; }
     QSize minimumSizeHint() const override { return { 720, 560 }; }
@@ -74,6 +80,9 @@ private:
     std::vector<int> meldOrder(int team) const;
     QPointF meldCardCentre(int team, int slot, int index) const;
     QPointF seatAnchor(int seat) const;
+    // The Lay down button, on the felt between your melds and your hand. Empty
+    // when there is nothing to lay down, which is also when it is not drawn.
+    QRectF layDownButton() const;
 
     // --- hit testing ---
     static bool hits(const QPointF& pos, const QPointF& centre, double w, double h, double angle);
@@ -118,7 +127,10 @@ private:
     void paintMelds(QPainter& p);
     void paintOpponents(QPainter& p);
     void paintCentre(QPainter& p);
+    void paintCentreStrip(QPainter& p);
     void paintHand(QPainter& p);
+    void paintLayDown(QPainter& p);
+    void paintDrag(QPainter& p);
     void paintFlights(QPainter& p);
     void paintScores(QPainter& p);
     void paintSummary(QPainter& p);
@@ -144,6 +156,13 @@ private:
     std::vector<int> m_selected; // indices into the human's hand
     int m_hover = -1;
     int m_hoverMeld = -1;
+    // A press is only a click once the mouse comes up without having moved;
+    // past a few pixels it is a drag, and the picked cards follow the cursor.
+    int m_pressIndex = -1;
+    QPointF m_pressPos;
+    QPointF m_dragPos;
+    bool m_dragging = false;
+    bool m_overButton = false;
     bool m_showHints = true;
     bool m_sortHand = true;
 
@@ -151,6 +170,11 @@ private:
     // Cleared and refilled every paint, so one flight suppresses exactly one
     // card wherever it is heading.
     mutable std::vector<int> m_consumed;
+
+    // The last card thrown and who threw it, kept on screen until the next one
+    // replaces it. Three computer seats play faster than a card can be read.
+    Card m_lastThrown;
+    int m_lastThrownBy = -1;
 
     QTimer* m_timer = nullptr;
     double m_pause = 0.0;    // seconds to wait before the next computer move
