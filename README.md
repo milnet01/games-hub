@@ -105,6 +105,10 @@ A strip under the middle of the table says how much stock is left, whether the
 pile is frozen, and **what the last player threw away**, in words, until the
 next card replaces it.
 
+Every meld carries a badge naming what it holds — `10 ×4 ★1` is four tens with
+one wild card among them. A melded card is mostly hidden by the one on top of
+it, so the badge is what actually says whether there is a joker in there.
+
 There are four opponent strengths. **Expert** counts the pack — it knows which
 ranks are wholly accounted for and throws those, keeps ranks back in hand as
 bait for the pile, takes every pile it legally can, freezes the pile when it

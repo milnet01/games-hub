@@ -705,7 +705,7 @@ QRectF CanastaView::bandFor(int team) const
 {
     const QRectF r = tableRect();
     const double h = r.height() * 0.200;
-    const double y = team == 0 ? r.top() + r.height() * 0.555 : r.top() + r.height() * 0.200;
+    const double y = team == 0 ? r.top() + r.height() * 0.585 : r.top() + r.height() * 0.200;
     // Kept clear of the side seats' fans, which reach a card's HEIGHT in from
     // each edge — a full-width band puts the red threes underneath them.
     const double inset = std::max(r.width() * 0.05, cardHeight() * 1.15);
@@ -1556,8 +1556,23 @@ void CanastaView::paintMelds(QPainter& p)
             // a stack of sevens and a stack of eights look alike from across
             // the table. The badge is what actually names the meld.
             const QPointF last = meldCardCentre(team, int(s), m->size() - 1);
-            const double bw = cardWidth() * scale * 1.20;
             const double bh = cardWidth() * scale * 0.52;
+            double bw = cardWidth() * scale * 1.20;
+            {
+                QFont probe = p.font();
+                probe.setPixelSize(std::max(9, int(bh * 0.72)));
+                probe.setBold(true);
+                const int wildCount = m->wilds();
+                const QString probeText = wildCount > 0
+                    ? QStringLiteral("%1 ×%2 ★%3")
+                          .arg(ranks[s] == 3 ? QStringLiteral("3♠") : rankLabel(ranks[s]))
+                          .arg(m->size())
+                          .arg(wildCount)
+                    : QStringLiteral("%1 ×%2")
+                          .arg(ranks[s] == 3 ? QStringLiteral("3♠") : rankLabel(ranks[s]))
+                          .arg(m->size());
+                bw = std::max(bw, QFontMetricsF(probe).horizontalAdvance(probeText) + bh * 0.9);
+            }
             const QRectF badge(last.x() - bw * 0.5, last.y() + cardHeight() * scale * 0.5 + 3.0,
                                bw, bh);
             QPainterPath plate;
@@ -1570,8 +1585,14 @@ void CanastaView::paintMelds(QPainter& p)
             p.setFont(bf);
             p.setPen(canasta ? Theme::kGold : kInkDim);
             const QString name = ranks[s] == 3 ? QStringLiteral("3♠") : rankLabel(ranks[s]);
-            p.drawText(badge, Qt::AlignCenter,
-                       QStringLiteral("%1 ×%2").arg(name).arg(m->size()));
+            // The wild count is on the badge because a stacked meld shows only
+            // slivers, and "is there a joker in there?" is the question a meld
+            // has to answer at a glance.
+            const int wilds = m->wilds();
+            const QString label = wilds > 0
+                ? QStringLiteral("%1 ×%2 ★%3").arg(name).arg(m->size()).arg(wilds)
+                : QStringLiteral("%1 ×%2").arg(name).arg(m->size());
+            p.drawText(badge, Qt::AlignCenter, label);
             if (lit) {
                 const QPointF centre = meldCardCentre(team, int(s), 0);
                 const double w = cardWidth() * scale;
@@ -1742,9 +1763,14 @@ void CanastaView::paintCentreStrip(QPainter& p)
         text += fm.horizontalAdvance(part.text);
     text += gap * double(parts.size() - 1);
 
-    const double h = fm.height() * 1.45;
-    const QRectF plate(tableRect().center().x() - (text + pad * 2.0) * 0.5,
-                       pileCentre().y() + cardHeight() * 0.55, text + pad * 2.0, h);
+    const double h = fm.height() * 1.35;
+    // Between the centre row and your meld band, in a lane kept clear for it.
+    // It used to sit ON the band, which hid the top cards of the first meld —
+    // exactly the cards that say whether the meld holds a wild.
+    const double top = std::min(pileCentre().y() + cardHeight() * 0.54,
+                                bandFor(0).top() - h - cardHeight() * 0.06);
+    const QRectF plate(tableRect().center().x() - (text + pad * 2.0) * 0.5, top,
+                       text + pad * 2.0, h);
 
     QPainterPath path;
     path.addRoundedRect(plate, h * 0.32, h * 0.32);
