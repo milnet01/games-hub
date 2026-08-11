@@ -2,3 +2,7 @@ build/
 build-*/
 compile_commands.json
 .cache/
+
+# Derived, per-machine cache: the roadmap format standard says this is
+# recomputed from committed content and never committed itself.
+.roadmap-counter

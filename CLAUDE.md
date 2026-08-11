@@ -234,8 +234,8 @@ immediately before a shape call rather than trusting what came before.
 
 **Sounds are generated, never sampled.** `tools/make_sounds.py` synthesises all
 17 effects from a fixed seed, so re-running it is byte-identical. That is a
-licensing decision rather than a stylistic one — see `ROADMAP.md` § Choosing
-games before adding any asset.
+licensing decision rather than a stylistic one — see `ROADMAP.md` § Standing
+rules before adding any asset.
 
 ## Testing notes
 

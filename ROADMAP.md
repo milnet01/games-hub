@@ -1,187 +1,284 @@
-# Roadmap
+<!-- ants-roadmap-format: 1 -->
+# Games Hub — Roadmap
 
-## Agreed queue
+A collection of desktop games in one window. Pre-1.0 (0.2.0), so the blocks
+below are phases rather than releases. Shipped items stay in the file and flip
+to ✅; `CHANGELOG.md` is the separate user-facing record.
 
-Games the owner has asked for, in the order agreed on 2026-08-10. All are
-traditional or public-domain; see *Choosing games* below for why each is safe.
+Execution order is positional: work a phase top to bottom. IDs are identity
+only, so they are not in order and are never renumbered.
 
-| Game | Notes | Size |
-|------|-------|------|
-| ~~**Chess**~~ | **Shipped 2026-08-10.** Full rules, an opponent at three strengths, and a move generator proven against the published node counts for four reference positions. | Large. Bigger than any single game currently in the hub. |
-| ~~**Canasta**~~ | **Shipped 2026-08-10.** Partnerships (2v2), melds, wild cards, red threes, freezing and taking the discard pile, going out and the full scoring table — plus a second, editable rule set for the owner's family's house rules. | Large. Most complex card game on the list. |
-| **Gin Rummy** | Two-handed against the computer: knocking, deadwood, gin, undercut. | Medium. |
-| **Cribbage** | Two-handed with the pegging board, the crib, and the show. | Medium. |
-| **Blackjack** | Traditional twenty-one against a dealer. | Small. |
-| **Spades** | Four-handed partnership trick-taking with bidding. Reuses the Hearts shape. | Medium. |
-| **TriPeaks / Golf / Yukon** | Three more solitaires. Cheapest of all — they reuse the card engine and drag-and-drop wholesale. | Small each. |
+## P01 — Shipped
 
-Chess and Canasta are done; nothing below them is started. The hub currently
-ships fourteen games.
+### 🎨 Games
 
-## Agreed, not yet scheduled
+- ✅ [GHUB-0001] **Chess, with a full rule set and an opponent at three
+  strengths.** Castling, en passant, promotion and every draw rule. The move
+  generator is proved by perft against the published node counts for four
+  reference positions rather than by playing it.
+  Layman: A proper game of chess against the computer.
+  Kind: feature.
+  Source: user-request-2026-08-10.
 
-Asked for by the owner on 2026-08-10, to be built after the queue above unless
-he says otherwise. None of these are started.
+- ✅ [GHUB-0002] **Canasta for four, in partnerships, with an editable second
+  rule set.** Melds, wild cards, red threes, freezing and taking the discard
+  pile, going out and the full scoring table. Every number the game plays by
+  lives in one `canasta::Rules` struct, which is what let the owner's six
+  family rules land as values rather than as branches.
+  Layman: Canasta against three computer players, including your family's own
+  rules.
+  Kind: feature.
+  Source: user-request-2026-08-10.
 
-### How to play, inside the app
+- ✅ [GHUB-0003] **The other twelve games of the collection.** Reversi,
+  Draughts, Minesweeper, Klondike, Spider, FreeCell, Pyramid, Sudoku, Hearts,
+  Snake, 2048 and Pinball, all behind one hub window and one toolbar.
+  Layman: Twelve more games, all in the same window.
+  Kind: feature.
+  Source: user-request-2026-08-10.
 
-**Every game explains its own rules.** Thirteen games ship with no instructions
-anywhere — a player who has never met Reversi or Canasta has to leave the
-program to learn it. Add a **Rules** action to the toolbar that opens the rules
-for whichever game is on screen.
+### 🎨 Saving a game in progress
 
-The shape that fits what is already here: give `GameView` a virtual returning
-the game's rules as rich text, so a game carries its own explanation in its own
-directory and adding a game means writing its rules next to its code. The hub
-shows them in one shared dialog, so all thirteen look the same. Also worth a
-short line of the *controls* — which mouse button, what a click on the stock
-does — because that is what a player actually gets stuck on.
+- ✅ [GHUB-0004] **A save mechanism every game can opt into.**
+  `GameView::saveState()` / `restoreState()` are the contract; the hub stores
+  whatever a game hands back and gives it straight back the next time that
+  game is opened. No save dialog and nothing to remember to press; an empty
+  state means "nothing worth keeping" and clears any stale save, which is how
+  a finished game avoids resuming onto its own result.
+  Layman: Games can remember where you left off, with nothing to press.
+  Kind: implement.
+  Source: user-request-2026-08-11.
 
-**Standing rule 2 below binds hard here, harder than anywhere else in this
-file.** Rules text is exactly the thing a rulebook author owns. Every word has
-to be written fresh from an understanding of the game. Do not paste from
-Wikipedia, from Bicycle's site, or from a printed rulebook, and do not
-paraphrase one closely enough that the sentence order survives.
+- ✅ [GHUB-0005] **Canasta saves and resumes.** The whole engine writes through
+  `QDataStream` behind a version number that refuses an older or truncated
+  save rather than misreading it. Rules added later append to a counted tail,
+  so a save from an earlier build still loads and comes back without the rules
+  it predates.
+  Layman: Close Canasta mid-game and the whole table comes back.
+  Kind: implement.
+  Source: user-request-2026-08-11.
 
-Size: medium, and most of it is writing rather than code.
+- ✅ [GHUB-0006] **Chess saves and resumes, and sets the pattern for the rest.**
+  It keeps the *moves*, not the position: a FEN says where the pieces are and
+  nothing else, while threefold repetition needs every position the game has
+  passed through and Undo needs the boards behind them. `ChessGame` rebuilds
+  all three from `play()`, so replaying the move list restores them from one
+  list with no second copy free to drift. Each move is matched against
+  `legalMoves()` on the way back in, which proves the save is a game this build
+  would play and lets the generator — not the file — set the castling and
+  en-passant flags.
+  Layman: Close Chess mid-game and come back to the same board, with Undo still
+  working.
+  Kind: implement.
+  Source: in-session-2026-08-11.
 
-### More card games
+## P02 — Queued
 
-The queue above already names Canasta, Gin Rummy, Cribbage, Blackjack, Spades
-and three more solitaires. Beyond those, the traditional card catalogue is
-enormous and entirely free. Worth picking from, roughly cheapest first:
+Worked top to bottom. Nothing here is started.
 
-- **War**, **Go Fish**, **Old Maid**, **Beggar-my-neighbour** — trivial rules,
-  and the first genuinely child-friendly games in the hub.
-- **Crazy Eights** — the public-domain game Uno was built from. Free under its
-  own name; do not use Uno's name, colours or card faces.
-- **Sevens** (also called Fan Tan or Domino) — one of the simplest card games
-  that is still worth playing.
-- **Whist** and **Euchre** — both already listed as safe below, and both reuse
-  the Hearts trick-taking shape almost wholesale.
-- **Rummy 500**, **Cassino**, **Pinochle**, **Bezique**, **Scopa**,
-  **Briscola** — bigger, and each needs its own scoring.
+### 🎨 Saving the remaining games
 
-Every one of these reuses `src/cards/` for the deck and the drawing. Nothing
-here needs a new asset.
+The shape is GHUB-0006's: save what the game was *told*, replay it, and match
+each step against the rules on the way back in.
 
-### Board games
+- 📋 [GHUB-0007] **Hearts saves and resumes.** Hands, tricks taken, passing
+  direction and the running scores. The longest game in the hub after Canasta.
+  Layman: Close Hearts mid-game and come back to it.
+  Kind: implement.
+  Lanes: hearts.
 
-Same test, same answer: the classics are ancient and free.
+- 📋 [GHUB-0008] **The four solitaires save and resume.** Klondike, Spider,
+  FreeCell and Pyramid: piles and stock. A shared card codec does all four at
+  once and is worth writing first — these are also the games most often left
+  half-finished.
+  Layman: Close a game of patience and come back to it.
+  Kind: implement.
+  Lanes: klondike, spider, freecell, pyramid, cards.
 
-- **Nine Men's Morris**, **Fox and Geese**, **Alquerque** — small, and all
-  three are close in shape to the Draughts board already built.
-- **Gomoku** (five in a row) and **Four in a Row** — the second is Connect
-  Four's game under a generic name, which is the rename trick described below.
-  Both are small.
-- **Backgammon** — needs dice, a doubling cube and a real opponent. Medium to
-  large, and the most likely to be actually played.
-- **Mancala** and **Dominoes** — medium, and neither looks like anything else
-  in the hub, which is worth something on the tile grid.
-- **Snakes and Ladders** (the ancient *Moksha Patam*) and **Pachisi** — pure
-  race games. Small, and the other family that suits children.
-- **Go** — the rules are tiny and the opponent is a research project. Ship it
-  only if a weak opponent is acceptable, and say so on the tile.
-- **Halma**, **Hnefatafl**, **Shogi**, **Xiangqi** — deeper cuts, all free.
+- 📋 [GHUB-0009] **Sudoku saves and resumes.** Grid, pencil marks and elapsed
+  time. Pause already covers the walk-away case, so this is the smaller half.
+  Layman: Close a puzzle part way and come back to it.
+  Kind: implement.
+  Lanes: sudoku.
 
-## Suggested, not yet agreed
+- 📋 [GHUB-0010] **Minesweeper, Reversi, Draughts and 2048 save and resume.**
+  Small states, quick wins, worth doing in one pass once the codec above
+  exists.
+  Layman: The four quick games remember where you were too.
+  Kind: implement.
 
-Proposed on 2026-08-11 by the session that built Canasta, and written down at
-the owner's request. Nothing here has been agreed; the order is the order they
-are worth doing.
+### 🎨 Games agreed and not yet started
 
-### Legibility, in the other thirteen games
+Asked for on 2026-08-10, in the order agreed. All are traditional or
+public-domain; see the standing rules for why each is safe.
 
-**The single most valuable item on this page.** The owner is partially sighted
-and reads cards by their pip pattern rather than the corner index, which is why
-Canasta ended up with named discards, a wild count on every meld, cards drawn
-large enough for `CardArt::paintFace` to draw a face at all, and a computer that
-pauses long enough to be followed. **None of that is true anywhere else.**
+- 📋 [GHUB-0011] **Gin Rummy, two-handed against the computer.** Knocking,
+  deadwood, gin and undercut. Medium.
+  Layman: The classic two-player rummy game.
+  Kind: feature.
+  Source: user-request-2026-08-10.
 
-Expected to be wrong, and worth checking by rendering each game rather than by
-reasoning about it: the four solitaires draw cards far smaller than Canasta
-does, Hearts plays a trick with no record of what was led, Chess and Draughts
-announce nothing, and Sudoku's pencil marks are a third of a cell.
+- 📋 [GHUB-0012] **Cribbage, two-handed, with the pegging board.** The crib and
+  the show included. Medium.
+  Layman: Cribbage, board and all.
+  Kind: feature.
+  Source: user-request-2026-08-10.
 
-Worth doing as one **Large cards / high contrast** switch the hub owns and every
-game reads, rather than as thirteen separate judgements. Size: large, and most
-of it is looking rather than typing.
+- 📋 [GHUB-0013] **Blackjack against a dealer.** Traditional twenty-one. Small.
+  Layman: Twenty-one against the house.
+  Kind: feature.
+  Source: user-request-2026-08-10.
 
-### Undo, in Canasta
+- 📋 [GHUB-0014] **Spades, four-handed partnership trick-taking with bidding.**
+  Reuses the Hearts shape almost wholesale. Medium.
+  Layman: Partnership card game where you bid how many tricks you will win.
+  Kind: feature.
+  Source: user-request-2026-08-10.
 
-Chess and Reversi take a move back; Canasta cannot. A mis-clicked discard is
-gone, and it is the game whose cards are hardest to read — the two facts
-compound. One step is enough: the discard, or the last lay-down. Small.
+- 📋 [GHUB-0015] **TriPeaks, Golf and Yukon.** Three more solitaires, and the
+  cheapest work on this page: they reuse the card engine and the drag-and-drop
+  wholesale. Small each.
+  Layman: Three more games of patience.
+  Kind: feature.
+  Source: user-request-2026-08-10.
 
-### The rules in force, on screen
+### 📚 Documentation
 
-`How to play, inside the app` above covers teaching the games. This is the other
-half and is cheaper: Canasta now has six house rules, and the only place any of
-them is described is `README.md` on disk. A **Rules in force** panel that lists
-what is switched on would answer it without the writing the rules screen needs.
-Small.
+- 📋 [GHUB-0016] **Every game explains its own rules, inside the app.** Fourteen
+  games ship with no instructions anywhere — a player who has never met Reversi
+  or Canasta has to leave the program to learn it. Give `GameView` a virtual
+  returning the game's rules as rich text, so a game carries its explanation in
+  its own directory and adding a game means writing its rules next to its code;
+  the hub shows them in one shared dialog so they all look the same. Worth a
+  short line on the *controls* too — which button, what a click on the stock
+  does — because that is what a player actually gets stuck on. **Standing rule
+  2 binds harder here than anywhere else in this file: rule text is exactly
+  what a rulebook author owns, so every word is written fresh.** Medium, and
+  most of it is writing rather than code.
+  Layman: A Rules button that tells you how to play whichever game is on
+  screen.
+  Kind: doc.
+  Source: user-request-2026-08-10.
 
-### A legality check that does not rely on the author's imagination
+## P03 — Considered
 
-Four separate bugs this session were positions where a move the player could see
-was legal got refused, all of them in one corner: where wild cards go. Every one
-passed the self-test, because the self-test checks positions somebody thought
-of.
+Nothing here is agreed. 💭 means the scope, the value or the decision is still
+open.
 
-The check that would have caught at least two: over thousands of random
-positions, work out by brute force every legal way to take the pile, and confirm
-the engine agrees with the enumeration. Medium, and it retires a whole class of
-bug rather than one bug.
+### 🖥 Legibility and accessibility
 
-## Deferred, deliberately
+- 💭 [GHUB-0017] **The other thirteen games have had no legibility pass.** The
+  owner is partially sighted and reads cards by their pip pattern rather than
+  the corner index, which is why Canasta ended up with named discards, a wild
+  count on every meld, cards drawn large enough for `CardArt::paintFace` to
+  draw a face at all, and a computer that pauses long enough to be followed.
+  None of that is true anywhere else. Expected to be wrong, and worth checking
+  by rendering each game rather than by reasoning about it: the four solitaires
+  draw cards far smaller than Canasta does, Hearts plays a trick with no record
+  of what was led, Chess and Draughts announce nothing, and Sudoku's pencil
+  marks are a third of a cell. Worth doing as one **Large cards / high
+  contrast** switch the hub owns and every game reads, rather than as thirteen
+  separate judgements. Large, and most of it is looking rather than typing.
+  Layman: Make the other games as easy to read as Canasta now is.
+  Kind: accessibility.
+  Source: in-session-2026-08-11.
 
-**Cutting the pack, in Canasta.** At a table the cut stops the dealer stacking
-the deck and breaks up cards left clumped from the last hand. Neither can
-happen here — every deal is a fresh random ordering — so a cut would be an
-animation that changes nothing, and putting one on screen implies it matters.
-What *does* rotate is the deal: each hand a different seat deals and the player
-to their left leads, so the advantage moves round the table as it should. If a
-cut is ever wanted it belongs in the house-rules dialog as honest decoration,
-labelled as such. Decided with the owner on 2026-08-10.
+### 🎨 Play
 
-## Agreed, in progress
+- 💭 [GHUB-0018] **Canasta cannot take a move back.** Chess and Reversi can. A
+  mis-clicked discard is gone, and it is the game whose cards are hardest to
+  read — the two facts compound. One step is enough: the discard, or the last
+  lay-down. Small.
+  Layman: An undo button for Canasta.
+  Kind: enhancement.
+  Source: in-session-2026-08-11.
 
-**Saving a game in progress — the mechanism is built, most games still need
-their half.** Asked for on 2026-08-11, which retired the entry below that had
-deferred it. `GameView::saveState()` / `restoreState()` are the contract; the
-hub stores whatever a game hands back and gives it straight back the next time
-that game is opened, so there is no save dialog and nothing to remember to
-press. **Canasta is done** — the whole engine writes through `QDataStream`
-behind a version number that refuses an older or truncated save rather than
-misreading it, and the self-test proves a resumed table is the same table and
-plays on.
+- 💭 [GHUB-0019] **Nothing on screen says which house rules are switched on.**
+  GHUB-0016 covers teaching the games; this is the cheaper other half. Canasta
+  has six house rules and the only place any of them is described is
+  `README.md` on disk. A **Rules in force** panel listing what is on would
+  answer it without the writing a rules screen needs. Small.
+  Layman: A panel showing which of your own rules are turned on.
+  Kind: ux.
+  Source: in-session-2026-08-11.
 
-**Chess is done too** (2026-08-11). It keeps the *moves*, not the position: a
-FEN would say where the pieces are and nothing else, while threefold repetition
-needs every position the game has passed through and Undo needs the boards
-behind them. `ChessGame` rebuilds all three from `play()`, so replaying the move
-list restores them from one list with no second copy to drift. Each move is
-matched against `legalMoves()` on the way back in, which both proves the save is
-a game this build would play and lets the generator — not the file — set the
-castling and en-passant flags. **That is the pattern for the games below.**
+### 🧰 Tests
 
-Still to do, in the order they are worth doing:
+- 💭 [GHUB-0020] **A legality check that does not rely on the author's
+  imagination.** Four separate bugs on 2026-08-11 were positions where a move
+  the player could see was legal got refused, all in one corner: where wild
+  cards go. Every one passed the self-test, because the self-test checks
+  positions somebody thought of. The check that would have caught at least two:
+  over thousands of random positions, enumerate by brute force every legal way
+  to take the pile and confirm the engine agrees. Medium, and it retires a
+  class of bug rather than a bug.
+  Layman: Have the tests find the illegal-move bugs instead of the player.
+  Kind: test.
+  Source: in-session-2026-08-11.
 
-- **Hearts** — hands, tricks taken, passing direction, running scores.
-- **Klondike, Spider, FreeCell, Pyramid** — piles and stock. A shared card
-  codec would do all four at once and is worth writing first.
-- **Sudoku** — grid, pencil marks, elapsed time. Pause covers the short case.
-- **Minesweeper, Reversi, Draughts, 2048** — small states, quick wins.
-- **Snake, Pinball** — real-time and session-shaped; probably not worth it.
+### 🎨 More games, if wanted
 
-**Choosing your colour, in Chess or Draughts.** Both put the human on the side
-that moves first — White and Red — and neither offers a swap or a board flip.
-That is scope, not oversight: it keeps `advance()` a single path with one
-`m_human`, which is the shape every engine game in the hub shares. Worth adding
-one day, but add it to *both* games at once and to that shared shape, rather
-than special-casing Chess. Decided while building Chess on 2026-08-10.
+- 💭 [GHUB-0021] **More card games, none of which need a new asset.** Beyond the
+  queue above the traditional catalogue is enormous and entirely free, roughly
+  cheapest first: **War**, **Go Fish**, **Old Maid**, **Beggar-my-neighbour**
+  (trivial rules, and the first genuinely child-friendly games here);
+  **Crazy Eights** (the public-domain game Uno was built from — free under its
+  own name, but do not use Uno's name, colours or card faces); **Sevens**, also
+  called Fan Tan; **Whist** and **Euchre**, both reusing the Hearts shape;
+  then **Rummy 500**, **Cassino**, **Pinochle**, **Bezique**, **Scopa** and
+  **Briscola**, each needing its own scoring. All reuse `src/cards/`.
+  Layman: A long list of traditional card games that would be cheap to add.
+  Kind: research.
+  Source: user-request-2026-08-10.
 
-## Choosing games
+- 💭 [GHUB-0022] **Board games, on the same test and the same answer.**
+  **Nine Men's Morris**, **Fox and Geese** and **Alquerque** are small and
+  close in shape to the Draughts board already built. **Gomoku** and **Four in
+  a Row** (Connect Four's game under a generic name) are small.
+  **Backgammon** needs dice, a doubling cube and a real opponent — medium to
+  large, and the most likely to actually be played. **Mancala** and
+  **Dominoes** look like nothing else on the tile grid. **Snakes and Ladders**
+  (the ancient *Moksha Patam*) and **Pachisi** are pure race games and suit
+  children. **Go** has tiny rules and an opponent that is a research project —
+  ship it only if a weak opponent is acceptable, and say so on the tile.
+  **Halma**, **Hnefatafl**, **Shogi** and **Xiangqi** are deeper cuts, all
+  free.
+  Layman: A long list of traditional board games that would be safe to add.
+  Kind: research.
+  Source: user-request-2026-08-10.
+
+### 🧹 Decided against, with reasons
+
+Kept because the reasoning is the useful part: without it these get proposed
+again.
+
+- 💭 [GHUB-0023] **Cutting the pack, in Canasta — not built, deliberately.** At
+  a table the cut stops the dealer stacking the deck and breaks up cards left
+  clumped from the last hand. Neither can happen here, because every deal is a
+  fresh random ordering, so a cut would be an animation that changes nothing
+  and putting one on screen implies it matters. What *does* rotate is the deal:
+  each hand a different seat deals and the player to their left leads, so the
+  advantage moves round the table as it should. If a cut is ever wanted it
+  belongs in the house-rules dialog as honest decoration, labelled as such.
+  Layman: Cutting the cards would look right but change nothing, so it was left
+  out.
+  Kind: investigate.
+  Source: user-request-2026-08-10.
+
+- 💭 [GHUB-0024] **Choosing your colour, in Chess or Draughts — scope, not
+  oversight.** Both put the human on the side that moves first, White and Red,
+  and neither offers a swap or a board flip. That keeps `advance()` a single
+  path with one `m_human`, which is the shape every engine game in the hub
+  shares. Worth adding one day, but add it to *both* games at once and to that
+  shared shape rather than special-casing Chess.
+  Layman: You always play the side that moves first; changing that touches both
+  games at once.
+  Kind: enhancement.
+  Source: in-session-2026-08-10.
+
+## Standing rules — choosing what to add
+
+Narration, not work. No bullet here takes a status.
 
 **Game rules cannot be copyrighted; names and specific artwork can.** That is
 the whole test, and it is why every game here is either centuries old or has a
