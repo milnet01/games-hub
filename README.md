@@ -80,6 +80,10 @@ are wild; red threes lay themselves down for a bonus; a black three on top
 stops anyone taking the pile. Click the pile again to throw a card away and end
 your turn. Your side needs a canasta before anyone can go out.
 
+You must draw before you can lay anything down, which is why **Meld** stays
+greyed out until you have. **Sort** keeps your hand fanned the way you would
+arrange it at a table: wild cards first, then aces down to threes.
+
 To add a wild card to a meld already on the table, pick the wild card and then
 click that meld — a joker has no rank of its own, so it has to be told where it
 is going.

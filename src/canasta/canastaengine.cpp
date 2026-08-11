@@ -23,6 +23,17 @@ void applyGroups(Team& t, const std::vector<Meld>& groups)
     }
 }
 
+// Position in the fan. Low sorts left. Jokers and twos lead because they are
+// the wild cards and a player keeps them together; the rest run downward from
+// the ace, which is what "sorted by value" means at a Canasta table.
+int fanOrder(const Card& c)
+{
+    if (isJoker(c)) return 0;
+    if (c.rank == 2) return 1;
+    if (c.rank == kAce) return 2;
+    return 16 - c.rank; // K, Q, J, 10 … 4, 3
+}
+
 } // namespace
 
 bool isWild(const Card& c) { return c.rank == kJoker || c.rank == 2; }
@@ -36,6 +47,15 @@ int cardValue(const Card& c, const Rules& rules)
     if (c.rank == kAce) return rules.aceValue;
     if (c.rank == 3) return isRed(c) ? rules.redThreeValue : rules.blackThreeValue;
     return c.rank >= 8 ? rules.highCardValue : rules.lowCardValue;
+}
+
+bool sortsBefore(const Card& a, const Card& b)
+{
+    const int ka = fanOrder(a);
+    const int kb = fanOrder(b);
+    if (ka != kb)
+        return ka < kb;
+    return int(a.suit) < int(b.suit);
 }
 
 int openRequirementFor(int score, const Rules& rules)
@@ -143,6 +163,14 @@ void Engine::nextHand()
         return;
     m_dealer = (m_dealer + 1) % kSeats;
     deal();
+}
+
+void Engine::sortHand(int seat)
+{
+    if (seat < 0 || seat >= kSeats)
+        return;
+    std::vector<Card>& h = m_hands[std::size_t(seat)];
+    std::stable_sort(h.begin(), h.end(), sortsBefore);
 }
 
 int Engine::winner() const

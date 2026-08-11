@@ -259,8 +259,8 @@ int main(int argc, char* argv[])
                 if (!a->isSeparator())
                     actions << a->text();
             std::printf("      canasta actions: %s\n", qPrintable(actions.join(QStringLiteral(", "))));
-            for (const char* wanted : { "New Game", "Meld", "Discard", "Easy", "Hard", "Classic",
-                                        "House", "Hints" }) {
+            for (const char* wanted : { "New Game", "Meld", "Discard", "Sort", "Easy", "Hard",
+                                        "Classic", "House", "Hints" }) {
                 check(actions.contains(QString::fromUtf8(wanted)),
                       qPrintable(QStringLiteral("canasta: the toolbar offers %1")
                                      .arg(QString::fromUtf8(wanted))));

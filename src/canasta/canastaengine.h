@@ -125,6 +125,12 @@ struct Team {
 int handScoreFor(const Team& t, const std::vector<Card>& handOne, const std::vector<Card>& handTwo,
                  bool wentOut, bool concealed, const Rules& rules);
 
+// The order a hand is fanned in: wild cards first, then aces down to threes,
+// suit breaking ties so pairs sit together. Nothing in Canasta depends on the
+// order a hand is held in — this is how it is arranged at a table, and the
+// engine owns it only because the engine owns the hand.
+bool sortsBefore(const Card& a, const Card& b);
+
 class Engine
 {
 public:
@@ -159,6 +165,9 @@ public:
     int currentSeat() const { return m_current; }
 
     const std::vector<Card>& hand(int seat) const { return m_hands[std::size_t(seat)]; }
+    // Rearranges a hand into sortsBefore() order. Cosmetic, so unlike every
+    // action below it validates nothing and may be called at any point.
+    void sortHand(int seat);
     const Team& team(int t) const { return m_teams[std::size_t(t)]; }
     const std::vector<Card>& pile() const { return m_pile; }
     bool pileFrozen() const { return m_frozen; }

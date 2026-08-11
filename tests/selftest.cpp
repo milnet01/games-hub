@@ -1437,6 +1437,49 @@ void canastaHouseRules()
     check(!six.isCanasta(ca::Rules::classic()), "canasta: and the classic rules still want seven");
 }
 
+// Sorting a hand is cosmetic, so the two things worth proving are that the
+// order is the one a player expects and that nothing is lost on the way.
+void canastaHandSort()
+{
+    check(ca::sortsBefore(joker(true), cd(Suit::Spades, 2)), "canasta: jokers lead the fan");
+    check(ca::sortsBefore(cd(Suit::Spades, 2), cd(Suit::Hearts, kAce)),
+          "canasta: then the twos, the other wild card");
+    check(ca::sortsBefore(cd(Suit::Hearts, kAce), cd(Suit::Clubs, kKing)),
+          "canasta: aces above kings");
+    check(ca::sortsBefore(cd(Suit::Clubs, kKing), cd(Suit::Clubs, 4)),
+          "canasta: and downward from there");
+    check(ca::sortsBefore(cd(Suit::Clubs, 4), cd(Suit::Spades, 3)),
+          "canasta: black threes at the far end");
+    check(!ca::sortsBefore(cd(Suit::Clubs, kKing), cd(Suit::Clubs, kKing)),
+          "canasta: a card does not sort before itself");
+
+    ca::Engine e;
+    e.newGame(9001);
+    const std::vector<Card> before = e.hand(0);
+    e.sortHand(0);
+    const std::vector<Card>& after = e.hand(0);
+
+    check(after.size() == before.size(), "canasta: sorting keeps the hand the same size");
+    std::vector<Card> pool = before;
+    bool same = true;
+    for (const Card& c : after) {
+        auto it = std::find(pool.begin(), pool.end(), c);
+        if (it == pool.end()) {
+            same = false;
+            break;
+        }
+        pool.erase(it);
+    }
+    check(same && pool.empty(), "canasta: sorting deals no new card and drops none");
+
+    bool ordered = true;
+    for (std::size_t i = 1; i < after.size(); ++i)
+        if (ca::sortsBefore(after[i], after[i - 1]))
+            ordered = false;
+    check(ordered, "canasta: a sorted hand is in order");
+    check(e.cardsInPlay() == 108, "canasta: the pack is still whole after a sort");
+}
+
 } // namespace
 
 int main()
@@ -1490,6 +1533,7 @@ int main()
     canastaFullGames();
     canastaLevelsDiffer();
     canastaHouseRules();
+    canastaHandSort();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;

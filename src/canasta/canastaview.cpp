@@ -285,6 +285,7 @@ CanastaView::CanastaView(QWidget* parent)
     m_timer->setInterval(16);
     connect(m_timer, &QTimer::timeout, this, &CanastaView::tick);
 
+    m_sortHand = QSettings().value(QStringLiteral("canasta/sortHand"), true).toBool();
     buildActions();
     newGame();
 }
@@ -305,6 +306,19 @@ void CanastaView::buildActions()
     m_discardAction->setShortcut(Qt::Key_Return);
     connect(m_discardAction, &QAction::triggered, this, &CanastaView::humanDiscard);
     m_actions.append(m_discardAction);
+
+    // Sits with the hand actions rather than with the display toggles at the
+    // far end, because that end is the first thing a narrow window hides.
+    auto* sort = new QAction(QStringLiteral("Sort"), this);
+    sort->setCheckable(true);
+    sort->setChecked(m_sortHand);
+    connect(sort, &QAction::toggled, this, [this](bool on) {
+        m_sortHand = on;
+        QSettings().setValue(QStringLiteral("canasta/sortHand"), on);
+        sortHand();
+        update();
+    });
+    m_actions.append(sort);
 
     auto* sep1 = new QAction(this);
     sep1->setSeparator(true);
@@ -427,6 +441,8 @@ void CanastaView::newGame()
     m_awaitingContinue = false;
     m_message.clear();
 
+    // Before the deal flies, so each card is aimed at the slot it will keep.
+    sortHand();
     Sound::instance().play(Sound::kShuffle);
     flyTheDeal();
     m_timer->start();
@@ -699,6 +715,30 @@ void CanastaView::clearSelection()
     m_selected.clear();
 }
 
+void CanastaView::sortHand()
+{
+    if (!m_sortHand)
+        return;
+
+    // The selection is a list of positions, so it has to be carried across by
+    // card. One position per selected card, matched once each, so a pair of
+    // identical cards stays a pair rather than collapsing onto one slot.
+    const std::vector<Card> picked = selectedCards();
+    m_engine.sortHand(0);
+
+    m_selected.clear();
+    const std::vector<Card>& h = m_engine.hand(0);
+    for (const Card& c : picked) {
+        for (int i = 0; i < int(h.size()); ++i) {
+            if (h[std::size_t(i)] == c && !isSelected(i)) {
+                m_selected.push_back(i);
+                break;
+            }
+        }
+    }
+    std::sort(m_selected.begin(), m_selected.end());
+}
+
 // ---------------------------------------------------------------------------
 // Animation
 // ---------------------------------------------------------------------------
@@ -847,6 +887,7 @@ void CanastaView::humanDraw()
         return;
     }
     Sound::instance().play(Sound::kCardDeal);
+    sortHand();
     double delay = 0.0;
     flyHandArrivals(0, gainedCards(before, m_engine.hand(0)), stockCentre(), true, delay, 0.06);
     refresh();
@@ -869,6 +910,7 @@ void CanastaView::humanTakePile()
     }
     Sound::instance().play(Sound::kCardPlace);
     clearSelection();
+    sortHand();
 
     // Everything converges on the pile and then leaves it, which is exactly
     // what the move is.
@@ -1010,9 +1052,15 @@ void CanastaView::refresh()
         what = QStringLiteral("Hand over — click to deal the next one.");
         break;
     case ca::Engine::Phase::Draw:
-        what = m_engine.currentSeat() == 0
-            ? QStringLiteral("Your turn: take from the stock, or take the pile with the cards you pick.")
-            : QStringLiteral("%1 is drawing.").arg(seatName(m_engine.currentSeat()));
+        if (m_engine.currentSeat() != 0)
+            what = QStringLiteral("%1 is drawing.").arg(seatName(m_engine.currentSeat()));
+        else if (m_selected.empty())
+            what = QStringLiteral("Your turn: take from the stock, or take the pile with the cards you pick.");
+        else
+            // Cards picked up but Meld greyed out is the one place the board
+            // looks broken rather than sequenced, so say why.
+            what = QStringLiteral("Your turn: click the pile to take it with those cards, or draw "
+                                  "first — melding comes after the draw.");
         break;
     case ca::Engine::Phase::Play:
         what = m_engine.currentSeat() == 0
@@ -1055,6 +1103,7 @@ void CanastaView::mousePressEvent(QMouseEvent* event)
             m_awaitingContinue = false;
             m_engine.nextHand();
             m_canastasShown = 0;
+            sortHand();
             Sound::instance().play(Sound::kShuffle);
             flyTheDeal();
             refresh();

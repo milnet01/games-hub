@@ -84,6 +84,9 @@ private:
     bool isSelected(int index) const;
     std::vector<Card> selectedCards() const;
     void clearSelection();
+    // Fans your hand back into order, carrying the selection across. Does
+    // nothing unless the Sort toggle is on.
+    void sortHand();
 
     // --- moves ---
     void humanDraw();
@@ -142,6 +145,7 @@ private:
     int m_hover = -1;
     int m_hoverMeld = -1;
     bool m_showHints = true;
+    bool m_sortHand = true;
 
     std::vector<Flight> m_flights;
     // Cleared and refilled every paint, so one flight suppresses exactly one
