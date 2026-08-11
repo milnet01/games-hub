@@ -105,6 +105,17 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
     if (!mine.opened) {
         const int need = e.openRequirement(t);
 
+        // How many wild cards a rank may take, which is not always the flat
+        // ceiling: a house rule can require a meld to keep more real cards than
+        // wild ones, and an opening built without checking that is refused by
+        // the engine and leaves the side never opening at all.
+        const auto wildRoom = [&](int naturals) {
+            int allow = r.maxWildsPerMeld;
+            if (r.wildsFewerThanNaturals)
+                allow = std::min(allow, naturals - 1);
+            return std::max(0, allow);
+        };
+
         // Everything that already stands on its own, laid down together — the
         // minimum is measured across the whole opening, not per meld.
         std::vector<Card> lay;
@@ -116,37 +127,41 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
                 lay.insert(lay.end(), n.begin(), n.end());
         }
 
-        if (!lay.empty() && valueOf(lay) >= need) {
-            consume(lay);
-            out.push_back({ lay, -1 });
-        } else {
-            // Short of the minimum, a wild card can turn a pair into a meld.
-            // Hard holds its last wild back for a canasta instead.
-            const std::vector<Card> wilds = wildsAvailable();
+        // Still short: wild cards turn pairs into melds, and those go down
+        // BESIDE the complete ones rather than instead of them. Opening on a
+        // single rank alone is a much higher bar than the rules set, and it is
+        // what kept a side sitting on 50 for a whole hand.
+        if (valueOf(lay) < need) {
+            std::vector<Card> wilds = wildsAvailable();
+            // Hard would rather keep a wild card for a canasta than spend its
+            // last one opening.
             const bool spendWild = m_level != Level::Hard || wilds.size() > 1;
-            bool opened = false;
-            for (int rank = kKing; rank >= kAce && spendWild && !opened; --rank) {
-                if (rank == 3 || rank == 2)
+            for (int rank = kKing; rank >= kAce && spendWild && valueOf(lay) < need; --rank) {
+                if (rank == 3 || rank == 2 || wilds.empty())
                     continue;
-                std::vector<Card> cand = naturalsOf(rank);
-                if (int(cand.size()) < r.minNaturalsPerMeld)
-                    continue;
-                for (const Card& w : wilds) {
-                    if (int(cand.size()) >= r.minMeldSize && valueOf(cand) >= need)
-                        break;
-                    if (int(cand.size()) - countRank(cand, rank) >= r.maxWildsPerMeld)
-                        break;
-                    cand.push_back(w);
+                const std::vector<Card> n = naturalsOf(rank);
+                if (int(n.size()) >= r.minMeldSize || int(n.size()) < r.minNaturalsPerMeld)
+                    continue; // already down there, or too few to build on
+
+                std::vector<Card> cand = n;
+                int room = std::min(wildRoom(int(n.size())), r.minMeldSize - int(n.size()));
+                while (room > 0 && !wilds.empty()) {
+                    cand.push_back(wilds.front());
+                    wilds.erase(wilds.begin());
+                    --room;
                 }
-                if (int(cand.size()) >= r.minMeldSize && valueOf(cand) >= need) {
-                    consume(cand);
-                    out.push_back({ cand, rank });
-                    opened = true;
-                }
+                if (int(cand.size()) < r.minMeldSize)
+                    continue; // could not be made into a meld after all
+                lay.insert(lay.end(), cand.begin(), cand.end());
             }
-            if (!opened)
-                return out; // cannot open this turn; hold everything
         }
+
+        // The engine has the final word: if what was built is not a legal
+        // opening, hold everything rather than throw refusals at it all hand.
+        if (lay.empty() || valueOf(lay) < need || !e.canMeldCards(lay, -1))
+            return out;
+        consume(lay);
+        out.push_back({ lay, -1 });
     }
 
     // Extend what is already down, and lay anything new that stands alone.
@@ -171,7 +186,11 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
             if (m.rank == 3 || m.isCanasta(r))
                 continue;
             const int short_ = r.canastaSize - m.size();
-            const int room = r.maxWildsPerMeld - m.wilds();
+            int room = r.maxWildsPerMeld - m.wilds();
+            // The same ratio rule binds here: a meld may have to keep more real
+            // cards than wild ones however close the canasta is.
+            if (r.wildsFewerThanNaturals)
+                room = std::min(room, m.naturals() - m.wilds() - 1);
             const std::vector<Card> wilds = wildsAvailable();
             if (short_ <= 0 || short_ > room || short_ > int(wilds.size()))
                 continue;

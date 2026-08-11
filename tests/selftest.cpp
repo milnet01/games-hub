@@ -1478,6 +1478,47 @@ void canastaMeldOrder()
     }
 }
 
+// The computer opening. Reported from a game where the other side needed only
+// 50 and sat on it for a whole hand: the opening was built one rank at a time
+// and without regard to the house rule on wild cards, so anything that had to
+// be assembled from a complete meld plus a wild-boosted pair never went down —
+// and what it did build was refused by the engine, silently, every turn.
+void canastaAiOpens()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Three fours are 15 and a pair of queens with a two is 40. Neither opens
+    // 50 alone; together they are 55.
+    hands[1] = { cd(Suit::Spades, 4),  cd(Suit::Hearts, 4), cd(Suit::Diamonds, 4),
+                 cd(Suit::Spades, kQueen), cd(Suit::Hearts, kQueen), cd(Suit::Clubs, 2),
+                 cd(Suit::Spades, 6),  cd(Suit::Hearts, 7), cd(Suit::Diamonds, 8),
+                 cd(Suit::Clubs, 10),  cd(Suit::Spades, kJack) };
+    hands[2] = filler(5);
+    hands[3] = filler(kKing);
+
+    for (int strict = 0; strict < 2; ++strict) {
+        ca::Rules r = ca::Rules::classic();
+        // The rule that broke it: a pair may take one wild card, not two.
+        r.wildsFewerThanNaturals = strict != 0;
+        ca::Engine e { r };
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+
+        ca::Ai ai { ca::Level::Medium };
+        e.drawFromStock();
+        ai.playAndDiscard(e);
+
+        check(e.team(1).opened,
+              strict ? "canasta: the computer opens by combining, under the house rule"
+                     : "canasta: the computer opens by combining");
+        const ca::Meld* fours = e.team(1).meldOfRank(4);
+        const ca::Meld* queens = e.team(1).meldOfRank(kQueen);
+        check(fours != nullptr && queens != nullptr,
+              "canasta: laying the fours and the queens down together");
+        if (queens != nullptr)
+            check(queens->wilds() == 1, "canasta: with the wild card on the pair that needed it");
+    }
+}
+
 // Opening AND taking the pile in one move, with the wild cards needed by the
 // ranks going down beside the take rather than by the take itself. Reported
 // from a real hand: a seven on the pile, two sevens in hand — already a meld —
@@ -1836,27 +1877,46 @@ void canastaFirstRoundAndPileOpening()
     // failure that matters here is a hand that cannot legally continue.
     ca::Rules house = ca::Rules::classic();
     house.name = QStringLiteral("House");
-    house.targetScore = 1000;
+    house.targetScore = 3000;
     house.noMeldingFirstRound = true;
     house.pileMeldCountsToOpen = false;
     house.canastaMakesRankSafe = true;
     house.wildsFewerThanNaturals = true;
     house.canastaNeededToScore = true;
 
-    ca::Engine e { house };
-    e.newGame(2718);
     std::array<ca::Ai, ca::kSeats> ai { ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Hard },
                                         ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Hard } };
     bool finished = false;
     bool whole = true;
     bool laidTooEarly = false;
     bool tookASafeRank = false;
+    int handsPlayed = 0;
+    std::array<int, ca::kTeams> handsOpened { 0, 0 };
+    // Several games rather than one, because "a side never opened" is a claim
+    // about a run of hands and one hand proves nothing either way.
+    for (const unsigned seed : { 2718u, 31415u, 1618u, 1414u }) {
+    ca::Engine e { house };
+    e.newGame(seed);
+    finished = false;
     for (long guard = 0; guard < 40000 && !finished; ++guard) {
         if (e.phase() == ca::Engine::Phase::GameOver) {
+            // The last hand is scored straight into GameOver, so it is counted
+            // here rather than below.
+            ++handsPlayed;
+            for (int t = 0; t < ca::kTeams; ++t)
+                if (e.team(t).opened)
+                    ++handsOpened[std::size_t(t)];
             finished = true;
             break;
         }
         if (e.phase() == ca::Engine::Phase::HandOver) {
+            // A side that never opens all hand is the shape of failure that
+            // does not announce itself: the engine refuses, the computer keeps
+            // playing, and nothing on screen says why.
+            ++handsPlayed;
+            for (int t = 0; t < ca::kTeams; ++t)
+                if (e.team(t).opened)
+                    ++handsOpened[std::size_t(t)];
             e.nextHand();
             continue;
         }
@@ -1879,10 +1939,19 @@ void canastaFirstRoundAndPileOpening()
         if (e.phase() == ca::Engine::Phase::Play)
             ai[std::size_t(seat)].playAndDiscard(e);
     }
+    if (!finished)
+        break;
+    }
     check(finished, "canasta: a full game plays out under all five house rules");
     check(whole, "canasta: and the pack stays whole all the way through");
     check(!laidTooEarly, "canasta: nothing reached the table during a first round");
     check(!tookASafeRank, "canasta: and no side could ever take a pile topped by its own canasta");
+
+    std::printf("      canasta: %d hands, opened by us %d, by them %d\n", handsPlayed,
+                handsOpened[0], handsOpened[1]);
+    check(handsPlayed > 0 && handsOpened[0] * 2 >= handsPlayed * 1
+              && handsOpened[1] * 2 >= handsPlayed * 1,
+          "canasta: both sides open in most hands rather than sitting on their cards");
 }
 
 // A game to 5000 is several sittings, so it has to survive being put away. The
@@ -2062,6 +2131,7 @@ int main()
     canastaLevelsDiffer();
     canastaHouseRules();
     canastaMeldOrder();
+    canastaAiOpens();
     canastaTakeAndOpenTogether();
     canastaCanastaNeededToScore();
     canastaWildsAcrossRanks();
