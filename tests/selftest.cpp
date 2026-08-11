@@ -1408,7 +1408,7 @@ void canastaLevelsDiffer()
     // the top two rungs are judged over a longer run than the bottom.
     check(canastaMatch(ca::Level::Hard, ca::Level::Medium, "hard v medium", 120) * 2 > 120,
           "canasta: hard beats medium");
-    check(canastaMatch(ca::Level::Expert, ca::Level::Hard, "expert v hard", 120) * 2 > 120,
+    check(canastaMatch(ca::Level::Expert, ca::Level::Hard, "expert v hard", 240) * 2 > 240,
           "canasta: expert beats hard");
 }
 
@@ -1600,6 +1600,46 @@ void canastaTakeAndOpenTogether()
               "canasta: and the other joins the eights");
     }
     check(e.team(0).opened, "canasta: which is what opens the side");
+}
+
+// Feeding the table while the pile is frozen. Reported as a partner's mistake,
+// and it was one: every card laid down is a rank the opposition will then never
+// throw, so while the pile is frozen and out of reach a side keeps its hand to
+// itself. The exception is a canasta, which is worth more than any pile.
+void canastaAiHoldsWhileFrozen()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Seat 1 opens with four aces, then holds two sevens and a spare ace.
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), cd(Suit::Spades, kAce), cd(Suit::Spades, 7),
+                 cd(Suit::Hearts, 7), cd(Suit::Clubs, 7), cd(Suit::Spades, 2),
+                 cd(Suit::Clubs, 5), cd(Suit::Hearts, 8) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    for (int frozen = 0; frozen < 2; ++frozen) {
+        ca::Engine e;
+        // A wild card as the up-card freezes the pile from the start.
+        e.newGameFromStock(canastaStock(hands, 0, spare(),
+                                        frozen ? cd(Suit::Hearts, 2) : cd(Suit::Diamonds, 9)),
+                           0);
+        check(e.pileFrozen() == (frozen != 0),
+              frozen ? "canasta: the pile starts frozen" : "canasta: the pile starts open");
+
+        ca::Ai ai { ca::Level::Medium };
+        e.drawFromStock();
+        ai.playAndDiscard(e);
+
+        const ca::Meld* aces = e.team(1).meldOfRank(kAce);
+        check(aces != nullptr && aces->size() >= 4, "canasta: it opens either way");
+        // The sevens are the tell: three of them stand as a meld on their own,
+        // and the question is only whether it lays them down now.
+        const ca::Meld* sevens = e.team(1).meldOfRank(7);
+        check((sevens == nullptr) == (frozen != 0),
+              frozen ? "canasta: and holds its sevens back while the pile is frozen"
+                     : "canasta: and lays its sevens down while the pile is open");
+    }
 }
 
 // What a side that has not opened may do with the pile, and what changing the
@@ -2290,6 +2330,7 @@ int main()
     canastaMeldOrder();
     canastaAiOpens();
     canastaTakeAndOpenTogether();
+    canastaAiHoldsWhileFrozen();
     canastaUnopenedPileAndLiveRules();
     canastaWildValueGoesWhereItCounts();
     canastaCanastaNeededToScore();

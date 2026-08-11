@@ -51,11 +51,53 @@ bool Ai::worthHolding(const Engine& e, int rank, int naturals) const
     // not worth the points sitting in your hand.
     if (int(e.pile().size()) < 4)
         return false;
+    // Bait only works if somebody can still throw one. A rank with all eight
+    // accounted for will never come, so those points belong on the table.
+    if (seen(e, rank) >= 8)
+        return false;
     // Never hold so much that going out becomes impossible, and never hold a
     // rank the opponents have shown they are collecting.
     if (naturals > 4 || e.team(teamOf(e.currentSeat()) ^ 1).meldOfRank(rank) != nullptr)
         return false;
     return int(e.hand(e.currentSeat()).size()) > 5;
+}
+
+bool Ai::closingOut(const Engine& e, std::size_t inHand) const
+{
+    if (m_level == Level::Easy)
+        return false;
+    const Rules& r = e.rules();
+    const Team& mine = e.team(teamOf(e.currentSeat()));
+    if (!mine.hasCanasta(r))
+        return false; // going out is not even legal yet
+
+    // Catching the other side without a canasta is the biggest swing in the
+    // game — under the house rule where a side with none counts nothing in its
+    // favour, it is the difference between their melds paying them and costing
+    // them. So the hand is worth ending sooner against a side that has none.
+    const bool theyAreShort = !e.team(teamOf(e.currentSeat()) ^ 1).hasCanasta(r);
+    // Expert reads the position sooner and starts closing from further out.
+    const std::size_t reach = m_level == Level::Expert ? (theyAreShort ? 12u : 7u)
+                                                       : (theyAreShort ? 8u : 5u);
+    return inHand <= reach;
+}
+
+bool Ai::holdsWhileFrozen(const Engine& e, int rank, int naturals) const
+{
+    if (m_level == Level::Easy || !e.pileFrozen())
+        return false;
+
+    const Rules& r = e.rules();
+    const Team& mine = e.team(teamOf(e.currentSeat()));
+    // Completing a canasta is worth more than any pile.
+    if (const Meld* m = mine.meldOfRank(rank))
+        if (m->size() + naturals >= r.canastaSize)
+            return false;
+    // And ending the hand beats keeping cards back for a pile you will not get
+    // the chance to take.
+    if (closingOut(e, e.hand(e.currentSeat()).size()))
+        return false;
+    return true;
 }
 
 bool Ai::wantsPile(const Engine& e) const
@@ -75,9 +117,10 @@ bool Ai::wantsPile(const Engine& e) const
         // is worth taking a thin pile to do it.
         return !mine.opened || v >= 15 || n >= 3;
     case Level::Expert:
-        // Pile control is the game, and a pile taken is a pile the opponents
-        // cannot have. It takes any pile it can legally take.
-        return true;
+        // Pile control is the game, but a pile so thin it is not worth the
+        // tempo is one to leave. Measured: taking every pile going is slightly
+        // worse than being choosy about the smallest ones.
+        return !mine.opened || v >= 15 || n >= 3;
     }
     return false;
 }
@@ -158,14 +201,42 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
 
         // Everything that already stands on its own, laid down together — the
         // minimum is measured across the whole opening, not per meld.
-        std::vector<Card> lay;
+        std::vector<std::vector<Card>> groups;
         for (int rank = kKing; rank >= kAce; --rank) {
             if (rank == 3 || rank == 2)
                 continue;
             const std::vector<Card> n = naturalsOf(rank);
             if (int(n.size()) >= r.minMeldSize)
-                lay.insert(lay.end(), n.begin(), n.end());
+                groups.push_back(n);
         }
+
+        // Opening while the pile is frozen, lay only what the minimum asks for.
+        // Everything else is better in hand: it is a rank the opposition would
+        // then stop throwing, and the frozen pile is the thing worth waiting
+        // for. Cheapest ranks come out of the lay-down first, so the points
+        // that do go down are the ones least wanted back.
+        if (m_level != Level::Easy && e.pileFrozen()) {
+            std::sort(groups.begin(), groups.end(),
+                      [&](const std::vector<Card>& a, const std::vector<Card>& b) {
+                          return valueOf(a) < valueOf(b);
+                      });
+            int total = 0;
+            for (const std::vector<Card>& g : groups)
+                total += valueOf(g);
+            for (auto it = groups.begin(); it != groups.end();) {
+                const int without = total - valueOf(*it);
+                if (without >= need) {
+                    total = without;
+                    it = groups.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        std::vector<Card> lay;
+        for (const std::vector<Card>& g : groups)
+            lay.insert(lay.end(), g.begin(), g.end());
 
         // Still short: wild cards turn pairs into melds, and those go down
         // BESIDE the complete ones rather than instead of them. Opening on a
@@ -220,6 +291,9 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
         // laying down everything it legally can.
         if (worthHolding(e, rank, int(n.size())))
             continue;
+        // And nobody above Easy feeds the table while the pile is frozen.
+        if (holdsWhileFrozen(e, rank, int(n.size())))
+            continue;
         consume(n);
         out.push_back({ n, -1 });
     }
@@ -228,7 +302,7 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
     // worth far more turning a leftover pair into a meld — that is what empties
     // the hand, and going out catches the other side holding everything they
     // have. The lower levels never do this, and hands drag on as a result.
-    if (m_level == Level::Expert && mine.hasCanasta(r) && int(remaining.size()) <= 6) {
+    if (m_level != Level::Easy && m_level != Level::Medium && closingOut(e, remaining.size())) {
         for (int rank = kAce; rank <= kKing; ++rank) {
             if (rank == 3 || rank == 2)
                 continue;
@@ -356,6 +430,14 @@ Card Ai::chooseDiscard(const Engine& e) const
                 score -= 25.0;
         }
 
+        if (m_level == Level::Expert) {
+            // A rank the others have already parted with is one they are
+            // unlikely to hold a pair of, so it is SAFER to throw than a rank
+            // nobody has let go. Hard reads the pile the other way round, the
+            // way most players do.
+            score += 50.0 * double(countRank(e.pile(), c.rank));
+        }
+
         if (m_level == Level::Hard || m_level == Level::Expert) {
             // Count the pack. Eight of every rank exist; the ones this seat can
             // see are the ones nobody else can be holding. A rank with all
@@ -381,7 +463,10 @@ Card Ai::chooseDiscard(const Engine& e) const
         }
 
         // A little noise so the same hand is not played identically every time.
-        score += double(m_rng() % 100) / (m_level == Level::Easy ? 20.0 : 100.0);
+        // Expert plays the card it thinks is best, every time: variety is a
+        // handicap, and at the top of the ladder that is the wrong trade.
+        if (m_level != Level::Expert)
+            score += double(m_rng() % 100) / (m_level == Level::Easy ? 20.0 : 100.0);
 
         if (score > bestScore) {
             bestScore = score;

@@ -65,6 +65,9 @@ private:
     void newGame();
     // Puts the toolbar's rule set onto the game in progress, without dealing.
     void applyRules();
+    // Sets each seat's strength, which is not simply the chosen level: the
+    // partner can be sharpened on its own.
+    void applyLevels();
     void tick();
 
     // --- geometry ---
@@ -168,6 +171,8 @@ private:
     bool m_overButton = false;
     bool m_showHints = true;
     bool m_sortHand = true;
+    // North plays Expert whatever the opponents are set to.
+    bool m_sharpPartner = false;
 
     std::vector<Flight> m_flights;
     // Cleared and refilled every paint, so one flight suppresses exactly one

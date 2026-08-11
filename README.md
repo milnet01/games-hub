@@ -109,6 +109,16 @@ Every meld carries a badge naming what it holds — `10 ×4 ★1` is four tens w
 one wild card among them. A melded card is mostly hidden by the one on top of
 it, so the badge is what actually says whether there is a joker in there.
 
+**Expert partner** raises North — your partner — to the top level while leaving
+the two you are playing against wherever you set them. A partner who throws the
+hand away is a worse evening than a strong opponent.
+
+Nobody above Easy feeds the table while the pile is frozen: laying a rank down
+is what stops the opposition ever throwing it, so a frozen pile is played for
+rather than built past. Opening while it is frozen lays only what the minimum
+asks for, and a side with a canasta closes the hand out fast against a side
+without one.
+
 There are four opponent strengths. **Expert** counts the pack — it knows which
 ranks are wholly accounted for and throws those, keeps ranks back in hand as
 bait for the pile, takes every pile it legally can, freezes the pile when it

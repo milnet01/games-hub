@@ -265,7 +265,7 @@ int main(int argc, char* argv[])
             check(!actions.contains(QStringLiteral("Meld")),
                   "canasta: melding is not a toolbar action");
             for (const char* wanted : { "New Game", "Discard", "Sort", "Easy", "Hard",
-                                        "Expert", "Classic", "House", "Hints" }) {
+                                        "Expert", "Classic", "House", "Expert partner", "Hints" }) {
                 check(actions.contains(QString::fromUtf8(wanted)),
                       qPrintable(QStringLiteral("canasta: the toolbar offers %1")
                                      .arg(QString::fromUtf8(wanted))));

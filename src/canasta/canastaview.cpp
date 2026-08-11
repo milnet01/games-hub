@@ -331,6 +331,7 @@ CanastaView::CanastaView(QWidget* parent)
     connect(m_timer, &QTimer::timeout, this, &CanastaView::tick);
 
     m_sortHand = QSettings().value(QStringLiteral("canasta/sortHand"), true).toBool();
+    m_sharpPartner = QSettings().value(QStringLiteral("canasta/sharpPartner"), false).toBool();
     buildActions();
     newGame();
 }
@@ -389,8 +390,7 @@ void CanastaView::buildActions()
         const ca::Level value = entry.value;
         connect(a, &QAction::triggered, this, [this, value] {
             m_level = value;
-            for (ca::Ai& ai : m_ai)
-                ai.setLevel(value);
+            applyLevels();
             refresh();
         });
         m_actions.append(a);
@@ -456,6 +456,17 @@ void CanastaView::buildActions()
     sep4->setSeparator(true);
     m_actions.append(sep4);
 
+    auto* partner = new QAction(QStringLiteral("Expert partner"), this);
+    partner->setCheckable(true);
+    partner->setChecked(m_sharpPartner);
+    connect(partner, &QAction::toggled, this, [this](bool on) {
+        m_sharpPartner = on;
+        QSettings().setValue(QStringLiteral("canasta/sharpPartner"), on);
+        applyLevels();
+        refresh();
+    });
+    m_actions.append(partner);
+
     auto* hints = new QAction(QStringLiteral("Hints"), this);
     hints->setCheckable(true);
     hints->setChecked(m_showHints);
@@ -464,6 +475,17 @@ void CanastaView::buildActions()
         update();
     });
     m_actions.append(hints);
+}
+
+// Who plays how. North is your partner, and a partner who throws away the hand
+// is a worse experience than a strong opponent — so the partner's strength can
+// be raised on its own, without making the two you are playing AGAINST harder.
+void CanastaView::applyLevels()
+{
+    for (int seat = 0; seat < ca::kSeats; ++seat) {
+        const bool partner = seat == 2;
+        m_ai[std::size_t(seat)].setLevel(partner && m_sharpPartner ? ca::Level::Expert : m_level);
+    }
 }
 
 // The rule set as the toolbar currently has it. Changing rules must not throw
@@ -490,10 +512,9 @@ void CanastaView::newGame()
     // Fresh seeds each game, so the same three opponents do not replay the same
     // decisions every time you press New Game.
     std::random_device rd;
-    for (ca::Ai& ai : m_ai) {
-        ai.setLevel(m_level);
+    applyLevels();
+    for (ca::Ai& ai : m_ai)
         ai.seed(rd());
-    }
 
     m_flights.clear();
     m_selected.clear();

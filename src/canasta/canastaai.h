@@ -41,6 +41,13 @@ private:
     // legally can, which is the single biggest thing separating a good player
     // from a beginner.
     bool worthHolding(const Engine& e, int rank, int naturals) const;
+    // Whether the frozen pile is worth more than laying this rank down. Every
+    // card that goes on the table is a rank the opposition will then never
+    // throw, and while the pile is frozen the pile is the prize.
+    bool holdsWhileFrozen(const Engine& e, int rank, int naturals) const;
+    // Whether the hand should be closed out now — a canasta down and the other
+    // side without one, which is when going out catches them worst.
+    bool closingOut(const Engine& e, std::size_t inHand) const;
     // Lay-downs to attempt in order, each with the rank its wild cards join.
     std::vector<std::pair<std::vector<Card>, int>> chooseMelds(const Engine& e) const;
     Card chooseDiscard(const Engine& e) const;
