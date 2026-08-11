@@ -599,11 +599,11 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
             }
             out.push_back(Meld { kJoker, wilds });
             return true;
-        } else {
-            // Two ranks and a wild card: there is no way to tell which it
-            // belongs to, and guessing wrong silently is worse than asking.
-            error = QStringLiteral("Lay one rank at a time when you are using a wild card.");
+        } else if (!spreadWilds(naturals, wilds, error)) {
             return false;
+        } else {
+            // Spread, and so already in the groups below.
+            wilds.clear();
         }
     }
 
@@ -629,6 +629,60 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
     // own, so they form a group by themselves and merge on commit.
     if (!wilds.empty() && !placedWilds)
         out.push_back(Meld { wildRank, wilds });
+    return true;
+}
+
+// Several ranks going down together with wild cards among them. This used to be
+// refused as ambiguous, which was wrong in the one place it mattered most: the
+// opening minimum has to be met in a single lay-down, so a player whose 90 was
+// spread across two ranks each needing a wild had no legal way to open at all.
+//
+// Every legal spread comes to the same score — the cards are the same cards and
+// they are all the team's — so the engine places them rather than asking. Each
+// wild goes where it is most needed: the meld furthest from being a meld, and
+// then the one holding the fewest wilds, so a pair of ranks gets one each
+// rather than both landing on the first.
+bool Engine::spreadWilds(std::vector<std::pair<int, std::vector<Card>>>& naturals,
+                         const std::vector<Card>& wilds, QString& error) const
+{
+    const Team& t = m_teams[std::size_t(teamOf(m_current))];
+
+    for (const Card& w : wilds) {
+        int best = -1;
+        int bestDeficit = -1;
+        int bestWilds = 0;
+
+        for (std::size_t i = 0; i < naturals.size(); ++i) {
+            if (naturals[i].first == 3)
+                continue; // black threes never take a wild card
+
+            Meld merged { naturals[i].first, {} };
+            if (const Meld* existing = t.meldOfRank(naturals[i].first))
+                merged.cards = existing->cards;
+            merged.cards.insert(merged.cards.end(), naturals[i].second.begin(),
+                                naturals[i].second.end());
+            const int deficit = std::max(0, m_rules.minMeldSize - merged.size());
+            const int had = merged.wilds();
+
+            merged.cards.push_back(w);
+            if (merged.wilds() > m_rules.maxWildsPerMeld)
+                continue;
+            if (m_rules.wildsFewerThanNaturals && merged.wilds() >= merged.naturals())
+                continue;
+
+            if (best < 0 || deficit > bestDeficit || (deficit == bestDeficit && had < bestWilds)) {
+                best = int(i);
+                bestDeficit = deficit;
+                bestWilds = had;
+            }
+        }
+
+        if (best < 0) {
+            error = QStringLiteral("Nothing in that lay-down can take another wild card.");
+            return false;
+        }
+        naturals[std::size_t(best)].second.push_back(w);
+    }
     return true;
 }
 

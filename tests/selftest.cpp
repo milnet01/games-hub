@@ -1157,14 +1157,16 @@ void canastaWildCardRules()
     e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 5)), 0);
     check(e.drawFromStock(), "canasta: seat one draws");
 
-    // A wild card has no rank of its own, so on its own it is not a meld and
-    // in a two-rank selection there is no way to tell where it belongs.
+    // A wild card has no rank of its own, so on its own it is not a meld.
     check(!e.canMeldCards({ cd(Suit::Spades, 2) }),
           "canasta: a wild card alone is not a meld");
-    check(!e.canMeldCards({ cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
-                            cd(Suit::Clubs, kAce), cd(Suit::Spades, kQueen),
-                            cd(Suit::Hearts, kQueen), cd(Suit::Spades, 2) }),
-          "canasta: a wild card across two ranks is ambiguous and refused");
+
+    // Across two ranks it is placed rather than refused, and it goes where it
+    // is needed: three aces are already a meld, two queens are not.
+    check(e.canMeldCards({ cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                           cd(Suit::Clubs, kAce), cd(Suit::Spades, kQueen),
+                           cd(Suit::Hearts, kQueen), cd(Suit::Spades, 2) }),
+          "canasta: a wild card across two ranks is placed, not refused");
 
     check(e.meldCards({ cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
                         cd(Suit::Diamonds, kAce) }),
@@ -1474,6 +1476,54 @@ void canastaMeldOrder()
         check(m->cards[2].rank == kAce && m->cards[5].rank == kAce,
               "canasta: and the real cards follow");
     }
+}
+
+// Opening with wild cards spread across two ranks. Reported from a real hand:
+// 90 needed, two jacks, two tens, a joker and a two — 110 in total, and no way
+// to lay it down, because the engine refused a multi-rank lay-down containing a
+// wild rather than working out where the wilds had to go.
+void canastaWildsAcrossRanks()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    hands[1] = { joker(true), cd(Suit::Clubs, 2), cd(Suit::Clubs, kJack),
+                 cd(Suit::Hearts, kJack), cd(Suit::Diamonds, 10), cd(Suit::Clubs, 10),
+                 cd(Suit::Spades, kQueen), cd(Suit::Hearts, 8), cd(Suit::Clubs, 7),
+                 cd(Suit::Diamonds, 6), cd(Suit::Spades, 4) };
+    hands[2] = filler(5);
+    hands[3] = filler(kKing);
+
+    const std::vector<Card> lot { joker(true), cd(Suit::Clubs, 2), cd(Suit::Clubs, kJack),
+                                  cd(Suit::Hearts, kJack), cd(Suit::Diamonds, 10),
+                                  cd(Suit::Clubs, 10) };
+
+    // The opening band that hand was in: 1500 to 2999 wants 90.
+    ca::Rules r = ca::Rules::classic();
+    r.wildsFewerThanNaturals = true; // the house set it was played under
+    ca::Engine e { r };
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+    check(e.openRequirement(1) == 50, "canasta: a side on nothing needs 50");
+
+    e.drawFromStock();
+    check(e.canMeldCards(lot), "canasta: two ranks and two wilds can go down together");
+    check(e.meldCards(lot), "canasta: and they do");
+
+    const ca::Meld* jacks = e.team(1).meldOfRank(kJack);
+    const ca::Meld* tens = e.team(1).meldOfRank(10);
+    const bool split = jacks != nullptr && tens != nullptr && jacks->size() == 3
+        && tens->size() == 3 && jacks->wilds() == 1 && tens->wilds() == 1;
+    check(split, "canasta: one wild each, rather than both on one meld");
+    check(e.team(1).opened, "canasta: which is what opens the side");
+    check(jacks->value(r) + tens->value(r) == 110, "canasta: worth the 110 it looks worth");
+
+    // The rule that a meld keeps more real cards than wild ones still binds:
+    // two naturals cannot take two wilds however they are spread.
+    ca::Engine tight { r };
+    tight.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+    tight.drawFromStock();
+    check(!tight.canMeldCards({ joker(true), cd(Suit::Clubs, 2), cd(Suit::Clubs, kJack),
+                                cd(Suit::Hearts, kJack) }),
+          "canasta: two wilds on one pair of jacks is still refused");
 }
 
 // A meld holds more real cards than wild ones: three sixes carry two wilds, and
@@ -1896,6 +1946,7 @@ int main()
     canastaLevelsDiffer();
     canastaHouseRules();
     canastaMeldOrder();
+    canastaWildsAcrossRanks();
     canastaWildsFewerThanNaturals();
     canastaClosedCanasta();
     canastaFirstRoundAndPileOpening();
