@@ -575,6 +575,7 @@ int Engine::layDownValue(const std::vector<Card>& cards) const
 }
 
 bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank,
+                   int priorityRank,
                    std::vector<Meld>& out, QString& error) const
 {
     out.clear();
@@ -622,7 +623,7 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
             }
             out.push_back(Meld { kJoker, wilds });
             return true;
-        } else if (!spreadWilds(naturals, wilds, error)) {
+        } else if (!spreadWilds(naturals, wilds, priorityRank, error)) {
             return false;
         } else {
             // Spread, and so already in the groups below.
@@ -666,12 +667,13 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
 // then the one holding the fewest wilds, so a pair of ranks gets one each
 // rather than both landing on the first.
 bool Engine::spreadWilds(std::vector<std::pair<int, std::vector<Card>>>& naturals,
-                         const std::vector<Card>& wilds, QString& error) const
+                         const std::vector<Card>& wilds, int priorityRank, QString& error) const
 {
     const Team& t = m_teams[std::size_t(teamOf(m_current))];
 
     for (const Card& w : wilds) {
         int best = -1;
+        bool bestPriority = false;
         int bestDeficit = -1;
         int bestWilds = 0;
 
@@ -693,8 +695,18 @@ bool Engine::spreadWilds(std::vector<std::pair<int, std::vector<Card>>>& natural
             if (m_rules.wildsFewerThanNaturals && merged.wilds() >= merged.naturals())
                 continue;
 
-            if (best < 0 || deficit > bestDeficit || (deficit == bestDeficit && had < bestWilds)) {
+            // Taking the pile depends on the top card's meld standing up, so
+            // that rank gets first refusal on a wild whenever it is still
+            // short. Everything else is decided by need, then by spread.
+            const bool priority = naturals[i].first == priorityRank && deficit > 0;
+            const bool better = best < 0
+                ? true
+                : priority != bestPriority ? priority
+                : deficit != bestDeficit   ? deficit > bestDeficit
+                                           : had < bestWilds;
+            if (better) {
                 best = int(i);
+                bestPriority = priority;
                 bestDeficit = deficit;
                 bestWilds = had;
             }
@@ -789,7 +801,7 @@ bool Engine::validateMeld(const std::vector<Card>& cards, int targetRank,
         return false;
     }
     const bool goingOut = m_hands[std::size_t(seat)].size() == cards.size();
-    if (!group(cards, goingOut, targetRank, groups, error))
+    if (!group(cards, goingOut, targetRank, -1, groups, error))
         return false;
     if (!validateGroups(t, groups, goingOut, error))
         return false;
@@ -888,9 +900,11 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
 
     std::vector<Card> combined = layDown;
     combined.push_back(top);
-    // Wild cards laid down with a pile take belong to the top card's rank —
-    // that is the whole point of the move, so it needs no separate answer.
-    if (!group(combined, goingOut, top.rank, groups, error))
+    // The top card's rank gets first call on a wild, but not every wild: a
+    // take whose own meld already stands up leaves them for the other ranks
+    // going down with it. Forcing them all onto the top rank was what left a
+    // pair of queens short of a meld in a lay-down that was otherwise legal.
+    if (!group(combined, goingOut, -1, top.rank, groups, error))
         return false;
 
     // The top card must actually be used; grouping puts it wherever its rank

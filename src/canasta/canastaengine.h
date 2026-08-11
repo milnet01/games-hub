@@ -280,12 +280,15 @@ private:
     // Splits a lay-down into per-rank groups, refusing anything ambiguous.
     // `goingOut` relaxes the ban on melding black threes; `targetRank` is where
     // wild cards go when their rank is not obvious.
-    bool group(const std::vector<Card>& cards, bool goingOut, int targetRank,
+    // `priorityRank` gets first call on a wild card while it is still short of
+    // a meld — the top card's rank during a pile take, since the move depends
+    // on it. Everything after that is spread by need.
+    bool group(const std::vector<Card>& cards, bool goingOut, int targetRank, int priorityRank,
                std::vector<Meld>& out, QString& error) const;
     // Places wild cards across several ranks going down together, since every
     // legal spread scores the same. Fails only when no meld can take one.
     bool spreadWilds(std::vector<std::pair<int, std::vector<Card>>>& naturals,
-                     const std::vector<Card>& wilds, QString& error) const;
+                     const std::vector<Card>& wilds, int priorityRank, QString& error) const;
     // Checks each group against the meld of that rank the team already holds.
     bool validateGroups(int team, const std::vector<Meld>& groups, bool goingOut,
                         QString& error) const;

@@ -1478,6 +1478,69 @@ void canastaMeldOrder()
     }
 }
 
+// Opening AND taking the pile in one move, with the wild cards needed by the
+// ranks going down beside the take rather than by the take itself. Reported
+// from a real hand: a seven on the pile, two sevens in hand — already a meld —
+// and 120 of queens, eights and wilds that the game refused, because a take
+// handed every wild to the top card's rank whether it needed them or not.
+void canastaTakeAndOpenTogether()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Seat 1 has a seven to throw.
+    hands[1] = { cd(Suit::Spades, 7), cd(Suit::Clubs, kKing), cd(Suit::Hearts, kKing),
+                 cd(Suit::Diamonds, kKing), cd(Suit::Spades, kKing), cd(Suit::Clubs, 4),
+                 cd(Suit::Hearts, 4), cd(Suit::Diamonds, 4), cd(Suit::Spades, 4),
+                 cd(Suit::Clubs, 5), cd(Suit::Hearts, 5) };
+    // Seat 2 is the one with the hand: joker, a two, two queens, three eights
+    // and two sevens.
+    hands[2] = { joker(true), cd(Suit::Hearts, 2), cd(Suit::Hearts, kQueen),
+                 cd(Suit::Spades, kQueen), cd(Suit::Clubs, 8), cd(Suit::Diamonds, 8),
+                 cd(Suit::Spades, 8), cd(Suit::Clubs, 7), cd(Suit::Diamonds, 7),
+                 cd(Suit::Diamonds, 6), cd(Suit::Spades, 10) };
+    hands[3] = filler(kJack);
+
+    ca::Rules r = ca::Rules::classic();
+    r.wildsFewerThanNaturals = true;
+    r.openMinUnder1500 = 120; // the band that hand was in, without the score
+    ca::Engine e { r };
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+
+    e.drawFromStock();
+    e.discard(cd(Suit::Spades, 7));
+    const bool ready = e.currentSeat() == 2 && e.pile().back().rank == 7 && !e.team(0).opened
+        && e.openRequirement(0) == 120;
+    check(ready, "canasta: a seven on the pile, 120 needed to open");
+
+    // Joker 50, two 20, two queens 20, three eights 30 — 120 exactly, with the
+    // two sevens taking the pile and counting nothing toward it.
+    const std::vector<Card> lot { joker(true),           cd(Suit::Hearts, 2),
+                                  cd(Suit::Hearts, kQueen), cd(Suit::Spades, kQueen),
+                                  cd(Suit::Clubs, 8),    cd(Suit::Diamonds, 8),
+                                  cd(Suit::Spades, 8),   cd(Suit::Clubs, 7),
+                                  cd(Suit::Diamonds, 7) };
+    check(e.canTakePile(lot), "canasta: the pile comes with the lay-down that opens you");
+    check(e.takePile(lot), "canasta: and it is taken");
+
+    const ca::Meld* sevens = e.team(0).meldOfRank(7);
+    const ca::Meld* queens = e.team(0).meldOfRank(kQueen);
+    const ca::Meld* eights = e.team(0).meldOfRank(8);
+    const bool built = sevens != nullptr && queens != nullptr && eights != nullptr;
+    check(built, "canasta: three melds go down at once");
+    if (built) {
+        // The sevens were already a meld, so they took no wild; both wilds went
+        // where they were needed, and the pair of queens is the only rank that
+        // needed one.
+        check(sevens->size() == 3 && sevens->wilds() == 0,
+              "canasta: the sevens take the pile on their own");
+        check(queens->size() == 3 && queens->wilds() == 1,
+              "canasta: a wild goes to the queens, which were two");
+        check(eights->size() == 4 && eights->wilds() == 1,
+              "canasta: and the other joins the eights");
+    }
+    check(e.team(0).opened, "canasta: which is what opens the side");
+}
+
 // A side that never made a canasta counts nothing in its favour. Reported from
 // a hand where the other side was caught with two melds, a red three and both
 // hands full, and still came out +45 — which is right in the classic game and
@@ -1999,6 +2062,7 @@ int main()
     canastaLevelsDiffer();
     canastaHouseRules();
     canastaMeldOrder();
+    canastaTakeAndOpenTogether();
     canastaCanastaNeededToScore();
     canastaWildsAcrossRanks();
     canastaWildsFewerThanNaturals();
