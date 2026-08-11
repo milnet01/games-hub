@@ -111,8 +111,8 @@ is going.
 
 **Rules → House rules…** opens every number the game plays by: the opening
 minimums, the canasta bonuses, what a red three is worth, and whether a canasta
-is really needed to go out. Four of them change how a hand plays rather than
-what it scores:
+is really needed to go out. Five of them are the owner's family's, all off in
+Classic:
 
 - *Nobody lays down in the first round* keeps the table clear until every seat
   has played once, so the pile has something in it before anyone can open.
@@ -124,6 +124,10 @@ what it scores:
   canasta as usual — the rule is about the pile, not about the meld.
 - *A meld keeps more real cards than wild ones* means three sixes carry two
   wilds and no more; the third wild waits for a fourth six.
+- *A side with no canasta counts nothing in its favour* takes that side's
+  melds off its score, exactly like the cards left in its hands, and turns its
+  red threes against it. Classic Canasta asks only that a side has opened, so
+  there a side with melds and no canasta still scores positively.
 
 Classic is never edited and is always one click away. **Play to** sets how long
 a game runs.

@@ -1478,6 +1478,57 @@ void canastaMeldOrder()
     }
 }
 
+// A side that never made a canasta counts nothing in its favour. Reported from
+// a hand where the other side was caught with two melds, a red three and both
+// hands full, and still came out +45 — which is right in the classic game and
+// wrong at the owner's table.
+void canastaCanastaNeededToScore()
+{
+    // Their table: five sixes and five aces down, a red three, and sixteen
+    // cards still in the two hands. No canasta anywhere.
+    ca::Team them;
+    them.opened = true;
+    them.melds.push_back(ca::Meld { 6,
+                                    { cd(Suit::Spades, 6), cd(Suit::Hearts, 6),
+                                      cd(Suit::Clubs, 6), cd(Suit::Diamonds, 6),
+                                      cd(Suit::Spades, 6) } });
+    them.melds.push_back(ca::Meld { kAce,
+                                    { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                                      cd(Suit::Clubs, kAce), cd(Suit::Diamonds, kAce),
+                                      cd(Suit::Spades, kAce) } });
+    them.redThrees.push_back(cd(Suit::Hearts, 3));
+    const std::vector<Card> west { cd(Suit::Spades, kKing), cd(Suit::Hearts, kQueen),
+                                   cd(Suit::Clubs, 9) };
+    const std::vector<Card> east { cd(Suit::Diamonds, 4) };
+
+    const ca::Rules classic = ca::Rules::classic();
+    ca::Rules house = classic;
+    house.canastaNeededToScore = true;
+
+    // Melded: five sixes at 5 and five aces at 20 is 125. In hand: 10 + 10 + 10
+    // + 5 is 35. A red three is 100 either way; only its sign moves.
+    check(ca::handScoreFor(them, west, east, false, false, classic) == 125 + 100 - 35,
+          "canasta: classic pays a side that opened but never made a canasta");
+    check(ca::handScoreFor(them, west, east, false, false, house) == -125 - 100 - 35,
+          "canasta: the house rule takes their melds and their red three off them");
+
+    // A canasta anywhere on the side and everything counts again, house rule or
+    // not — the rule is about having one, not about how much is down.
+    them.melds[0].cards.push_back(cd(Suit::Hearts, 6));
+    them.melds[0].cards.push_back(cd(Suit::Clubs, 6));
+    check(them.melds[0].isCanasta(house), "canasta: seven sixes are a canasta");
+    const int melded = 7 * 5 + 5 * 20;
+    check(ca::handScoreFor(them, west, east, false, false, house)
+              == melded + house.naturalCanastaBonus + 100 - 35,
+          "canasta: and with one, the same side scores as it always did");
+
+    // The going-out side is unaffected by the rule, since it needs a canasta to
+    // go out at all.
+    check(ca::handScoreFor(them, west, east, true, false, house)
+              == melded + house.naturalCanastaBonus + 100 - 35 + house.goingOutBonus,
+          "canasta: going out still pays on top");
+}
+
 // Opening with wild cards spread across two ranks. Reported from a real hand:
 // 90 needed, two jacks, two tens, a joker and a two — 110 in total, and no way
 // to lay it down, because the engine refused a multi-rank lay-down containing a
@@ -1718,7 +1769,7 @@ void canastaFirstRoundAndPileOpening()
                      : "canasta: aces alongside take the pile too");
     }
 
-    // All four house rules at once, played out by four computers, because the
+    // All five house rules at once, played out by four computers, because the
     // failure that matters here is a hand that cannot legally continue.
     ca::Rules house = ca::Rules::classic();
     house.name = QStringLiteral("House");
@@ -1727,6 +1778,7 @@ void canastaFirstRoundAndPileOpening()
     house.pileMeldCountsToOpen = false;
     house.canastaMakesRankSafe = true;
     house.wildsFewerThanNaturals = true;
+    house.canastaNeededToScore = true;
 
     ca::Engine e { house };
     e.newGame(2718);
@@ -1764,7 +1816,7 @@ void canastaFirstRoundAndPileOpening()
         if (e.phase() == ca::Engine::Phase::Play)
             ai[std::size_t(seat)].playAndDiscard(e);
     }
-    check(finished, "canasta: a full game plays out under all four house rules");
+    check(finished, "canasta: a full game plays out under all five house rules");
     check(whole, "canasta: and the pack stays whole all the way through");
     check(!laidTooEarly, "canasta: nothing reached the table during a first round");
     check(!tookASafeRank, "canasta: and no side could ever take a pile topped by its own canasta");
@@ -1779,6 +1831,7 @@ void canastaSaveAndResume()
     house.targetScore = 2000;
     house.canastaMakesRankSafe = true;
     house.wildsFewerThanNaturals = true;
+    house.canastaNeededToScore = true;
 
     ca::Engine e { house };
     e.newGame(1234);
@@ -1811,7 +1864,7 @@ void canastaSaveAndResume()
         && back.stockCount() == e.stockCount() && back.pile().size() == e.pile().size()
         && back.dealer() == e.dealer() && back.pileFrozen() == e.pileFrozen()
         && back.rules().targetScore == house.targetScore && back.rules().canastaMakesRankSafe
-        && back.openRequirement(0) == e.openRequirement(0);
+        && back.rules().canastaNeededToScore && back.openRequirement(0) == e.openRequirement(0);
     for (int s = 0; s < ca::kSeats; ++s)
         same = same && back.hand(s) == e.hand(s);
     for (int t = 0; t < ca::kTeams; ++t) {
@@ -1946,6 +1999,7 @@ int main()
     canastaLevelsDiffer();
     canastaHouseRules();
     canastaMeldOrder();
+    canastaCanastaNeededToScore();
     canastaWildsAcrossRanks();
     canastaWildsFewerThanNaturals();
     canastaClosedCanasta();

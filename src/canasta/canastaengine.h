@@ -85,6 +85,12 @@ struct Rules {
     // carry two wilds, and the third wild waits for a fourth six. Stricter
     // than maxWildsPerMeld, which is a flat ceiling rather than a ratio.
     bool wildsFewerThanNaturals = false;
+    // A side that never made a canasta counts nothing in its favour: its melds
+    // are taken off its score exactly like the cards left in its hands, and its
+    // red threes count against it too. Classic Canasta asks only that a side
+    // has opened, which is why a side with melds and no canasta still scores
+    // positively there.
+    bool canastaNeededToScore = false;
     // Once a side has a canasta in a rank, that rank is a safe discard against
     // it: the pile can no longer be taken with it. The canasta itself stays
     // open — its owners go on adding to it — so this is a rule about the pile
@@ -254,8 +260,10 @@ public:
     // a version number guards it.
     void save(QDataStream& out) const;
     // Leaves the engine untouched and returns false if the stream is from a
-    // different version or runs out part way.
-    bool load(QDataStream& in);
+    // different version or runs out part way. `hasTail` says whether the stream
+    // carries the fields added after the format was first written: only the
+    // caller knows, since it may have written fields of its own after ours.
+    bool load(QDataStream& in, bool hasTail = true);
 
 private:
     void deal();

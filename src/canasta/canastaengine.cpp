@@ -74,18 +74,23 @@ int openRequirementFor(int score, const Rules& rules)
 int handScoreFor(const Team& t, const std::vector<Card>& handOne, const std::vector<Card>& handTwo,
                  bool wentOut, bool concealed, const Rules& rules)
 {
+    // Whether this side's cards count for it or against it. Classic asks only
+    // that it opened; the house rule asks for a canasta, and a side that never
+    // made one has its melds subtracted like the cards still in its hands.
+    const bool counts = !rules.canastaNeededToScore || t.hasCanasta(rules);
+
     int s = 0;
     for (const Meld& m : t.melds) {
-        s += m.value(rules);
+        s += counts ? m.value(rules) : -m.value(rules);
         if (m.isCanasta(rules))
             s += m.isNatural(rules) ? rules.naturalCanastaBonus : rules.mixedCanastaBonus;
     }
 
-    // Red threes swing both ways: a bonus to a side that has melded, and the
-    // same figure against a side that never did.
+    // Red threes swing both ways: a bonus to a side whose cards count, and the
+    // same figure against a side whose do not.
     const int n = int(t.redThrees.size());
     const int red = n == 4 ? rules.allRedThreesValue : n * rules.redThreeValue;
-    s += t.opened ? red : -red;
+    s += (counts && t.opened) ? red : -red;
 
     if (wentOut)
         s += concealed ? rules.concealedGoingOutBonus : rules.goingOutBonus;
@@ -317,9 +322,14 @@ void Engine::save(QDataStream& out) const
     writeCards(out, m_pile);
     out << qint32(m_phase) << qint32(m_hand) << qint32(m_dealer) << qint32(m_current)
         << qint32(m_turnsTaken) << qint32(m_outSeat) << m_outConcealed << m_frozen;
+
+    // Rules added after the format was first written go on the end rather than
+    // in with the others, so a game saved before they existed still loads and
+    // simply comes back without them. See the atEnd() read in load().
+    out << m_rules.canastaNeededToScore << m_pendingRules.canastaNeededToScore;
 }
 
-bool Engine::load(QDataStream& in)
+bool Engine::load(QDataStream& in, bool hasTail)
 {
     quint32 version = 0;
     in >> version;
@@ -367,6 +377,19 @@ bool Engine::load(QDataStream& in)
     e.m_current = int(current);
     e.m_turnsTaken = int(turns);
     e.m_outSeat = int(outSeat);
+
+    // The tail: rules added after this format was first written. Whether it is
+    // there is the caller's to know — atEnd() cannot answer it, because a
+    // caller may have written its own fields after ours.
+    if (hasTail) {
+        bool inPlay = false;
+        bool pending = false;
+        in >> inPlay >> pending;
+        if (in.status() != QDataStream::Ok)
+            return false;
+        e.m_rules.canastaNeededToScore = inPlay;
+        e.m_pendingRules.canastaNeededToScore = pending;
+    }
 
     // The pack has to still be whole, which is the one check that catches a
     // file that parsed cleanly but says something impossible.
