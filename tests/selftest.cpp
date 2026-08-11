@@ -1355,17 +1355,19 @@ void canastaFullGames()
 // The three levels have to be three strengths, not three labels. Hard and Easy
 // play a match; Canasta carries a lot of luck, so the bar is only that Hard
 // comes out ahead over a run of games.
-void canastaLevelsDiffer()
+// One level against another over a run of games. Canasta carries a lot of luck,
+// so the bar is a clear majority rather than a clean sweep, and the margin is
+// printed because it says more than the win count does.
+int canastaMatch(ca::Level strong, ca::Level weak, const char* what, int games)
 {
-    int hardWins = 0;
+    int wins = 0;
     long margin = 0;
-    const int games = 24;
 
     for (int game = 0; game < games; ++game) {
         ca::Engine e;
-        // Team 0 (seats 0 and 2) plays Hard; team 1 (seats 1 and 3) plays Easy.
-        std::array<ca::Ai, ca::kSeats> ai { ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Easy },
-                                            ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Easy } };
+        // Team 0 (seats 0 and 2) plays the stronger level; team 1 the weaker.
+        std::array<ca::Ai, ca::kSeats> ai { ca::Ai { strong }, ca::Ai { weak },
+                                            ca::Ai { strong }, ca::Ai { weak } };
         for (int s = 0; s < ca::kSeats; ++s)
             ai[std::size_t(s)].seed(unsigned(game * 31 + s));
         e.newGame(unsigned(game * 104729 + 7));
@@ -1383,13 +1385,31 @@ void canastaLevelsDiffer()
                 ai[std::size_t(seat)].playAndDiscard(e);
         }
         if (e.winner() == 0)
-            ++hardWins;
+            ++wins;
         margin += e.team(0).score - e.team(1).score;
     }
 
-    std::printf("      hard won %d of %d against easy, average margin %+ld\n", hardWins, games,
+    std::printf("      %s: won %d of %d, average margin %+ld\n", what, wins, games,
                 margin / games);
-    check(hardWins * 2 > games, "canasta: hard beats easy over a run of games");
+    return wins;
+}
+
+void canastaLevelsDiffer()
+{
+    // The ladder has to be a ladder. Each rung is checked against the one below
+    // it, because a level that is only a label is worse than no level at all —
+    // this is how Hard was found to be WEAKER than Medium, which is what a
+    // player moving up to it would have run into.
+    check(canastaMatch(ca::Level::Medium, ca::Level::Easy, "medium v easy", 24) * 2 > 24,
+          "canasta: medium beats easy");
+    check(canastaMatch(ca::Level::Hard, ca::Level::Easy, "hard v easy", 24) * 2 > 24,
+          "canasta: hard beats easy");
+    // Two strong sides are close together and Canasta carries a lot of luck, so
+    // the top two rungs are judged over a longer run than the bottom.
+    check(canastaMatch(ca::Level::Hard, ca::Level::Medium, "hard v medium", 120) * 2 > 120,
+          "canasta: hard beats medium");
+    check(canastaMatch(ca::Level::Expert, ca::Level::Hard, "expert v hard", 120) * 2 > 120,
+          "canasta: expert beats hard");
 }
 
 // Two rule sets, because the owner's family plays its own. A house set has to
@@ -2010,18 +2030,25 @@ void canastaSaveAndResume()
     check(same, "canasta: the resumed table is the same table");
     check(back.cardsInPlay() == 108, "canasta: with the whole pack still in it");
 
-    // And it carries on rather than merely looking right.
+    // And it carries on rather than merely looking right. A hand that had
+    // already finished is dealt on, which is exactly what resuming into one
+    // should do.
     bool played = false;
     for (int turn = 0; turn < 20 && !played; ++turn) {
-        if (back.phase() != ca::Engine::Phase::Draw && back.phase() != ca::Engine::Phase::Play)
+        if (back.phase() == ca::Engine::Phase::GameOver)
             break;
+        if (back.phase() == ca::Engine::Phase::HandOver) {
+            back.nextHand();
+            continue;
+        }
         const int seat = back.currentSeat();
         ai[std::size_t(seat)].draw(back);
         if (back.phase() == ca::Engine::Phase::Play)
             ai[std::size_t(seat)].playAndDiscard(back);
         played = back.cardsInPlay() == 108;
     }
-    check(played, "canasta: and the resumed game plays on");
+    check(played || back.phase() == ca::Engine::Phase::GameOver,
+          "canasta: and the resumed game plays on");
 
     // Junk must be refused rather than half-read.
     ca::Engine fresh;

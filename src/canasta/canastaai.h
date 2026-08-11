@@ -8,7 +8,7 @@
 
 namespace canasta {
 
-enum class Level { Easy, Medium, Hard };
+enum class Level { Easy, Medium, Hard, Expert };
 
 // A computer seat.
 //
@@ -32,6 +32,15 @@ public:
 
 private:
     bool wantsPile(const Engine& e) const;
+    // How many of a rank are already accounted for — melded by anyone, sitting
+    // in the pile, or in this seat's own hand. A rank with all eight visible is
+    // a discard nobody can use, which is the safest card in the game.
+    int seen(const Engine& e, int rank) const;
+    // Whether laying this rank down now is worth more than keeping it in hand
+    // to take the pile with. Expert only: the others lay down everything they
+    // legally can, which is the single biggest thing separating a good player
+    // from a beginner.
+    bool worthHolding(const Engine& e, int rank, int naturals) const;
     // Lay-downs to attempt in order, each with the rank its wild cards join.
     std::vector<std::pair<std::vector<Card>, int>> chooseMelds(const Engine& e) const;
     Card chooseDiscard(const Engine& e) const;

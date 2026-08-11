@@ -112,7 +112,11 @@ display, and it is the rule to preserve when adding a game.
   set the player edits in a dialog and which is saved via QSettings. Adding a
   house variation should be a new field there, not a branch in the engine.
   `canasta/canastaai.*` is judgement rather than search, so unlike Chess it
-  needs no work budget. `canasta/canastaview.*` is presentation and timing.
+  needs no work budget. **Its four levels are checked against each other, not
+  just described** — `canastaLevelsDiffer()` plays each rung against the one
+  below it, which is how Hard was caught being weaker than Medium. Any change
+  to one level has to be re-measured against its neighbours.
+  `canasta/canastaview.*` is presentation and timing.
 - **Pinball** — `pinball/pinballtable.*` is the simulation in fixed table units
   (400×720), scaled to the widget so resizing never changes the physics.
   Everything collides as a circle against a fat line segment. `PinballView`

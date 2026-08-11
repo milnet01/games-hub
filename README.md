@@ -105,6 +105,13 @@ A strip under the middle of the table says how much stock is left, whether the
 pile is frozen, and **what the last player threw away**, in words, until the
 next card replaces it.
 
+There are four opponent strengths. **Expert** counts the pack — it knows which
+ranks are wholly accounted for and throws those, keeps ranks back in hand as
+bait for the pile, takes every pile it legally can, freezes the pile when it
+holds the pair to reclaim it, and spends wild cards to close the hand out once
+it has a canasta. Pick it if you have played Canasta for years. Each level is
+measured against the one below it rather than merely labelled.
+
 To add a wild card to a meld already on the table, pick the wild card and then
 click that meld — a joker has no rank of its own, so it has to be told where it
 is going.

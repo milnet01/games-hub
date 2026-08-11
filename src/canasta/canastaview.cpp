@@ -373,6 +373,7 @@ void CanastaView::buildActions()
         { "Easy", ca::Level::Easy },
         { "Medium", ca::Level::Medium },
         { "Hard", ca::Level::Hard },
+        { "Expert", ca::Level::Expert },
     };
     for (const auto& entry : kLevels) {
         auto* a = new QAction(QString::fromUtf8(entry.name), this);
@@ -527,7 +528,7 @@ bool CanastaView::restoreState(const QByteArray& blob)
     if (in.status() != QDataStream::Ok)
         return false;
 
-    m_level = ca::Level(std::clamp<int>(level, 0, 2));
+    m_level = ca::Level(std::clamp<int>(level, 0, 3));
     m_target = target;
     for (ca::Ai& ai : m_ai)
         ai.setLevel(m_level);
@@ -557,9 +558,10 @@ bool CanastaView::restoreState(const QByteArray& blob)
         if (a->isCheckable() && a->text() == QStringLiteral("Play to %1").arg(m_target))
             a->setChecked(true);
     }
-    const QString wanted = m_level == ca::Level::Easy    ? QStringLiteral("Easy")
-        : m_level == ca::Level::Medium                   ? QStringLiteral("Medium")
-                                                         : QStringLiteral("Hard");
+    const QString wanted = m_level == ca::Level::Easy ? QStringLiteral("Easy")
+        : m_level == ca::Level::Medium                ? QStringLiteral("Medium")
+        : m_level == ca::Level::Hard                  ? QStringLiteral("Hard")
+                                                      : QStringLiteral("Expert");
     for (QAction* a : m_actions)
         if (a->isCheckable() && a->text() == wanted)
             a->setChecked(true);
