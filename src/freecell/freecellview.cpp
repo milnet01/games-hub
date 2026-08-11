@@ -1,10 +1,13 @@
 #include "freecellview.h"
 
 #include "cards/cardart.h"
+#include "cards/cardcodec.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
 
+#include <QDataStream>
+#include <QIODevice>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -99,6 +102,89 @@ void FreeCellView::undo()
     m_undoAction->setEnabled(!m_history.empty());
     update();
     refresh();
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+// The table, not the moves that made it — see KlondikeView::saveState for why
+// the card games save differently from Chess.
+QByteArray FreeCellView::saveState() const
+{
+    if (m_won || m_history.empty())
+        return {};
+
+    // A run lifted in mid-drag belongs to the pile it came from until it is
+    // dropped; closing the window while holding it must not lose the cards.
+    const auto pile = [this](PileKind kind, int index) {
+        std::vector<Card> cards = pileFor(kind, index);
+        if (m_dragging && m_dragFrom.kind == kind && m_dragFrom.pile == index)
+            cards.insert(cards.end(), m_drag.begin(), m_drag.end());
+        return cards;
+    };
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint32(m_moves);
+    for (int col = 0; col < kColumns; ++col)
+        cardcodec::writePile(out, pile(PileKind::Column, col));
+    for (int i = 0; i < kCells; ++i)
+        cardcodec::writePile(out, pile(PileKind::Cell, i));
+    for (int f = 0; f < 4; ++f)
+        cardcodec::writePile(out, pile(PileKind::Foundation, f));
+    return blob;
+}
+
+bool FreeCellView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    qint32 moves = 0;
+    in >> version >> moves;
+    if (version != 1 || in.status() != QDataStream::Ok || moves < 0)
+        return false;
+
+    // Read into a table of its own, so a blob that turns out to be nonsense
+    // leaves the deal already on screen alone.
+    std::array<std::vector<Card>, kColumns> columns;
+    std::array<std::vector<Card>, kCells> cells;
+    std::array<std::vector<Card>, 4> foundations;
+    if (!cardcodec::readPiles(in, columns) || !cardcodec::readPiles(in, cells)
+        || !cardcodec::readPiles(in, foundations))
+        return false;
+
+    // A cell holds one card. That is the whole point of the game, so a save
+    // saying otherwise is not a FreeCell position.
+    for (const std::vector<Card>& cell : cells) {
+        if (cell.size() > 1)
+            return false;
+    }
+
+    // FreeCell never takes a card out of play, so the whole pack must be here —
+    // nothing missing, nothing doubled.
+    std::vector<Card> all;
+    cardcodec::gather(all, columns);
+    cardcodec::gather(all, cells);
+    cardcodec::gather(all, foundations);
+    if (!cardcodec::matchesPack(all, 1, 4))
+        return false;
+
+    m_columns = columns;
+    m_cells = cells;
+    m_foundations = foundations;
+    m_moves = int(moves);
+    m_history.clear();
+    m_drag.clear();
+    m_dragging = false;
+    m_pressValid = false;
+    m_won = false;
+    m_undoAction->setEnabled(false);
+    update();
+    refresh();
+    return true;
 }
 
 // ---------------------------------------------------------------------------

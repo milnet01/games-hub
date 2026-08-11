@@ -21,6 +21,8 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    QByteArray saveState() const override;
+    bool restoreState(const QByteArray& blob) override;
 
     static constexpr int kRows = 7;
 

@@ -1,10 +1,13 @@
 #include "pyramidview.h"
 
 #include "cards/cardart.h"
+#include "cards/cardcodec.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
 
+#include <QDataStream>
+#include <QIODevice>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -101,6 +104,94 @@ void PyramidView::undo()
     m_undoAction->setEnabled(!m_history.empty());
     update();
     refresh();
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+// The table, not the moves that made it — see KlondikeView::saveState for why
+// the card games save differently from Chess. Pyramid has no drag to fold back
+// in: cards are taken by clicking, so nothing is ever in mid-air.
+QByteArray PyramidView::saveState() const
+{
+    if (m_won || m_history.empty())
+        return {};
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint32(m_pairs) << qint32(m_redeals) << qint32(m_pyramid.size());
+    // A taken pyramid card keeps its slot and is simply marked gone, because the
+    // slot above it still needs to know both its supports have been cleared.
+    for (const Slot& s : m_pyramid) {
+        cardcodec::writeCard(out, s.card);
+        out << qint8(s.removed ? 1 : 0);
+    }
+    cardcodec::writePile(out, m_stock);
+    cardcodec::writePile(out, m_waste);
+    return blob;
+}
+
+bool PyramidView::restoreState(const QByteArray& blob)
+{
+    constexpr int kPyramidCards = kRows * (kRows + 1) / 2; // 28
+
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    qint32 pairs = 0;
+    qint32 redeals = 0;
+    // Not `slots`: that is a Qt keyword macro and expands to nothing, leaving an
+    // error that points at the `=` (CLAUDE.md § Traps worth knowing).
+    qint32 slotCount = 0;
+    in >> version >> pairs >> redeals >> slotCount;
+    if (version != 1 || in.status() != QDataStream::Ok || pairs < 0 || pairs > 52 || redeals < 0
+        || redeals > kMaxRedeals || slotCount != kPyramidCards)
+        return false;
+
+    std::vector<Slot> pyramid;
+    pyramid.reserve(kPyramidCards);
+    for (int i = 0; i < kPyramidCards; ++i) {
+        Card c;
+        if (!cardcodec::readCard(in, c))
+            return false;
+        qint8 removed = 0;
+        in >> removed;
+        if (in.status() != QDataStream::Ok)
+            return false;
+        pyramid.push_back({ c, removed != 0 });
+    }
+
+    std::vector<Card> stock;
+    std::vector<Card> waste;
+    if (!cardcodec::readPile(in, stock) || !cardcodec::readPile(in, waste))
+        return false;
+
+    // Pyramid takes matched pairs out of play, so the pack cannot come back
+    // whole. What it can promise is that nothing here was ever outside it, and
+    // that no card has turned up twice.
+    std::vector<Card> all;
+    for (const Slot& s : pyramid)
+        all.push_back(s.card);
+    cardcodec::gather(all, stock);
+    cardcodec::gather(all, waste);
+    if (!cardcodec::fitsPack(all, 1, 4))
+        return false;
+
+    m_pyramid = pyramid;
+    m_stock = stock;
+    m_waste = waste;
+    m_pairs = int(pairs);
+    m_redeals = int(redeals);
+    m_history.clear();
+    m_won = false;
+    m_announced = false;
+    clearSelection();
+    m_undoAction->setEnabled(false);
+    update();
+    refresh();
+    return true;
 }
 
 // ---------------------------------------------------------------------------

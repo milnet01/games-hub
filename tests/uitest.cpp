@@ -7,11 +7,13 @@
 #include "sound.h"
 #include "canasta/canastaview.h"
 #include "chess/chessview.h"
+#include "freecell/freecellview.h"
 #include "hearts/heartsview.h"
 #include "hubwindow.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
 #include "pinball/pinballview.h"
+#include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
 #include "spider/spiderview.h"
 
@@ -73,6 +75,24 @@ void clickAt(QWidget* w, QPointF pos, Qt::MouseButton button)
                       Qt::NoModifier);
     QCoreApplication::sendEvent(w, &press);
     QMouseEvent release(QEvent::MouseButtonRelease, pos, w->mapToGlobal(pos), button,
+                        Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(w, &release);
+}
+
+// A press, a move past the drag threshold, and a release. clickAt cannot stand
+// in for this: without the move between them the card games never lift a run
+// off its pile, so nothing happens at all.
+void dragBetween(QWidget* w, QPointF from, QPointF to)
+{
+    QMouseEvent press(QEvent::MouseButtonPress, from, w->mapToGlobal(from), Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(w, &press);
+    for (const QPointF& step : { (from + to) / 2.0, to }) {
+        QMouseEvent move(QEvent::MouseMove, step, w->mapToGlobal(step), Qt::NoButton,
+                         Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(w, &move);
+    }
+    QMouseEvent release(QEvent::MouseButtonRelease, to, w->mapToGlobal(to), Qt::LeftButton,
                         Qt::NoButton, Qt::NoModifier);
     QCoreApplication::sendEvent(w, &release);
 }
@@ -246,11 +266,115 @@ int main(int argc, char* argv[])
         ChessView untouched;
         check(untouched.saveState().isEmpty(), "chess: an unplayed game saves nothing");
 
-        KlondikeView klondike;
-        check(paints(&klondike), "klondike view paints");
+        // ---- The four solitaires put a deal away and pick it up again ----
+        //
+        // Each one is the same three questions. An untouched deal saves nothing,
+        // so it never resumes onto a table nobody has played. A deal in progress
+        // reads back onto the very same table — and the check for that is the
+        // picture, because two identical renderings are the same piles with the
+        // same cards the same way up. And a corrupt save is refused without
+        // disturbing the deal already on screen.
+        {
+            KlondikeView klondike;
+            check(paints(&klondike), "klondike view paints");
+            klondike.resize(820, 620);
+            check(klondike.saveState().isEmpty(), "klondike: an untouched deal saves nothing");
 
-        SpiderView spider;
-        check(paints(&spider), "spider view paints");
+            // The stock is the top-left corner card; clicking it turns one over.
+            clickAt(&klondike, QPointF(31, 40), Qt::LeftButton);
+            const QImage played = renderOf(&klondike);
+            const QByteArray saved = klondike.saveState();
+            check(!saved.isEmpty(), "klondike: a deal in progress is worth saving");
+
+            KlondikeView resumed;
+            resumed.resize(klondike.size());
+            const QImage brandNew = renderOf(&resumed);
+            check(resumed.restoreState(saved), "klondike: and it reads back");
+            check(renderOf(&resumed) == played, "klondike: onto the very same table");
+            check(brandNew != played, "klondike: which is not just a new deal by another name");
+
+            check(!resumed.restoreState(QByteArray("not a game of patience")),
+                  "klondike: a corrupt save is refused");
+            check(renderOf(&resumed) == played, "klondike: and refusing one changes nothing");
+        }
+
+        {
+            SpiderView spider;
+            check(paints(&spider), "spider view paints");
+            spider.resize(900, 640);
+            check(spider.saveState().isEmpty(), "spider: an untouched deal saves nothing");
+
+            // The stock is the stack in the bottom-right corner; clicking it
+            // deals a row across the ten columns.
+            clickAt(&spider, QPointF(spider.width() - 20, spider.height() - 20), Qt::LeftButton);
+            const QImage played = renderOf(&spider);
+            const QByteArray saved = spider.saveState();
+            check(!saved.isEmpty(), "spider: a deal in progress is worth saving");
+
+            SpiderView resumed;
+            resumed.resize(spider.size());
+            check(resumed.restoreState(saved), "spider: and it reads back");
+            check(renderOf(&resumed) == played, "spider: onto the very same table");
+            check(!resumed.restoreState(QByteArray("eight runs of nothing")),
+                  "spider: a corrupt save is refused");
+            check(renderOf(&resumed) == played, "spider: and refusing one changes nothing");
+        }
+
+        {
+            FreeCellView freecell;
+            check(paints(&freecell), "freecell view paints");
+            freecell.resize(900, 640);
+            check(freecell.saveState().isEmpty(), "freecell: an untouched deal saves nothing");
+
+            // Mirrors FreeCellView's geometry: four cells along the top, eight
+            // columns below fanned by 0.27 of a card. Parking the bottom card of
+            // the first column in the first cell is the one move legal in every
+            // deal, whatever it dealt.
+            const double card = std::min((900.0 - 24.0) / (8 + 7 * 0.12),
+                                         (640.0 - 24.0) / (1.4 * 2.5));
+            const double tall = card * 1.4;
+            const double columnTop = 12 + tall + tall * 0.22;
+            dragBetween(&freecell, QPointF(12 + card / 2, columnTop + tall * (6 * 0.27 + 0.15)),
+                        QPointF(12 + card / 2, 12 + tall / 2));
+
+            const QImage played = renderOf(&freecell);
+            const QByteArray saved = freecell.saveState();
+            check(!saved.isEmpty(), "freecell: a card parked in a cell is worth saving");
+
+            FreeCellView resumed;
+            resumed.resize(freecell.size());
+            check(resumed.restoreState(saved), "freecell: and it reads back");
+            check(renderOf(&resumed) == played, "freecell: onto the very same table");
+            check(!resumed.restoreState(QByteArray("no cells here")),
+                  "freecell: a corrupt save is refused");
+            check(renderOf(&resumed) == played, "freecell: and refusing one changes nothing");
+        }
+
+        {
+            PyramidView pyramid;
+            check(paints(&pyramid), "pyramid view paints");
+            pyramid.resize(860, 640);
+            check(pyramid.saveState().isEmpty(), "pyramid: an untouched deal saves nothing");
+
+            // Mirrors PyramidView::stockRect: the face-down pile left of centre
+            // along the bottom edge.
+            const double card = std::min((860.0 - 40.0) / (7 * 0.62 + 0.4),
+                                         (640.0 - 40.0) / (1.4 + 6 * 0.52 + 1.6));
+            clickAt(&pyramid, QPointF(860 / 2.0 - card * 0.75, 640 - card * 0.7 - 16),
+                    Qt::LeftButton);
+
+            const QImage played = renderOf(&pyramid);
+            const QByteArray saved = pyramid.saveState();
+            check(!saved.isEmpty(), "pyramid: a deal in progress is worth saving");
+
+            PyramidView resumed;
+            resumed.resize(pyramid.size());
+            check(resumed.restoreState(saved), "pyramid: and it reads back");
+            check(renderOf(&resumed) == played, "pyramid: onto the very same table");
+            check(!resumed.restoreState(QByteArray("thirteen of nothing")),
+                  "pyramid: a corrupt save is refused");
+            check(renderOf(&resumed) == played, "pyramid: and refusing one changes nothing");
+        }
 
         HeartsView hearts;
         check(paints(&hearts), "hearts view paints");

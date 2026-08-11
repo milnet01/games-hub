@@ -93,7 +93,10 @@ display, and it is the rule to preserve when adding a game.
   a card came from and decides only the colour of its back — Canasta shuffles
   two packs together, so its stock shows red and blue backs mixed the way a
   real table does. It is deliberately outside `operator==`: two red kings are
-  the same card whichever pack they came from.
+  the same card whichever pack they came from. `cards/cardcodec.*` is the third
+  shared piece: piles in and out of a `QDataStream`, plus `fitsPack` /
+  `matchesPack`, which are what a table-based save has instead of Chess's
+  legal-move check — see the save trap below.
 - **Klondike / Spider** — `klondike/`, `spider/`. Both keep piles as
   `std::vector<Card>` and drag by lifting a run off its pile into `m_drag`,
   restoring it on a failed drop. Card width is solved from the row cost
@@ -196,6 +199,19 @@ and the generator supplies the castling and en-passant flags — a save that is
 not a game this build would play is refused rather than half-loaded. Canasta
 cannot do this (it has no move log, so its engine serialises directly), which is
 why the two look different; prefer Chess's shape when a game offers the choice.
+
+**A game with no move log saves the table, and then the PACK is what re-checks
+it.** The four solitaires keep piles rather than moves, so there is nothing to
+replay against the rules. What stands in for that is `cardcodec::matchesPack` —
+Klondike and FreeCell never take a card out of play, so the whole deck must come
+back, nothing missing and nothing doubled. Spider and Pyramid do remove cards
+(a harvested run, a matched pair), so they get `fitsPack` plus a count of their
+own. Without that check a corrupt blob restores into a deal that cannot be won,
+and the player finds out an hour later. **A drag is the other half:** a run
+lifted in mid-drag has been erased from its pile and lives in `m_drag` until it
+is dropped, so each `saveState()` writes it back onto the pile it came from —
+otherwise closing the window with a card in hand loses it, and the pack check
+then refuses the save it just wrote.
 
 **Card order that the eye depends on belongs in the model, not the painter.**
 A hand fans wild-cards-first and so does every meld, and both orders are made

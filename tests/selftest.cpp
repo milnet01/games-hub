@@ -4,6 +4,7 @@
 #include "canasta/canastaai.h"
 #include "canasta/canastaengine.h"
 #include "cards/card.h"
+#include "cards/cardcodec.h"
 #include "chess/chessai.h"
 #include "chess/chessboard.h"
 #include "hearts/heartsengine.h"
@@ -212,6 +213,107 @@ void deckRules()
         ++suits[int(c.suit)];
     check(suits.size() == 2 && suits.begin()->second == 52,
           "cards: a two-suit deck splits evenly");
+}
+
+// The codec the four solitaires save through. A solitaire has no move log to
+// replay the way Chess does, so these two things are the whole of its safety:
+// a pile comes back exactly as it went in, and a pile that cannot be a real
+// deal is refused rather than restored into a game nobody can win.
+void cardCodecRoundTrip()
+{
+    std::vector<Card> deck = makeDeck(1, 4);
+    std::mt19937 rng(7);
+    shuffleCards(deck, rng);
+    // Which way up a card lies is half of Klondike's position, so it has to
+    // survive the trip as much as the card itself does.
+    for (std::size_t i = 0; i < deck.size(); i += 3)
+        deck[i].faceUp = true;
+
+    QByteArray blob;
+    {
+        QDataStream out(&blob, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        cardcodec::writePile(out, deck);
+    }
+
+    std::vector<Card> back;
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    check(cardcodec::readPile(in, back), "codec: a pile reads back");
+    check(back.size() == deck.size(), "codec: with every card still in it");
+
+    bool identical = back.size() == deck.size();
+    for (std::size_t i = 0; i < back.size() && identical; ++i) {
+        identical = back[i] == deck[i] && back[i].faceUp == deck[i].faceUp
+            && back[i].deck == deck[i].deck;
+    }
+    check(identical, "codec: in the same order, each card the same way up");
+}
+
+void cardCodecRefusals()
+{
+    // A length beyond any real deal must not be trusted into an allocation.
+    QByteArray absurd;
+    {
+        QDataStream out(&absurd, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << qint32(cardcodec::kMaxPileSize + 1);
+    }
+    std::vector<Card> pile;
+    QDataStream tooLong(absurd);
+    tooLong.setVersion(QDataStream::Qt_6_0);
+    check(!cardcodec::readPile(tooLong, pile), "codec: an impossible pile length is refused");
+
+    // A pile that promises four cards and carries one.
+    QByteArray cut;
+    {
+        QDataStream out(&cut, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << qint32(4);
+        cardcodec::writeCard(out, Card { Suit::Spades, kAce, true, 0 });
+    }
+    std::vector<Card> partial;
+    QDataStream truncated(cut);
+    truncated.setVersion(QDataStream::Qt_6_0);
+    check(!cardcodec::readPile(truncated, partial), "codec: a truncated pile is refused");
+
+    // A rank no pack holds.
+    QByteArray impossible;
+    {
+        QDataStream out(&impossible, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << qint32(1) << qint8(0) << qint8(kKing + 1) << qint8(1) << qint8(0);
+    }
+    std::vector<Card> nonsense;
+    QDataStream badRank(impossible);
+    badRank.setVersion(QDataStream::Qt_6_0);
+    check(!cardcodec::readPile(badRank, nonsense), "codec: a card above a King is refused");
+}
+
+void cardCodecPackCheck()
+{
+    const std::vector<Card> deck = makeDeck(1, 4);
+    check(cardcodec::matchesPack(deck, 1, 4), "codec: a whole pack is the pack it was dealt from");
+
+    std::vector<Card> missing = deck;
+    missing.pop_back();
+    check(!cardcodec::matchesPack(missing, 1, 4), "codec: one card short is not");
+    check(cardcodec::fitsPack(missing, 1, 4), "codec: but it does still fit inside the pack");
+
+    // The failure a state save has to catch: a card that turns up twice.
+    std::vector<Card> doubled = missing;
+    doubled.push_back(doubled.front());
+    check(doubled.size() == deck.size(), "codec: the doubled pack is still 52 cards");
+    check(!cardcodec::matchesPack(doubled, 1, 4),
+          "codec: a card appearing twice is not a one-deck pack");
+
+    check(cardcodec::matchesPack(makeDeck(2, 4), 2, 4), "codec: two packs match two packs");
+    check(!cardcodec::fitsPack(makeDeck(2, 4), 1, 4), "codec: and do not fit inside one");
+
+    // Spider's one-suit pack holds eight of every spade and nothing else.
+    const std::vector<Card> spades = makeDeck(2, 1);
+    check(cardcodec::matchesPack(spades, 2, 1), "codec: Spider's one-suit pack matches itself");
+    check(!cardcodec::fitsPack(spades, 2, 4), "codec: but not a four-suit one");
 }
 
 // ---------------------------------------------------------------------------
@@ -2308,6 +2410,9 @@ int main()
 
     section("Cards");
     deckRules();
+    cardCodecRoundTrip();
+    cardCodecRefusals();
+    cardCodecPackCheck();
 
     section("Hearts");
     heartsRules();

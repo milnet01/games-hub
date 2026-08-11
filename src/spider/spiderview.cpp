@@ -3,9 +3,12 @@
 #include "scores.h"
 #include "sound.h"
 #include "cards/cardart.h"
+#include "cards/cardcodec.h"
 #include "theme.h"
 
 #include <QActionGroup>
+#include <QDataStream>
+#include <QIODevice>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QMouseEvent>
@@ -132,6 +135,82 @@ void SpiderView::undo()
     m_undoAction->setEnabled(!m_history.empty());
     update();
     refresh();
+}
+
+// The table, not the moves that made it — see KlondikeView::saveState for why
+// the card games save differently from Chess.
+QByteArray SpiderView::saveState() const
+{
+    if (m_won || m_history.empty())
+        return {};
+
+    // A run lifted in mid-drag belongs to the column it came from until it is
+    // dropped; closing the window while holding it must not lose the cards.
+    const auto column = [this](int index) {
+        std::vector<Card> cards = m_columns[std::size_t(index)];
+        if (m_dragging && m_dragFrom == index)
+            cards.insert(cards.end(), m_drag.begin(), m_drag.end());
+        return cards;
+    };
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint32(m_suits) << qint32(m_completed) << qint32(m_moves);
+    for (int col = 0; col < kColumns; ++col)
+        cardcodec::writePile(out, column(col));
+    cardcodec::writePile(out, m_stock);
+    return blob;
+}
+
+bool SpiderView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    qint32 suits = 0;
+    qint32 completed = 0;
+    qint32 moves = 0;
+    in >> version >> suits >> completed >> moves;
+    if (version != 1 || in.status() != QDataStream::Ok
+        || (suits != 1 && suits != 2 && suits != 4) || completed < 0 || completed > 8 || moves < 0)
+        return false;
+
+    std::array<std::vector<Card>, kColumns> columns;
+    std::vector<Card> stock;
+    if (!cardcodec::readPiles(in, columns) || !cardcodec::readPile(in, stock))
+        return false;
+
+    // Spider takes a finished run off the table for good, so it cannot ask for
+    // the whole pack back: what is left is two packs less thirteen cards for
+    // every run already completed, and all of it from the pack it was dealt.
+    std::vector<Card> all;
+    cardcodec::gather(all, columns);
+    cardcodec::gather(all, stock);
+    if (all.size() != std::size_t(104 - 13 * completed) || !cardcodec::fitsPack(all, 2, int(suits)))
+        return false;
+
+    m_columns = columns;
+    m_stock = stock;
+    m_suits = int(suits);
+    m_completed = int(completed);
+    m_moves = int(moves);
+    m_history.clear();
+    m_drag.clear();
+    m_dragging = false;
+    m_pressValid = false;
+    m_won = false;
+    m_undoAction->setEnabled(false);
+    const QString mode = QStringLiteral("%1 Suit%2")
+                             .arg(m_suits)
+                             .arg(m_suits == 1 ? QString() : QStringLiteral("s"));
+    for (QAction* a : m_actions) {
+        if (a->isCheckable())
+            a->setChecked(a->text() == mode);
+    }
+    update();
+    refresh();
+    return true;
 }
 
 double SpiderView::cardWidth() const

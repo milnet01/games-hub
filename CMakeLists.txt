@@ -24,6 +24,7 @@ set(GAME_CORE_SOURCES
     src/chess/chessai.cpp
     src/sudoku/sudokugrid.cpp
     src/cards/card.cpp
+    src/cards/cardcodec.cpp
     src/hearts/heartsengine.cpp
     src/canasta/canastaengine.cpp
     src/canasta/canastaai.cpp

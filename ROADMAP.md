@@ -87,13 +87,23 @@ each step against the rules on the way back in.
   Kind: implement.
   Lanes: hearts.
 
-- 📋 [GHUB-0008] **The four solitaires save and resume.** Klondike, Spider,
+- ✅ [GHUB-0008] **The four solitaires save and resume.** Klondike, Spider,
   FreeCell and Pyramid: piles and stock. A shared card codec does all four at
   once and is worth writing first — these are also the games most often left
   half-finished.
   Layman: Close a game of patience and come back to it.
   Kind: implement.
   Lanes: klondike, spider, freecell, pyramid, cards.
+  Resolved (2026-08-11): src/cards/cardcodec.* holds the shared codec —
+  piles to and from a QDataStream, plus fitsPack/matchesPack, which is
+  what a table-based save has instead of Chess's legal-move check.
+  Klondike and FreeCell must produce the whole pack back; Spider and
+  Pyramid take cards out of play, so they get fitsPack and a count of
+  their own. Each saveState() folds a run held in mid-drag back onto the
+  pile it came from. 15 new rules checks and 27 new UI checks: an
+  untouched deal saves nothing, a deal in progress renders identically
+  after a round trip, a corrupt save is refused without disturbing the
+  table. GHUB-0010's four small games can now reuse the codec.
 
 - 📋 [GHUB-0009] **Sudoku saves and resumes.** Grid, pencil marks and elapsed
   time. Pause already covers the walk-away case, so this is the smaller half.

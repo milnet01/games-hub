@@ -3,9 +3,12 @@
 #include "scores.h"
 #include "sound.h"
 #include "cards/cardart.h"
+#include "cards/cardcodec.h"
 #include "theme.h"
 
 #include <QActionGroup>
+#include <QDataStream>
+#include <QIODevice>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QMouseEvent>
@@ -127,6 +130,99 @@ void KlondikeView::undo()
     m_undoAction->setEnabled(!m_history.empty());
     update();
     refresh();
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+// The table, not the moves that made it.
+//
+// Chess saves its move list because replaying it rebuilds the undo stack and the
+// repetition keys as a side effect. A solitaire keeps no move log, so the piles
+// themselves are what gets written, and cardcodec's pack check stands in for
+// Chess's legal-move check on the way back in. The undo history is deliberately
+// not saved: a resumed deal starts a fresh one.
+QByteArray KlondikeView::saveState() const
+{
+    // Nothing worth coming back to: a deal already solved, or one nobody has
+    // touched. An empty state also clears whatever was stored before.
+    if (m_won || m_history.empty())
+        return {};
+
+    // A run lifted in mid-drag has been erased from its pile and is held until
+    // it is dropped. Closing the window at that moment must not lose those
+    // cards, so they go back onto the pile they came from.
+    const auto pile = [this](PileKind kind, int index) {
+        std::vector<Card> cards = pileFor(kind, index);
+        if (m_dragging && m_dragFrom.kind == kind && m_dragFrom.pile == index)
+            cards.insert(cards.end(), m_drag.begin(), m_drag.end());
+        return cards;
+    };
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint32(m_drawCount) << qint32(m_score);
+    cardcodec::writePile(out, pile(PileKind::Stock, 0));
+    cardcodec::writePile(out, pile(PileKind::Waste, 0));
+    for (int f = 0; f < 4; ++f)
+        cardcodec::writePile(out, pile(PileKind::Foundation, f));
+    for (int col = 0; col < 7; ++col)
+        cardcodec::writePile(out, pile(PileKind::Tableau, col));
+    return blob;
+}
+
+bool KlondikeView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    qint32 draw = 0;
+    qint32 score = 0;
+    in >> version >> draw >> score;
+    if (version != 1 || in.status() != QDataStream::Ok || (draw != 1 && draw != 3) || score < 0)
+        return false;
+
+    // Read into a table of its own, so a blob that turns out to be nonsense
+    // leaves the deal already on screen alone.
+    std::vector<Card> stock;
+    std::vector<Card> waste;
+    std::array<std::vector<Card>, 4> foundations;
+    std::array<std::vector<Card>, 7> tableau;
+    if (!cardcodec::readPile(in, stock) || !cardcodec::readPile(in, waste)
+        || !cardcodec::readPiles(in, foundations) || !cardcodec::readPiles(in, tableau))
+        return false;
+
+    // Klondike never takes a card out of play, so the whole pack must be here —
+    // nothing missing, nothing doubled.
+    std::vector<Card> all;
+    cardcodec::gather(all, stock);
+    cardcodec::gather(all, waste);
+    cardcodec::gather(all, foundations);
+    cardcodec::gather(all, tableau);
+    if (!cardcodec::matchesPack(all, 1, 4))
+        return false;
+
+    m_stock = stock;
+    m_waste = waste;
+    m_foundations = foundations;
+    m_tableau = tableau;
+    m_drawCount = int(draw);
+    m_score = int(score);
+    m_history.clear();
+    m_drag.clear();
+    m_dragging = false;
+    m_pressValid = false;
+    m_won = false;
+    m_undoAction->setEnabled(false);
+    for (QAction* a : m_actions) {
+        if (a->isCheckable())
+            a->setChecked(a->text() == QStringLiteral("Draw %1").arg(m_drawCount));
+    }
+    update();
+    refresh();
+    return true;
 }
 
 // ---------------------------------------------------------------------------
