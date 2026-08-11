@@ -164,6 +164,20 @@ void Engine::newGame(unsigned seed)
     deal();
 }
 
+void Engine::applyRules(Rules r)
+{
+    m_pendingRules = r;
+
+    // The deal is already on the table, so the numbers that made it stand.
+    r.decks = m_rules.decks;
+    r.jokers = m_rules.jokers;
+    r.handSize = m_rules.handSize;
+    m_rules = std::move(r);
+    // The opening minimums are deliberately NOT recomputed: each side's is
+    // fixed when the hand is dealt, and moving it mid-hand would change what a
+    // player is playing towards after they had started.
+}
+
 void Engine::nextHand()
 {
     if (m_phase != Phase::HandOver)

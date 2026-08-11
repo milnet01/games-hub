@@ -63,6 +63,8 @@ private:
 
     void buildActions();
     void newGame();
+    // Puts the toolbar's rule set onto the game in progress, without dealing.
+    void applyRules();
     void tick();
 
     // --- geometry ---

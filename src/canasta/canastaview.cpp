@@ -410,7 +410,7 @@ void CanastaView::buildActions()
     sets->addAction(classic);
     connect(classic, &QAction::triggered, this, [this] {
         m_useHouse = false;
-        newGame();
+        applyRules();
     });
     m_actions.append(classic);
 
@@ -419,7 +419,7 @@ void CanastaView::buildActions()
     sets->addAction(house);
     connect(house, &QAction::triggered, this, [this] {
         m_useHouse = true;
-        newGame();
+        applyRules();
     });
     m_actions.append(house);
 
@@ -429,7 +429,7 @@ void CanastaView::buildActions()
             return;
         m_useHouse = true;
         house->setChecked(true);
-        newGame();
+        applyRules();
     });
     m_actions.append(m_rulesAction);
 
@@ -447,7 +447,7 @@ void CanastaView::buildActions()
         connect(a, &QAction::triggered, this, [this, score] {
             m_target = score;
             QSettings().setValue(QStringLiteral("canasta/target"), score);
-            newGame();
+            applyRules();
         });
         m_actions.append(a);
     }
@@ -464,6 +464,20 @@ void CanastaView::buildActions()
         update();
     });
     m_actions.append(hints);
+}
+
+// The rule set as the toolbar currently has it. Changing rules must not throw
+// the game away: a rule corrected at 2335 apiece takes effect on the table in
+// front of you, and only the three numbers that shaped the deal wait for the
+// next hand.
+void CanastaView::applyRules()
+{
+    ca::Rules r = m_useHouse ? m_house : ca::Rules::classic();
+    r.targetScore = m_target;
+    m_engine.applyRules(r);
+    announce(m_useHouse ? QStringLiteral("House rules now — this hand carries on.")
+                        : QStringLiteral("Classic rules now — this hand carries on."));
+    update();
 }
 
 void CanastaView::newGame()

@@ -1602,6 +1602,74 @@ void canastaTakeAndOpenTogether()
     check(e.team(0).opened, "canasta: which is what opens the side");
 }
 
+// What a side that has not opened may do with the pile, and what changing the
+// rules mid-game does to the game.
+//
+// Classic Canasta lets an unopened side take the pile AS its opening — that is
+// the strongest move in the game — but freezes it against them, so they need
+// two natural cards matching the top rather than one and a wild. Both halves
+// are checked here, because the first was reported as missing on the strength
+// of having seen the second.
+void canastaUnopenedPileAndLiveRules()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    hands[1] = { cd(Suit::Hearts, kKing), cd(Suit::Clubs, 4), cd(Suit::Hearts, 4),
+                 cd(Suit::Diamonds, 4), cd(Suit::Spades, 5), cd(Suit::Hearts, 5),
+                 cd(Suit::Clubs, 5), cd(Suit::Spades, 6), cd(Suit::Hearts, 6),
+                 cd(Suit::Clubs, 6), cd(Suit::Spades, 8) };
+    // Two kings AND one king with a wild, so both routes can be tried from the
+    // same hand.
+    hands[2] = { joker(true), cd(Suit::Clubs, 2), cd(Suit::Diamonds, kAce),
+                 cd(Suit::Spades, kAce), cd(Suit::Spades, kKing), cd(Suit::Clubs, kKing),
+                 cd(Suit::Diamonds, 10), cd(Suit::Clubs, 9), cd(Suit::Diamonds, 9),
+                 cd(Suit::Clubs, 7), cd(Suit::Clubs, 3) };
+    hands[3] = filler(kJack);
+
+    ca::Engine e; // classic
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+    e.drawFromStock();
+    e.discard(cd(Suit::Hearts, kKing));
+    check(e.currentSeat() == 2 && !e.team(0).opened && e.pile().back().rank == kKing,
+          "canasta: an unopened side is on lead with a king on the pile");
+
+    // Two natural kings: legal in the classic game, and it opens the side off
+    // the pile. This is the move that was seen being played.
+    const std::vector<Card> pair { cd(Suit::Spades, kKing), cd(Suit::Clubs, kKing),
+                                   cd(Suit::Diamonds, kAce), cd(Suit::Spades, kAce),
+                                   joker(true) };
+    check(e.canTakePile(pair), "canasta: classic lets an unopened side take the pile to open");
+
+    // One king and a wild: refused in the classic game, because the pile is
+    // frozen against a side that has not opened.
+    check(!e.canTakePile({ cd(Suit::Spades, kKing), cd(Suit::Clubs, 2), cd(Suit::Diamonds, kAce),
+                           cd(Suit::Spades, kAce), joker(true) }),
+          "canasta: but not with one king and a wild card");
+
+    // The rule change lands on the game in front of you rather than throwing it
+    // away — same seat, same hands, same scores, and now the move is legal.
+    ca::Rules live = ca::Rules::classic();
+    live.pileFrozenUntilOpened = false;
+    const int seatBefore = e.currentSeat();
+    const std::size_t handBefore = e.hand(2).size();
+    e.applyRules(live);
+    check(e.currentSeat() == seatBefore && e.hand(2).size() == handBefore
+              && e.cardsInPlay() == 108,
+          "canasta: changing the rules keeps the hand exactly where it was");
+    check(e.canTakePile({ cd(Suit::Spades, kKing), cd(Suit::Clubs, 2), cd(Suit::Diamonds, kAce),
+                          cd(Suit::Spades, kAce), joker(true) }),
+          "canasta: and the house rule takes effect on this hand, not the next one");
+
+    // The three numbers that shaped the deal do not move under it.
+    ca::Rules bigger = live;
+    bigger.handSize = 15;
+    bigger.decks = 3;
+    e.applyRules(bigger);
+    check(e.rules().handSize == 11 && e.rules().decks == 2 && e.cardsInPlay() == 108,
+          "canasta: the deal's own numbers wait for the next deal");
+    check(e.pendingRules().handSize == 15, "canasta: and are what the next game is dealt from");
+}
+
 // Which wild card lands where, when it decides whether a move is legal at all.
 // Reported: 90 needed, a king on the pile, and a hand holding a joker, a two,
 // two aces and a king. The kings take the pile and count nothing toward the
@@ -2222,6 +2290,7 @@ int main()
     canastaMeldOrder();
     canastaAiOpens();
     canastaTakeAndOpenTogether();
+    canastaUnopenedPileAndLiveRules();
     canastaWildValueGoesWhereItCounts();
     canastaCanastaNeededToScore();
     canastaWildsAcrossRanks();

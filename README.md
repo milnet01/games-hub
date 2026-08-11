@@ -143,6 +143,12 @@ Classic (the last is ON in Classic, since Classic is the one that freezes):
 Classic is never edited and is always one click away. **Play to** sets how long
 a game runs.
 
+**Changing any of this does not restart your game.** A rule corrected mid-game
+takes effect on the hand in front of you, with the scores and the position
+untouched — including switching between Classic and House. Only the three
+numbers that shaped the deal — pack size, jokers and cards dealt — wait for the
+next hand, since they cannot change under cards already dealt.
+
 **Pinball.** Hold `Space` to charge the plunger, release to launch. `Z` and `M`
 (or the arrow keys) work the flippers; clicking the left or right half of the
 table does the same. Three balls. A launch that falls short rolls back to the

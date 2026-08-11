@@ -179,6 +179,13 @@ public:
     // under the players.
     void setRules(Rules r) { m_pendingRules = std::move(r); }
     const Rules& pendingRules() const { return m_pendingRules; }
+    // Changes the rules of the game ALREADY IN PROGRESS, keeping the position
+    // and the scores. Everything that is a permission or a value takes effect
+    // at once; the three numbers that shaped the deal — pack size, jokers and
+    // hand size — cannot change under cards already dealt, so they carry on as
+    // dealt and take effect from the next hand. Nobody should have to abandon a
+    // game at 2335 to correct a house rule.
+    void applyRules(Rules r);
 
     void newGame();
     void newGame(unsigned seed);
