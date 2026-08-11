@@ -135,6 +135,7 @@ void storeHouse(const ca::Rules& r)
     put("blackThreeBlocks", r.blackThreeBlocksPile ? 1 : 0);
     put("wildTake", r.unfrozenPileTakeableWithWild ? 1 : 0);
     put("wildsFewer", r.wildsFewerThanNaturals ? 1 : 0);
+    put("frozenUntilOpen", r.pileFrozenUntilOpened ? 1 : 0);
     put("canastaToScore", r.canastaNeededToScore ? 1 : 0);
     put("closedCanasta", r.canastaMakesRankSafe ? 1 : 0);
     put("noMeldFirstRound", r.noMeldingFirstRound ? 1 : 0);
@@ -166,6 +167,7 @@ ca::Rules loadHouse()
     r.blackThreeBlocksPile = get("blackThreeBlocks", 1) != 0;
     r.unfrozenPileTakeableWithWild = get("wildTake", 1) != 0;
     r.wildsFewerThanNaturals = get("wildsFewer", 0) != 0;
+    r.pileFrozenUntilOpened = get("frozenUntilOpen", 1) != 0;
     r.canastaNeededToScore = get("canastaToScore", 0) != 0;
     r.canastaMakesRankSafe = get("closedCanasta", 0) != 0;
     r.noMeldingFirstRound = get("noMeldFirstRound", 0) != 0;
@@ -225,6 +227,8 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                           rules.unfrozenPileTakeableWithWild);
     auto* wildsFewer = tick(QStringLiteral("A meld keeps more real cards than wild ones"),
                             rules.wildsFewerThanNaturals);
+    auto* frozenUntilOpen = tick(QStringLiteral("The pile is frozen until your side has opened"),
+                                 rules.pileFrozenUntilOpened);
     auto* needCanastaToScore = tick(QStringLiteral("A side with no canasta counts nothing in its "
                                                    "favour"),
                                     rules.canastaNeededToScore);
@@ -273,6 +277,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                          blackBlocks->setChecked(c.blackThreeBlocksPile);
                          wildTake->setChecked(c.unfrozenPileTakeableWithWild);
                          wildsFewer->setChecked(c.wildsFewerThanNaturals);
+                         frozenUntilOpen->setChecked(c.pileFrozenUntilOpened);
                          needCanastaToScore->setChecked(c.canastaNeededToScore);
                          closedCanasta->setChecked(c.canastaMakesRankSafe);
                          firstRound->setChecked(c.noMeldingFirstRound);
@@ -299,6 +304,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
     rules.blackThreeBlocksPile = blackBlocks->isChecked();
     rules.unfrozenPileTakeableWithWild = wildTake->isChecked();
     rules.wildsFewerThanNaturals = wildsFewer->isChecked();
+    rules.pileFrozenUntilOpened = frozenUntilOpen->isChecked();
     rules.canastaNeededToScore = needCanastaToScore->isChecked();
     rules.canastaMakesRankSafe = closedCanasta->isChecked();
     rules.noMeldingFirstRound = firstRound->isChecked();
@@ -504,8 +510,9 @@ QByteArray CanastaView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    // 2 adds the engine's tail — rules that did not exist when 1 was written.
-    out << quint32(2);
+    // Each version adds another pair to the engine's tail: rules that did not
+    // exist when the version before it was written.
+    out << quint32(3);
     m_engine.save(out);
     out << qint32(m_level) << m_useHouse << qint32(m_target) << m_sortHand;
     return blob;
@@ -518,8 +525,8 @@ bool CanastaView::restoreState(const QByteArray& blob)
     quint32 version = 0;
     in >> version;
     // A game saved by an older build still comes back; it simply predates the
-    // rules the tail carries, and their defaults stand.
-    if (version < 1 || version > 2 || !m_engine.load(in, version >= 2))
+    // rules its tail does not carry, and their defaults stand.
+    if (version < 1 || version > 3 || !m_engine.load(in, int(version) - 1))
         return false;
 
     qint32 level = 0;
@@ -575,6 +582,12 @@ void CanastaView::activate()
 {
     m_timer->start();
     refresh();
+}
+
+void CanastaView::deactivate()
+{
+    // The computers stop playing when nobody is watching.
+    m_timer->stop();
 }
 
 // ---------------------------------------------------------------------------

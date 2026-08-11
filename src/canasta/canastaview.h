@@ -23,6 +23,7 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    void deactivate() override;
     // A game to 5000 is several sittings, so the whole table is kept and put
     // back. Nothing in the air is saved — a restored game shows the position as
     // it settles, which is where the cards were going anyway.

@@ -99,7 +99,7 @@ qint64 MinesweeperView::elapsedMs() const
 {
     if (!m_started)
         return 0;
-    return m_elapsedMs + (m_paused ? 0 : m_clock.elapsed());
+    return m_elapsedMs + ((m_paused || m_suspended) ? 0 : m_clock.elapsed());
 }
 
 void MinesweeperView::newGame(int levelIndex)
@@ -110,6 +110,7 @@ void MinesweeperView::newGame(int levelIndex)
     m_started = false;
     m_announced = false;
     m_paused = false;
+    m_suspended = false;
     m_elapsedMs = 0;
     if (m_pauseAction != nullptr)
         m_pauseAction->setChecked(false);
@@ -120,7 +121,24 @@ void MinesweeperView::newGame(int levelIndex)
 
 void MinesweeperView::activate()
 {
+    // Pick the clock up where it was left rather than where it would have got
+    // to on its own while another game was on screen.
+    if (m_suspended) {
+        m_suspended = false;
+        m_clock.restart();
+        if (m_started && !m_paused)
+            m_tick->start();
+    }
     refresh();
+}
+
+void MinesweeperView::deactivate()
+{
+    if (m_suspended)
+        return;
+    m_elapsedMs = elapsedMs();
+    m_suspended = true;
+    m_tick->stop();
 }
 
 double MinesweeperView::cellSize() const

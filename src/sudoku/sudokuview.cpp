@@ -126,7 +126,7 @@ void SudokuView::buildActions()
 
 qint64 SudokuView::elapsedMs() const
 {
-    return m_elapsedMs + (m_paused ? 0 : m_clock.elapsed());
+    return m_elapsedMs + ((m_paused || m_suspended) ? 0 : m_clock.elapsed());
 }
 
 void SudokuView::newGame(SudokuGrid::Level level)
@@ -136,6 +136,7 @@ void SudokuView::newGame(SudokuGrid::Level level)
     m_solved = false;
     m_announced = false;
     m_paused = false;
+    m_suspended = false;
     m_elapsedMs = 0;
     if (m_pauseAction != nullptr)
         m_pauseAction->setChecked(false);
@@ -150,8 +151,25 @@ void SudokuView::newGame(SudokuGrid::Level level)
 
 void SudokuView::activate()
 {
+    // Pick the clock up where it was left, not where it would have got to on
+    // its own while another game was on screen.
+    if (m_suspended) {
+        m_suspended = false;
+        m_clock.restart();
+        if (!m_solved)
+            m_tick->start();
+    }
     setFocus();
     refresh();
+}
+
+void SudokuView::deactivate()
+{
+    if (m_suspended)
+        return;
+    m_elapsedMs = elapsedMs();
+    m_suspended = true;
+    m_tick->stop();
 }
 
 double SudokuView::cellSize() const

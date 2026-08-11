@@ -81,6 +81,11 @@ struct Rules {
     bool unfrozenPileTakeableWithWild = true;
     // On an unfrozen pile, take it by adding the top card to a meld you own.
     bool unfrozenPileTakeableByExtending = true;
+    // Classic Canasta freezes the pile against a side that has not opened, so
+    // that side needs two matching cards from hand exactly as if it were frozen
+    // for everyone. Turned off, an unopened side takes the pile on the same
+    // terms as anyone else — one matching card and a wild will do it.
+    bool pileFrozenUntilOpened = true;
     // A meld must always hold more real cards than wild ones — three sixes
     // carry two wilds, and the third wild waits for a fourth six. Stricter
     // than maxWildsPerMeld, which is a flat ceiling rather than a ratio.
@@ -259,11 +264,14 @@ public:
     // Written through QDataStream, so the format is the member order below and
     // a version number guards it.
     void save(QDataStream& out) const;
+    // The number of appended-rule pairs the current save() writes. A caller
+    // reading an older stream passes how many that stream has.
+    static constexpr int kTail = 2;
     // Leaves the engine untouched and returns false if the stream is from a
-    // different version or runs out part way. `hasTail` says whether the stream
-    // carries the fields added after the format was first written: only the
-    // caller knows, since it may have written fields of its own after ours.
-    bool load(QDataStream& in, bool hasTail = true);
+    // different version or runs out part way. `tail` says how many of the
+    // fields added after the format was first written the stream carries: only
+    // the caller knows, since it may have written fields of its own after ours.
+    bool load(QDataStream& in, int tail = kTail);
 
 private:
     void deal();

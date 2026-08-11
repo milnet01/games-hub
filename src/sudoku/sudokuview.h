@@ -16,6 +16,7 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    void deactivate() override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -50,6 +51,8 @@ private:
     // Paused: the clock stops and the grid is covered, so a puzzle left on
     // screen does not quietly cost you your time.
     bool m_paused = false;
+    // Set while another game is on screen; the clock stops there too.
+    bool m_suspended = false;
     qint64 m_elapsedMs = 0; // banked before the current run of the clock
     qint64 elapsedMs() const;
     QAction* m_pauseAction = nullptr;

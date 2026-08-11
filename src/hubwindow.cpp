@@ -513,6 +513,14 @@ QString saveKey(const QString& game)
 
 } // namespace
 
+GameView* HubWindow::currentView() const
+{
+    for (const Entry& e : m_entries)
+        if (e.view != nullptr && e.name == m_page)
+            return e.view;
+    return nullptr;
+}
+
 void HubWindow::rememberPage()
 {
     // Nothing to remember until a page has actually been on screen: the first
@@ -571,6 +579,8 @@ void HubWindow::closeEvent(QCloseEvent* event)
 void HubWindow::showMenu()
 {
     rememberPage();
+    if (GameView* leaving = currentView())
+        leaving->deactivate();
     setGameActions(nullptr);
     m_backAction->setVisible(false);
     m_stack->setCurrentWidget(m_menuPage);
@@ -583,11 +593,20 @@ void HubWindow::openGame(int index)
 {
     Entry& e = m_entries[index];
     rememberPage();
+    if (GameView* leaving = currentView(); leaving != nullptr && leaving != e.view)
+        leaving->deactivate();
 
     bool resumed = false;
     if (!e.view) {
         e.view = e.create();
-        connect(e.view, &GameView::statusChanged, m_status, &QLabel::setText);
+        // Only the page on screen writes to the status bar. Connecting every
+        // game to it let a background game's clock overwrite the line
+        // belonging to the game being played.
+        GameView* view = e.view;
+        connect(view, &GameView::statusChanged, this, [this, view](const QString& text) {
+            if (view == currentView())
+                m_status->setText(text);
+        });
         e.pageIndex = m_stack->addWidget(e.view);
 
         // Pick the game up where it was left, if it kept anything. Done here

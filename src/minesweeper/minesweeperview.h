@@ -18,6 +18,7 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    void deactivate() override;
 
     struct Level {
         const char* name;
@@ -51,6 +52,9 @@ private:
     // Paused: the clock stops and the field is covered, so walking away does
     // not cost you a time and does not hand you a free look at the board.
     bool m_paused = false;
+    // Set while another game is on screen: the clock must not run on a board
+    // nobody is looking at.
+    bool m_suspended = false;
     qint64 m_elapsedMs = 0; // time banked before the current run of the clock
     qint64 elapsedMs() const;
     bool m_announced = false;

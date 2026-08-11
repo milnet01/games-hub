@@ -325,11 +325,13 @@ void Engine::save(QDataStream& out) const
 
     // Rules added after the format was first written go on the end rather than
     // in with the others, so a game saved before they existed still loads and
-    // simply comes back without them. See the atEnd() read in load().
-    out << m_rules.canastaNeededToScore << m_pendingRules.canastaNeededToScore;
+    // simply comes back without them. `tail` in load() says how many of these
+    // the stream carries.
+    out << m_rules.canastaNeededToScore << m_pendingRules.canastaNeededToScore;   // tail 1
+    out << m_rules.pileFrozenUntilOpened << m_pendingRules.pileFrozenUntilOpened; // tail 2
 }
 
-bool Engine::load(QDataStream& in, bool hasTail)
+bool Engine::load(QDataStream& in, int tail)
 {
     quint32 version = 0;
     in >> version;
@@ -378,18 +380,22 @@ bool Engine::load(QDataStream& in, bool hasTail)
     e.m_turnsTaken = int(turns);
     e.m_outSeat = int(outSeat);
 
-    // The tail: rules added after this format was first written. Whether it is
-    // there is the caller's to know — atEnd() cannot answer it, because a
+    // The tail: rules added after this format was first written. How much of it
+    // is there is the caller's to know — atEnd() cannot answer it, because a
     // caller may have written its own fields after ours.
-    if (hasTail) {
-        bool inPlay = false;
-        bool pending = false;
-        in >> inPlay >> pending;
-        if (in.status() != QDataStream::Ok)
-            return false;
-        e.m_rules.canastaNeededToScore = inPlay;
-        e.m_pendingRules.canastaNeededToScore = pending;
-    }
+    const auto readPair = [&](bool& inPlay, bool& pending) {
+        bool a = false;
+        bool b = false;
+        in >> a >> b;
+        inPlay = a;
+        pending = b;
+    };
+    if (tail >= 1)
+        readPair(e.m_rules.canastaNeededToScore, e.m_pendingRules.canastaNeededToScore);
+    if (tail >= 2)
+        readPair(e.m_rules.pileFrozenUntilOpened, e.m_pendingRules.pileFrozenUntilOpened);
+    if (in.status() != QDataStream::Ok)
+        return false;
 
     // The pack has to still be whole, which is the one check that catches a
     // file that parsed cleanly but says something impossible.
@@ -609,6 +615,17 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
         else
             it->second.push_back(c);
     }
+
+    // Cheapest wild card first. It usually makes no difference — the same cards
+    // go down either way and they are all the team's — but it decides a legal
+    // move from an illegal one under the house rule where the meld that
+    // captures the pile counts nothing toward opening: the expensive wild has
+    // to end up in a meld that DOES count, and the cheap one goes on the pile
+    // take. Spreading fills the pile's rank first, so ordering the list here is
+    // what puts the joker where it earns its 50.
+    std::stable_sort(wilds.begin(), wilds.end(), [this](const Card& a, const Card& b) {
+        return cardValue(a, m_rules) < cardValue(b, m_rules);
+    });
 
     // Where the wild cards go. Named explicitly if the caller said so;
     // otherwise the one natural rank on the table, if there is exactly one.
@@ -871,9 +888,11 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
     }
 
     // A side that has not opened is in the same position as a frozen pile: it
-    // has to hold two matching cards of its own.
+    // has to hold two matching cards of its own. A house rule can lift that and
+    // let it take the pile on the same terms as anyone else.
     const Team& team = m_teams[std::size_t(t)];
-    const bool mustUseTwoNaturals = m_frozen || !team.opened;
+    const bool mustUseTwoNaturals
+        = m_frozen || (m_rules.pileFrozenUntilOpened && !team.opened);
 
     if (mustUseTwoNaturals) {
         if (naturalsOfTop < 2) {

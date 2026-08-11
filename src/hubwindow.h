@@ -44,6 +44,7 @@ private:
     void setGameActions(GameView* view);
     // Window size and position are kept per page, so the hub and each game come
     // back the size you last left them.
+    GameView* currentView() const;
     void rememberPage();
     void applyPageGeometry(const QString& page);
     // A game's position, kept between sessions for the games that offer one.

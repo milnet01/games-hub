@@ -1602,6 +1602,68 @@ void canastaTakeAndOpenTogether()
     check(e.team(0).opened, "canasta: which is what opens the side");
 }
 
+// Which wild card lands where, when it decides whether a move is legal at all.
+// Reported: 90 needed, a king on the pile, and a hand holding a joker, a two,
+// two aces and a king. The kings take the pile and count nothing toward the
+// opening, so the joker has to go on the ACES — 20 + 20 + 50 is the 90 — and
+// the two goes on the kings. Placed the other way round it is 60 and refused.
+void canastaWildValueGoesWhereItCounts()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    hands[1] = { cd(Suit::Hearts, kKing), cd(Suit::Clubs, 4), cd(Suit::Hearts, 4),
+                 cd(Suit::Diamonds, 4), cd(Suit::Spades, 5), cd(Suit::Hearts, 5),
+                 cd(Suit::Clubs, 5), cd(Suit::Spades, 6), cd(Suit::Hearts, 6),
+                 cd(Suit::Clubs, 6), cd(Suit::Spades, 8) };
+    hands[2] = { joker(true), cd(Suit::Clubs, 2), cd(Suit::Diamonds, kAce),
+                 cd(Suit::Spades, kAce), cd(Suit::Spades, kKing), cd(Suit::Clubs, 10),
+                 cd(Suit::Diamonds, 10), cd(Suit::Clubs, 9), cd(Suit::Diamonds, 9),
+                 cd(Suit::Clubs, 7), cd(Suit::Clubs, 3) };
+    hands[3] = filler(kJack);
+
+    ca::Rules r = ca::Rules::classic();
+    r.pileMeldCountsToOpen = false;  // the house rule that makes placement matter
+    r.pileFrozenUntilOpened = false; // and the one that lets an unopened side take it
+    r.openMinUnder1500 = 90;
+    ca::Engine e { r };
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+
+    e.drawFromStock();
+    e.discard(cd(Suit::Hearts, kKing));
+    check(e.currentSeat() == 2 && e.pile().back().rank == kKing && e.openRequirement(0) == 90,
+          "canasta: a king on the pile, 90 needed to open");
+
+    const std::vector<Card> lot { joker(true), cd(Suit::Clubs, 2), cd(Suit::Diamonds, kAce),
+                                  cd(Suit::Spades, kAce), cd(Suit::Spades, kKing) };
+    check(e.canTakePile(lot), "canasta: the joker opens on the aces while the two takes the pile");
+    check(e.takePile(lot), "canasta: and the move goes through");
+
+    const ca::Meld* aces = e.team(0).meldOfRank(kAce);
+    const ca::Meld* kings = e.team(0).meldOfRank(kKing);
+    const bool built = aces != nullptr && kings != nullptr;
+    check(built, "canasta: both melds go down");
+    if (built) {
+        check(aces->value(r) == 90, "canasta: the aces are the 90 that opens the side");
+        check(kings->size() == 3, "canasta: and the kings are a meld with the pile's king in it");
+    }
+    check(e.team(0).opened, "canasta: the side is open");
+
+    // And the classic rule the house one lifts: the pile is frozen against a
+    // side that has not opened, so one king and a wild is not enough there.
+    ca::Rules strict = r;
+    strict.pileFrozenUntilOpened = true;
+    ca::Engine frozen { strict };
+    frozen.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 9)), 0);
+    frozen.drawFromStock();
+    frozen.discard(cd(Suit::Hearts, kKing));
+    check(!frozen.canTakePile(lot),
+          "canasta: classic keeps the pile frozen until a side has opened");
+    check(frozen.canTakePile({ joker(true), cd(Suit::Clubs, 2), cd(Suit::Diamonds, kAce),
+                               cd(Suit::Spades, kAce) })
+              == false,
+          "canasta: and no lay-down without two kings takes it");
+}
+
 // A side that never made a canasta counts nothing in its favour. Reported from
 // a hand where the other side was caught with two melds, a red three and both
 // hands full, and still came out +45 — which is right in the classic game and
@@ -2160,6 +2222,7 @@ int main()
     canastaMeldOrder();
     canastaAiOpens();
     canastaTakeAndOpenTogether();
+    canastaWildValueGoesWhereItCounts();
     canastaCanastaNeededToScore();
     canastaWildsAcrossRanks();
     canastaWildsFewerThanNaturals();

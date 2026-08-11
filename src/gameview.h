@@ -21,6 +21,11 @@ public:
     // Called when the game becomes visible in the hub. Games that need a fresh
     // deal on entry override this.
     virtual void activate() { }
+    // Called when the hub leaves this game for another page. A game that runs a
+    // clock or an animation stops it here: a background game that keeps ticking
+    // costs the player a Minesweeper time they never spent, and its status
+    // messages land in the status bar of whatever game IS on screen.
+    virtual void deactivate() { }
 
     // A game long enough to be worth coming back to writes its whole position
     // here and takes it back in restoreState(). The hub keeps it, so a game is
