@@ -218,6 +218,16 @@ suite that failed about one run in three.
 **`pkill -f <pattern>` will kill this session's own shell** when the pattern
 appears in the command line being run. Use `pkill -x gameshub`.
 
+**Chaining `cmake --build` and a test binary on one shell line races the
+linker, and the failure it produces reads as a real one.** `cmake --build build
+&& ./build/gameshub_selftest` can run the *previous* binary, or one being
+rewritten, and what comes back is a plausible FAIL against a check you did not
+touch — twice in one session it was reported as a broken Minesweeper test that
+was in fact green. Build, then run as a separate command, or `sleep 1` between
+them. The same shape in reverse is the well-known one: a green test over a
+stale binary. Red is the more expensive direction, because it sends you
+debugging code that is not broken.
+
 **`qt_add_resources(<target> <file>.qrc)` silently compiles an EMPTY resource.**
 That signature expects a resource name plus a `FILES` list, so handing it a
 `.qrc` gives no error, no warning and no content — every sound lookup then
