@@ -169,7 +169,7 @@ double-clicking a file.
   seed deals the same game on both standard libraries. Contract and its
   three cold-eyes loops in docs/specs/GHUB-0025-downloadable-builds.md.
 
-- 📋 [GHUB-0026] **The release smoke tests never start Qt, so they cannot see a broken bundle.**
+- 🚧 [GHUB-0026] **The release smoke tests never start Qt, so they cannot see a broken bundle.**
   Both smoke tests run the artifact with --version, and GHUB-0025 made
   --version return before QApplication is constructed so it works headless
   on Windows. The consequence is that neither test loads a Qt plugin, opens
@@ -194,6 +194,19 @@ double-clicking a file.
   Kind: test.
   Lanes: packaging, ci.
   Source: in-session-2026-08-12.
+  Progress (2026-08-12): written and lint-clean, not yet verified.
+  Both smoke tests now run the artifact twice — once for --version, once
+  starting --game spider under QT_QPA_PLATFORM=offscreen, passing only if
+  the process is still alive when a 20 s timeout fires. The offscreen
+  plugin is bundled for it: EXTRA_PLATFORM_PLUGINS=libqoffscreen.so on
+  Linux, an explicit copy of qoffscreen.dll beside windeployqt on Windows.
+  The bullet's own prescription (EXTRA_QT_PLUGINS=offscreen) was wrong:
+  that name is a deprecated alias for EXTRA_QT_MODULES and matches Qt
+  modules, so it would have matched nothing and failed silently.
+  Also fixed in passing: the step's shell is bash -e without pipefail, so
+  the container's exit status was being discarded by tee.
+  Stays in-progress deliberately — release.yml runs on a tag only, so
+  nothing has executed this. The v0.3.1 run is its first observation.
 
 ### 🎨 Games agreed and not yet started
 

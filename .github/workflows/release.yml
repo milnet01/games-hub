@@ -97,9 +97,15 @@ jobs:
           sed -i 's|^Exec=.*|Exec=gameshub|' \
             AppDir/usr/share/applications/gameshub.desktop
 
+      # The offscreen platform plugin is not something a player needs: it is
+      # what lets the smoke test start Qt in a container with no display.
+      # linuxdeploy-plugin-qt always deploys libqxcb.so and takes anything
+      # beyond it as full sonames in EXTRA_PLATFORM_PLUGINS -- EXTRA_QT_PLUGINS
+      # is a deprecated alias for EXTRA_QT_MODULES and would not do this.
       - name: Deploy Qt into the AppDir
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
+          EXTRA_PLATFORM_PLUGINS: libqoffscreen.so
         run: |
           export PATH="$PWD:$PATH"
           ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt \
@@ -107,17 +113,21 @@ jobs:
             --desktop-file AppDir/usr/share/applications/gameshub.desktop \
             --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/gameshub.svg
 
-      # INV-7 and INV-8. Neither smoke test can catch a missing plugin --
-      # --version returns before QApplication exists -- so this staged-tree
-      # check is the only thing between a silent or windowless build and a
-      # release.
+      # INV-7 and INV-8. The smoke test below starts Qt, so a missing platform
+      # plugin no longer sails through -- but it fails there as a process that
+      # died, and here by name, which is the difference between a diagnosis
+      # and a puzzle. The platform plugins are named individually because the
+      # smoke test depends on the offscreen one being present.
       - name: Check the AppDir carries its plugins and licences
         run: |
-          for group in platforms multimedia; do
-            if [ -z "$(ls -A "AppDir/usr/plugins/$group" 2>/dev/null)" ]; then
-              echo "no Qt $group plugin in the AppDir" >&2; exit 1
+          for plugin in platforms/libqxcb.so platforms/libqoffscreen.so; do
+            if [ ! -f "AppDir/usr/plugins/$plugin" ]; then
+              echo "no $plugin in the AppDir" >&2; exit 1
             fi
           done
+          if [ -z "$(ls -A AppDir/usr/plugins/multimedia 2>/dev/null)" ]; then
+            echo "no Qt multimedia plugin in the AppDir" >&2; exit 1
+          fi
           doc=AppDir/usr/share/doc/gameshub
           for f in "$doc/LICENSE" "$doc/THIRD-PARTY.md" \
                    "$doc/licenses/LGPL-3.0.txt" "$doc/licenses/GPL-3.0.txt"; do
@@ -141,16 +151,40 @@ jobs:
       # the base image; these 13 packages cover the rest, verified in a real
       # ubuntu:24.04 on 2026-08-12. Adding them one failure at a time costs a
       # CI run each -- the GL stack alone is four separate libglvnd packages,
-      # and libEGL is a fifth beyond those.
+      # and libEGL is a fifth beyond those. fonts-dejavu-core is the one
+      # addition not derived that way: it is data rather than a linked
+      # library, every real desktop has fonts, and an empty font database is
+      # not the property under test.
+      #
+      # Two runs, and the second is the one that proves anything (GHUB-0026).
+      # --version returns before QApplication exists, so on its own it loads
+      # no Qt plugin at all and a bundle missing its platform plugin passes
+      # every gate. Starting the hub on the bundled offscreen plugin and
+      # requiring it to still be alive when the timeout fires exercises Qt
+      # init, the widget stack and one game, in a container with no Qt.
       - name: Smoke-test the AppImage
         run: |
+          # The default step shell is bash -e with no pipefail, so without
+          # this the container's exit status is discarded by tee and the
+          # version line printed by the first run would pass the step for a
+          # second run that died.
+          set -o pipefail
           docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
+            set -e
             apt-get update -qq >/dev/null
             apt-get install -y -qq --no-install-recommends \
               libegl1 libgl1 libglx0 libglvnd0 libopengl0 libdrm2 \
               libx11-6 libx11-xcb1 libxcb1 libfontconfig1 libfreetype6 \
-              libgpg-error0 libcom-err2 >/dev/null
-            /w/GamesHub-*.AppImage --appimage-extract-and-run --version' | tee out.txt
+              libgpg-error0 libcom-err2 fonts-dejavu-core >/dev/null
+            app=$(ls /w/GamesHub-*.AppImage)
+            "$app" --appimage-extract-and-run --version
+            rc=0
+            QT_QPA_PLATFORM=offscreen timeout -s TERM 20 \
+              "$app" --appimage-extract-and-run --game spider || rc=$?
+            if [ "$rc" -ne 124 ]; then
+              echo "the app exited on its own with status $rc" >&2
+              exit 1
+            fi' | tee out.txt
           grep -q '^Games ' out.txt
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -198,13 +232,26 @@ jobs:
           xcopy /e /i packaging\licenses dist\licenses
           windeployqt --release --no-translations --no-system-d3d-compiler `
                       --compiler-runtime dist\gameshub.exe
+          # The offscreen platform plugin is what lets the smoke test start Qt
+          # with no desktop. Taken from the Qt install beside windeployqt
+          # rather than assumed to be among the plugins it chose to copy.
+          $qtBin = Split-Path (Get-Command windeployqt).Source
+          Copy-Item "$qtBin\..\plugins\platforms\qoffscreen.dll" `
+                    dist\platforms\ -Force
 
+      # The smoke test below starts Qt, so a missing platform plugin no longer
+      # sails through -- but it fails there as a process that died, and here
+      # by name. The platform plugins are named individually because the smoke
+      # test depends on the offscreen one being present.
       - name: Check the staged tree carries its plugins and licences
         run: |
-          foreach ($group in 'platforms','multimedia') {
-            if (-not (Get-ChildItem "dist\$group" -File -EA SilentlyContinue)) {
-              throw "no Qt $group plugin in dist\"
+          foreach ($dll in 'qwindows.dll','qoffscreen.dll') {
+            if (-not (Test-Path "dist\platforms\$dll")) {
+              throw "no dist\platforms\$dll"
             }
+          }
+          if (-not (Get-ChildItem 'dist\multimedia' -File -EA SilentlyContinue)) {
+            throw "no Qt multimedia plugin in dist\"
           }
           foreach ($f in 'dist\LICENSE','dist\THIRD-PARTY.md',
                          'dist\licenses\LGPL-3.0.txt','dist\licenses\GPL-3.0.txt') {
@@ -229,6 +276,19 @@ jobs:
           if (-not (Select-String -Path ver.txt -Pattern '^Games ')) {
             throw "no version line: $(Get-Content ver.txt -Raw)"
           }
+          # And the run that actually loads Qt (GHUB-0026). --version answers
+          # from argv before QApplication exists, so the check above proves
+          # nothing about the bundled plugins; this one starts the hub on the
+          # offscreen plugin and requires it to still be running afterwards.
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $run = Start-Process .\unzipped\gameshub.exe -ArgumentList '--game','spider' `
+                   -PassThru -RedirectStandardError run-err.txt
+          Start-Sleep -Seconds 20
+          if ($run.HasExited) {
+            $err = Get-Content run-err.txt -Raw
+            throw "the app exited on its own with status $($run.ExitCode): $err"
+          }
+          Stop-Process -Id $run.Id -Force
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:

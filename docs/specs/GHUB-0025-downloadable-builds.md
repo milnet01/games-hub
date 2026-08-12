@@ -177,6 +177,7 @@ for t in linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage; do
 done
 export PATH="$PWD:$PATH"
 export APPIMAGE_EXTRACT_AND_RUN=1   # the runner has no FUSE 2
+export EXTRA_PLATFORM_PLUGINS=libqoffscreen.so   # for §4.6's running check
 
 DESTDIR="$PWD/AppDir" cmake --install build
 
@@ -291,29 +292,63 @@ in `dist\`, per §4.3.
 
 ### 4.6 What "self-contained" is checked to mean
 
-Both release jobs smoke-test their own artifact before it is published:
+Both release jobs smoke-test their own artifact before it is published, and
+each does it **twice: once for `--version`, and once by starting the app.**
+The second run is the only one that loads a Qt plugin, because §4.7 makes
+`--version` return before `QApplication` is constructed. A `--version`-only
+gate therefore proves the file unpacks and reports the right version, and
+says nothing about whether it can open a window — which is how the 0.3.0
+AppImage shipped carrying no offscreen plugin with every gate green.
+
+The running check starts the hub straight into one game under a timeout, and
+**passes only if the app is still alive when the timeout fires.** An app that
+cannot load its platform plugin exits at once, so "still running" is the
+signal; the timeout's own `124` is the expected status and any other status
+is the failure. Twenty seconds is far longer than a start-up that works and
+far shorter than a CI job cares about.
 
 - Linux, in a container with no Qt:
 
   ```bash
   docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
+    set -e
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends \
       libegl1 libgl1 libglx0 libglvnd0 libopengl0 libdrm2 \
       libx11-6 libx11-xcb1 libxcb1 libfontconfig1 libfreetype6 \
-      libgpg-error0 libcom-err2
-    /w/GamesHub-*.AppImage --appimage-extract-and-run --version'
+      libgpg-error0 libcom-err2 fonts-dejavu-core
+    app=$(ls /w/GamesHub-*.AppImage)
+    "$app" --appimage-extract-and-run --version
+    rc=0
+    QT_QPA_PLATFORM=offscreen timeout -s TERM 20 \
+      "$app" --appimage-extract-and-run --game spider || rc=$?
+    [ "$rc" -eq 124 ]'
   ```
 
   Host libraries, no Qt — installing anything Qt here would void what the
   test proves. **The list is derived rather than guessed, and it has to
   be:** intersect the excludelist with the sonames the binary links and 23
   libraries come back, most already in the base image, the rest covered by
-  these 13 packages. Verified in a real `ubuntu:24.04` on 2026-08-12 by
+  13 of these packages. Verified in a real `ubuntu:24.04` on 2026-08-12 by
   checking all 23 resolve. Building it up one CI failure at a time is the
   trap — the excluded GL stack alone is four libglvnd packages plus
   `libegl1`, so each attempt buys exactly one more library and a full
   release run.
+
+  `fonts-dejavu-core` is the fourteenth and the one exception to that
+  derivation: it is data rather than a linked library, so no soname scan
+  finds it. `libfontconfig1` pulls in the configuration but recommends the
+  fonts, and `--no-install-recommends` drops them, leaving a font database
+  with nothing in it. Every real desktop has fonts and an empty database is
+  not what this test is about.
+
+  The offscreen plugin the second run needs is bundled by
+  `EXTRA_PLATFORM_PLUGINS=libqoffscreen.so` at §4.3's deploy step.
+  `linuxdeploy-plugin-qt` deploys `libqxcb.so` unconditionally and reads that
+  variable for any platform plugin beyond it, as a full soname. It is **not**
+  `EXTRA_QT_PLUGINS`, which is a deprecated alias for `EXTRA_QT_MODULES` and
+  matches Qt *modules*, so an offscreen value there matches nothing and fails
+  silently.
 
 - Windows, from the artifact rather than the staging tree, with the Qt
   install removed from `PATH`:
@@ -325,16 +360,34 @@ Both release jobs smoke-test their own artifact before it is published:
          -Wait -PassThru -NoNewWindow -RedirectStandardOutput ver.txt
   if ($p.ExitCode -ne 0) { throw "exit $($p.ExitCode)" }
   if (-not (Select-String -Path ver.txt -Pattern '^Games ')) { throw 'no version line' }
+
+  $env:QT_QPA_PLATFORM = 'offscreen'
+  $run = Start-Process .\unzipped\gameshub.exe -ArgumentList '--game','spider' `
+           -PassThru -RedirectStandardError run-err.txt
+  Start-Sleep -Seconds 20
+  if ($run.HasExited) { throw "exited with $($run.ExitCode)" }
+  Stop-Process -Id $run.Id -Force
   ```
 
-Both must write `Games <version>` and exit 0. The Windows side reads it back
-from a redirected file rather than from the pipeline, for the subsystem
-reason §4.7 gives.
+Both must write `Games <version>` and exit 0 from the first run, and still be
+running after the second. The Windows side reads the version back from a
+redirected file rather than from the pipeline, for the subsystem reason §4.7
+gives; the running check needs no such handle, because what it reads is
+whether the process is alive rather than anything it printed.
+
+**Windows gets its offscreen plugin by an explicit copy, not by a variable.**
+`windeployqt` chooses the plugins it copies, so §4.3's staging step takes
+`platforms\qoffscreen.dll` from the Qt installation beside `windeployqt`
+itself — located from `Get-Command windeployqt`, which is the same Qt the
+build linked against — and copies it into `dist\platforms\`. A copy that was
+already there is simply overwritten.
 
 The Linux command runs under `sh -c` because `docker run` executes its
 argument directly with no shell, so `GamesHub-*.AppImage` would otherwise be
-taken as a literal filename. Neither line sets `QT_QPA_PLATFORM`, and §4.7
-is why.
+taken as a literal filename. **The step's own shell sets `pipefail`
+explicitly**: a GitHub `run:` step defaults to `bash -e` without it, so
+`docker run … | tee` would report `tee`'s status, and the version line from
+the first run would satisfy the `grep` for a second run that had died.
 
 ### 4.7 `--version` is answered before Qt starts
 
@@ -416,22 +469,28 @@ this reason and not as a style choice.
   *Breaks when:* a new painter is written with `M_PI`, which compiles
   silently on this machine's GCC and fails only in the Windows CI job.
 
-- **INV-5** — The published Linux file runs on a machine with no Qt
-  installed.
+- **INV-5** — The published Linux file both reports its version and **starts
+  Qt** on a machine with no Qt installed.
   *Test:* the `Smoke-test the AppImage` step in
   `.github/workflows/release.yml` runs it inside an `ubuntu:24.04`
-  container carrying only §4.6's three host graphics libraries and no Qt
-  at all, and requires `Games <version>` on stdout.
+  container carrying §4.6's host libraries and fonts and no Qt at all. It
+  requires `Games <version>` on stdout from `--version`, and then runs
+  `--game spider` under `QT_QPA_PLATFORM=offscreen` and `timeout 20`,
+  requiring the timeout's `124` — the app still running — rather than any
+  exit of its own.
   *Breaks when:* `linuxdeploy --plugin qt` stops finding a library — most
-  likely after a Qt version bump changes where a dependency lives.
+  likely after a Qt version bump changes where a dependency lives — or the
+  AppImage stops carrying the offscreen plugin the running half needs.
 
-- **INV-6** — The published Windows file runs with no Qt on `PATH`.
+- **INV-6** — The published Windows file does the same with no Qt on `PATH`.
   *Test:* the `Smoke-test the portable build` step in
   `.github/workflows/release.yml` expands the finished zip into `unzipped\`,
   scrubs `PATH` to `C:\Windows\System32`, and runs
   `unzipped\gameshub.exe --version` through `Start-Process -Wait -PassThru
   -RedirectStandardOutput`, asserting exit 0 and a `Games ` line in the
-  redirected file. It tests the artifact, not the staging tree it was made
+  redirected file. It then starts `--game spider` under
+  `QT_QPA_PLATFORM=offscreen` without `-Wait`, sleeps 20 seconds, and fails
+  if `HasExited`. It tests the artifact, not the staging tree it was made
   from, and it reads a file rather than stdout because §4.7's binary is
   GUI-subsystem.
   *Breaks when:* `windeployqt` is run against the wrong binary, or a new Qt
@@ -442,18 +501,20 @@ this reason and not as a style choice.
   cannot open a window at all, and the multimedia backend, without which it
   plays in silence.
   *Test:* both release jobs assert, at the §4.3 marker before packaging,
-  that their staged tree holds at least one file in **both** the `platforms`
-  and `multimedia` plugin directories. **The two tools use different
-  layouts:** `linuxdeploy` keeps Qt's, so it is
-  `AppDir/usr/plugins/{platforms,multimedia}/`, while `windeployqt` mirrors
-  each plugin group into the deployment root, so it is
+  that their staged tree holds **both platform plugins by name** — the one
+  the app runs on and the one §4.6's running check runs on, so
+  `libqxcb.so` + `libqoffscreen.so` on Linux and `qwindows.dll` +
+  `qoffscreen.dll` on Windows — and at least one file in the `multimedia`
+  directory. **The two tools use different layouts:** `linuxdeploy` keeps
+  Qt's, so it is `AppDir/usr/plugins/{platforms,multimedia}/`, while
+  `windeployqt` mirrors each plugin group into the deployment root, so it is
   `dist\{platforms,multimedia}\`.
-  *Breaks when:* a deployment tool bundles linked libraries only. Neither
-  smoke test can see it: §4.7 makes `--version` return before `QApplication`
-  exists, so nothing in INV-5 or INV-6 loads a plugin, and a missing
-  platform plugin would reach a user as "could not load the Qt platform
-  plugin" with every gate green. This staged-tree assertion is the only
-  thing standing between that and a release.
+  *Breaks when:* a deployment tool bundles linked libraries only. INV-5 and
+  INV-6's running halves would also catch a missing platform plugin, since
+  the app cannot start without one — but they catch it as a process that
+  died, where this catches it by name, before packaging. A missing
+  *multimedia* plugin is caught here and nowhere else: the app runs in
+  silence rather than failing, so no smoke test can see it.
 
 - **INV-8** — Neither artifact ships Qt without the licence text LGPL-3.0 §4
   requires.
@@ -538,10 +599,11 @@ red; their first real run is their first observation.
 | INV-4 | The `windows-2022` CI job's compile step; `rg 'M_PI' src/` locally |
 | INV-5 | `.github/workflows/release.yml`, `Smoke-test the AppImage` |
 | INV-6 | `.github/workflows/release.yml`, `Smoke-test the portable build` |
-| INV-7 | `.github/workflows/release.yml`, the `platforms` + `multimedia` plugin assertion in both packaging jobs, at each one's own path |
+| INV-7 | `.github/workflows/release.yml`, the named-platform-plugin + `multimedia` assertion in both packaging jobs, at each one's own path; the platform half is caught again, later and less legibly, by INV-5 and INV-6's running checks |
 | INV-8 | `.github/workflows/release.yml`, the licence-file assertion in both packaging jobs |
 | The AppImage runs on distributions older than the build runner | **nothing** — glibc 2.39 is a hard floor and no check tests an older system; stated as a requirement in the README instead |
-| The packaged games actually play | **nothing** — the smoke tests prove the binary starts and reports its version, not that fourteen games work. The test suite covers that on the same commit, but not inside the artifact |
+| The packaged games actually play | **partly** — the smoke tests start the hub inside the artifact and open one game, so a bundle that cannot run at all is caught; that fourteen games play *correctly* is covered by the test suite on the same commit, not inside the artifact |
+| Sound works inside the artifact | **nothing** — INV-7 proves the multimedia plugin is present, and the smoke-test container has no audio device by design, so a plugin that is bundled but broken would reach a user as silence |
 
 ## 11. Cross-doc impact
 

@@ -338,12 +338,24 @@ filesystem*, and the release workflow's clean-room container installs that
 baseline before testing. Adding anything Qt to that container would make the
 test prove nothing.
 
-**Neither smoke test loads Qt**, because `--version` returns first. A missing
-platform or multimedia plugin would sail through both and reach a user as
-"could not load the Qt platform plugin". The staged-tree assertions in
-`release.yml` are the only thing catching that, and they use different paths
-per platform: `linuxdeploy` keeps Qt's `plugins/<group>/` layout, while
-`windeployqt` mirrors each group into the deployment root.
+**Each smoke test runs the artifact twice, and only the second run loads
+Qt.** `--version` returns before `QApplication` exists, so on its own it
+proves the file unpacks and reports the right version and nothing more — a
+bundle with no platform plugin passed every gate that way, which is how 0.3.0
+shipped carrying only `xcb`. The second run starts `--game spider` under
+`QT_QPA_PLATFORM=offscreen` and **passes only if the app is still alive when
+the timeout fires**, so `timeout`'s own 124 is the success status and any exit
+of the app's own is the failure. Both artifacts bundle the offscreen plugin
+for it: Linux via `EXTRA_PLATFORM_PLUGINS=libqoffscreen.so` (not
+`EXTRA_QT_PLUGINS`, a deprecated alias for `EXTRA_QT_MODULES` that matches
+modules and would silently match nothing), Windows by copying
+`qoffscreen.dll` from the Qt install beside `windeployqt`. The staged-tree
+assertions still name both platform plugins, because a missing one fails
+there by name rather than as a process that died, and they use different
+paths per platform: `linuxdeploy` keeps Qt's `plugins/<group>/` layout, while
+`windeployqt` mirrors each group into the deployment root. A missing
+*multimedia* plugin is still caught only there — the app runs in silence
+rather than failing.
 
 **`pkill -f <pattern>` will kill this session's own shell** when the pattern
 appears in the command line being run. Use `pkill -x gameshub`.
