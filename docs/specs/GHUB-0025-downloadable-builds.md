@@ -237,7 +237,7 @@ redistributable already being installed, which INV-6 cannot detect because
 the runner has it system-wide. The user would meet a missing-DLL dialog that
 no gate in this pipeline can see.
 
-Both build jobs end with `actions/upload-artifact@v4`, naming the file they
+Both build jobs end with `actions/upload-artifact`, naming the file they
 produced; that is what `publish` downloads.
 
 **`publish`** — needs both, downloads their artifacts with
