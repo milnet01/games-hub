@@ -299,18 +299,21 @@ Both release jobs smoke-test their own artifact before it is published:
   docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends \
-      libgl1 libglx0 libopengl0 libglvnd0 libxcb1 libx11-6 libx11-xcb1
+      libegl1 libgl1 libglx0 libglvnd0 libopengl0 libdrm2 \
+      libx11-6 libx11-xcb1 libxcb1 libfontconfig1 libfreetype6 \
+      libgpg-error0 libcom-err2
     /w/GamesHub-*.AppImage --appimage-extract-and-run --version'
   ```
 
-  The seven packages are the excludelist baseline from §4.2 — host graphics
-  libraries, no Qt. Installing anything Qt here would void what the test
-  proves. Two package-naming traps, both confirmed against a real
-  `ubuntu:24.04` on 2026-08-12: `libX11-xcb.so.1` ships in `libx11-xcb1`,
-  not `libx11-6`; and the excluded GL stack is four separate libraries
-  (`libGL.so.1`, `libOpenGL.so.0`, `libGLX.so.0`, `libGLdispatch.so.0`)
-  across four packages, so `libgl1` alone leaves the AppImage dying on
-  `libOpenGL.so.0: cannot open shared object file`.
+  Host libraries, no Qt — installing anything Qt here would void what the
+  test proves. **The list is derived rather than guessed, and it has to
+  be:** intersect the excludelist with the sonames the binary links and 23
+  libraries come back, most already in the base image, the rest covered by
+  these 13 packages. Verified in a real `ubuntu:24.04` on 2026-08-12 by
+  checking all 23 resolve. Building it up one CI failure at a time is the
+  trap — the excluded GL stack alone is four libglvnd packages plus
+  `libegl1`, so each attempt buys exactly one more library and a full
+  release run.
 
 - Windows, from the artifact rather than the staging tree, with the Qt
   install removed from `PATH`:
