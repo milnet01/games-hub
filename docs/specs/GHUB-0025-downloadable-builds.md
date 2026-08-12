@@ -169,12 +169,13 @@ costs a deleted tag and nothing else.
 `-DCMAKE_INSTALL_PREFIX=/usr`, then:
 
 ```bash
-# linuxdeploy and its Qt plugin are two separate downloads; --plugin qt
-# finds the second by name on PATH. Neither ships with the runner.
-for t in linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage; do
-  curl -fsSLO "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/$t"
-  chmod +x "$t"
-done
+# linuxdeploy and its Qt plugin live in two different repositories; --plugin
+# qt finds the second by name on PATH. Neither ships with the runner.
+base=https://github.com/linuxdeploy
+curl -fsSLO "$base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+plugin=linuxdeploy-plugin-qt
+curl -fsSLO "$base/$plugin/releases/download/continuous/$plugin-x86_64.AppImage"
+chmod +x linuxdeploy*.AppImage
 export PATH="$PWD:$PATH"
 export APPIMAGE_EXTRACT_AND_RUN=1   # the runner has no FUSE 2
 export EXTRA_PLATFORM_PLUGINS=libqoffscreen.so   # for §4.6's running check
@@ -229,6 +230,10 @@ copy LICENSE,packaging\THIRD-PARTY.md dist\
 xcopy /e /i packaging\licenses dist\licenses
 windeployqt --release --no-translations --no-system-d3d-compiler `
             --compiler-runtime dist\gameshub.exe
+# windeployqt chooses its own plugins, so the offscreen one §4.6's running
+# check needs is taken from the Qt install beside windeployqt itself.
+$qtBin = Split-Path (Get-Command windeployqt).Source
+Copy-Item "$qtBin\..\plugins\platforms\qoffscreen.dll" dist\platforms\ -Force
 # INV-7 and INV-8 assert against dist\ here, before it is packaged
 Compress-Archive -Path dist\* -DestinationPath GamesHub-<version>-windows-x64.zip
 ```
@@ -279,9 +284,12 @@ which only one is new:
   **already in the tree**, fetched verbatim from gnu.org. LGPL-3.0
   incorporates the GPL by reference and requires a copy of both. This work
   adds their install rules, not the files.
-- `packaging/THIRD-PARTY.md` — **new**. Names the bundled Qt version, states
-  that it is unmodified, and links to the matching source archive on
-  `download.qt.io`.
+- `packaging/THIRD-PARTY.md` — **new**. States the licence, that Qt is
+  unmodified, that the linking is dynamic, and links to the source archive
+  on `download.qt.io`. **It does not name the Qt version**, pointing at the
+  download's release notes for it instead, so that a Qt bump is one edit in
+  `release.yml` rather than two. Nothing currently requires those notes to
+  mention Qt — see §6.
 
 `CMakeLists.txt` installs the two licence texts into
 `${CMAKE_INSTALL_DOCDIR}/licenses`, and `LICENSE` and `THIRD-PARTY.md` into
@@ -310,6 +318,7 @@ far shorter than a CI job cares about.
 - Linux, in a container with no Qt:
 
   ```bash
+  set -o pipefail
   docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
     set -e
     apt-get update -qq
@@ -322,7 +331,8 @@ far shorter than a CI job cares about.
     rc=0
     QT_QPA_PLATFORM=offscreen timeout -s TERM 20 \
       "$app" --appimage-extract-and-run --game spider || rc=$?
-    [ "$rc" -eq 124 ]'
+    [ "$rc" -eq 124 ]' | tee out.txt
+  grep -q '^Games ' out.txt
   ```
 
   Host libraries, no Qt — installing anything Qt here would void what the
@@ -369,9 +379,12 @@ far shorter than a CI job cares about.
   Stop-Process -Id $run.Id -Force
   ```
 
-Both must write `Games <version>` and exit 0 from the first run, and still be
-running after the second. The Windows side reads the version back from a
-redirected file rather than from the pipeline, for the subsystem reason §4.7
+Both must write a `Games ` line and exit 0 from the first run, and still be
+running after the second. **Both assert the prefix, not the number** — the
+version itself is checked by INV-2 against the tag and comes from
+`project(gameshub VERSION …)` by construction, so a smoke test comparing it
+would re-check what CMake already guarantees. The Windows side reads the line
+back from a redirected file rather than from the pipeline, for the subsystem reason §4.7
 gives; the running check needs no such handle, because what it reads is
 whether the process is alive rather than anything it printed.
 
@@ -474,7 +487,7 @@ this reason and not as a style choice.
   *Test:* the `Smoke-test the AppImage` step in
   `.github/workflows/release.yml` runs it inside an `ubuntu:24.04`
   container carrying §4.6's host libraries and fonts and no Qt at all. It
-  requires `Games <version>` on stdout from `--version`, and then runs
+  requires a `Games ` line on stdout from `--version`, and then runs
   `--game spider` under `QT_QPA_PLATFORM=offscreen` and `timeout 20`,
   requiring the timeout's `124` — the app still running — rather than any
   exit of its own.
@@ -538,6 +551,7 @@ this reason and not as a style choice.
 | `linuxdeploy --plugin qt` finds the multimedia backend | Qt moves it, or the plugin lags a Qt release | INV-7 fails the job before publishing. |
 | The AppImage's glibc floor is low enough | Built on `ubuntu-24.04` (glibc 2.39) | It will not start on Debian 12 or Ubuntu 22.04. Not fixed — documented in the README, see §10. |
 | The tag matches the CMake version | Human cuts the tag first | INV-2 fails the job. |
+| The release notes name the Qt version `THIRD-PARTY.md` sends readers to | They are generated from a hand-written `CHANGELOG.md` block that nothing requires to mention Qt | A reader cannot tell which source archive matches their download. Caught by nothing today; the fix is either a line in the changelog block at release time or the version in `THIRD-PARTY.md`. |
 
 ## 7. Tests
 
@@ -593,7 +607,7 @@ red; their first real run is their first observation.
 
 | Rule | What catches a breach |
 |------|----------------------|
-| INV-1 | The INV-5 and INV-6 smoke tests, which require the artifact to print `Games <tag version>`; combined with INV-2 that chains binary → CMake → tag |
+| INV-1 | `./build/gameshub --version` locally. **Not the smoke tests** — they assert the `Games ` prefix only, and pass a binary printing any version at all. The binary → CMake → tag chain holds by construction instead: `GAMESHUB_VERSION` is `${PROJECT_VERSION}` (`CMakeLists.txt:65`), and INV-2 checks the tag against it |
 | INV-2 | `.github/workflows/release.yml`, the `verify` job both build jobs `needs:` |
 | INV-3 | `.github/workflows/ci.yml` matrix; a missing platform is visible on the commit's check list |
 | INV-4 | The `windows-2022` CI job's compile step; `rg 'M_PI' src/` locally |
@@ -602,7 +616,7 @@ red; their first real run is their first observation.
 | INV-7 | `.github/workflows/release.yml`, the named-platform-plugin + `multimedia` assertion in both packaging jobs, at each one's own path; the platform half is caught again, later and less legibly, by INV-5 and INV-6's running checks |
 | INV-8 | `.github/workflows/release.yml`, the licence-file assertion in both packaging jobs |
 | The AppImage runs on distributions older than the build runner | **nothing** — glibc 2.39 is a hard floor and no check tests an older system; stated as a requirement in the README instead |
-| The packaged games actually play | **partly** — the smoke tests start the hub inside the artifact and open one game, so a bundle that cannot run at all is caught; that fourteen games play *correctly* is covered by the test suite on the same commit, not inside the artifact |
+| The packaged games actually play | **partly** — the smoke tests start the hub inside the artifact under `--game spider`, so a bundle that cannot start Qt at all is caught. A game that failed to *open* would not be: `src/main.cpp:58` warns and falls back to the hub, leaving the process alive and the check green. That fourteen games play *correctly* is the test suite's job, on the same commit but not inside the artifact |
 | Sound works inside the artifact | **nothing** — INV-7 proves the multimedia plugin is present, and the smoke-test container has no audio device by design, so a plugin that is bundled but broken would reach a user as silence |
 
 ## 11. Cross-doc impact
@@ -630,3 +644,4 @@ red; their first real run is their first observation.
 | 2 | 2026-08-12 | 2 | 3 | 3 | 5 | 0 | 11 verified, all fixed; 0 dismissed. Four were loop-1 collateral (a "three new files" claim two of which loop 1 had created, a `licenses/` layout INV-8 and §4.5 disagreed on, INV-1's hardcoded `0.2.0` invalidated by the bump loop 1 added, and a claim that linuxdeploy bundles libGL — refuted against the 53-entry AppImage excludelist). The rest were real gaps: PowerShell `copy` cannot take three positional arguments; linuxdeploy and its Qt plugin are two separate downloads and the runner has no FUSE; and `qt_add_executable` sets `WIN32_EXECUTABLE ON`, so `--version` would have opened a message box on Windows instead of printing — §4.7 added to answer it before Qt starts. |
 | 3 | 2026-08-12 | 2 | 1 | 2 | 4 | 2 | 9 verified, all fixed; 0 dismissed; nothing deferred. Loop cap reached. Both lanes found loop 2's §4.7 fix incomplete: the argv early-return removes the message box but not the GUI subsystem, so stdout still reaches nothing — answered with `Start-Process -RedirectStandardOutput`. Loop 2's fix also made both smoke tests stop loading Qt at all, so a missing platform plugin would have shipped green; INV-7 now asserts `platforms` as well as `multimedia`. Also: `--compiler-runtime`, a `verify` check that the changelog block exists, and an absolute `Exec=` that would have made the AppRun launch the host's binary. Findings concentrate in the Windows and AppImage paths — the half nobody can test on this machine — which is the argument for CI as the real verifier rather than for a fourth loop. |
 | 3-impl | 2026-08-12 | none — no reviewer dispatched | — | — | — | — | Implementation fold-back (`/write-code` Step 8). Building it falsified three things three cold loops could not see. **§4.6's smoke-test container listed four packages and needed seven**: the excludelist drops the whole libglvnd set, so `libgl1` alone left the AppImage dying on `libOpenGL.so.0`; the real run is what found it, and the corrected list is confirmed against an `ubuntu:24.04` container. **§4.2's and §4.3's action pins were stale or wrong** — `actions/checkout` is v7 not v4, `upload-artifact` v7, `download-artifact` v8, and the Qt plugin is a *separate repository* from linuxdeploy, so the spec's single download loop would have 404'd. All are now SHA-pinned. **`softprops/action-gh-release` was dropped entirely** for the runner's own `gh release`, on zizmor's advice: one less third-party action holding write access to this repository's releases. |
+| 4 | 2026-08-12 | 2 | 3 | 2 | 0 | 1 | 6 verified, all fixed; 0 dismissed. Loop 1 of a fresh run, re-gating the document after GHUB-0026 rewrote §4.3, §4.6, §10 and INV-5/6/7. **Q1 is out of scope over the whole release path and the packet said so**: no docker, no Windows toolchain, and `release.yml` runs on a tag only, so no claim about linuxdeploy, windeployqt or PowerShell is runnable on this machine. Both lanes independently found the same three: §4.3's download loop fetched the Qt plugin from linuxdeploy's own repository, contradicting the comment directly above it (loop 3-impl fixed this in the workflow and not in the snippet); §4.3's Windows block never copied `qoffscreen.dll` though §4.6 says it does; and §4.6's Linux block showed neither the `tee`, the `grep` nor the `pipefail` the paragraph below it reasons about — all three GHUB-0026 collateral, the last two mine. Lane A alone caught the oldest defect here: three passages claimed the smoke tests require `Games <version>` when both assert the `Games ` prefix only, so `Games 9.9.9` passes — verified by running the grep against that literal. Lane B alone caught §4.5 claiming `THIRD-PARTY.md` names the Qt version, which it does not, and a `--game spider` check that cannot fail on a game that did not open (`main.cpp:58` warns and falls back to the hub, leaving the process alive) — the §10 row now says so. Collateral outside the document: `README.md`'s licence paragraph repeated the THIRD-PARTY version claim and was corrected there. Four open questions resolved clean and are not in the tally, three of them the same one — §2, §4.1 and §4.7 describe the pre-change tree, which is a spec's correct "before" framing, not staleness. |

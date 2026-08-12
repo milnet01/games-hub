@@ -259,5 +259,5 @@ The app links Qt 6 dynamically, which Qt offers under LGPL-3.0 (or LGPL-2.1
 with the Qt Company exception). Qt is not modified here, and a source
 checkout bundles nothing — but **the downloads above do carry Qt**, since
 that is what lets them run without it installed. Each one ships the LGPL and
-GPL texts alongside `THIRD-PARTY.md`, which records the Qt version, says it
-is unmodified, and points at the matching sources.
+GPL texts alongside `THIRD-PARTY.md`, which says Qt is unmodified and points
+at the matching sources.
