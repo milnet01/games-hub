@@ -90,6 +90,17 @@ add_test(NAME selftest COMMAND gameshub_selftest)
 add_test(NAME uitest COMMAND gameshub_uitest)
 set_tests_properties(uitest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# The pre-push hook decides between the linters and the full pipeline, and a
+# wrong decision is silent — the push succeeds either way. Unix only: the hook
+# is bash, and nothing on Windows installs it.
+if(UNIX)
+    find_program(BASH_PROGRAM bash)
+    if(BASH_PROGRAM)
+        add_test(NAME prepush
+                 COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/pre-push-test.sh)
+    endif()
+endif()
+
 # ---------------------------------------------------------------------------
 # Desktop integration. `cmake --install build` puts the hub in the application
 # menu; the .desktop file needs the absolute Exec path because ~/.local/bin is

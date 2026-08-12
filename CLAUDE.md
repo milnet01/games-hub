@@ -21,7 +21,7 @@ cmake --build build                     # build everything
 ./build/gameshub                        # the hub
 ./build/gameshub --game spider          # straight into one game
 
-cd build && ctest --output-on-failure   # both test binaries
+cd build && ctest --output-on-failure   # both test binaries + the hook test
 cmake --install build                   # refresh the installed copy
 ```
 
@@ -31,6 +31,7 @@ pass/fail:
 ```bash
 ./build/gameshub_selftest                             # all game rules
 QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest     # widgets and hub
+tests/pre-push-test.sh                                # which arm the hook takes
 ```
 
 `CMAKE_INSTALL_PREFIX` must be set at **configure** time, not passed to
@@ -65,6 +66,16 @@ The `pre-push` hook runs it automatically. A push touching only `.md` files,
 `docs/`, or the licence texts runs the workflow linters and stops; anything
 touching code, CMake or a workflow runs the full pipeline. `SKIP_LOCAL_CI=1
 git push` bypasses it when you mean to.
+
+**The hook reads one line per ref and must accumulate across all of them.**
+`git push --follow-tags` sends the tag *last*, and a new ref has no remote sha
+— so a hook that let the last ref decide diffed a bare sha against the working
+tree, found a clean tree, and called a release push a documentation change. It
+ran lint-only on every release and every new branch, silently, because a push
+succeeds either way. `tests/pre-push-test.sh` is the guard: it drives real
+pushes at a throwaway remote and asserts which arm each one takes. Keep the
+docs-only arm in it — that path is a feature, and the obvious "fix" of always
+running the full pipeline deletes it.
 
 **Two traps this script hit while being written**, both of which produce a
 green run that checked nothing. `$(...)` strips NUL bytes, so the

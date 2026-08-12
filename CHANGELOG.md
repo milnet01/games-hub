@@ -8,6 +8,18 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Fixed
+
+- **The pre-push check no longer skips itself on a release (GHUB-0027)**
+  Pushing a release sends the branch and its tag together, and the
+  check that builds and tests everything first was reading only the
+  last of the two. A tag on its own looks like no change at all, so
+  the check quietly decided there was nothing to do and waved the
+  release through. It now looks at everything being pushed. A new
+  branch was skipped the same way and is fixed with it. There is a
+  new test that pushes to a scratch copy and confirms which checks
+  each kind of push runs.
+
 ## [0.3.1] - 2026-08-12
 
 A release about the checks rather than the games: nothing you can see has

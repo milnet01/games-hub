@@ -234,7 +234,7 @@ double-clicking a file.
   INV-6's no-window clause fires only on failure, so a green release
   cannot confirm it.
 
-- 📋 [GHUB-0027] **The pre-push hook skips the pipeline on exactly the pushes that matter most.**
+- ✅ [GHUB-0027] **The pre-push hook skips the pipeline on exactly the pushes that matter most.**
   git feeds the hook one line per ref being pushed, and the loop in
   .githooks/pre-push assigns RANGE inside that loop rather than
   accumulating, so the LAST ref wins. `git push --follow-tags` sends the
@@ -264,6 +264,21 @@ double-clicking a file.
   **Layman:** The guard that runs the tests before a push quietly does nothing when you push a release.
   Kind: fix.
   Source: in-session-2026-08-12.
+  Resolved (2026-08-12): both halves fixed. The loop now accumulates
+  the changed files across every ref instead of overwriting a single
+  range, and a ref the remote has never seen is asked for the commits it
+  adds (`git log --name-only --not --remotes`) rather than diffed as a
+  bare sha against the working tree. The docs-only arm is unchanged and
+  still lints.
+
+  The check the bullet asked for is `tests/pre-push-test.sh`, wired into
+  ctest as `prepush` on Unix. It drives real `git push` calls at a
+  throwaway bare remote — so the stdin format is git's own, not a guess
+  — and asserts the arm taken for seven cases: first push, docs-only,
+  mixed, `--follow-tags` release, new code branch, new prose branch, and
+  a deletion. Run against the OLD hook it fails three of them (first
+  push, release, new branch); against the new one all seven pass.
+  ctest is 3/3.
 
 ### 🎨 Games agreed and not yet started
 
