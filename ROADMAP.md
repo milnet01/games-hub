@@ -318,6 +318,29 @@ public-domain; see the standing rules for why each is safe.
   Kind: doc.
   Source: user-request-2026-08-10.
 
+- 📋 [GHUB-0028] **The README's screenshot is from a six-game build.**
+  docs/hub.png shows Reversi, Minesweeper, Solitaire, Spider, Hearts and
+  Pinball, over a status bar reading "Six games. Pick one." It is the
+  first thing anyone sees on the repository page, and it undersells the
+  collection by eight games. Everything else in README.md was brought up
+  to date on 2026-08-12; this was not, because it cannot be.
+
+  No session on this machine can replace it unaided. The existing image
+  is a real desktop capture, with KDE window decorations and a shadow,
+  and the offscreen platform an agent can drive produces no decorations
+  and cannot be screenshotted the same way. Two routes, and the choice is
+  the owner's: either he captures the hub himself and drops the file at
+  docs/hub.png, or the app gains a small --screenshot <file> option that
+  grabs its own window, which is one QWidget::grab plus a save and would
+  also make future refreshes a single command.
+
+  Worth doing either way when a game is added, since the same staleness
+  returns silently: nothing checks that the picture matches the tile
+  grid, and no test can, so it is a standing manual step.
+  **Layman:** The picture at the top of the README shows six games when there are fourteen.
+  Kind: doc-fix.
+  Source: in-session-2026-08-12.
+
 ## P03 — Considered
 
 Nothing here is agreed. 💭 means the scope, the value or the decision is still
