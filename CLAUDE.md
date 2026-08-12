@@ -238,7 +238,8 @@ the same. Canasta's meld layout hit this.
 
 **`CardArt::paintFace` stops drawing the face below 46 pixels wide** and leaves
 only the corner index, because pips are unreadable smaller than that. Anything
-drawing cards at reduced scale — Canasta's melds are 0.62 — gets a stack of
+drawing cards at reduced scale — Canasta's melds are `kMeldScale` = 0.74, its
+opponent hands 0.8 — gets a stack of
 slivers rather than cards, and has to name them some other way. The melds carry
 a "K ×5" badge for exactly this reason. Check the width before assuming a face.
 

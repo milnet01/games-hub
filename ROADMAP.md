@@ -355,6 +355,12 @@ public-domain; see the standing rules for why each is safe.
   **Layman:** The picture at the top of the README shows six games when there are fourteen.
   Kind: doc-fix.
   Source: in-session-2026-08-12.
+  Owner's call (2026-08-12): parked, neither route taken. Asked
+  directly which of the two the bullet offers he wanted — capture it
+  himself, or a --screenshot option — and the answer was to leave it for
+  now and let the README keep the six-game picture. So the --screenshot
+  option is NOT declined on its merits, it is simply unbuilt; if this is
+  picked up later both routes are still open. Stays 📋.
 
 ## P03 — Considered
 
