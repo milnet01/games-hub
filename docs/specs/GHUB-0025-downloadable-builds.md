@@ -74,8 +74,14 @@ GAMESHUB_VERSION="${PROJECT_VERSION}")`, read by `main()` in `src/main.cpp`
 as `app.setApplicationVersion(...)`, and surfaced by the
 `parser.addVersionOption()` that is already there.
 
-A release tag is `v<PROJECT_VERSION>`. The release workflow refuses to
-publish when the two disagree:
+A release tag is `v<PROJECT_VERSION>`. The first release under this spec
+bumps `project(gameshub VERSION 0.2.0` to `0.3.0` — that bump is part of this
+work, not a later step — and is tagged `v0.3.0`.
+
+The `verify` job in §4.3 refuses the tag when the two disagree. It is its own
+job, which both build jobs declare in `needs:`, so INV-2's "before anything is
+built" holds; putting it in `publish` would run it after both builds, and
+duplicating it in each build job would make it two rules:
 
 ```bash
 tag="${GITHUB_REF_NAME#v}"
@@ -93,54 +99,100 @@ Triggers on push to `master` and on pull requests. One matrix job:
 | `windows-2022` | `win64_msvc2022_64` | MSVC, the default Qt Windows build |
 
 Steps: `actions/checkout@v4`; `jurplel/install-qt-action@v4` with
-`version: 6.8.3` and `modules: qtmultimedia`; `cmake -S . -B build -G Ninja
+`version: 6.8.3` and `modules: qtmultimedia`; **on the Windows leg only,
+`ilammy/msvc-dev-cmd@v1`**; `cmake -S . -B build -G Ninja
 -DCMAKE_BUILD_TYPE=Release`; `cmake --build build`; `ctest --test-dir build
 --output-on-failure`. Qt 6.8.3 satisfies the existing
 `find_package(Qt6 6.5 REQUIRED ...)` floor.
+
+The `msvc-dev-cmd` step is not optional and is the whole reason Ninja can be
+used on both legs: outside a developer command prompt CMake cannot find
+`cl.exe`, and the Ninja generator has no equivalent of the Visual Studio
+generator's own toolchain discovery, so configure fails with "No
+CMAKE_CXX_COMPILER could be found". The alternative — `-G "Visual Studio 17
+2022"` on Windows — needs no extra action but is multi-config, which moves
+the executable to `build\Release\gameshub.exe` and forces `--config Release`
+on every build and test line. One action buys one build recipe for both
+platforms.
 
 `ctest` already sets `QT_QPA_PLATFORM=offscreen` for the UI test
 (`set_tests_properties(uitest PROPERTIES ENVIRONMENT ...)`), so both test
 binaries run headless on both runners with no workflow-side environment
 fiddling.
-The Linux runner additionally needs `libxkbcommon-x11-0` and friends for Qt
-to load its platform plugins at all; installed with `apt-get install -y
-libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0`.
+The Linux runner additionally needs `libgl1-mesa-dev libxkbcommon-x11-0
+libxcb-cursor0` installed with `apt-get`, because the Qt that
+`install-qt-action` unpacks there links them and finds nothing bundled
+beside it. This is a property of the **runner**, not of the artifact: the
+AppImage carries its own copies of those libraries, put there by
+`linuxdeploy --plugin qt`, which is why INV-5's container is deliberately
+left bare.
 
 ### 4.3 `.github/workflows/release.yml` — a tag becomes two files
 
-Triggers on `push: tags: ['v*']`. Three jobs.
+Triggers on `push: tags: ['v*']`. The workflow declares
+`permissions: contents: read` at the top and raises it to
+`contents: write` on the `publish` job alone, which is what
+`softprops/action-gh-release` needs to create the release; a repository
+whose default `GITHUB_TOKEN` is read-only fails at the publish step
+otherwise, and nothing else in the workflow needs write.
 
-**`linux`** — same build as CI, then:
+Four jobs: `verify`, then `linux` and `windows` in parallel (both
+`needs: verify`), then `publish`.
+
+**`verify`** — checks out and runs §4.1's tag-versus-`CMakeLists.txt`
+comparison, and nothing else.
+
+**`linux`** — same build as CI, configured with
+`-DCMAKE_INSTALL_PREFIX=/usr`, then:
 
 ```bash
-cmake --install build --prefix AppDir/usr
+DESTDIR="$PWD/AppDir" cmake --install build
 linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt \
   --desktop-file AppDir/usr/share/applications/gameshub.desktop \
-  --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/gameshub.svg \
-  --output appimage
+  --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/gameshub.svg
+# INV-7 and INV-8 assert against AppDir here, before it is packaged
+linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
 ```
 
 `cmake --install` already lays down exactly the three things an AppDir
 needs — the binary, the `.desktop` file and the icon — because §2.4's
 desktop-integration rules put them in the standard prefix-relative
-locations. The install prefix must be set at configure time
-(`-DCMAKE_INSTALL_PREFIX=/usr`), not passed to `--install --prefix`,
-because `configure_file` bakes the absolute `Exec=` path into the
-`.desktop` file; `--prefix` on the install line would relocate the binary
-while leaving `Exec=` pointing at the configure-time path. Output is
+locations. **`DESTDIR`, not `--prefix`:** the prefix must be `/usr` at
+configure time, because `configure_file` bakes the absolute `Exec=` path
+into the `.desktop` file, and `--prefix` on the install line would relocate
+the binary while leaving `Exec=` pointing at the configure-time path.
+`DESTDIR` stages the whole `/usr` tree under `AppDir/` without touching the
+paths compiled into it, which is exactly what an AppDir is. Verified
+locally 2026-08-12: `DESTDIR=… cmake --install` produced `usr/bin/gameshub`,
+`usr/share/applications/gameshub.desktop` and the hicolor icon, with
+`Exec=/usr/bin/gameshub`.
+
+**linuxdeploy is called twice on purpose.** The first call populates the
+AppDir; the second packages it. A single call with `--output appimage` does
+both at once and leaves no moment at which a deployed-but-unpackaged tree
+exists, which is the moment INV-7 and INV-8 assert against. Output is
 renamed to `GamesHub-<version>-x86_64.AppImage`.
 
-**`windows`** — same build, then:
+**`windows`** — same build, then, deliberately *not* via `cmake --install`,
+because that puts the executable under `bin/` and a portable zip wants it at
+the top level:
 
 ```powershell
-cmake --install build --prefix stage
-windeployqt --release --no-translations --no-system-d3d-compiler stage\bin\gameshub.exe
-Compress-Archive -Path stage\bin\* -DestinationPath GamesHub-<version>-windows-x64.zip
+mkdir dist
+copy build\gameshub.exe dist\
+copy LICENSE packaging\THIRD-PARTY.md dist\
+xcopy /e /i packaging\licenses dist\licenses
+windeployqt --release --no-translations --no-system-d3d-compiler dist\gameshub.exe
+# INV-7 and INV-8 assert against dist\ here, before it is packaged
+Compress-Archive -Path dist\* -DestinationPath GamesHub-<version>-windows-x64.zip
 ```
 
 **`publish`** — needs both, downloads their artifacts and calls
-`softprops/action-gh-release@v2` with the two files and the `[Unreleased]`
-changelog body.
+`softprops/action-gh-release@v2` with the two files and a release body
+extracted from the `## [<version>]` block of `CHANGELOG.md` matching the
+tag — **not** `[Unreleased]`. Per §11 the release commit closes
+`[Unreleased]` into a numbered block before the tag is cut, so at tag time
+`[Unreleased]` is empty and reading it would publish blank release notes.
 
 ### 4.4 The MSVC maths constant
 
@@ -151,17 +203,47 @@ C++20 provides on every compiler and which this project already targets
 each of five files, but it leaves a build flag load-bearing for a maths
 constant, which is invisible at the call site.
 
-### 4.5 What "self-contained" is checked to mean
+### 4.5 Bundling Qt is a licence change, not just a packaging one
+
+Until now the project has distributed source only, and `README.md` says so:
+"The app links Qt 6 dynamically, which Qt offers under LGPL-3.0 (or LGPL-2.1
+with the Qt Company exception). Qt itself is neither bundled nor modified
+here." Both artifacts in §4.3 bundle Qt, so that sentence stops being true
+and LGPL-3.0 §4's conditions start applying to every download.
+
+Dynamic linking already satisfies the relinking condition; what is missing is
+the paperwork. Three files are added to the repository and installed beside
+the binary in both artifacts:
+
+- `packaging/licenses/LGPL-3.0.txt` and `packaging/licenses/GPL-3.0.txt` —
+  LGPL-3.0 incorporates the GPL by reference and requires a copy of both.
+- `packaging/THIRD-PARTY.md` — names the bundled Qt version, states that it
+  is unmodified, and links to the matching source archive on
+  `download.qt.io`.
+
+`CMakeLists.txt` installs all three plus the existing `LICENSE` into
+`${CMAKE_INSTALL_DOCDIR}`, which puts them in the AppDir automatically. The
+Windows job copies them into `dist/` explicitly, per §4.3.
+
+### 4.6 What "self-contained" is checked to mean
 
 Both release jobs smoke-test their own artifact before it is published:
 
 - Linux, in a container with no Qt:
-  `docker run --rm -v "$PWD:/w" ubuntu:24.04 /w/GamesHub-*.AppImage
-  --appimage-extract-and-run --version`, with `QT_QPA_PLATFORM=offscreen`.
+  `docker run --rm -e QT_QPA_PLATFORM=offscreen -v "$PWD:/w" ubuntu:24.04
+  sh -c '/w/GamesHub-*.AppImage --appimage-extract-and-run --version'`.
 - Windows, with the Qt install removed from `PATH`:
-  `$env:PATH = 'C:\Windows\System32'; .\stage\bin\gameshub.exe --version`.
+  `$env:PATH = 'C:\Windows\System32'; .\dist\gameshub.exe --version`.
 
 Both must print `Games <version>` and exit 0.
+
+Two details the Linux line cannot do without. `-e QT_QPA_PLATFORM=offscreen`
+must be passed to the container, not exported on the runner, because
+`src/main.cpp` constructs `HubWindow` *before* `parser.process(app)` — so
+`--version` builds the full window and needs a platform plugin, and a bare
+container has no display for the default one to attach to. And the command
+runs under `sh -c` because `docker run` executes its argument directly with
+no shell, so `GamesHub-*.AppImage` would be taken as a literal filename.
 
 ## 5. Invariants
 
@@ -175,9 +257,10 @@ Both must print `Games <version>` and exit 0.
 
 - **INV-2** — A tag never publishes artifacts whose version disagrees with
   it.
-  *Test:* the `Check tag matches CMake version` step in
-  `.github/workflows/release.yml`; pushing `v9.9.9` against a 0.3.0
-  `CMakeLists.txt` fails the job before anything is built.
+  *Test:* the `Check tag matches CMake version` step of the `verify` job in
+  `.github/workflows/release.yml`, which both build jobs declare in
+  `needs:`; pushing `v9.9.9` against a 0.3.0 `CMakeLists.txt` fails `verify`
+  and neither build job starts.
   *Breaks when:* the tag is cut before `project(... VERSION ...)` is bumped —
   the ordinary release mistake.
 
@@ -214,11 +297,26 @@ Both must print `Games <version>` and exit 0.
 
 - **INV-7** — Sound still works in the packaged builds, which needs the Qt
   Multimedia backend plugin and not just the `Qt6Multimedia` library.
-  *Test:* both release jobs assert the staged tree contains at least one
-  file under its `plugins/multimedia` directory before packaging.
+  *Test:* both release jobs assert, at the §4.3 marker before packaging,
+  that their staged tree holds at least one file in the multimedia plugin
+  directory. **The two tools use different layouts:** `linuxdeploy` keeps
+  Qt's, so it is `AppDir/usr/plugins/multimedia/`, while `windeployqt`
+  mirrors each plugin group into the deployment root, so it is
+  `dist\multimedia\`.
   *Breaks when:* a deployment tool bundles linked libraries only — the app
   then starts, paints and plays in silence, which no `--version` check can
   see.
+
+- **INV-8** — Neither artifact ships Qt without the licence text LGPL-3.0 §4
+  requires.
+  *Test:* both release jobs assert, at the §4.3 marker before packaging,
+  that `LICENSE`, `THIRD-PARTY.md`, `licenses/LGPL-3.0.txt` and
+  `licenses/GPL-3.0.txt` are all present — under
+  `AppDir/usr/share/doc/gameshub/` on Linux, where
+  `${CMAKE_INSTALL_DOCDIR}` puts them, and flat in `dist\` on Windows.
+  *Breaks when:* the Windows job gains a file to copy and the copy line is
+  not updated — the Linux side cannot break this way, because
+  `cmake --install` carries the whole `${CMAKE_INSTALL_DOCDIR}` group.
 
 ## 6. Failure modes
 
@@ -280,19 +378,25 @@ Windows compile is red before it and green after.
 | Rule | What catches a breach |
 |------|----------------------|
 | INV-1 | The INV-5 and INV-6 smoke tests, which require the artifact to print `Games <tag version>`; combined with INV-2 that chains binary → CMake → tag |
-| INV-2 | `.github/workflows/release.yml`, `Check tag matches CMake version` |
+| INV-2 | `.github/workflows/release.yml`, the `verify` job both build jobs `needs:` |
 | INV-3 | `.github/workflows/ci.yml` matrix; a missing platform is visible on the commit's check list |
 | INV-4 | The `windows-2022` CI job's compile step; `rg 'M_PI' src/` locally |
 | INV-5 | `.github/workflows/release.yml`, `Smoke-test the AppImage` |
 | INV-6 | `.github/workflows/release.yml`, `Smoke-test the portable build` |
-| INV-7 | `.github/workflows/release.yml`, the `plugins/multimedia` assertion in both packaging jobs |
+| INV-7 | `.github/workflows/release.yml`, the multimedia-plugin assertion in both packaging jobs, at each one's own path |
+| INV-8 | `.github/workflows/release.yml`, the licence-file assertion in both packaging jobs |
 | The AppImage runs on distributions older than the build runner | **nothing** — glibc 2.39 is a hard floor and no check tests an older system; stated as a requirement in the README instead |
 | The packaged games actually play | **nothing** — the smoke tests prove the binary starts and reports its version, not that fourteen games work. The test suite covers that on the same commit, but not inside the artifact |
 
 ## 11. Cross-doc impact
 
 - `README.md` — a download section naming the two files, the glibc floor,
-  the SmartScreen warning; the build-from-source instructions stay.
+  the SmartScreen warning; the build-from-source instructions stay. Its
+  Licence section's closing sentence ("Qt itself is neither bundled nor
+  modified here") becomes false with the first release and is rewritten
+  per §4.5.
+- `packaging/THIRD-PARTY.md`, `packaging/licenses/LGPL-3.0.txt`,
+  `packaging/licenses/GPL-3.0.txt` — new, per §4.5.
 - `CHANGELOG.md` — `[Unreleased]` closes as `0.3.0`.
 - `CLAUDE.md` — the release procedure and the MSVC trap.
 - `ROADMAP.md` — GHUB-0025 flips to shipped.
@@ -304,3 +408,4 @@ Windows compile is red before it and green after.
 
 | Loop | Date | Lanes | Q1 | Q2 | Q3 | Q4 | Outcome |
 |------|------|-------|----|----|----|----|---------|
+| 1 | 2026-08-12 | 2 | 1 | 3 | 6 | 1 | 11 verified, all fixed; 1 dismissed (INV-4's pre-change count of 7 challenged by both lanes, confirmed correct — `M_E` and `M_SQRT2` are 0 in `src/`). Both lanes independently found the same six defects. Largest: §4.3's AppDir install contradicted its own prose, fixed to `DESTDIR` staging and verified locally. |
