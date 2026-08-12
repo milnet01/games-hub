@@ -8,15 +8,20 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-12
+
+A release about the checks rather than the games: nothing you can see has
+changed, but a broken download can no longer reach the releases page.
+
 ### Fixed
 
 - **The release checks now start the downloaded build, not just ask it its version** (GHUB-0026)
   Both downloads are opened and run headless before they are published,
-  and the check passes only if the game is still running twenty seconds
-  later. The old check asked the file for its version number, which it
-  answers before the graphics layer is even loaded — so a download that
-  could not open a window would have passed. Both downloads now also
-  carry the offscreen display plugin the check runs on.
+  and the check passes only if the game is still running afterwards with
+  no error box on screen. The old check asked the file for its version
+  number, which it answers before the graphics layer is even loaded — so
+  a download that could not open a window would have passed. Both
+  downloads now also carry the offscreen display plugin the check runs on.
 
 ## [0.3.0] - 2026-08-12
 
