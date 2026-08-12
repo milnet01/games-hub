@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace {
 
@@ -333,7 +334,7 @@ void MinesweeperView::paintEvent(QPaintEvent*)
                 p.setPen(QPen(detonated ? QColor(0xff, 0x8a, 0x80) : QColor(0xcf, 0xd6, 0xe0),
                               std::max(1.0, cell * 0.06)));
                 for (int i = 0; i < 4; ++i) {
-                    const double a = i * M_PI / 4;
+                    const double a = i * std::numbers::pi / 4;
                     p.drawLine(centre - QPointF(std::cos(a), std::sin(a)) * rad * 1.7,
                                centre + QPointF(std::cos(a), std::sin(a)) * rad * 1.7);
                 }

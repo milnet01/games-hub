@@ -41,6 +41,32 @@ while leaving `Exec=/usr/local/bin/gameshub` pointing at nothing.
 The panel launcher runs the **installed** copy, so re-run `cmake --install`
 after changing code or the pinned icon keeps launching the old build.
 
+## Releasing
+
+Two workflows in `.github/workflows/`, contract in
+`docs/specs/GHUB-0025-downloadable-builds.md`. `ci.yml` builds and runs both
+test binaries on `ubuntu-24.04` and `windows-2022` for every push. `release.yml`
+turns a tag into a Linux AppImage and a Windows zip on the releases page.
+
+Cutting a release is three edits and a tag, **in this order**:
+
+1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`.
+2. Close `## [Unreleased]` in `CHANGELOG.md` into `## [X.Y.Z] - <date>`, and
+   leave a fresh empty `[Unreleased]` above it.
+3. Commit, then `git tag vX.Y.Z && git push --follow-tags`.
+
+The tag's `v` prefix is stripped and compared against `CMakeLists.txt`, and
+the changelog must already have a `## [X.Y.Z]` block — the `verify` job
+checks both before either build starts, because the release notes are read
+from that block and a forgotten step would otherwise publish an empty one.
+Get it wrong and the fix is to delete the tag; nothing is published.
+
+Every action is pinned to a commit SHA with the version in a trailing
+comment. That is not decoration: these workflows publish binaries that
+strangers download, and a moved tag on a third-party action would run
+arbitrary code against them. `actionlint`, `yamllint` and `zizmor` all pass
+clean and are the check before pushing a workflow edit.
+
 ## Architecture
 
 **Every game is a rules core plus a view, and the core never includes a
@@ -235,6 +261,38 @@ several cards arriving at once each get their own slot.
 to come round to the human, and again for the cards to land, since the board
 ignores clicks while anything is animating. Testing only the first produced a
 suite that failed about one run in three.
+
+**`M_PI` does not exist on MSVC, so this codebase uses `std::numbers::pi`.**
+MSVC's `<cmath>` defines `M_PI` only if `_USE_MATH_DEFINES` was defined
+before it was included, so the seven uses that lived here compiled on GCC
+and would have failed the Windows build. `<numbers>` is C++20, which the
+project already targets, and it needs no build flag to be load-bearing for a
+maths constant. A new painter reaching for `M_PI` is caught only by the
+Windows CI job, minutes later.
+
+**`--version` is answered from `argv` before `QApplication` exists, and it
+must stay that way.** `qt_add_executable` sets `WIN32_EXECUTABLE`, so the
+Windows binary is a GUI-subsystem process: `QCommandLineParser::showVersion()`
+puts the version in a *message box* there instead of on stdout, and the
+release workflow's smoke test would hang waiting for a dialog no runner can
+close. Going through `argv` also means `--version` needs no display and no
+platform plugin anywhere, which is what makes it usable as a packaging check
+at all. Folding it back into the parser looks tidier and breaks the release.
+
+**An AppImage is not a closed box — linuxdeploy deliberately leaves 53
+libraries to the host**, `libGL.so.1`, `libxcb.so.1` and `libX11.so.6` among
+them, because a bundled graphics stack breaks against the host driver. So
+"self-contained" here means *carries its own Qt*, not *runs on an empty
+filesystem*, and the release workflow's clean-room container installs that
+baseline before testing. Adding anything Qt to that container would make the
+test prove nothing.
+
+**Neither smoke test loads Qt**, because `--version` returns first. A missing
+platform or multimedia plugin would sail through both and reach a user as
+"could not load the Qt platform plugin". The staged-tree assertions in
+`release.yml` are the only thing catching that, and they use different paths
+per platform: `linuxdeploy` keeps Qt's `plugins/<group>/` layout, while
+`windeployqt` mirrors each group into the deployment root.
 
 **`pkill -f <pattern>` will kill this session's own shell** when the pattern
 appears in the command line being run. Use `pkill -x gameshub`.

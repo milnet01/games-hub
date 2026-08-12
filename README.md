@@ -1,9 +1,34 @@
 # Games
 
-A small collection of desktop games for Linux, in one window sized to sit
-beside whatever you are actually working on.
+A small collection of desktop games for Linux and Windows, in one window
+sized to sit beside whatever you are actually working on.
 
 ![the games hub](docs/hub.png)
+
+Current version 0.3.0 — see the [changelog](CHANGELOG.md) for what changed
+and the [roadmap](ROADMAP.md) for what is coming.
+
+## Download
+
+Nothing to install and no compiler needed. Both downloads carry their own
+copy of Qt, so they run on a machine that has never had it.
+
+| Your system | File | How to run it |
+|---|---|---|
+| Linux | `GamesHub-<version>-x86_64.AppImage` | Mark it executable (`chmod +x`) and double-click it |
+| Windows | `GamesHub-<version>-windows-x64.zip` | Unzip anywhere and run `gameshub.exe` |
+
+Both are on the [releases page](https://github.com/milnet01/games-hub/releases).
+
+Two things worth knowing before you download:
+
+- **The Linux build needs a reasonably current distribution** — glibc 2.39 or
+  newer, which means Ubuntu 24.04, Fedora 40, Debian 13 or Tumbleweed and
+  later. On anything older, build from source instead; the instructions are
+  below and there is nothing exotic about them.
+- **Windows will warn you the first time.** The download is not code-signed,
+  so SmartScreen shows "Windows protected your PC". Signing needs a paid
+  certificate. Click *More info* → *Run anyway*, or build it yourself.
 
 ## The games
 
@@ -219,4 +244,8 @@ MIT — see [LICENSE](LICENSE). Every game here is a traditional one whose rules
 are in the public domain, and the code is written from scratch.
 
 The app links Qt 6 dynamically, which Qt offers under LGPL-3.0 (or LGPL-2.1
-with the Qt Company exception). Qt itself is neither bundled nor modified here.
+with the Qt Company exception). Qt is not modified here, and a source
+checkout bundles nothing — but **the downloads above do carry Qt**, since
+that is what lets them run without it installed. Each one ships the LGPL and
+GPL texts alongside `THIRD-PARTY.md`, which records the Qt version, says it
+is unmodified, and points at the matching sources.

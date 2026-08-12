@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace {
 constexpr int kFrameMs = 16;
@@ -252,7 +253,7 @@ void PinballView::buildLamps()
 
     // An arch of lamps following the dome, chasing left to right.
     for (int i = 0; i < 9; ++i) {
-        const double a = M_PI + (i + 0.5) * (M_PI / 9.0);
+        const double a = std::numbers::pi + (i + 0.5) * (std::numbers::pi / 9.0);
         const double radius = PinballTable::kDomeRadius - 26.0;
         m_lamps.push_back({ QPointF(200.0 + std::cos(a) * radius,
                                     PinballTable::kDomeCentreY + std::sin(a) * radius),

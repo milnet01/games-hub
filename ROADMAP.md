@@ -135,7 +135,7 @@ machine. This section is about the gap between that and someone else
 
 double-clicking a file.
 
-- 📋 [GHUB-0025] **Games Hub downloads as one file, on Linux and on Windows.**
+- 🚧 [GHUB-0025] **Games Hub downloads as one file, on Linux and on Windows.**
   Nothing in this project has ever left the machine it was written on. There
   is no tag, no CI, no published build, and three changelog entries already
   owed a release. C++ helps here — a compiled binary needs no interpreter on
@@ -155,6 +155,9 @@ double-clicking a file.
   Kind: release.
   Lanes: packaging, ci.
   Source: user-request-2026-08-12.
+  Progress (2026-08-12): contract accepted as
+  docs/specs/GHUB-0025-downloadable-builds.md after three cold-eyes loops
+  (31 verified findings, all fixed). Implementation started.
 
 ### 🎨 Games agreed and not yet started
 

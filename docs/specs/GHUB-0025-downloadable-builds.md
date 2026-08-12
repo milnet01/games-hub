@@ -1,6 +1,6 @@
 # GHUB-0025 — Publish Games Hub as a downloadable file for Linux and Windows
 
-**Status:** spec draft (2026-08-12).
+**Status:** accepted (2026-08-12).
 **Kind:** release.
 **Source:** ROADMAP GHUB-0025 (user request, 2026-08-12).
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace {
 
@@ -66,7 +67,7 @@ void PinballTable::buildTable()
     // the play field — that curve is the ball's way in.
     QPointF previous;
     for (int i = 0; i <= 20; ++i) {
-        const double a = M_PI + i * (M_PI / 20.0);
+        const double a = std::numbers::pi + i * (std::numbers::pi / 20.0);
         const QPointF pt(200.0 + std::cos(a) * kDomeRadius,
                          kDomeCentreY + std::sin(a) * kDomeRadius);
         if (i > 0)

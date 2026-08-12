@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(gameshub VERSION 0.2.0 LANGUAGES CXX)
+project(gameshub VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -105,3 +105,13 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/gameshub.desktop
         DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
 install(FILES packaging/gameshub.svg
         DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps)
+
+# Licence texts travel with the binary. A source checkout has LICENSE at its
+# root, but a downloaded AppImage or zip carries no repository to read it
+# from, and bundling Qt makes the LGPL's copy-of-the-licence condition apply.
+# The licenses/ subdirectory is asserted by the release workflow (GHUB-0025
+# INV-8) — installing these flat here would fail that check.
+install(FILES LICENSE packaging/THIRD-PARTY.md
+        DESTINATION ${CMAKE_INSTALL_DOCDIR})
+install(FILES packaging/licenses/LGPL-3.0.txt packaging/licenses/GPL-3.0.txt
+        DESTINATION ${CMAKE_INSTALL_DOCDIR}/licenses)

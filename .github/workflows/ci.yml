@@ -1,0 +1,81 @@
+---
+name: CI
+
+# Fourteen games that only ever built on one openSUSE machine. This runs the
+# same two test binaries on Linux and on Windows for every change, so a
+# platform break is found by the machine rather than at release time.
+# Contract: docs/specs/GHUB-0025-downloadable-builds.md
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Not ubuntu-22.04: GitHub begins deprecating that image on
+          # 2026-09-17. Not windows-latest: it moved to Visual Studio 2026 in
+          # June 2026, and Qt's prebuilt win64_msvc2022_64 wants VS 2022.
+          - name: Linux
+            os: ubuntu-24.04
+            qt_arch: linux_gcc_64
+          - name: Windows
+            os: windows-2022
+            qt_arch: win64_msvc2022_64
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Qt from apt is 6.4 on ubuntu-24.04, below this project's
+      # find_package(Qt6 6.5 REQUIRED) floor, so both legs take the same
+      # prebuilt Qt instead.
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
+        with:
+          version: '6.8.3'
+          arch: ${{ matrix.qt_arch }}
+          modules: qtmultimedia
+          cache: true
+
+      # The Qt that lands here links these and finds nothing bundled beside
+      # it. ninja-build is not guaranteed on the image either.
+      - name: Install Linux build and runtime dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build libgl1-mesa-dev \
+            libxkbcommon-x11-0 libxcb-cursor0
+
+      # Without a developer command prompt CMake cannot find cl.exe, and the
+      # Ninja generator has no toolchain discovery of its own. This step is
+      # what lets both legs share one build recipe. It also puts Visual
+      # Studio's ninja.exe on PATH.
+      - name: Set up MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1.13.0
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      # CMakeLists already sets QT_QPA_PLATFORM=offscreen for the UI test, so
+      # both binaries run headless on both runners with nothing set here.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

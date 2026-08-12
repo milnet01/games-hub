@@ -1,0 +1,266 @@
+---
+name: Release
+
+# A version tag becomes two downloadable files: a single-file AppImage for
+# Linux and a portable zip for Windows, each carrying its own Qt so neither
+# needs anything installed first.
+# Contract: docs/specs/GHUB-0025-downloadable-builds.md
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  # Both build jobs need this, so a bad tag costs no build time and nothing
+  # is ever published from a tree that disagrees with its own tag.
+  verify:
+    name: Verify the tag
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check tag matches CMake version
+        id: check
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cmake_version=$(sed -n 's/^project(gameshub VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "$tag" != "$cmake_version" ]; then
+            echo "tag $tag != CMakeLists.txt $cmake_version" >&2
+            exit 1
+          fi
+          # The release notes come from the matching CHANGELOG block, so a
+          # forgotten "close [Unreleased]" step must fail here rather than
+          # publish a release with an empty body.
+          if ! grep -q "^## \[$tag\]" CHANGELOG.md; then
+            echo "CHANGELOG.md has no '## [$tag]' section" >&2
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: AppImage
+    needs: verify
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
+        with:
+          version: '6.8.3'
+          arch: linux_gcc_64
+          modules: qtmultimedia
+          cache: true
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build libgl1-mesa-dev \
+            libxkbcommon-x11-0 libxcb-cursor0
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX=/usr
+          cmake --build build
+
+      # linuxdeploy and its Qt plugin live in two different repositories;
+      # --plugin qt finds the second by name on PATH. The runner has no
+      # FUSE 2, so every AppImage involved -- these two and the appimagetool
+      # linuxdeploy spawns -- has to extract itself instead of mounting.
+      - name: Fetch linuxdeploy
+        run: |
+          base=https://github.com/linuxdeploy
+          curl -fsSLO "$base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+          plugin=linuxdeploy-plugin-qt
+          curl -fsSLO "$base/$plugin/releases/download/continuous/$plugin-x86_64.AppImage"
+          chmod +x linuxdeploy*.AppImage
+
+      - name: Stage the AppDir
+        run: |
+          DESTDIR="$PWD/AppDir" cmake --install build
+          # configure_file bakes Exec=/usr/bin/gameshub into the desktop file
+          # so a local install gets a working launcher. Inside an AppImage
+          # that absolute path names the HOST's binary, so AppRun needs a
+          # bare name instead.
+          sed -i 's|^Exec=.*|Exec=gameshub|' \
+            AppDir/usr/share/applications/gameshub.desktop
+
+      - name: Deploy Qt into the AppDir
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: |
+          export PATH="$PWD:$PATH"
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt \
+            --executable AppDir/usr/bin/gameshub \
+            --desktop-file AppDir/usr/share/applications/gameshub.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/gameshub.svg
+
+      # INV-7 and INV-8. Neither smoke test can catch a missing plugin --
+      # --version returns before QApplication exists -- so this staged-tree
+      # check is the only thing between a silent or windowless build and a
+      # release.
+      - name: Check the AppDir carries its plugins and licences
+        run: |
+          for group in platforms multimedia; do
+            if [ -z "$(ls -A "AppDir/usr/plugins/$group" 2>/dev/null)" ]; then
+              echo "no Qt $group plugin in the AppDir" >&2; exit 1
+            fi
+          done
+          doc=AppDir/usr/share/doc/gameshub
+          for f in "$doc/LICENSE" "$doc/THIRD-PARTY.md" \
+                   "$doc/licenses/LGPL-3.0.txt" "$doc/licenses/GPL-3.0.txt"; do
+            [ -f "$f" ] || { echo "missing $f" >&2; exit 1; }
+          done
+
+      - name: Package
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: |
+          export PATH="$PWD:$PATH"
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+          mv Games*.AppImage "GamesHub-${VERSION}-x86_64.AppImage"
+
+      # A container with the host graphics libraries the AppImage community
+      # excludelist deliberately leaves out, and no Qt whatsoever. Installing
+      # anything Qt here would void what this proves.
+      - name: Smoke-test the AppImage
+        run: |
+          docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
+            apt-get update -qq >/dev/null
+            apt-get install -y -qq libgl1 libxcb1 libx11-6 libx11-xcb1 >/dev/null
+            /w/GamesHub-*.AppImage --appimage-extract-and-run --version' | tee out.txt
+          grep -q '^Games ' out.txt
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: appimage
+          path: GamesHub-*.AppImage
+          if-no-files-found: error
+
+  windows:
+    name: Portable zip
+    needs: verify
+    runs-on: windows-2022
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          modules: qtmultimedia
+          cache: true
+
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1.13.0
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      # Deliberately not cmake --install: that puts the executable under
+      # bin/, and a portable zip wants it at the top level.
+      # --compiler-runtime bundles the MSVC redistributable; without it the
+      # zip silently depends on the user already having it, which INV-6
+      # cannot detect because the runner has it system-wide.
+      - name: Stage and deploy
+        run: |
+          mkdir dist
+          copy build\gameshub.exe dist\
+          copy LICENSE,packaging\THIRD-PARTY.md dist\
+          xcopy /e /i packaging\licenses dist\licenses
+          windeployqt --release --no-translations --no-system-d3d-compiler `
+                      --compiler-runtime dist\gameshub.exe
+
+      - name: Check the staged tree carries its plugins and licences
+        run: |
+          foreach ($group in 'platforms','multimedia') {
+            if (-not (Get-ChildItem "dist\$group" -File -EA SilentlyContinue)) {
+              throw "no Qt $group plugin in dist\"
+            }
+          }
+          foreach ($f in 'dist\LICENSE','dist\THIRD-PARTY.md',
+                         'dist\licenses\LGPL-3.0.txt','dist\licenses\GPL-3.0.txt') {
+            if (-not (Test-Path $f)) { throw "missing $f" }
+          }
+
+      - name: Package
+        run: Compress-Archive -Path dist\* -DestinationPath "GamesHub-$env:VERSION-windows-x64.zip"
+
+      # Tests the artifact, not the tree it came from. The output is read
+      # back from a redirected file because qt_add_executable makes this a
+      # GUI-subsystem binary: it has no console to print to, and PowerShell
+      # does not wait on one, so -Wait and a real file handle are what make
+      # the result observable at all.
+      - name: Smoke-test the portable build
+        run: |
+          Expand-Archive "GamesHub-$env:VERSION-windows-x64.zip" -DestinationPath unzipped
+          $env:PATH = 'C:\Windows\System32'
+          $p = Start-Process .\unzipped\gameshub.exe -ArgumentList '--version' `
+                 -Wait -PassThru -NoNewWindow -RedirectStandardOutput ver.txt
+          if ($p.ExitCode -ne 0) { throw "exit $($p.ExitCode)" }
+          if (-not (Select-String -Path ver.txt -Pattern '^Games ')) {
+            throw "no version line: $(Get-Content ver.txt -Raw)"
+          }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: windows-zip
+          path: GamesHub-*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [verify, linux, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      # The verify job has already proved this section exists. Published with
+      # the runner's own gh rather than a third-party action: one less
+      # dependency with write access to this repository's releases.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { inside = 1; next }
+            inside && /^## \[/     { exit }
+            inside                 { print }
+          ' CHANGELOG.md > notes.md
+          cat notes.md
+
+          appimage=$(ls artifacts/GamesHub-*.AppImage)
+          zip=$(ls artifacts/GamesHub-*.zip)
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Games $VERSION" \
+            --notes-file notes.md \
+            "$appimage" "$zip"

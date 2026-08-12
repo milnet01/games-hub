@@ -32,6 +32,8 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 
+#include <numbers>
+
 namespace {
 
 constexpr QColor kTileBase { 0x2f, 0x35, 0x3b };
@@ -188,7 +190,7 @@ void minesweeperTile(QPainter& p, const QRectF& r)
     const double rad = cell * 0.3;
     p.setPen(QPen(QColor(0x1a, 0x1c, 0x1e), 2));
     for (int i = 0; i < 4; ++i) {
-        const double a = i * M_PI / 4;
+        const double a = i * std::numbers::pi / 4;
         p.drawLine(mine - QPointF(std::cos(a), std::sin(a)) * rad * 1.6,
                    mine + QPointF(std::cos(a), std::sin(a)) * rad * 1.6);
     }

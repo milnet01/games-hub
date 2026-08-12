@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <random>
 
 namespace ca = canasta;
@@ -1905,7 +1906,7 @@ void CanastaView::paintFlights(QPainter& p)
         const QPointF at = f.from + (f.to - f.from) * t;
         const double angle = f.fromAngle + (f.toAngle - f.fromAngle) * t;
         // A lift off the table on the way, which reads as depth.
-        const double hop = std::sin(t * M_PI) * cardHeight() * 0.10;
+        const double hop = std::sin(t * std::numbers::pi) * cardHeight() * 0.10;
         const bool faceUp = f.flips ? t > 0.45 : f.faceUp;
         paintCard(p, f.card, QPointF(at.x(), at.y() - hop), angle, faceUp);
     }

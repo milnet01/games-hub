@@ -8,7 +8,21 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-12
+
+The first release. Fourteen games that had only ever run from a build
+directory on one machine now download as a single file on Linux or Windows,
+and eight of them remember where you left off.
+
 ### Added
+
+- **Games downloads as one file, for Linux and for Windows** (GHUB-0025)
+  No compiler, no build steps, nothing to install: grab the AppImage on
+  Linux or the zip on Windows and run it. Both carry their own copy of Qt,
+  so they work on a machine that has never had it, and both ship the
+  licence texts that bundling Qt requires. Every push is now built and
+  tested on both operating systems too, so a change that breaks Windows is
+  caught by the machine rather than by whoever downloads it next.
 
 - **Minesweeper, Reversi, Draughts and 2048 remember where you left off** (GHUB-0010)
   Close one of them mid-game and it is exactly as you left it next time you
