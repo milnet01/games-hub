@@ -162,7 +162,10 @@ Four jobs: `verify`, then `linux` and `windows` in parallel (both
 contains a `## [<version>]` heading for that version. The second exists
 because §11 requires the release commit to close `[Unreleased]` into a
 numbered block; if that was forgotten, `publish` would otherwise ship a
-release with an empty body, and by then the tag is public. Failing here
+release with an empty body, and by then the tag is public. It also publishes
+the bare version as a job output, which `linux`, `windows` and `publish` each
+read into a `VERSION` environment variable and use for their artifact names —
+so the `v` is stripped in exactly one place. Failing here
 costs a deleted tag and nothing else.
 
 **`linux`** — same build as CI, configured with
@@ -193,6 +196,10 @@ sed -i 's|^Exec=.*|Exec=gameshub|' AppDir/usr/share/applications/gameshub.deskto
   --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/gameshub.svg
 # INV-7 and INV-8 assert against AppDir here, before it is packaged
 ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+# linuxdeploy names its output from the desktop file's Name= field, which is
+# `Games` (packaging/gameshub.desktop.in), so the glob must not be *.AppImage
+# -- linuxdeploy and its Qt plugin are still sitting in this directory.
+mv Games*.AppImage "GamesHub-${VERSION}-x86_64.AppImage"
 ```
 
 `APPIMAGE_EXTRACT_AND_RUN=1` is not optional: GitHub's `ubuntu-24.04` image
@@ -216,8 +223,7 @@ locally 2026-08-12: `DESTDIR=… cmake --install` produced `usr/bin/gameshub`,
 **linuxdeploy is called twice on purpose.** The first call populates the
 AppDir; the second packages it. A single call with `--output appimage` does
 both at once and leaves no moment at which a deployed-but-unpackaged tree
-exists, which is the moment INV-7 and INV-8 assert against. Output is
-renamed to `GamesHub-<version>-x86_64.AppImage`.
+exists, which is the moment INV-7 and INV-8 assert against.
 
 **`windows`** — same build, then, deliberately *not* via `cmake --install`,
 because that puts the executable under `bin/` and a portable zip wants it at
@@ -470,7 +476,9 @@ this reason and not as a style choice.
   change, not just Linux.
   *Test:* `.github/workflows/ci.yml` runs `ctest --test-dir build
   --output-on-failure` under a matrix containing both `ubuntu-24.04` and
-  `windows-2022`; the run appears twice on every commit's check list.
+  `windows-2022`; the run appears twice on the check list of every `master`
+  commit and every pull request, which is what `ci.yml`'s `on:` selects —
+  a commit pushed to a topic branch with no PR open runs nothing.
   *Breaks when:* a matrix entry is dropped, or a step is given an
   `if: runner.os == 'Linux'` guard that skips the tests rather than a
   platform-specific setup detail.
@@ -522,10 +530,15 @@ this reason and not as a style choice.
   Qt's, so it is `AppDir/usr/plugins/{platforms,multimedia}/`, while
   `windeployqt` mirrors each plugin group into the deployment root, so it is
   `dist\{platforms,multimedia}\`.
-  *Breaks when:* a deployment tool bundles linked libraries only. INV-5 and
-  INV-6's running halves would also catch a missing platform plugin, since
-  the app cannot start without one — but they catch it as a process that
-  died, where this catches it by name, before packaging. A missing
+  *Breaks when:* a deployment tool bundles linked libraries only. **This
+  assertion is the only guard for the plugin real users need**, and that is
+  not a legibility point: INV-5 and INV-6's running halves set
+  `QT_QPA_PLATFORM=offscreen`, so they load `libqoffscreen.so` /
+  `qoffscreen.dll` and never touch `libqxcb.so` / `qwindows.dll`. A bundle
+  missing the desktop plugin starts perfectly under both and passes. That is
+  the 0.3.0 failure in mirror image — that artifact carried only `xcb`, ran
+  on a desktop, and aborted under offscreen. What the running halves do
+  catch is a missing *offscreen* plugin, as a process that died. A missing
   *multimedia* plugin is caught here and nowhere else: the app runs in
   silence rather than failing, so no smoke test can see it.
 
@@ -564,6 +577,14 @@ INV-1 and INV-4 are checkable locally by the commands in their clauses.
 INV-2, INV-3, INV-5, INV-6, INV-7 and INV-8 are workflow steps, and are
 verified by a real run: the first push exercises INV-3 and INV-4, and the
 first tag exercises the rest.
+
+**Not all of them have had that run.** The `v0.3.0` tag exercised INV-2,
+INV-8, and INV-5 and INV-6 in their `--version`-only form. Everything
+GHUB-0026 added afterwards — INV-5's and INV-6's running halves, and INV-7's
+named-plugin assertion — has never executed, because `release.yml` is
+tag-triggered and no tag has been cut against this content. **The next tag is
+their first observation, and a failure there is first light rather than a
+regression.**
 
 **Only INV-3 and INV-4 have a pre-fix state to fail against**, and both are
 seen to: INV-4's grep returns 7 before the `std::numbers::pi` change and 0
@@ -613,7 +634,7 @@ red; their first real run is their first observation.
 | INV-4 | The `windows-2022` CI job's compile step; `rg 'M_PI' src/` locally |
 | INV-5 | `.github/workflows/release.yml`, `Smoke-test the AppImage` |
 | INV-6 | `.github/workflows/release.yml`, `Smoke-test the portable build` |
-| INV-7 | `.github/workflows/release.yml`, the named-platform-plugin + `multimedia` assertion in both packaging jobs, at each one's own path; the platform half is caught again, later and less legibly, by INV-5 and INV-6's running checks |
+| INV-7 | `.github/workflows/release.yml`, the named-platform-plugin + `multimedia` assertion in both packaging jobs, at each one's own path. **Not INV-5/INV-6** — their running checks run offscreen, so they exercise the offscreen plugin and never the desktop one |
 | INV-8 | `.github/workflows/release.yml`, the licence-file assertion in both packaging jobs |
 | The AppImage runs on distributions older than the build runner | **nothing** — glibc 2.39 is a hard floor and no check tests an older system; stated as a requirement in the README instead |
 | The packaged games actually play | **partly** — the smoke tests start the hub inside the artifact under `--game spider`, so a bundle that cannot start Qt at all is caught. A game that failed to *open* would not be: `src/main.cpp:58` warns and falls back to the hub, leaving the process alive and the check green. That fourteen games play *correctly* is the test suite's job, on the same commit but not inside the artifact |
@@ -645,3 +666,4 @@ red; their first real run is their first observation.
 | 3 | 2026-08-12 | 2 | 1 | 2 | 4 | 2 | 9 verified, all fixed; 0 dismissed; nothing deferred. Loop cap reached. Both lanes found loop 2's §4.7 fix incomplete: the argv early-return removes the message box but not the GUI subsystem, so stdout still reaches nothing — answered with `Start-Process -RedirectStandardOutput`. Loop 2's fix also made both smoke tests stop loading Qt at all, so a missing platform plugin would have shipped green; INV-7 now asserts `platforms` as well as `multimedia`. Also: `--compiler-runtime`, a `verify` check that the changelog block exists, and an absolute `Exec=` that would have made the AppRun launch the host's binary. Findings concentrate in the Windows and AppImage paths — the half nobody can test on this machine — which is the argument for CI as the real verifier rather than for a fourth loop. |
 | 3-impl | 2026-08-12 | none — no reviewer dispatched | — | — | — | — | Implementation fold-back (`/write-code` Step 8). Building it falsified three things three cold loops could not see. **§4.6's smoke-test container listed four packages and needed seven**: the excludelist drops the whole libglvnd set, so `libgl1` alone left the AppImage dying on `libOpenGL.so.0`; the real run is what found it, and the corrected list is confirmed against an `ubuntu:24.04` container. **§4.2's and §4.3's action pins were stale or wrong** — `actions/checkout` is v7 not v4, `upload-artifact` v7, `download-artifact` v8, and the Qt plugin is a *separate repository* from linuxdeploy, so the spec's single download loop would have 404'd. All are now SHA-pinned. **`softprops/action-gh-release` was dropped entirely** for the runner's own `gh release`, on zizmor's advice: one less third-party action holding write access to this repository's releases. |
 | 4 | 2026-08-12 | 2 | 3 | 2 | 0 | 1 | 6 verified, all fixed; 0 dismissed. Loop 1 of a fresh run, re-gating the document after GHUB-0026 rewrote §4.3, §4.6, §10 and INV-5/6/7. **Q1 is out of scope over the whole release path and the packet said so**: no docker, no Windows toolchain, and `release.yml` runs on a tag only, so no claim about linuxdeploy, windeployqt or PowerShell is runnable on this machine. Both lanes independently found the same three: §4.3's download loop fetched the Qt plugin from linuxdeploy's own repository, contradicting the comment directly above it (loop 3-impl fixed this in the workflow and not in the snippet); §4.3's Windows block never copied `qoffscreen.dll` though §4.6 says it does; and §4.6's Linux block showed neither the `tee`, the `grep` nor the `pipefail` the paragraph below it reasons about — all three GHUB-0026 collateral, the last two mine. Lane A alone caught the oldest defect here: three passages claimed the smoke tests require `Games <version>` when both assert the `Games ` prefix only, so `Games 9.9.9` passes — verified by running the grep against that literal. Lane B alone caught §4.5 claiming `THIRD-PARTY.md` names the Qt version, which it does not, and a `--game spider` check that cannot fail on a game that did not open (`main.cpp:58` warns and falls back to the hub, leaving the process alive) — the §10 row now says so. Collateral outside the document: `README.md`'s licence paragraph repeated the THIRD-PARTY version claim and was corrected there. Four open questions resolved clean and are not in the tally, three of them the same one — §2, §4.1 and §4.7 describe the pre-change tree, which is a spec's correct "before" framing, not staleness. |
+| 5 | 2026-08-12 | 2 | 1 | 2 | 1 | 0 | 4 verified, all fixed; 0 dismissed. Loop 2 of this run, and the most valuable finding here is the one that refutes loop 4's own repair. **INV-7's *Breaks when* claimed the running checks would also catch a missing platform plugin. They will not**: both set `QT_QPA_PLATFORM=offscreen`, so they load `libqoffscreen.so` / `qoffscreen.dll` and never touch `libqxcb.so` / `qwindows.dll` — a bundle missing the plugin every real player needs starts perfectly under them and passes. It is the 0.3.0 failure exactly reversed, and it means the staged-tree assertion is the ONLY guard for the desktop plugin rather than a legible duplicate of one. Corrected in INV-7, §10, both workflow comments and `CLAUDE.md`; an implementer who had read the old text could have dropped the by-name check and re-shipped 0.3.0's bug. Also: §7 said the first tag exercises INV-5 to INV-8, which is now false of the halves GHUB-0026 added — they are unobserved until the next tag, and §7 says so. §4.3 never said how the AppImage is renamed, and `mv *.AppImage` cannot work with linuxdeploy's two tools sitting in the same directory — the block now carries `mv Games*.AppImage`, plus the reason the glob is `Games*` (linuxdeploy names its output from the desktop file's `Name=`). And INV-3 claimed a run on "every commit" where `ci.yml` selects `master` pushes and pull requests only. One defect was the orchestrator's own, caught at 4a step 3 before dispatch: the `mv` line introduced `${VERSION}` with nothing saying where it comes from, so the `verify` paragraph now states the job output. Q1 remained out of scope over the release path for the same reason as loop 4. |

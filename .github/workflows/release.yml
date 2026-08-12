@@ -113,11 +113,12 @@ jobs:
             --desktop-file AppDir/usr/share/applications/gameshub.desktop \
             --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/gameshub.svg
 
-      # INV-7 and INV-8. The smoke test below starts Qt, so a missing platform
-      # plugin no longer sails through -- but it fails there as a process that
-      # died, and here by name, which is the difference between a diagnosis
-      # and a puzzle. The platform plugins are named individually because the
-      # smoke test depends on the offscreen one being present.
+      # INV-7 and INV-8. This is the ONLY guard for libqxcb.so, the plugin
+      # real users need: the smoke test below runs offscreen, so it loads
+      # libqoffscreen.so and never touches xcb -- an AppImage missing the
+      # desktop plugin starts fine under it and passes. 0.3.0 was that bug in
+      # mirror image: only xcb bundled, fine on a desktop, dead offscreen.
+      # Both plugins are named here for that reason.
       - name: Check the AppDir carries its plugins and licences
         run: |
           for plugin in platforms/libqxcb.so platforms/libqoffscreen.so; do
@@ -239,10 +240,9 @@ jobs:
           Copy-Item "$qtBin\..\plugins\platforms\qoffscreen.dll" `
                     dist\platforms\ -Force
 
-      # The smoke test below starts Qt, so a missing platform plugin no longer
-      # sails through -- but it fails there as a process that died, and here
-      # by name. The platform plugins are named individually because the smoke
-      # test depends on the offscreen one being present.
+      # As on Linux: this is the ONLY guard for qwindows.dll, because the
+      # smoke test below runs offscreen and so exercises qoffscreen.dll
+      # alone. A zip missing the desktop plugin passes every run in this job.
       - name: Check the staged tree carries its plugins and licences
         run: |
           foreach ($dll in 'qwindows.dll','qoffscreen.dll') {

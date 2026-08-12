@@ -349,13 +349,16 @@ of the app's own is the failure. Both artifacts bundle the offscreen plugin
 for it: Linux via `EXTRA_PLATFORM_PLUGINS=libqoffscreen.so` (not
 `EXTRA_QT_PLUGINS`, a deprecated alias for `EXTRA_QT_MODULES` that matches
 modules and would silently match nothing), Windows by copying
-`qoffscreen.dll` from the Qt install beside `windeployqt`. The staged-tree
-assertions still name both platform plugins, because a missing one fails
-there by name rather than as a process that died, and they use different
-paths per platform: `linuxdeploy` keeps Qt's `plugins/<group>/` layout, while
-`windeployqt` mirrors each group into the deployment root. A missing
-*multimedia* plugin is still caught only there — the app runs in silence
-rather than failing.
+`qoffscreen.dll` from the Qt install beside `windeployqt`. **The running
+check cannot see a missing desktop plugin**, and that is not a detail: it
+asks for offscreen, so it loads `libqoffscreen.so` / `qoffscreen.dll` and
+never touches `libqxcb.so` / `qwindows.dll` — a bundle missing the plugin
+every player needs starts fine under it. The staged-tree assertions name both
+platform plugins for exactly that reason, and they are the *only* guard for
+the desktop one. They use different paths per platform: `linuxdeploy` keeps
+Qt's `plugins/<group>/` layout, while `windeployqt` mirrors each group into
+the deployment root. A missing *multimedia* plugin is likewise caught only
+there — the app runs in silence rather than failing.
 
 **`pkill -f <pattern>` will kill this session's own shell** when the pattern
 appears in the command line being run. Use `pkill -x gameshub`.
