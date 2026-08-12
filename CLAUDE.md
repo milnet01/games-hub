@@ -41,6 +41,38 @@ while leaving `Exec=/usr/local/bin/gameshub` pointing at nothing.
 The panel launcher runs the **installed** copy, so re-run `cmake --install`
 after changing code or the pinned icon keeps launching the old build.
 
+## Run the pipeline locally before pushing
+
+```bash
+git config core.hooksPath .githooks   # once per clone
+scripts/local-ci.sh                   # or just push; the hook runs it
+```
+
+**`scripts/local-ci.sh` reads its steps out of `.github/workflows/ci.yml`
+rather than restating them.** That is the whole point: a hand-written mirror
+of a pipeline drifts, and then passes locally for a build that fails on
+GitHub. It executes the workflow's own `run:` blocks in the workflow's own
+order, and **stops on any step it has no rule for** — a new action added to
+`ci.yml` fails the local run until `STEP_RULES` in the script accounts for
+it, because a silently skipped step is exactly the drift being prevented.
+
+Two things it cannot do, and says so on every run rather than implying
+coverage. **The Windows leg does not run here** — nothing on Linux drives
+MSVC, so that half is verified by CI and nowhere else. And the `uses:` steps
+are stood in for by this machine's own Qt and Ninja rather than executed.
+
+The `pre-push` hook runs it automatically. A push touching only `.md` files,
+`docs/`, or the licence texts runs the workflow linters and stops; anything
+touching code, CMake or a workflow runs the full pipeline. `SKIP_LOCAL_CI=1
+git push` bypasses it when you mean to.
+
+**Two traps this script hit while being written**, both of which produce a
+green run that checked nothing. `$(...)` strips NUL bytes, so the
+NUL-separated step list came back empty and the run "passed" having executed
+zero steps — hence the `STEPS_RUN` guard. And a newline-separated record
+splits a multi-line `run:` block mid-body, so a step executes only its first
+line, silently.
+
 ## Releasing
 
 Two workflows in `.github/workflows/`, contract in

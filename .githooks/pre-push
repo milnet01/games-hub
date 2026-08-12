@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Runs the local CI pipeline before every push, so a red build is found here
+# rather than on GitHub.
+#
+# Enable it once per clone:
+#     git config core.hooksPath .githooks
+#
+# A documentation-only push runs the workflow linters and stops — there is no
+# code for the compiler to have an opinion about. Anything touching code,
+# CMake or a workflow runs the full local pipeline.
+#
+# Emergency bypass: SKIP_LOCAL_CI=1 git push
+# Use it when you mean to; it is not the default for a reason.
+
+set -uo pipefail
+
+if [ "${SKIP_LOCAL_CI:-}" = "1" ]; then
+    echo "pre-push: SKIP_LOCAL_CI=1 — local CI deliberately skipped."
+    exit 0
+fi
+
+CI=scripts/local-ci.sh
+[ -x "$CI" ] || { echo "pre-push: $CI is missing or not executable"; exit 1; }
+
+# git feeds "<local ref> <local sha> <remote ref> <remote sha>" per ref on
+# stdin. Collect the range of commits actually being pushed.
+ZERO=0000000000000000000000000000000000000000
+RANGE=""
+while read -r _localref localsha _remoteref remotesha; do
+    [ "$localsha" = "$ZERO" ] && continue          # a branch deletion
+    if [ "$remotesha" = "$ZERO" ]; then
+        RANGE="$localsha"                          # a new branch
+    else
+        RANGE="$remotesha..$localsha"
+    fi
+done
+
+if [ -z "$RANGE" ]; then
+    echo "pre-push: nothing to check (deletion or empty push)."
+    exit 0
+fi
+
+CHANGED=$(git diff --name-only "$RANGE" 2>/dev/null || git show --name-only --pretty=format: "$RANGE" 2>/dev/null)
+
+# Docs-only if nothing outside these paths changed. Deliberately strict: a
+# CMakeLists or workflow edit is NOT documentation, however small.
+CODE=$(printf '%s\n' "$CHANGED" | grep -Ev '(^$|\.md$|^docs/|^LICENSE$|^\.gitignore$|^packaging/licenses/)' || true)
+
+if [ -z "$CODE" ]; then
+    echo "pre-push: documentation-only push — running the workflow linters only."
+    exec "$CI" --lint
+fi
+
+echo "pre-push: code changed, running the full local pipeline:"
+printf '%s\n' "$CODE" | sed 's/^/    /'
+exec "$CI"

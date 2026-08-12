@@ -229,6 +229,18 @@ time writes a launcher pointing at the wrong place.
 cd build && ctest --output-on-failure
 ```
 
+The same pipeline CI runs can be run locally before pushing, which is worth
+doing because half of it is checked on a machine you do not have:
+
+```bash
+git config core.hooksPath .githooks   # once, then it runs on every push
+scripts/local-ci.sh
+```
+
+It takes its steps from `.github/workflows/ci.yml` instead of repeating
+them, so it cannot quietly fall out of step with what GitHub actually runs.
+The Windows half still only runs there.
+
 `gameshub_selftest` checks every game's rules with no UI: Chess's move
 generator counted against the published totals for four reference positions,
 Reversi's engine against random play, Minesweeper's first-click safety, deck
