@@ -5,30 +5,33 @@ sized to sit beside whatever you are actually working on.
 
 ![the games hub](docs/hub.png)
 
-Current version 0.3.0 — see the [changelog](CHANGELOG.md) for what changed
+Current version 0.3.1 — see the [changelog](CHANGELOG.md) for what changed
 and the [roadmap](ROADMAP.md) for what is coming.
 
 ## Download
 
-Nothing to install and no compiler needed. Both downloads carry their own
-copy of Qt, so they run on a machine that has never had it.
+One file, and nothing to install first. Each download brings everything it
+needs with it, so it runs on a computer that has never had anything to do
+with this sort of thing.
 
 | Your system | File | How to run it |
 |---|---|---|
-| Linux | `GamesHub-<version>-x86_64.AppImage` | Mark it executable (`chmod +x`) and double-click it |
-| Windows | `GamesHub-<version>-windows-x64.zip` | Unzip anywhere and run `gameshub.exe` |
+| Linux | `GamesHub-<version>-x86_64.AppImage` | Give it permission to run (right-click → *Properties* → *Permissions* → *Allow executing*, or `chmod +x` in a terminal), then double-click it |
+| Windows | `GamesHub-<version>-windows-x64.zip` | Unzip it anywhere you like and run `gameshub.exe` inside |
 
 Both are on the [releases page](https://github.com/milnet01/games-hub/releases).
 
 Two things worth knowing before you download:
 
-- **The Linux build needs a reasonably current distribution** — glibc 2.39 or
-  newer, which means Ubuntu 24.04, Fedora 40, Debian 13 or Tumbleweed and
-  later. On anything older, build from source instead; the instructions are
-  below and there is nothing exotic about them.
-- **Windows will warn you the first time.** The download is not code-signed,
-  so SmartScreen shows "Windows protected your PC". Signing needs a paid
-  certificate. Click *More info* → *Run anyway*, or build it yourself.
+- **The Linux file needs a reasonably recent Linux.** Ubuntu 24.04, Fedora 40,
+  Debian 13, Tumbleweed and anything newer are all fine; older versions will
+  refuse to start it. (The technical reason is a system library called glibc,
+  which has to be 2.39 or newer.) If yours is older, you can build it
+  yourself — see the end of this file.
+- **Windows will warn you the first time.** You will see a blue box saying
+  "Windows protected your PC". That is not a sign anything is wrong with the
+  download: it appears for any program whose author has not paid for a
+  certificate to stamp it with. Click *More info*, then *Run anyway*.
 
 ## The games
 
@@ -55,19 +58,26 @@ the **Sound** switch at the right mutes the lot.
 
 Best scores are kept between sessions: games won at Chess and Draughts, discs
 won at each Reversi level, fastest Minesweeper and Sudoku clears, top Klondike
-score, fewest Spider and FreeCell moves, lowest winning Hearts total, highest
-winning Canasta score, and the Snake, 2048 and Pinball high scores.
+score, fewest Spider and FreeCell moves, most Pyramid pairs cleared, lowest
+winning Hearts total, highest winning Canasta score, and the Snake, 2048 and
+Pinball high scores.
 
 **The window remembers itself.** Size and position are kept for each game
 separately as well as for the tile menu, so a game you like large opens large
 and the menu comes back where you left it.
 
-**Canasta and Chess pick up where you left off.** Close the window mid-game and
-the whole table — every hand, the melds, the pile, the stock, the scores and the
-rule set in force — comes back next time you open Canasta, and Chess comes back
-to the same board with the same moves behind it, so Undo and threefold
-repetition still work. There is nothing to press: New Game is how you start a
-fresh one instead. The other games do not do this yet.
+**Ten of the games pick up where you left off.** Close the window in the middle
+of one and it comes back exactly as you left it — Chess, Canasta, Draughts,
+Reversi, Minesweeper, 2048, and all four card games (Klondike, Spider, FreeCell
+and Pyramid). Canasta brings back the whole table: every hand, the melds, the
+pile, the stock, the scores and the rules in force. Chess brings back the board
+*and* the moves that led to it, so Undo still works.
+
+There is nothing to press and no save button — it just happens. Starting a
+fresh game is what New Game is for. Finish a game and nothing is kept, so you
+never come back to a board you have already won.
+
+The four that do not do this yet are Hearts, Sudoku, Snake and Pinball.
 
 **Minesweeper and Sudoku can be paused**, which stops the clock and covers the
 board, so walking away costs you nothing. Snake has its own pause on the space
@@ -80,9 +90,10 @@ squares it can reach show a dot, and the ones it can capture show a ring.
 Click one to move. A pawn reaching the far rank asks which piece it should
 become. A king in check is lit in red, and the rule that a move must get you
 out of check is enforced, so a piece that cannot help simply offers no moves.
-Undo takes back your move and the computer's reply together. Draws by
-stalemate, the fifty-move rule, threefold repetition and insufficient material
-are all detected and named when the game ends.
+Undo takes back your move and the computer's reply together. All four ways a
+game can end in a draw are spotted and named for you when they happen —
+stalemate, the fifty-move rule, the same position three times over, and too
+few pieces left for anyone to win.
 
 **Reversi.** You are Black and move first. Click a square with a faint dot on
 it. Your move must trap a line of the computer's discs between the square you
@@ -194,9 +205,16 @@ next hand, since they cannot change under cards already dealt.
 table does the same. Three balls. A launch that falls short rolls back to the
 plunger rather than costing you a ball.
 
-## Building
+## For developers
 
-Needs Qt 6, CMake and a C++20 compiler.
+**If you just want to play, you can stop here.** The rest of this file is
+about building the games from their source code, which you only need if you
+are changing them, or if your Linux is too old for the download above.
+
+### Building
+
+Needs Qt 6 (the toolkit the windows and cards are drawn with), CMake and a
+C++20 compiler.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -211,7 +229,7 @@ cmake --build build
 ./build/gameshub --game pinball
 ```
 
-## Installing
+### Installing
 
 Adds Games to the application menu with its own icon:
 
@@ -223,7 +241,7 @@ Set `CMAKE_INSTALL_PREFIX` when configuring, as above — the `.desktop` file
 records an absolute path to the binary, so passing `--prefix` only at install
 time writes a launcher pointing at the wrong place.
 
-## Tests
+### Tests
 
 ```bash
 cd build && ctest --output-on-failure
@@ -252,8 +270,12 @@ needs a display.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). Every game here is a traditional one whose rules
-are in the public domain, and the code is written from scratch.
+**In plain terms: these games are free. Play them, copy them, change them,
+give them away.** Nobody owns the rules to Chess or Solitaire, and every line
+of code here was written from scratch rather than borrowed.
+
+The licence is MIT — see [LICENSE](LICENSE). The rest of this section is the
+paperwork that goes with it, and matters only if you redistribute the games.
 
 The app links Qt 6 dynamically, which Qt offers under LGPL-3.0 (or LGPL-2.1
 with the Qt Company exception). Qt is not modified here, and a source
