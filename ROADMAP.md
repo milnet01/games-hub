@@ -135,7 +135,7 @@ machine. This section is about the gap between that and someone else
 
 double-clicking a file.
 
-- 🚧 [GHUB-0025] **Games Hub downloads as one file, on Linux and on Windows.**
+- ✅ [GHUB-0025] **Games Hub downloads as one file, on Linux and on Windows.**
   Nothing in this project has ever left the machine it was written on. There
   is no tag, no CI, no published build, and three changelog entries already
   owed a release. C++ helps here — a compiled binary needs no interpreter on
@@ -158,6 +158,42 @@ double-clicking a file.
   Progress (2026-08-12): contract accepted as
   docs/specs/GHUB-0025-downloadable-builds.md after three cold-eyes loops
   (31 verified findings, all fixed). Implementation started.
+  Resolved (2026-08-12): v0.3.0 is published with both files —
+  GamesHub-0.3.0-x86_64.AppImage (49 MB) and
+  GamesHub-0.3.0-windows-x64.zip (62 MB). CI builds and runs both test
+  binaries on ubuntu-24.04 and windows-2022 for every push; all fourteen
+  games compile under MSVC, which had never been tried. The published
+  AppImage was downloaded to this machine and runs. Three source changes
+  the port needed: std::numbers::pi for M_PI, --version answered from
+  argv before Qt starts, and a hand-written Fisher-Yates shuffle so a
+  seed deals the same game on both standard libraries. Contract and its
+  three cold-eyes loops in docs/specs/GHUB-0025-downloadable-builds.md.
+
+- 📋 [GHUB-0026] **The release smoke tests never start Qt, so they cannot see a broken bundle.**
+  Both smoke tests run the artifact with --version, and GHUB-0025 made
+  --version return before QApplication is constructed so it works headless
+  on Windows. The consequence is that neither test loads a Qt plugin, opens
+  a window or plays a sound: a bundle missing its platform plugin passes
+  every gate and reaches a user as "could not load the Qt platform plugin".
+
+  This is not theoretical. The published 0.3.0 AppImage carries only the
+  xcb platform plugin, so it runs on a desktop — verified by downloading it
+  and launching it here — but aborts under QT_QPA_PLATFORM=offscreen. The
+  staged-tree assertion (INV-7) is the only thing catching a missing plugin
+  today, and it checks that the directory is non-empty, not that the right
+  plugin is in it.
+
+  The fix is to make the container test actually start the app: bundle the
+  offscreen plugin (EXTRA_QT_PLUGINS=offscreen for linuxdeploy-plugin-qt),
+  then run the AppImage with QT_QPA_PLATFORM=offscreen under a timeout and
+  require that it is still alive when the timeout fires. That exercises Qt
+  init, the hub and one game inside a container with no Qt installed, which
+  is the property the download actually has to have. The Windows job can do
+  the same with Start-Process and a timeout.
+  **Layman:** The checks that guard a download prove it can say its version, not that it can open a game.
+  Kind: test.
+  Lanes: packaging, ci.
+  Source: in-session-2026-08-12.
 
 ### 🎨 Games agreed and not yet started
 
