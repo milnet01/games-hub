@@ -150,8 +150,13 @@ otherwise, and nothing else in the workflow needs write.
 Four jobs: `verify`, then `linux` and `windows` in parallel (both
 `needs: verify`), then `publish`.
 
-**`verify`** — checks out and runs §4.1's tag-versus-`CMakeLists.txt`
-comparison, and nothing else.
+**`verify`** — checks out and runs two assertions, both before any build:
+§4.1's tag-versus-`CMakeLists.txt` comparison, and that `CHANGELOG.md`
+contains a `## [<version>]` heading for that version. The second exists
+because §11 requires the release commit to close `[Unreleased]` into a
+numbered block; if that was forgotten, `publish` would otherwise ship a
+release with an empty body, and by then the tag is public. Failing here
+costs a deleted tag and nothing else.
 
 **`linux`** — same build as CI, configured with
 `-DCMAKE_INSTALL_PREFIX=/usr`, then:
@@ -167,7 +172,14 @@ export PATH="$PWD:$PATH"
 export APPIMAGE_EXTRACT_AND_RUN=1   # the runner has no FUSE 2
 
 DESTDIR="$PWD/AppDir" cmake --install build
+
+# The installed desktop file carries Exec=/usr/bin/gameshub, an absolute path
+# baked in by configure_file. Inside an AppImage that would name the HOST's
+# binary, so the AppRun linuxdeploy generates must see a bare name instead.
+sed -i 's|^Exec=.*|Exec=gameshub|' AppDir/usr/share/applications/gameshub.desktop
+
 ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt \
+  --executable AppDir/usr/bin/gameshub \
   --desktop-file AppDir/usr/share/applications/gameshub.desktop \
   --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/gameshub.svg
 # INV-7 and INV-8 assert against AppDir here, before it is packaged
@@ -207,10 +219,16 @@ mkdir dist
 copy build\gameshub.exe dist\
 copy LICENSE,packaging\THIRD-PARTY.md dist\
 xcopy /e /i packaging\licenses dist\licenses
-windeployqt --release --no-translations --no-system-d3d-compiler dist\gameshub.exe
+windeployqt --release --no-translations --no-system-d3d-compiler `
+            --compiler-runtime dist\gameshub.exe
 # INV-7 and INV-8 assert against dist\ here, before it is packaged
 Compress-Archive -Path dist\* -DestinationPath GamesHub-<version>-windows-x64.zip
 ```
+
+`--compiler-runtime` is deliberate: without it the zip relies on the MSVC
+redistributable already being installed, which INV-6 cannot detect because
+the runner has it system-wide. The user would meet a missing-DLL dialog that
+no gate in this pipeline can see.
 
 Both build jobs end with `actions/upload-artifact@v4`, naming the file they
 produced; that is what `publish` downloads.
@@ -241,9 +259,12 @@ here." Both artifacts in §4.3 bundle Qt, so that sentence stops being true
 and LGPL-3.0 §4's conditions start applying to every download.
 
 Dynamic linking already satisfies the relinking condition; what is missing is
-the paperwork. Three files travel beside the binary in both artifacts, of
+the paperwork. Four files travel beside the binary in both artifacts, of
 which only one is new:
 
+- `LICENSE` — **already in the tree**, the project's own MIT text. It has
+  never been installed anywhere; it is part of the four because a download
+  carries no repository to read it from.
 - `packaging/licenses/LGPL-3.0.txt` and `packaging/licenses/GPL-3.0.txt` —
   **already in the tree**, fetched verbatim from gnu.org. LGPL-3.0
   incorporates the GPL by reference and requires a copy of both. This work
@@ -267,13 +288,14 @@ Both release jobs smoke-test their own artifact before it is published:
 
   ```bash
   docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
-    apt-get update -qq && apt-get install -y -qq libgl1 libxcb1 libx11-6
+    apt-get update -qq && apt-get install -y -qq libgl1 libxcb1 libx11-6 libx11-xcb1
     /w/GamesHub-*.AppImage --appimage-extract-and-run --version'
   ```
 
-  The three packages are the excludelist baseline from §4.2 — host graphics
-  libraries, no Qt. Installing anything Qt here would void what the test
-  proves.
+  The four packages are the excludelist baseline from §4.2 — host graphics
+  libraries, no Qt. (`libX11-xcb.so.1` is on the excludelist but ships in
+  `libx11-xcb1`, a different package from `libx11-6`.) Installing anything
+  Qt here would void what the test proves.
 
 - Windows, from the artifact rather than the staging tree, with the Qt
   install removed from `PATH`:
@@ -281,10 +303,15 @@ Both release jobs smoke-test their own artifact before it is published:
   ```powershell
   Expand-Archive GamesHub-<version>-windows-x64.zip -DestinationPath unzipped
   $env:PATH = 'C:\Windows\System32'
-  .\unzipped\gameshub.exe --version
+  $p = Start-Process .\unzipped\gameshub.exe -ArgumentList '--version' `
+         -Wait -PassThru -NoNewWindow -RedirectStandardOutput ver.txt
+  if ($p.ExitCode -ne 0) { throw "exit $($p.ExitCode)" }
+  if (-not (Select-String -Path ver.txt -Pattern '^Games ')) { throw 'no version line' }
   ```
 
-Both must print `Games <version>` on stdout and exit 0.
+Both must write `Games <version>` and exit 0. The Windows side reads it back
+from a redirected file rather than from the pipeline, for the subsystem
+reason §4.7 gives.
 
 The Linux command runs under `sh -c` because `docker run` executes its
 argument directly with no shell, so `GamesHub-*.AppImage` would otherwise be
@@ -321,6 +348,18 @@ early return simply means the parser's own version path is never reached.
 The string is `Games <version>` either way — the same text
 `QCommandLineParser` produced from `setApplicationName("Games")` — so
 nothing a user sees changes on Linux.
+
+**The early return removes the dialog but not the subsystem, and that
+changes how Windows must observe it.** `WIN32_EXECUTABLE` stays ON — turning
+it off would pop a console window behind the hub every time a player
+launches the game, which is a worse bug than the one being fixed. A
+GUI-subsystem process has no console attached, so `printf` reaches nothing
+when stdout *is* a console, and PowerShell does not block on such a process,
+so `$LASTEXITCODE` is not reliable either. What does work is an explicitly
+redirected handle: `Start-Process -Wait -RedirectStandardOutput` gives the
+child a real file handle, which `printf` writes to normally, and `-Wait`
+makes the exit code observable. §4.6's Windows check is written that way for
+this reason and not as a style choice.
 
 ## 5. Invariants
 
@@ -370,32 +409,43 @@ nothing a user sees changes on Linux.
 
 - **INV-6** — The published Windows file runs with no Qt on `PATH`.
   *Test:* the `Smoke-test the portable build` step in
-  `.github/workflows/release.yml` expands the finished zip into `unzipped\`
-  and scrubs `PATH` to `C:\Windows\System32` before running
-  `unzipped\gameshub.exe --version`. It tests the artifact, not the staging
-  tree it was made from.
+  `.github/workflows/release.yml` expands the finished zip into `unzipped\`,
+  scrubs `PATH` to `C:\Windows\System32`, and runs
+  `unzipped\gameshub.exe --version` through `Start-Process -Wait -PassThru
+  -RedirectStandardOutput`, asserting exit 0 and a `Games ` line in the
+  redirected file. It tests the artifact, not the staging tree it was made
+  from, and it reads a file rather than stdout because §4.7's binary is
+  GUI-subsystem.
   *Breaks when:* `windeployqt` is run against the wrong binary, or a new Qt
   module is linked that it does not know to copy.
 
-- **INV-7** — Sound still works in the packaged builds, which needs the Qt
-  Multimedia backend plugin and not just the `Qt6Multimedia` library.
+- **INV-7** — The packaged builds carry the Qt *plugins* they need, not just
+  the Qt libraries they link: the platform plugin, without which the app
+  cannot open a window at all, and the multimedia backend, without which it
+  plays in silence.
   *Test:* both release jobs assert, at the §4.3 marker before packaging,
-  that their staged tree holds at least one file in the multimedia plugin
-  directory. **The two tools use different layouts:** `linuxdeploy` keeps
-  Qt's, so it is `AppDir/usr/plugins/multimedia/`, while `windeployqt`
-  mirrors each plugin group into the deployment root, so it is
-  `dist\multimedia\`.
-  *Breaks when:* a deployment tool bundles linked libraries only — the app
-  then starts, paints and plays in silence, which no `--version` check can
-  see.
+  that their staged tree holds at least one file in **both** the `platforms`
+  and `multimedia` plugin directories. **The two tools use different
+  layouts:** `linuxdeploy` keeps Qt's, so it is
+  `AppDir/usr/plugins/{platforms,multimedia}/`, while `windeployqt` mirrors
+  each plugin group into the deployment root, so it is
+  `dist\{platforms,multimedia}\`.
+  *Breaks when:* a deployment tool bundles linked libraries only. Neither
+  smoke test can see it: §4.7 makes `--version` return before `QApplication`
+  exists, so nothing in INV-5 or INV-6 loads a plugin, and a missing
+  platform plugin would reach a user as "could not load the Qt platform
+  plugin" with every gate green. This staged-tree assertion is the only
+  thing standing between that and a release.
 
 - **INV-8** — Neither artifact ships Qt without the licence text LGPL-3.0 §4
   requires.
   *Test:* both release jobs assert, at the §4.3 marker before packaging,
-  that `LICENSE`, `THIRD-PARTY.md`, `licenses/LGPL-3.0.txt` and
-  `licenses/GPL-3.0.txt` are all present — under
-  `AppDir/usr/share/doc/gameshub/` on Linux, where
-  `${CMAKE_INSTALL_DOCDIR}` puts them, and flat in `dist\` on Windows.
+  that all four files are present at these exact paths — on Linux
+  `AppDir/usr/share/doc/gameshub/{LICENSE,THIRD-PARTY.md}` and
+  `AppDir/usr/share/doc/gameshub/licenses/{LGPL-3.0.txt,GPL-3.0.txt}`; on
+  Windows `dist\{LICENSE,THIRD-PARTY.md}` and
+  `dist\licenses\{LGPL-3.0.txt,GPL-3.0.txt}`. The `licenses/` subdirectory
+  is present on both sides; only the parent differs.
   *Breaks when:* the Windows job gains a file to copy and the copy line is
   not updated — the Linux side cannot break this way, because
   `cmake --install` carries the whole `${CMAKE_INSTALL_DOCDIR}` group.
@@ -420,9 +470,14 @@ run — a second operating system.
 INV-1 and INV-4 are checkable locally by the commands in their clauses.
 INV-2, INV-3, INV-5, INV-6, INV-7 and INV-8 are workflow steps, and are
 verified by a real run: the first push exercises INV-3 and INV-4, and the
-first tag exercises the rest. Each must be seen to fail against pre-fix code — INV-4's
-grep returns 7 before the `std::numbers::pi` change and 0 after, and the
-Windows compile is red before it and green after.
+first tag exercises the rest.
+
+**Only INV-3 and INV-4 have a pre-fix state to fail against**, and both are
+seen to: INV-4's grep returns 7 before the `std::numbers::pi` change and 0
+after, and the Windows compile is red before it and green after. The other
+six assert properties of workflows and artifacts that do not exist until
+this work creates them, so there is no "before" in which to watch them go
+red; their first real run is their first observation.
 
 ## 8. Alternatives considered (and rejected)
 
@@ -465,7 +520,7 @@ Windows compile is red before it and green after.
 | INV-4 | The `windows-2022` CI job's compile step; `rg 'M_PI' src/` locally |
 | INV-5 | `.github/workflows/release.yml`, `Smoke-test the AppImage` |
 | INV-6 | `.github/workflows/release.yml`, `Smoke-test the portable build` |
-| INV-7 | `.github/workflows/release.yml`, the multimedia-plugin assertion in both packaging jobs, at each one's own path |
+| INV-7 | `.github/workflows/release.yml`, the `platforms` + `multimedia` plugin assertion in both packaging jobs, at each one's own path |
 | INV-8 | `.github/workflows/release.yml`, the licence-file assertion in both packaging jobs |
 | The AppImage runs on distributions older than the build runner | **nothing** — glibc 2.39 is a hard floor and no check tests an older system; stated as a requirement in the README instead |
 | The packaged games actually play | **nothing** — the smoke tests prove the binary starts and reports its version, not that fourteen games work. The test suite covers that on the same commit, but not inside the artifact |
@@ -493,3 +548,4 @@ Windows compile is red before it and green after.
 |------|------|-------|----|----|----|----|---------|
 | 1 | 2026-08-12 | 2 | 1 | 3 | 6 | 1 | 11 verified, all fixed; 1 dismissed (INV-4's pre-change count of 7 challenged by both lanes, confirmed correct — `M_E` and `M_SQRT2` are 0 in `src/`). Both lanes independently found the same six defects. Largest: §4.3's AppDir install contradicted its own prose, fixed to `DESTDIR` staging and verified locally. |
 | 2 | 2026-08-12 | 2 | 3 | 3 | 5 | 0 | 11 verified, all fixed; 0 dismissed. Four were loop-1 collateral (a "three new files" claim two of which loop 1 had created, a `licenses/` layout INV-8 and §4.5 disagreed on, INV-1's hardcoded `0.2.0` invalidated by the bump loop 1 added, and a claim that linuxdeploy bundles libGL — refuted against the 53-entry AppImage excludelist). The rest were real gaps: PowerShell `copy` cannot take three positional arguments; linuxdeploy and its Qt plugin are two separate downloads and the runner has no FUSE; and `qt_add_executable` sets `WIN32_EXECUTABLE ON`, so `--version` would have opened a message box on Windows instead of printing — §4.7 added to answer it before Qt starts. |
+| 3 | 2026-08-12 | 2 | 1 | 2 | 4 | 2 | 9 verified, all fixed; 0 dismissed; nothing deferred. Loop cap reached. Both lanes found loop 2's §4.7 fix incomplete: the argv early-return removes the message box but not the GUI subsystem, so stdout still reaches nothing — answered with `Start-Process -RedirectStandardOutput`. Loop 2's fix also made both smoke tests stop loading Qt at all, so a missing platform plugin would have shipped green; INV-7 now asserts `platforms` as well as `multimedia`. Also: `--compiler-runtime`, a `verify` check that the changelog block exists, and an absolute `Exec=` that would have made the AppRun launch the host's binary. Findings concentrate in the Windows and AppImage paths — the half nobody can test on this machine — which is the argument for CI as the real verifier rather than for a fourth loop. |
