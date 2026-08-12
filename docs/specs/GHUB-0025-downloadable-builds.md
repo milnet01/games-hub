@@ -98,9 +98,9 @@ Triggers on push to `master` and on pull requests. One matrix job:
 | `ubuntu-24.04` | `linux_gcc_64` | not `ubuntu-22.04`: deprecation begins 2026-09-17 |
 | `windows-2022` | `win64_msvc2022_64` | MSVC, the default Qt Windows build |
 
-Steps: `actions/checkout@v4`; `jurplel/install-qt-action@v4` with
+Steps: `actions/checkout`; `jurplel/install-qt-action` with
 `version: 6.8.3` and `modules: qtmultimedia`; **on the Windows leg only,
-`ilammy/msvc-dev-cmd@v1`**; `cmake -S . -B build -G Ninja
+`ilammy/msvc-dev-cmd`**; `cmake -S . -B build -G Ninja
 -DCMAKE_BUILD_TYPE=Release`; `cmake --build build`; `ctest --test-dir build
 --output-on-failure`. Qt 6.8.3 satisfies the existing
 `find_package(Qt6 6.5 REQUIRED ...)` floor.
@@ -126,8 +126,9 @@ beside it.
 
 **The AppImage does not carry those libraries either, and INV-5's container
 must install them.** linuxdeploy honours the AppImage community
-excludelist, which names `libGL.so.1`, `libxcb.so.1` and `libX11.so.6`
-among 53 entries deliberately left to the host, on the grounds that a
+excludelist, which names the whole libglvnd set (`libGL.so.1`,
+`libOpenGL.so.0`, `libGLX.so.0`, `libGLdispatch.so.0`), `libxcb.so.1` and
+`libX11.so.6` among 53 entries deliberately left to the host, on the grounds that a
 bundled graphics stack breaks against the host driver. So "self-contained"
 means *carries its own Qt*, not *runs on an empty filesystem*: any machine
 that can run a desktop application already has them, and a stock
@@ -142,10 +143,16 @@ the Linux leg adds `ninja-build` to its `apt-get` line; on Windows the
 
 Triggers on `push: tags: ['v*']`. The workflow declares
 `permissions: contents: read` at the top and raises it to
-`contents: write` on the `publish` job alone, which is what
-`softprops/action-gh-release` needs to create the release; a repository
-whose default `GITHUB_TOKEN` is read-only fails at the publish step
-otherwise, and nothing else in the workflow needs write.
+`contents: write` on the `publish` job alone, which is what `gh release
+create` needs; a repository whose default `GITHUB_TOKEN` is read-only fails
+at the publish step otherwise, and nothing else in the workflow needs write.
+
+**Every action is pinned to a commit SHA**, with its version in a trailing
+comment, and `actions/checkout` is given `persist-credentials: false`. Both
+are `zizmor` requirements and both earn it here: these workflows publish
+binaries that strangers download, so a moved tag on a third-party action
+would run arbitrary code against them, and a token left in `.git/config`
+travels into any artifact built from that workspace.
 
 Four jobs: `verify`, then `linux` and `windows` in parallel (both
 `needs: verify`), then `publish`.
@@ -234,10 +241,12 @@ Both build jobs end with `actions/upload-artifact@v4`, naming the file they
 produced; that is what `publish` downloads.
 
 **`publish`** — needs both, downloads their artifacts with
-`actions/download-artifact@v4` and calls
-`softprops/action-gh-release@v2` with the two files and a release body
-extracted from the `## [<version>]` block of `CHANGELOG.md` matching the
-tag — **not** `[Unreleased]`. Per §11 the release commit closes
+`actions/download-artifact` and calls the runner's own `gh release create`
+with the two files and a release body extracted from the `## [<version>]`
+block of `CHANGELOG.md` matching the tag — **not** `[Unreleased]`. `gh`
+rather than a third-party publish action: it is already on the runner, so
+it is one less dependency holding write access to this repository's
+releases. Per §11 the release commit closes
 `[Unreleased]` into a numbered block before the tag is cut, so at tag time
 `[Unreleased]` is empty and reading it would publish blank release notes.
 
@@ -288,14 +297,20 @@ Both release jobs smoke-test their own artifact before it is published:
 
   ```bash
   docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
-    apt-get update -qq && apt-get install -y -qq libgl1 libxcb1 libx11-6 libx11-xcb1
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends \
+      libgl1 libglx0 libopengl0 libglvnd0 libxcb1 libx11-6 libx11-xcb1
     /w/GamesHub-*.AppImage --appimage-extract-and-run --version'
   ```
 
-  The four packages are the excludelist baseline from §4.2 — host graphics
-  libraries, no Qt. (`libX11-xcb.so.1` is on the excludelist but ships in
-  `libx11-xcb1`, a different package from `libx11-6`.) Installing anything
-  Qt here would void what the test proves.
+  The seven packages are the excludelist baseline from §4.2 — host graphics
+  libraries, no Qt. Installing anything Qt here would void what the test
+  proves. Two package-naming traps, both confirmed against a real
+  `ubuntu:24.04` on 2026-08-12: `libX11-xcb.so.1` ships in `libx11-xcb1`,
+  not `libx11-6`; and the excluded GL stack is four separate libraries
+  (`libGL.so.1`, `libOpenGL.so.0`, `libGLX.so.0`, `libGLdispatch.so.0`)
+  across four packages, so `libgl1` alone leaves the AppImage dying on
+  `libOpenGL.so.0: cannot open shared object file`.
 
 - Windows, from the artifact rather than the staging tree, with the Qt
   install removed from `PATH`:
@@ -549,3 +564,4 @@ red; their first real run is their first observation.
 | 1 | 2026-08-12 | 2 | 1 | 3 | 6 | 1 | 11 verified, all fixed; 1 dismissed (INV-4's pre-change count of 7 challenged by both lanes, confirmed correct — `M_E` and `M_SQRT2` are 0 in `src/`). Both lanes independently found the same six defects. Largest: §4.3's AppDir install contradicted its own prose, fixed to `DESTDIR` staging and verified locally. |
 | 2 | 2026-08-12 | 2 | 3 | 3 | 5 | 0 | 11 verified, all fixed; 0 dismissed. Four were loop-1 collateral (a "three new files" claim two of which loop 1 had created, a `licenses/` layout INV-8 and §4.5 disagreed on, INV-1's hardcoded `0.2.0` invalidated by the bump loop 1 added, and a claim that linuxdeploy bundles libGL — refuted against the 53-entry AppImage excludelist). The rest were real gaps: PowerShell `copy` cannot take three positional arguments; linuxdeploy and its Qt plugin are two separate downloads and the runner has no FUSE; and `qt_add_executable` sets `WIN32_EXECUTABLE ON`, so `--version` would have opened a message box on Windows instead of printing — §4.7 added to answer it before Qt starts. |
 | 3 | 2026-08-12 | 2 | 1 | 2 | 4 | 2 | 9 verified, all fixed; 0 dismissed; nothing deferred. Loop cap reached. Both lanes found loop 2's §4.7 fix incomplete: the argv early-return removes the message box but not the GUI subsystem, so stdout still reaches nothing — answered with `Start-Process -RedirectStandardOutput`. Loop 2's fix also made both smoke tests stop loading Qt at all, so a missing platform plugin would have shipped green; INV-7 now asserts `platforms` as well as `multimedia`. Also: `--compiler-runtime`, a `verify` check that the changelog block exists, and an absolute `Exec=` that would have made the AppRun launch the host's binary. Findings concentrate in the Windows and AppImage paths — the half nobody can test on this machine — which is the argument for CI as the real verifier rather than for a fourth loop. |
+| 3-impl | 2026-08-12 | none — no reviewer dispatched | — | — | — | — | Implementation fold-back (`/write-code` Step 8). Building it falsified three things three cold loops could not see. **§4.6's smoke-test container listed four packages and needed seven**: the excludelist drops the whole libglvnd set, so `libgl1` alone left the AppImage dying on `libOpenGL.so.0`; the real run is what found it, and the corrected list is confirmed against an `ubuntu:24.04` container. **§4.2's and §4.3's action pins were stale or wrong** — `actions/checkout` is v7 not v4, `upload-artifact` v7, `download-artifact` v8, and the Qt plugin is a *separate repository* from linuxdeploy, so the spec's single download loop would have 404'd. All are now SHA-pinned. **`softprops/action-gh-release` was dropped entirely** for the runner's own `gh release`, on zizmor's advice: one less third-party action holding write access to this repository's releases. |

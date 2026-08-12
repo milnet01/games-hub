@@ -135,11 +135,19 @@ jobs:
       # A container with the host graphics libraries the AppImage community
       # excludelist deliberately leaves out, and no Qt whatsoever. Installing
       # anything Qt here would void what this proves.
+      #
+      # The GL stack needs all four libglvnd packages, not just libgl1: the
+      # excludelist drops libOpenGL.so.0, libGLX.so.0 and libGLdispatch.so.0
+      # as well as libGL.so.1, and a container with only libgl1 dies on
+      # "libOpenGL.so.0: cannot open shared object file" -- which reads as a
+      # broken AppImage rather than a thin container.
       - name: Smoke-test the AppImage
         run: |
           docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
             apt-get update -qq >/dev/null
-            apt-get install -y -qq libgl1 libxcb1 libx11-6 libx11-xcb1 >/dev/null
+            apt-get install -y -qq --no-install-recommends \
+              libgl1 libglx0 libopengl0 libglvnd0 \
+              libxcb1 libx11-6 libx11-xcb1 >/dev/null
             /w/GamesHub-*.AppImage --appimage-extract-and-run --version' | tee out.txt
           grep -q '^Games ' out.txt
 
