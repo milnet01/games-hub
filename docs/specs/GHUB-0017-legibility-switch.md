@@ -17,10 +17,12 @@ and `CardArt`'s face-drawing threshold is a named constant a game can compute
 against instead of a literal buried in an `if`. 2048's unreadable tiles are
 fixed on the way past.
 
-**What this change does NOT do is make any game look different** (§4.6). The
-guarantee that no game draws a card too small to show its pips arrives one game
-at a time afterwards, and each of those passes is judged by eye (§3.2, §9).
-Claiming it here would be claiming the switch does the work the passes do.
+**What this change does NOT do is make any game respond to the switch** (§4.6).
+The guarantee that no game draws a card too small to show its pips arrives one
+game at a time afterwards, and each of those passes is judged by eye (§3.2,
+§9). Claiming it here would be claiming the switch does the work the passes do.
+**2048's ink is the one deliberate exception** — it changes for everyone,
+switch or no switch, because it is a defect and not a preference (§3.4, §4.6).
 
 Today Canasta is the only game that has been adjusted for a partially sighted
 player, that adjustment is hardcoded rather than chosen, and the six games that
@@ -237,9 +239,18 @@ public:
 ```
 
 It lives in the test, not in `GameView`: a counter on the base class would be
-production surface existing only to be asserted on. **`applyLegibility` must
-therefore be `public` or `protected`, not private** — a private virtual cannot
-be overridden from a subclass outside the class.
+production surface existing only to be asserted on. `applyLegibility` is
+declared `public` alongside the other `GameView` virtuals, because it is part
+of the contract a game implements rather than an internal detail.
+
+**The probes are free-standing — deliberately not added to the hub.**
+`HubWindow`'s public surface is only its constructor, `openGameNamed()` and
+`gameNames()`; its `QStackedWidget` is private, so a test cannot install a
+probe as a page, and this spec asks for no hook to let it. That costs nothing,
+because a free-standing probe is the *stronger* fixture: it is connected purely
+by the `GameView` base constructor, so it stays green under the design in §4.2
+and goes red under any implementation that instead has the hub walk its own
+pages — which is exactly the bug INV-2 exists to catch.
 
 **The connection is made in the base constructor, so every constructed game is
 connected whether or not it is on screen.** Games are built lazily by
@@ -324,17 +335,72 @@ not.
 
 ### 4.6 What the switch does *not* do here
 
-It changes no game's appearance in this change. `Legibility` ships with the
-switch, the hook, the exported threshold and the 2048 fix; the fourteen games
-read it one at a time afterwards (§9). That is deliberate — the mechanism is
-the part every game binds to, and it is worth getting a cold read on before
+**No game changes appearance in response to the switch.** `Legibility` ships
+with the switch, the hook and the exported threshold; the fourteen games read
+it one at a time afterwards (§9). That is deliberate — the mechanism is the
+part every game binds to, and it is worth getting a cold read on before
 fourteen games are written against it.
+
+**§4.7's 2048 ink fix is the exception and is not gated by the switch at all**
+(§3.4). It ships here, it changes what every player sees, and `Legibility` is
+not consulted for it. So "nothing looks different" is true of the *switch* and
+false of *this change*, and the two must not be conflated.
 
 **This is why §5 carries no invariant about card size.** An invariant asserting
 that cards clear `kFaceMinWidth` would be red on all six card views the day it
 landed, because no view is adapted here; one asserting the switch is reversible
 would be vacuously green, because nothing changes to be reversed. Both belong
 to the first game's pass, and §9 records them there.
+
+### 4.7 The 2048 ink rule, stated exactly
+
+**`tileColour()` does not change. `inkFor()` is replaced outright**, and the
+replacement is a luminance test rather than a value test:
+
+```cpp
+// src/twenty48/twenty48view.h — declared here so uitest.cpp can reach it
+// (INV-7); moved out of twenty48view.cpp's anonymous namespace.
+QColor tileColour(int value);
+QColor inkFor(int value);
+
+// src/twenty48/twenty48view.cpp
+QColor inkFor(int value)
+{
+    // Which ink reads on a tile is a property of the TILE's brightness, not of
+    // its number. Keying on the value meant every tile from 8 up got near-white
+    // ink over a mid-tone colour, at half the contrast a reader needs.
+    return relativeLuminance(tileColour(value)) > 0.20
+             ? QColor(0x26, 0x23, 0x1d)      // near-black, for the light tiles
+             : QColor(0xf9, 0xf6, 0xf2);     // near-white, for the dark one
+}
+```
+
+**Why a luminance test and not a corrected value cut-off.** The obvious minimal
+fix — widen the `value <= 4` arm so more tiles get the existing dark
+`#776e65` — does not work: that ink fails 3:1 on tiles 8 (2.70), 16 (2.23),
+32 (1.90), 64 (1.57) and 2048 (2.94). No cut-off on the *value* fixes it,
+because the tiles are not ordered by brightness — 64 is the darkest at
+L = 0.279 while 128 jumps back up to L = 0.639. Only a darker ink clears every
+light tile, and only a luminance test picks the right ink for the `default:`
+arm, which is near-black (L = 0.042) and needs the white.
+
+Ratios under this rule, every value `tileColour()` can return:
+
+| Tile | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | `default:` |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Ratio | 12.49 | 12.01 | 8.46 | 6.98 | 5.94 | 4.91 | 10.27 | 10.00 | 9.68 | 9.44 | 9.22 | 10.57 |
+
+**It changes two tiles that already passed.** Tiles 2 and 4 currently use
+`#776e65` at 3.98 and 3.83; under this rule they become near-black at 12.49 and
+12.01. That is a visible change to two tiles nobody complained about, accepted
+because one rule that is correct for every tile — including any added later —
+beats a rule with two special cases carved out to preserve a shade. `0.20` is
+chosen well below the darkest light tile (64, at 0.279) and well above the dark
+one (0.042), so no tile sits near the boundary.
+
+`relativeLuminance(QColor)` is the WCAG 2.2 formula and is new; it lives beside
+`inkFor` and is what `scripts/legibility-check.py` (§4.5) reimplements in
+Python.
 
 ## 5. Invariants
 
@@ -349,8 +415,12 @@ to the first game's pass, and §9 records them there.
 
 - **INV-2** — Every *constructed* game is notified, not only the visible one.
   *Test:* `tests/uitest.cpp`, block `legibilityReachesBackgroundGames` — build
-  two `LegibilityProbe`s (§4.2), add both to the hub's stack, show one, toggle
-  the switch, and assert **both** probes' counters read 1.
+  two free-standing `LegibilityProbe`s (§4.2), `show()` one and leave the other
+  unshown, then **drive the switch to a known state and back**:
+  `setEnabled(false)`, record each probe's `calls`, `setEnabled(true)`, and
+  assert **both** counters rose by exactly one. Absolute counts cannot be
+  asserted — `setEnabled()` is a no-op when unchanged (§4.1), so an earlier
+  block that left the switch on makes a bare `setEnabled(true)` emit nothing.
   *Breaks when:* the hub connects `currentView()` instead of connecting in the
   `GameView` base constructor — the bug is invisible until the player reopens
   a game they had already visited.
@@ -380,11 +450,21 @@ to the first game's pass, and §9 records them there.
 
 - **INV-5** — On a machine with no stored value the switch is off, and the
   stored key is `display/legibility`.
-  *Test:* `tests/uitest.cpp`, block `legibilityDefaultsOff` — clear the key, construct,
-  assert `enabled() == false`.
+  *Test:* `tests/uitest.cpp`, block `legibilityDefaultsOff` — **must be the
+  first block in `main()`, before any `GameView` is constructed.** Clear
+  `display/legibility` from a fresh `QSettings`, then assert
+  `Legibility::instance().enabled()` is false.
+  *Why the position is part of the clause:* `Legibility` is a singleton whose
+  private constructor reads `QSettings` **once**, at first use — and §4.2 has
+  every `GameView` constructor connect to it, so constructing any game
+  instantiates it. A block that clears the key afterwards is asserting a value
+  cached earlier, and would stay green after the default flipped to on. No
+  `reloadFromSettings()` is added for this: a method existing only so a test
+  can re-read is production surface the product does not need.
   *Breaks when:* the key is renamed in a later release, which silently turns
   the switch off for a player who had turned it on — the old key is still in
-  their settings file and nothing reads it.
+  their settings file and nothing reads it. Also breaks if the block drifts
+  down `main()`, which is the failure the position rule makes visible.
 
 - **INV-6** — *withdrawn — moved to the per-game pass contract (§9).* It
   asserted that turning the switch off restores the previous
@@ -396,13 +476,16 @@ to the first game's pass, and §9 records them there.
   one at a time.
 
 - **INV-7** — Every tile value `tileColour()` enumerates, **and its `default:`
-  arm**, has ink meeting 3:1 against its own tile colour, with the switch in
-  either position.
+  arm**, has ink meeting 3:1 against its own tile colour. The switch is not
+  mentioned because §4.7's rule does not consult it — that is the invariant's
+  point, not an omission.
   *Test:* `tests/uitest.cpp`, block `twenty48InkIsReadable` — for
   `{2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096}`, assert
   `ratio(inkFor(v), tileColour(v)) >= 3.0`. The trailing 4096 is the
-  `default:` arm, which a loop over the enumerated cases alone never reaches —
-  and it is the one value in the list that passes today.
+  `default:` arm, which a loop over the enumerated cases alone never reaches.
+  **Three of the twelve pass today** — 2 and 4, which take the dark
+  `#776e65` arm, and 4096, which is near-black under near-white ink. The other
+  nine are the defect.
   *Requires a code change this spec asks for:* `tileColour()` and `inkFor()`
   are free functions in an **anonymous namespace** in
   `src/twenty48/twenty48view.cpp` and appear in no header, so `uitest.cpp`
@@ -440,10 +523,12 @@ to the first game's pass, and §9 records them there.
 
 ## 7. Tests
 
-All seven invariants are locked in `tests/uitest.cpp`, which is where widget
-behaviour lives; none belongs in `gameshub_selftest`, which links no widgets
-and cannot construct a view. `QColor` is QtGui, so even the contrast arithmetic
-in INV-7 belongs here rather than in the rules half.
+**Four of the seven invariants are locked in `tests/uitest.cpp`** — INV-1,
+INV-2, INV-5 and INV-7. INV-4 is a grep (below), and INV-3 and INV-6 are
+withdrawn to the per-game passes (§5, §9). Nothing belongs in
+`gameshub_selftest`, which links no widgets and cannot construct a view;
+`QColor` is QtGui, so even INV-7's contrast arithmetic belongs here rather than
+in the rules half.
 
 **`tests/uitest.cpp` has no test-function registry** — it is one `main()` with
 inline blocks guarded by a `check(bool, const char*)` helper. The names below
@@ -452,7 +537,7 @@ registry to be built.
 
 | Block | Locks | Notes |
 |-------|-------|-------|
-| `legibilityDefaultsOff` | INV-5 | clears the key first, so it is not order-dependent |
+| `legibilityDefaultsOff` | INV-5 | **must be first in `main()`** — the singleton caches at first use |
 | `legibilityPersists` | INV-1 | fresh `QSettings`, never `QFile::exists` |
 | `legibilityReachesBackgroundGames` | INV-2 | needs the `LegibilityProbe` of §4.2 |
 | `twenty48InkIsReadable` | INV-7 | needs the two colour functions exported first |
@@ -556,3 +641,4 @@ only the visible view.
 | Loop | Date | Lanes | Q1 | Q2 | Q3 | Q4 | Outcome |
 |------|------|-------|----|----|----|----|---------|
 | 1 | 2026-08-13 | 3 cold (general-purpose), genre pinned `spec` | 5 | 2 | 2 | 3 | 12 verified, all fixed; 1 dismissed. **Q1:** §2.1's heading said four games can fall below 46 px when all six can — the grep behind it matches only the `std::max` form and misses both `std::clamp` games; "Hearts is the only card game that clamps upward" (Canasta does too); Canasta's melds described as staying above the threshold on the strength of a code comment that is itself false — 0.74 × 34 = 25.2, and clearing 46 needs `cardWidth() ≥ 62.2`; "fails at every tile from 8 upward" (the `default:` arm above 2048 passes at 10.57); `tileColour`/`inkFor` cited as `Twenty48View::` members when they are free functions in an **anonymous namespace**, callable from no test. **Q2:** INV-3 and INV-6 contradicted §4.6's "changes no game's appearance" — one would be red on six views the day it landed, the other vacuously green; per-game passes counted as thirteen in two places and fourteen in a third. **Q3:** which label goes with which switch state was unstated (the toolbar is text-only, so it is the whole affordance); §4.5's script was to fail on "any pair marked as required" with nothing marking any. **Q4:** INV-7's "every tile" against a loop that never reaches `default:`; INV-2 asserted a call nothing could observe; and — found while verifying, not by a lane — INV-3's test was **unwritable at all**, `cardWidth()` being `private` on all six card views with no laid-out-rect accessor anywhere. INV-3 and INV-6 withdrawn to the per-game pass contract rather than weakened. **Dismissed:** the `uitest.cpp::name` test-identifier convention, raised as an open question by all three lanes and by none as a finding — a builder resolves it either way, so it answers no question; the notation was tidied in passing anyway. **Open questions resolved clean, counted nowhere:** §4.2's "every game delegates as `GameView(parent)`" holds 14/14; INV-4's grep survives its own fix; `gameshub_uitest` links both source halves. **Collateral from this loop's own fixes:** §1 was left promising a guarantee this change does not deliver, and §6 still cited withdrawn INV-6 — both corrected before the commit. |
+| 2 | 2026-08-13 | 3 cold (general-purpose), genre pinned `spec` | 2 | 2 | 2 | 3 | 9 verified, all fixed; 0 dismissed. **None of loop 1's findings reappeared**, which is the evidence those fixes held. **The one that mattered:** §1, §3.4, §4.6 and INV-7 all required a 2048 ink fix and **no section of §4 ever said what the fix was** — three implementers would have invented three different palettes, all satisfying INV-7. Now §4.7, stated as code: `tileColour()` unchanged, `inkFor()` replaced by a **luminance** test rather than a value test. Measurement drove that: widening the existing `value <= 4` arm cannot work, because the current dark `#776e65` itself fails on tiles 8 (2.70), 16 (2.23), 32 (1.90), 64 (1.57) and 2048 (2.94), and the tiles are not ordered by brightness — 64 is the darkest at L=0.279 while 128 jumps back to L=0.639. **Q1:** "the one value in the list that passes today" — three do (2, 4 and the `default:` arm); "a private virtual cannot be overridden from a subclass outside the class" — false in C++, access control governs calling, not overriding. **Q2:** §1 and §4.6 both said no game looks different while §3.4 changes 2048's ink for everyone — an implementer resolving it would have gated the fix behind the switch, which §3.4 forbids; §7 still opened "All seven invariants are locked in `tests/uitest.cpp`" seventeen lines above its own four-row table. **Q3:** the 2048 fix unspecified (above); INV-2 never pinned the switch's starting state, and `setEnabled()` is a no-op when unchanged, so a bare `setEnabled(true)` after an earlier block emits nothing. **Q4:** INV-5's block could not work at all — `Legibility`'s constructor is private and reads `QSettings` once at first use, and §4.2 has every `GameView` constructor instantiate it, so clearing the key later asserts a cached value; INV-2's "add both to the hub's stack" is impossible, `HubWindow` exposing only its constructor, `openGameNamed()` and `gameNames()`; INV-7 claimed "with the switch in either position" against a loop that never touches the switch. **Four of the nine landed on text loop 1's own fixes added** — the §7 lead sentence, the §1 guarantee, the "one value" count and the C++ claim — which is the expected shape and the reason the loop is run cold rather than briefed. **Open questions resolved clean, counted nowhere:** all three lanes queried whether §2.1's second grep block was real output, since the packet showed those functions with their expressions inlined — the **document is verbatim** (`sed -n 199p src/freecell/freecellview.cpp` matches exactly) and the packet was the paraphrase, so the finding was evidence against the packet, as the brief says it should be; and `tests/uitest.cpp` already runs under `GamesHubTest`/`GamesSelfTest`, so INV-1 and INV-5 never touch a player's real settings. |
