@@ -387,6 +387,29 @@ open.
   Agreed (2026-08-11): owner approved the single hub-owned "Large cards /
   high contrast" switch as the shape. Moved from considered to planned; not
   yet started.
+  Spec (2026-08-13): docs/specs/GHUB-0017-legibility-switch.md, accepted.
+  Covers the shared mechanism ONLY — a hub-owned Legibility singleton, a
+  GameView::applyLegibility hook, CardArt's 46px threshold exported as
+  kFaceMinWidth, the toolbar control, and 2048's ink fixed
+  unconditionally. The fourteen per-game passes stay under this bullet
+  and follow one at a time, each shown to the owner first (owner's call,
+  2026-08-12).
+
+  Two things measurement changed. Contrast is mostly already fine —
+  card and Sudoku inks all clear WCAG's 4.5 — so SIZE is the lever and
+  the item's "high contrast" half buys less than assumed. And 2048 is a
+  plain bug: inkFor() returns near-white for every tile from 8 up,
+  giving 1.50-1.72 against a 3.0 floor, so it is fixed for everyone
+  rather than behind the switch.
+
+  Cold-eyes: 3 loops, 3 lanes each, 29 verified findings all fixed, 1
+  dismissed. Reached the 3-loop cap without an empty loop; §12 records
+  the assessment that this is document growth (434 to 727 lines) rather
+  than an unsettled contract — no lane challenged the mechanism after
+  loop 1. Two invariants (INV-3 card size, INV-6 reversibility) were
+  withdrawn to the per-game pass contract: both were untestable against
+  a change that adapts no game, and INV-3 was unwritable at all since
+  cardWidth() is private on all six card views.
 
 ### 🎨 Play
 
