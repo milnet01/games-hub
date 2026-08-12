@@ -262,6 +262,25 @@ to come round to the human, and again for the cards to land, since the board
 ignores clicks while anything is animating. Testing only the first produced a
 suite that failed about one run in three.
 
+**A seed does not mean the same deal on two compilers, so `shuffleCards` is
+a hand-written Fisher-Yates.** The standard pins down what `std::mt19937`
+emits but not how `std::shuffle` consumes it, and `std::uniform_int_distribution`
+is unspecified the same way — so libstdc++ and MSVC's library produce
+different permutations from identical state. Every seeded check here would
+then play a different game on Windows. That is not theory: Canasta's AI
+strength ladder passed on this machine and failed on the Windows runner with
+no difference in the engine at all, which reads as a broken AI rather than a
+broken shuffle. `card.cpp` now draws its index from `rng()` directly.
+**`minefield.cpp` and `sudokugrid.cpp` still call `std::shuffle`** — nothing
+asserts their sequence across platforms today, but a new test that seeds
+either one needs the same treatment first.
+
+**`QSettings` has no file on Windows.** It writes to the registry there, so
+`QFile::exists(QSettings().fileName())` is false however well saving works —
+a persistence check has to construct a fresh `QSettings` and read the value
+back instead. That assertion cost a red Windows run for a feature that was
+working.
+
 **`M_PI` does not exist on MSVC, so this codebase uses `std::numbers::pi`.**
 MSVC's `<cmath>` defines `M_PI` only if `_USE_MATH_DEFINES` was defined
 before it was included, so the seven uses that lived here compiled on GCC

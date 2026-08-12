@@ -159,14 +159,15 @@ int main(int argc, char* argv[])
         check(scores.recordLow(low, 45), "a faster time does");
         check(scores.best(low) == 45, "the stored best time is the fastest seen");
 
-        // The point of all this is that it outlives the process, so the value
-        // must actually be on disk.
-        QSettings written;
-        check(QFile::exists(written.fileName()), "scores are written to a settings file");
-        QSettings reopened(written.fileName(), QSettings::IniFormat);
-        const bool onDisk = reopened.value(high).toInt() == 5000
-            || QSettings().value(high).toInt() == 5000;
-        check(onDisk, "a reopened settings file still holds the best score");
+        // The point of all this is that it outlives the process. A freshly
+        // constructed QSettings reads the backing store rather than the
+        // Scores object's own cache, so that is the persistence check — and
+        // it is the same check on both platforms. Asserting a settings *file*
+        // existed used to stand here and failed on Windows, where the store
+        // is the registry and there is no file to look for; nothing had gone
+        // unsaved.
+        check(QSettings().value(high).toInt() == 5000,
+              "a best score is read back from a freshly opened settings store");
 
         scores.clear();
     }

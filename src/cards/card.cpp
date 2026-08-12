@@ -50,5 +50,16 @@ std::vector<Card> makeDeck(int decks, int suitsUsed, int jokers)
 
 void shuffleCards(std::vector<Card>& cards, std::mt19937& rng)
 {
-    std::shuffle(cards.begin(), cards.end(), rng);
+    // Fisher-Yates by hand, and deliberately not std::shuffle. The standard
+    // pins down what mt19937 emits but not how std::shuffle consumes it, so
+    // libstdc++ and MSVC's library deal *different hands from the same seed*.
+    // Every seeded check in the self-test then plays a different game on
+    // Windows than on Linux — which is how this was found: Canasta's AI
+    // strength ladder passed here and failed on the Windows runner, with no
+    // difference in the engine at all. std::uniform_int_distribution is
+    // unspecified in the same way, so the index comes from rng() directly.
+    // The modulo bias that costs is about one part in 40 million on a
+    // 108-card pack, which no card game can notice.
+    for (std::size_t i = cards.size(); i > 1; --i)
+        std::swap(cards[i - 1], cards[rng() % i]);
 }
