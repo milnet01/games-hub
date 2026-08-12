@@ -169,7 +169,7 @@ double-clicking a file.
   seed deals the same game on both standard libraries. Contract and its
   three cold-eyes loops in docs/specs/GHUB-0025-downloadable-builds.md.
 
-- 🚧 [GHUB-0026] **The release smoke tests never start Qt, so they cannot see a broken bundle.**
+- ✅ [GHUB-0026] **The release smoke tests never start Qt, so they cannot see a broken bundle.**
   Both smoke tests run the artifact with --version, and GHUB-0025 made
   --version return before QApplication is constructed so it works headless
   on Windows. The consequence is that neither test loads a Qt plugin, opens
@@ -207,6 +207,63 @@ double-clicking a file.
   the container's exit status was being discarded by tee.
   Stays in-progress deliberately — release.yml runs on a tag only, so
   nothing has executed this. The v0.3.1 run is its first observation.
+  Resolved (2026-08-12): shipped in v0.3.1 and observed green.
+  The v0.3.1 release run executed the new checks for the first time.
+  Evidence rather than a green tick: the deploy log carries "Deploying
+  extra platform plugin: libqoffscreen.so"; the two smoke steps took 35 s
+  and 21 s, consistent with a 20 s run survived rather than skipped; and
+  the container log carries the offscreen plugin's own
+  propagateSizeHints() line, which is Qt initialising inside a machine
+  with no Qt. The published AppImage was downloaded here and carries
+  libqoffscreen.so and libqxcb.so, where 0.3.0 carried only the latter.
+
+  Two things the cold-eyes gate on GHUB-0025 changed on the way. The
+  bullet prescribed EXTRA_QT_PLUGINS=offscreen, which is a deprecated
+  alias for EXTRA_QT_MODULES and matches Qt modules — it would have
+  matched nothing, silently. The variable is EXTRA_PLATFORM_PLUGINS and
+  it takes full sonames. And liveness alone is not a sufficient signal on
+  Windows: a release build with no console does not exit when the
+  platform plugin will not load, it shows a blocking message box and
+  reaches qFatal only when someone dismisses it, so HasExited would have
+  passed the exact failure this item exists to catch. That run now also
+  asserts the process owns no top-level window.
+
+  Still uncovered, deliberately: the running check runs offscreen, so it
+  cannot see a missing DESKTOP platform plugin — the staged-tree
+  assertion is the only guard for that, and for the multimedia plugin.
+  INV-6's no-window clause fires only on failure, so a green release
+  cannot confirm it.
+
+- 📋 [GHUB-0027] **The pre-push hook skips the pipeline on exactly the pushes that matter most.**
+  git feeds the hook one line per ref being pushed, and the loop in
+  .githooks/pre-push assigns RANGE inside that loop rather than
+  accumulating, so the LAST ref wins. `git push --follow-tags` sends the
+  tag last, and a new ref takes the `remotesha = ZERO` branch, which sets
+  RANGE to a bare sha. `git diff --name-only <sha>` then compares that
+  commit against the working tree — clean, so nothing comes back. CHANGED
+  is empty, CODE is empty, and the hook takes its documentation-only path
+  and runs `local-ci.sh --lint`.
+
+  Observed on the v0.3.1 push (2026-08-12), which carried CMakeLists.txt,
+  release.yml, CLAUDE.md and the spec, and printed "Lint-only run
+  (documentation change) — build and tests not run". No harm done: the
+  full pipeline had been run by hand minutes earlier. The defect is that
+  a release push is the one push where the guard is least likely to be
+  questioned and most expensive to get wrong.
+
+  Two things to fix, not one. Accumulate the file list across every ref
+  instead of overwriting a single RANGE, and stop using `git diff` for a
+  new ref — against a bare sha it diffs the working tree, which is never
+  what was meant; `git show --name-only` or a diff against the remote
+  branch is. A tag whose commit is already covered by the branch push
+  then contributes nothing rather than erasing everything.
+
+  Worth a check while in there: the docs-only path is a real feature and
+  should keep working, so the fix needs a case that proves a docs-only
+  push still lints and a mixed push still builds.
+  **Layman:** The guard that runs the tests before a push quietly does nothing when you push a release.
+  Kind: fix.
+  Source: in-session-2026-08-12.
 
 ### 🎨 Games agreed and not yet started
 
