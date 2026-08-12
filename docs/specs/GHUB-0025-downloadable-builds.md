@@ -122,10 +122,21 @@ fiddling.
 The Linux runner additionally needs `libgl1-mesa-dev libxkbcommon-x11-0
 libxcb-cursor0` installed with `apt-get`, because the Qt that
 `install-qt-action` unpacks there links them and finds nothing bundled
-beside it. This is a property of the **runner**, not of the artifact: the
-AppImage carries its own copies of those libraries, put there by
-`linuxdeploy --plugin qt`, which is why INV-5's container is deliberately
-left bare.
+beside it.
+
+**The AppImage does not carry those libraries either, and INV-5's container
+must install them.** linuxdeploy honours the AppImage community
+excludelist, which names `libGL.so.1`, `libxcb.so.1` and `libX11.so.6`
+among 53 entries deliberately left to the host, on the grounds that a
+bundled graphics stack breaks against the host driver. So "self-contained"
+means *carries its own Qt*, not *runs on an empty filesystem*: any machine
+that can run a desktop application already has them, and a stock
+`ubuntu:24.04` container does not. §4.6's container installs that baseline
+and nothing Qt, which is what keeps the test honest.
+
+Both runners also need Ninja. It is not guaranteed on the Ubuntu image, so
+the Linux leg adds `ninja-build` to its `apt-get` line; on Windows the
+`msvc-dev-cmd` step puts Visual Studio's own `ninja.exe` on `PATH`.
 
 ### 4.3 `.github/workflows/release.yml` — a tag becomes two files
 
@@ -146,13 +157,27 @@ comparison, and nothing else.
 `-DCMAKE_INSTALL_PREFIX=/usr`, then:
 
 ```bash
+# linuxdeploy and its Qt plugin are two separate downloads; --plugin qt
+# finds the second by name on PATH. Neither ships with the runner.
+for t in linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage; do
+  curl -fsSLO "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/$t"
+  chmod +x "$t"
+done
+export PATH="$PWD:$PATH"
+export APPIMAGE_EXTRACT_AND_RUN=1   # the runner has no FUSE 2
+
 DESTDIR="$PWD/AppDir" cmake --install build
-linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt \
+./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt \
   --desktop-file AppDir/usr/share/applications/gameshub.desktop \
   --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/gameshub.svg
 # INV-7 and INV-8 assert against AppDir here, before it is packaged
-linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
 ```
+
+`APPIMAGE_EXTRACT_AND_RUN=1` is not optional: GitHub's `ubuntu-24.04` image
+carries no FUSE 2, so every AppImage — linuxdeploy, its Qt plugin and the
+`appimagetool` linuxdeploy spawns — would otherwise fail to mount itself.
+Exporting it once covers all three.
 
 `cmake --install` already lays down exactly the three things an AppDir
 needs — the binary, the `.desktop` file and the icon — because §2.4's
@@ -180,14 +205,18 @@ the top level:
 ```powershell
 mkdir dist
 copy build\gameshub.exe dist\
-copy LICENSE packaging\THIRD-PARTY.md dist\
+copy LICENSE,packaging\THIRD-PARTY.md dist\
 xcopy /e /i packaging\licenses dist\licenses
 windeployqt --release --no-translations --no-system-d3d-compiler dist\gameshub.exe
 # INV-7 and INV-8 assert against dist\ here, before it is packaged
 Compress-Archive -Path dist\* -DestinationPath GamesHub-<version>-windows-x64.zip
 ```
 
-**`publish`** — needs both, downloads their artifacts and calls
+Both build jobs end with `actions/upload-artifact@v4`, naming the file they
+produced; that is what `publish` downloads.
+
+**`publish`** — needs both, downloads their artifacts with
+`actions/download-artifact@v4` and calls
 `softprops/action-gh-release@v2` with the two files and a release body
 extracted from the `## [<version>]` block of `CHANGELOG.md` matching the
 tag — **not** `[Unreleased]`. Per §11 the release commit closes
@@ -212,46 +241,96 @@ here." Both artifacts in §4.3 bundle Qt, so that sentence stops being true
 and LGPL-3.0 §4's conditions start applying to every download.
 
 Dynamic linking already satisfies the relinking condition; what is missing is
-the paperwork. Three files are added to the repository and installed beside
-the binary in both artifacts:
+the paperwork. Three files travel beside the binary in both artifacts, of
+which only one is new:
 
 - `packaging/licenses/LGPL-3.0.txt` and `packaging/licenses/GPL-3.0.txt` —
-  LGPL-3.0 incorporates the GPL by reference and requires a copy of both.
-- `packaging/THIRD-PARTY.md` — names the bundled Qt version, states that it
-  is unmodified, and links to the matching source archive on
+  **already in the tree**, fetched verbatim from gnu.org. LGPL-3.0
+  incorporates the GPL by reference and requires a copy of both. This work
+  adds their install rules, not the files.
+- `packaging/THIRD-PARTY.md` — **new**. Names the bundled Qt version, states
+  that it is unmodified, and links to the matching source archive on
   `download.qt.io`.
 
-`CMakeLists.txt` installs all three plus the existing `LICENSE` into
-`${CMAKE_INSTALL_DOCDIR}`, which puts them in the AppDir automatically. The
-Windows job copies them into `dist/` explicitly, per §4.3.
+`CMakeLists.txt` installs the two licence texts into
+`${CMAKE_INSTALL_DOCDIR}/licenses`, and `LICENSE` and `THIRD-PARTY.md` into
+`${CMAKE_INSTALL_DOCDIR}` itself. **The `licenses/` subdirectory is part of
+the contract, not incidental** — INV-8 asserts that layout, and a flat
+install into DOCDIR would fail it. The Windows job reproduces the same shape
+in `dist\`, per §4.3.
 
 ### 4.6 What "self-contained" is checked to mean
 
 Both release jobs smoke-test their own artifact before it is published:
 
 - Linux, in a container with no Qt:
-  `docker run --rm -e QT_QPA_PLATFORM=offscreen -v "$PWD:/w" ubuntu:24.04
-  sh -c '/w/GamesHub-*.AppImage --appimage-extract-and-run --version'`.
-- Windows, with the Qt install removed from `PATH`:
-  `$env:PATH = 'C:\Windows\System32'; .\dist\gameshub.exe --version`.
 
-Both must print `Games <version>` and exit 0.
+  ```bash
+  docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
+    apt-get update -qq && apt-get install -y -qq libgl1 libxcb1 libx11-6
+    /w/GamesHub-*.AppImage --appimage-extract-and-run --version'
+  ```
 
-Two details the Linux line cannot do without. `-e QT_QPA_PLATFORM=offscreen`
-must be passed to the container, not exported on the runner, because
-`src/main.cpp` constructs `HubWindow` *before* `parser.process(app)` — so
-`--version` builds the full window and needs a platform plugin, and a bare
-container has no display for the default one to attach to. And the command
-runs under `sh -c` because `docker run` executes its argument directly with
-no shell, so `GamesHub-*.AppImage` would be taken as a literal filename.
+  The three packages are the excludelist baseline from §4.2 — host graphics
+  libraries, no Qt. Installing anything Qt here would void what the test
+  proves.
+
+- Windows, from the artifact rather than the staging tree, with the Qt
+  install removed from `PATH`:
+
+  ```powershell
+  Expand-Archive GamesHub-<version>-windows-x64.zip -DestinationPath unzipped
+  $env:PATH = 'C:\Windows\System32'
+  .\unzipped\gameshub.exe --version
+  ```
+
+Both must print `Games <version>` on stdout and exit 0.
+
+The Linux command runs under `sh -c` because `docker run` executes its
+argument directly with no shell, so `GamesHub-*.AppImage` would otherwise be
+taken as a literal filename. Neither line sets `QT_QPA_PLATFORM`, and §4.7
+is why.
+
+### 4.7 `--version` is answered before Qt starts
+
+Today `src/main.cpp` constructs `QApplication` and then `HubWindow` before
+`parser.process(app)` ever runs, so `--version` builds the entire hub window
+to print one line. That is merely wasteful on Linux. On Windows it is fatal
+to both smoke tests: `qt_add_executable` sets `WIN32_EXECUTABLE ON`
+(`QtExecutableHelpers.cmake`, verified in the installed Qt 6 on 2026-08-12),
+which makes the binary a GUI-subsystem application, and
+`QCommandLineParser::showVersion()` then renders a **message box** instead of
+writing to stdout. The Windows job would capture no output and wait for a
+dialog nobody can close.
+
+So `main()` answers `-v` / `--version` from `argv` and returns, before
+`QApplication` is constructed:
+
+```cpp
+for (int i = 1; i < argc; ++i) {
+    const std::string_view arg(argv[i]);
+    if (arg == "--version" || arg == "-v") {
+        std::printf("Games %s\n", GAMESHUB_VERSION);
+        return 0;
+    }
+}
+```
+
+`parser.addVersionOption()` stays, so `--help` still lists the option; the
+early return simply means the parser's own version path is never reached.
+The string is `Games <version>` either way — the same text
+`QCommandLineParser` produced from `setApplicationName("Games")` — so
+nothing a user sees changes on Linux.
 
 ## 5. Invariants
 
 - **INV-1** — The version the binary reports is the version CMake was
   configured with; there is no second place to edit.
-  *Test:* `QT_QPA_PLATFORM=offscreen ./build/gameshub --version` →
-  `Games 0.2.0`, matching `project(gameshub VERSION 0.2.0` in
-  `CMakeLists.txt`.
+  *Test:* `./build/gameshub --version` prints `Games ` followed by whatever
+  `project(gameshub VERSION …)` currently declares — stated as an equality
+  rather than a literal, because §4.1's bump moves it inside this same
+  change. Observed `Games 0.2.0` before the bump (run with
+  `QT_QPA_PLATFORM=offscreen`, which §4.7 makes unnecessary).
   *Breaks when:* a second version literal is introduced — a hardcoded
   string in `main.cpp`, or a version written into a workflow file.
 
@@ -283,15 +362,18 @@ no shell, so `GamesHub-*.AppImage` would be taken as a literal filename.
 - **INV-5** — The published Linux file runs on a machine with no Qt
   installed.
   *Test:* the `Smoke-test the AppImage` step in
-  `.github/workflows/release.yml` runs it inside a stock `ubuntu:24.04`
-  container and requires `Games <version>` on stdout.
+  `.github/workflows/release.yml` runs it inside an `ubuntu:24.04`
+  container carrying only §4.6's three host graphics libraries and no Qt
+  at all, and requires `Games <version>` on stdout.
   *Breaks when:* `linuxdeploy --plugin qt` stops finding a library — most
   likely after a Qt version bump changes where a dependency lives.
 
 - **INV-6** — The published Windows file runs with no Qt on `PATH`.
   *Test:* the `Smoke-test the portable build` step in
-  `.github/workflows/release.yml` scrubs `PATH` to `C:\Windows\System32`
-  before running `gameshub.exe --version`.
+  `.github/workflows/release.yml` expands the finished zip into `unzipped\`
+  and scrubs `PATH` to `C:\Windows\System32` before running
+  `unzipped\gameshub.exe --version`. It tests the artifact, not the staging
+  tree it was made from.
   *Breaks when:* `windeployqt` is run against the wrong binary, or a new Qt
   module is linked that it does not know to copy.
 
@@ -336,9 +418,9 @@ constitute the check that the CI matrix runs. What is new is *where* they
 run — a second operating system.
 
 INV-1 and INV-4 are checkable locally by the commands in their clauses.
-INV-2, INV-3, INV-5, INV-6 and INV-7 are workflow steps, and are verified by
-a real run: the first push exercises INV-3 and INV-4, and the first tag
-exercises the rest. Each must be seen to fail against pre-fix code — INV-4's
+INV-2, INV-3, INV-5, INV-6, INV-7 and INV-8 are workflow steps, and are
+verified by a real run: the first push exercises INV-3 and INV-4, and the
+first tag exercises the rest. Each must be seen to fail against pre-fix code — INV-4's
 grep returns 7 before the `std::numbers::pi` change and 0 after, and the
 Windows compile is red before it and green after.
 
@@ -395,8 +477,9 @@ Windows compile is red before it and green after.
   Licence section's closing sentence ("Qt itself is neither bundled nor
   modified here") becomes false with the first release and is rewritten
   per §4.5.
-- `packaging/THIRD-PARTY.md`, `packaging/licenses/LGPL-3.0.txt`,
-  `packaging/licenses/GPL-3.0.txt` — new, per §4.5.
+- `packaging/THIRD-PARTY.md` — new, per §4.5.
+  `packaging/licenses/LGPL-3.0.txt` and `packaging/licenses/GPL-3.0.txt`
+  already exist; this work only adds their install rules.
 - `CHANGELOG.md` — `[Unreleased]` closes as `0.3.0`.
 - `CLAUDE.md` — the release procedure and the MSVC trap.
 - `ROADMAP.md` — GHUB-0025 flips to shipped.
@@ -409,3 +492,4 @@ Windows compile is red before it and green after.
 | Loop | Date | Lanes | Q1 | Q2 | Q3 | Q4 | Outcome |
 |------|------|-------|----|----|----|----|---------|
 | 1 | 2026-08-12 | 2 | 1 | 3 | 6 | 1 | 11 verified, all fixed; 1 dismissed (INV-4's pre-change count of 7 challenged by both lanes, confirmed correct — `M_E` and `M_SQRT2` are 0 in `src/`). Both lanes independently found the same six defects. Largest: §4.3's AppDir install contradicted its own prose, fixed to `DESTDIR` staging and verified locally. |
+| 2 | 2026-08-12 | 2 | 3 | 3 | 5 | 0 | 11 verified, all fixed; 0 dismissed. Four were loop-1 collateral (a "three new files" claim two of which loop 1 had created, a `licenses/` layout INV-8 and §4.5 disagreed on, INV-1's hardcoded `0.2.0` invalidated by the bump loop 1 added, and a claim that linuxdeploy bundles libGL — refuted against the 53-entry AppImage excludelist). The rest were real gaps: PowerShell `copy` cannot take three positional arguments; linuxdeploy and its Qt plugin are two separate downloads and the runner has no FUSE; and `qt_add_executable` sets `WIN32_EXECUTABLE ON`, so `--version` would have opened a message box on Windows instead of printing — §4.7 added to answer it before Qt starts. |
