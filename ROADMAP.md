@@ -127,6 +127,35 @@ each step against the rules on the way back in.
   deliberately wrong is the only way to reach them) and 30 new UI checks on
   the round trip. Full suite green: 353 rules checks, 115 UI checks.
 
+### 📦 Getting it to other people
+
+Fourteen finished games that only run from a build directory on one
+
+machine. This section is about the gap between that and someone else
+
+double-clicking a file.
+
+- 📋 [GHUB-0025] **Games Hub downloads as one file, on Linux and on Windows.**
+  Nothing in this project has ever left the machine it was written on. There
+  is no tag, no CI, no published build, and three changelog entries already
+  owed a release. C++ helps here — a compiled binary needs no interpreter on
+  the far side — but it does not carry Qt with it, so each platform needs
+  its runtime bundled in a different way.
+
+  Two halves. A workflow that builds and runs both test binaries on Linux
+  and on Windows for every push, so a change that breaks one platform is
+  caught by the machine rather than by a user; and a release workflow that
+  turns a version tag into published files — a single-file AppImage for
+  Linux and a portable zip for Windows, since a truly single Windows .exe
+  needs a statically linked Qt and hours of build time per run.
+
+  Windows has never been compiled once, so the first job is finding out what
+  in fourteen games does not build there.
+  **Layman:** Download one file, run it, play — no compiler, no build steps, on either operating system.
+  Kind: release.
+  Lanes: packaging, ci.
+  Source: user-request-2026-08-12.
+
 ### 🎨 Games agreed and not yet started
 
 Asked for on 2026-08-10, in the order agreed. All are traditional or
