@@ -345,7 +345,14 @@ bundle with no platform plugin passed every gate that way, which is how 0.3.0
 shipped carrying only `xcb`. The second run starts `--game spider` under
 `QT_QPA_PLATFORM=offscreen` and **passes only if the app is still alive when
 the timeout fires**, so `timeout`'s own 124 is the success status and any exit
-of the app's own is the failure. Both artifacts bundle the offscreen plugin
+of the app's own is the failure. **On Windows liveness alone is not enough,
+and assuming it was would pass the failure the check exists to catch:** a
+release build with no console does not exit when the platform plugin will not
+load — Qt shows a blocking message box first (guarded by `!isDebugBuild() &&
+!GetConsoleWindow()`) and reaches `qFatal` only when someone dismisses it,
+which on a runner nobody does. So that run adds `-NoNewWindow` and asserts the
+process owns no top-level window; under offscreen a healthy app opens none, so
+a window is the dialog. Both artifacts bundle the offscreen plugin
 for it: Linux via `EXTRA_PLATFORM_PLUGINS=libqoffscreen.so` (not
 `EXTRA_QT_PLUGINS`, a deprecated alias for `EXTRA_QT_MODULES` that matches
 modules and would silently match nothing), Windows by copying

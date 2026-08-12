@@ -280,13 +280,30 @@ jobs:
           # from argv before QApplication exists, so the check above proves
           # nothing about the bundled plugins; this one starts the hub on the
           # offscreen plugin and requires it to still be running afterwards.
+          # "Still alive" is NOT sufficient on Windows, and assuming it was
+          # would have made this gate pass the very failure it exists to
+          # catch. A release build with no console does not exit when the
+          # platform plugin will not load: qguiapplication.cpp shows a
+          # blocking MessageBox first (guarded by !GetConsoleWindow()), and
+          # qFatal runs only once someone dismisses it. On a runner nobody
+          # does, so the process is happily alive at 20 s.
+          # -NoNewWindow lets it inherit any console the runner has, which
+          # suppresses the box; the window check is what catches it when
+          # there is no console to inherit. Under offscreen a healthy app
+          # opens no native window at all, so a top-level window belonging
+          # to this process IS the fatal dialog.
           $env:QT_QPA_PLATFORM = 'offscreen'
           $run = Start-Process .\unzipped\gameshub.exe -ArgumentList '--game','spider' `
-                   -PassThru -RedirectStandardError run-err.txt
+                   -PassThru -NoNewWindow -RedirectStandardError run-err.txt
           Start-Sleep -Seconds 20
           if ($run.HasExited) {
             $err = Get-Content run-err.txt -Raw
             throw "the app exited on its own with status $($run.ExitCode): $err"
+          }
+          $run.Refresh()
+          if ($run.MainWindowHandle -ne 0) {
+            $err = Get-Content run-err.txt -Raw
+            throw "a dialog is open, so Qt did not start: $($run.MainWindowTitle) $err"
           }
           Stop-Process -Id $run.Id -Force
 

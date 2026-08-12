@@ -91,7 +91,10 @@ cmake_version=$(sed -n 's/^project(gameshub VERSION \([0-9.]*\).*/\1/p' CMakeLis
 
 ### 4.2 `.github/workflows/ci.yml` — build and test both platforms
 
-Triggers on push to `master` and on pull requests. One matrix job:
+Triggers on push to `master` and on pull requests, with
+`concurrency: {group: ci-${{ github.ref }}, cancel-in-progress: true}` so a
+second push to the same ref cancels the first run rather than paying for
+both. One matrix job:
 
 | `os` | Qt arch | Notes |
 |------|---------|-------|
@@ -124,12 +127,16 @@ libxcb-cursor0` installed with `apt-get`, because the Qt that
 `install-qt-action` unpacks there links them and finds nothing bundled
 beside it.
 
-**The AppImage does not carry those libraries either, and INV-5's container
-must install them.** linuxdeploy honours the AppImage community
+**The AppImage does not carry the *excluded* ones, and INV-5's container
+must install those.** linuxdeploy honours the AppImage community
 excludelist, which names the whole libglvnd set (`libGL.so.1`,
 `libOpenGL.so.0`, `libGLX.so.0`, `libGLdispatch.so.0`), `libxcb.so.1` and
 `libX11.so.6` among 53 entries deliberately left to the host, on the grounds that a
-bundled graphics stack breaks against the host driver. So "self-contained"
+bundled graphics stack breaks against the host driver. **`libxkbcommon-x11-0`
+and `libxcb-cursor0` are not on that list** — checked against the published
+excludelist on 2026-08-12 — so linuxdeploy bundles them and §4.6's container
+deliberately does not install them. Adding them there would hide it if a
+future linuxdeploy stopped. So "self-contained"
 means *carries its own Qt*, not *runs on an empty filesystem*: any machine
 that can run a desktop application already has them, and a stock
 `ubuntu:24.04` container does not. §4.6's container installs that baseline
@@ -207,10 +214,12 @@ carries no FUSE 2, so every AppImage — linuxdeploy, its Qt plugin and the
 `appimagetool` linuxdeploy spawns — would otherwise fail to mount itself.
 Exporting it once covers all three.
 
-`cmake --install` already lays down exactly the three things an AppDir
-needs — the binary, the `.desktop` file and the icon — because §2.4's
-desktop-integration rules put them in the standard prefix-relative
-locations. **`DESTDIR`, not `--prefix`:** the prefix must be `/usr` at
+`cmake --install` already lays down everything the AppDir needs, and
+everything INV-8 asserts — the binary, the `.desktop` file, the icon, and
+§4.5's four licence and notice files — because §2.4's desktop-integration
+rules and §4.5's install rules both use standard prefix-relative locations.
+**That is why the Linux job has no copy step and the Windows one does**, and
+why INV-8 can break on Windows and not here. **`DESTDIR`, not `--prefix`:** the prefix must be `/usr` at
 configure time, because `configure_file` bakes the absolute `Exec=` path
 into the `.desktop` file, and `--prefix` on the install line would relocate
 the binary while leaving `Exec=` pointing at the configure-time path.
@@ -293,9 +302,10 @@ which only one is new:
 - `packaging/THIRD-PARTY.md` — **new**. States the licence, that Qt is
   unmodified, that the linking is dynamic, and links to the source archive
   on `download.qt.io`. **It does not name the Qt version**, pointing at the
-  download's release notes for it instead, so that a Qt bump is one edit in
-  `release.yml` rather than two. Nothing currently requires those notes to
-  mention Qt — see §6.
+  download's release notes for it instead, so a Qt bump does not add a
+  fourth place to edit: `6.8.3` is already pinned three times, once in
+  `ci.yml` and once in each of `release.yml`'s two build jobs. Nothing
+  currently requires those notes to mention Qt — see §6.
 
 `CMakeLists.txt` installs the two licence texts into
 `${CMAKE_INSTALL_DOCDIR}/licenses`, and `LICENSE` and `THIRD-PARTY.md` into
@@ -318,7 +328,20 @@ The running check starts the hub straight into one game under a timeout, and
 **passes only if the app is still alive when the timeout fires.** An app that
 cannot load its platform plugin exits at once, so "still running" is the
 signal; the timeout's own `124` is the expected status and any other status
-is the failure. Twenty seconds is far longer than a start-up that works and
+is the failure.
+
+**"Exits at once" is a Linux property, and Windows needs a second condition
+because of it.** A release build with no console does not exit when the
+platform plugin will not load: `qguiapplication.cpp` shows a blocking
+`MessageBox` first — guarded by `!QLibraryInfo::isDebugBuild() &&
+!GetConsoleWindow()`, both true here — and reaches `qFatal` only once
+somebody dismisses it, which on a runner nobody does. Liveness alone would
+therefore pass the exact failure this check exists to catch. So the Windows
+run adds `-NoNewWindow`, which lets the process inherit a console if the
+runner has one and suppresses the box, **and** asserts that the process owns
+no top-level window: under offscreen a healthy app opens none, so a window
+belonging to it is the fatal dialog. Verified from the Qt 6.8.3 source on
+2026-08-12; the check itself is unobserved until the next tag. Twenty seconds is far longer than a start-up that works and
 far shorter than a CI job cares about.
 
 - Linux, in a container with no Qt:
@@ -391,8 +414,8 @@ version itself is checked by INV-2 against the tag and comes from
 `project(gameshub VERSION …)` by construction, so a smoke test comparing it
 would re-check what CMake already guarantees. The Windows side reads the line
 back from a redirected file rather than from the pipeline, for the subsystem reason §4.7
-gives; the running check needs no such handle, because what it reads is
-whether the process is alive rather than anything it printed.
+gives; the running check redirects stderr too, not to assert on it but so
+that a failure can say *why* the process died.
 
 **Windows gets its offscreen plugin by an explicit copy, not by a variable.**
 `windeployqt` chooses the plugins it copies, so §4.3's staging step takes
@@ -478,7 +501,9 @@ this reason and not as a style choice.
   --output-on-failure` under a matrix containing both `ubuntu-24.04` and
   `windows-2022`; the run appears twice on the check list of every `master`
   commit and every pull request, which is what `ci.yml`'s `on:` selects —
-  a commit pushed to a topic branch with no PR open runs nothing.
+  a commit pushed to a topic branch with no PR open runs nothing, and a
+  commit superseded by a later push to the same ref has its run cancelled
+  by §4.2's `concurrency` block before it finishes.
   *Breaks when:* a matrix entry is dropped, or a step is given an
   `if: runner.os == 'Linux'` guard that skips the tests rather than a
   platform-specific setup detail.
@@ -586,12 +611,14 @@ tag-triggered and no tag has been cut against this content. **The next tag is
 their first observation, and a failure there is first light rather than a
 regression.**
 
-**Only INV-3 and INV-4 have a pre-fix state to fail against**, and both are
+**Only INV-3 and INV-4 had a pre-fix state to fail against**, and both were
 seen to: INV-4's grep returns 7 before the `std::numbers::pi` change and 0
 after, and the Windows compile is red before it and green after. The other
-six assert properties of workflows and artifacts that do not exist until
-this work creates them, so there is no "before" in which to watch them go
-red; their first real run is their first observation.
+six asserted properties of workflows and artifacts that did not exist until
+this work created them, so there was no "before" in which to watch them go
+red. **That reasoning has expired for the GHUB-0026 additions** — the
+published 0.3.0 AppImage is a real "before" for INV-7's named-plugin
+assertion, since it carries no offscreen plugin and would fail it.
 
 ## 8. Alternatives considered (and rejected)
 
@@ -667,3 +694,4 @@ red; their first real run is their first observation.
 | 3-impl | 2026-08-12 | none — no reviewer dispatched | — | — | — | — | Implementation fold-back (`/write-code` Step 8). Building it falsified three things three cold loops could not see. **§4.6's smoke-test container listed four packages and needed seven**: the excludelist drops the whole libglvnd set, so `libgl1` alone left the AppImage dying on `libOpenGL.so.0`; the real run is what found it, and the corrected list is confirmed against an `ubuntu:24.04` container. **§4.2's and §4.3's action pins were stale or wrong** — `actions/checkout` is v7 not v4, `upload-artifact` v7, `download-artifact` v8, and the Qt plugin is a *separate repository* from linuxdeploy, so the spec's single download loop would have 404'd. All are now SHA-pinned. **`softprops/action-gh-release` was dropped entirely** for the runner's own `gh release`, on zizmor's advice: one less third-party action holding write access to this repository's releases. |
 | 4 | 2026-08-12 | 2 | 3 | 2 | 0 | 1 | 6 verified, all fixed; 0 dismissed. Loop 1 of a fresh run, re-gating the document after GHUB-0026 rewrote §4.3, §4.6, §10 and INV-5/6/7. **Q1 is out of scope over the whole release path and the packet said so**: no docker, no Windows toolchain, and `release.yml` runs on a tag only, so no claim about linuxdeploy, windeployqt or PowerShell is runnable on this machine. Both lanes independently found the same three: §4.3's download loop fetched the Qt plugin from linuxdeploy's own repository, contradicting the comment directly above it (loop 3-impl fixed this in the workflow and not in the snippet); §4.3's Windows block never copied `qoffscreen.dll` though §4.6 says it does; and §4.6's Linux block showed neither the `tee`, the `grep` nor the `pipefail` the paragraph below it reasons about — all three GHUB-0026 collateral, the last two mine. Lane A alone caught the oldest defect here: three passages claimed the smoke tests require `Games <version>` when both assert the `Games ` prefix only, so `Games 9.9.9` passes — verified by running the grep against that literal. Lane B alone caught §4.5 claiming `THIRD-PARTY.md` names the Qt version, which it does not, and a `--game spider` check that cannot fail on a game that did not open (`main.cpp:58` warns and falls back to the hub, leaving the process alive) — the §10 row now says so. Collateral outside the document: `README.md`'s licence paragraph repeated the THIRD-PARTY version claim and was corrected there. Four open questions resolved clean and are not in the tally, three of them the same one — §2, §4.1 and §4.7 describe the pre-change tree, which is a spec's correct "before" framing, not staleness. |
 | 5 | 2026-08-12 | 2 | 1 | 2 | 1 | 0 | 4 verified, all fixed; 0 dismissed. Loop 2 of this run, and the most valuable finding here is the one that refutes loop 4's own repair. **INV-7's *Breaks when* claimed the running checks would also catch a missing platform plugin. They will not**: both set `QT_QPA_PLATFORM=offscreen`, so they load `libqoffscreen.so` / `qoffscreen.dll` and never touch `libqxcb.so` / `qwindows.dll` — a bundle missing the plugin every real player needs starts perfectly under them and passes. It is the 0.3.0 failure exactly reversed, and it means the staged-tree assertion is the ONLY guard for the desktop plugin rather than a legible duplicate of one. Corrected in INV-7, §10, both workflow comments and `CLAUDE.md`; an implementer who had read the old text could have dropped the by-name check and re-shipped 0.3.0's bug. Also: §7 said the first tag exercises INV-5 to INV-8, which is now false of the halves GHUB-0026 added — they are unobserved until the next tag, and §7 says so. §4.3 never said how the AppImage is renamed, and `mv *.AppImage` cannot work with linuxdeploy's two tools sitting in the same directory — the block now carries `mv Games*.AppImage`, plus the reason the glob is `Games*` (linuxdeploy names its output from the desktop file's `Name=`). And INV-3 claimed a run on "every commit" where `ci.yml` selects `master` pushes and pull requests only. One defect was the orchestrator's own, caught at 4a step 3 before dispatch: the `mv` line introduced `${VERSION}` with nothing saying where it comes from, so the `verify` paragraph now states the job output. Q1 remained out of scope over the release path for the same reason as loop 4. |
+| 6 | 2026-08-12 | 2 | 3 | 3 | 1 | 0 | 7 verified, all fixed; 0 dismissed; nothing deferred. **Loop 3 of this run — the cap binds, and the document is accepted rather than looped again.** The cap binding here is evidence about the subject, not the document: the region under review is a Windows and AppImage release path that cannot be executed on this machine at all, so a cold lane can judge it only for internal consistency, and each loop has found real defects there that only reading the platform's own source could settle. The heaviest is exactly that shape. **The Windows running check would have passed the failure it exists to catch**: liveness is a valid signal on Linux, where a missing platform plugin aborts, but a Windows release build with no console shows a blocking `MessageBox` first — `qguiapplication.cpp` guards it with `!QLibraryInfo::isDebugBuild() && !GetConsoleWindow()`, both true on a runner — and reaches `qFatal` only when somebody dismisses it, which nobody does. Read from the Qt 6.8.3 source to confirm. The step now adds `-NoNewWindow` and asserts the process owns no top-level window, since a healthy offscreen app opens none. Six more: `cmake --install` was said to lay down three files when it lays down seven, which is what INV-8's Linux half rests on; §4.2 claimed the AppImage carries none of the three libraries CI installs, when `libxkbcommon-x11-0` and `libxcb-cursor0` are absent from the excludelist and so ARE bundled — checked against the published list, and adding them to the container would have hidden a future regression; `ci.yml`'s `concurrency` block was recorded nowhere and defeats INV-3's "every commit" as written; §4.6 said the running check needs no stderr handle beside a block that redirects one; §7's "no before exists" had expired, the published 0.3.0 AppImage being a real before for INV-7; and loop 4's own `THIRD-PARTY.md` fix claimed a Qt bump is one edit when `6.8.3` is pinned three times. Two of the seven were this run's own collateral, both from loop 5. |
