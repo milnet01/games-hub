@@ -362,6 +362,26 @@ public-domain; see the standing rules for why each is safe.
   option is NOT declined on its merits, it is simply unbuilt; if this is
   picked up later both routes are still open. Stays 📋.
 
+- 📋 [GHUB-0029] **cardart.h says it serves three games; it serves six.**
+  The header comment on src/cards/cardart.h reads "Shared card drawing
+  for Klondike, Spider and Hearts, so the three games look like one deck
+  rather than three." Six game views include it: canasta, freecell,
+  hearts, klondike, pyramid, spider — confirmed by
+  `grep -rl cardart.h src --include=*.cpp` minus cardart.cpp itself.
+
+  Trivial, and filed rather than fixed in passing because it surfaced
+  during a documentation review, which does not edit code. It matters a
+  little more than a normal stale comment: GHUB-0017 makes this file the
+  home of kFaceMinWidth, the threshold all six games must compute
+  against, so a reader arriving there to understand that constant is
+  told the wrong set of callers on the first line.
+
+  Fix is one line. Worth folding into the first GHUB-0017 commit that
+  touches cardart.h rather than taking a commit of its own.
+  **Layman:** The comment at the top of the shared card-drawing file names the wrong games.
+  Kind: doc-fix.
+  Source: in-session-2026-08-13 (found building the GHUB-0017 review packet).
+
 ## P03 — Considered
 
 Nothing here is agreed. 💭 means the scope, the value or the decision is still
