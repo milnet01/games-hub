@@ -12,6 +12,16 @@ namespace CardArt {
 // Playing-card proportion: height = width * 1.4.
 constexpr double kAspect = 1.4;
 
+// Below this width paintFace draws only the corner index — the pips and court
+// letters are dropped, because they are unreadable smaller. A game that lays
+// cards out must not go below it while Legibility is on, and must measure that
+// against the SMALLEST scale it draws a card at: Canasta's melds are drawn at
+// 0.74, so a meld needs cardWidth() >= 46 / 0.74 to show a face at all.
+//
+// This is the only definition of the number; scripts/legibility-check.py
+// --thresholds fails if any other source states it as a literal.
+inline constexpr double kFaceMinWidth = 46.0;
+
 void paintFace(QPainter& p, const QRectF& r, const Card& c);
 
 // `deck` picks the colourway: 0 is blue, 1 is red. Games dealt from a single

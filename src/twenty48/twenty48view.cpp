@@ -19,6 +19,15 @@
 namespace {
 const QString kBestKey = QStringLiteral("twenty48/best_score");
 
+// Above this relative luminance a tile is "light" and takes the dark ink. It
+// sits well below the darkest light tile (64, at L = 0.279) and well above the
+// dark one (the default: arm, at 0.042), so no tile is near the boundary.
+constexpr double kLightTileLuminance = 0.20;
+
+constexpr QColor kDarkInk { 0x26, 0x23, 0x1d };
+constexpr QColor kLightInk { 0xf9, 0xf6, 0xf2 };
+}
+
 // Warm paper tones that climb towards a hot colour as the numbers grow.
 QColor tileColour(int value)
 {
@@ -38,10 +47,30 @@ QColor tileColour(int value)
     }
 }
 
+double relativeLuminance(const QColor& c)
+{
+    auto channel = [](double v) {
+        return v <= 0.03928 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(c.redF()) + 0.7152 * channel(c.greenF())
+         + 0.0722 * channel(c.blueF());
+}
+
+double contrastRatio(const QColor& a, const QColor& b)
+{
+    const double la = relativeLuminance(a);
+    const double lb = relativeLuminance(b);
+    return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+}
+
 QColor inkFor(int value)
 {
-    return value <= 4 ? QColor(0x77, 0x6e, 0x65) : QColor(0xf9, 0xf6, 0xf2);
-}
+    // Which ink reads on a tile is a property of the TILE's brightness, not of
+    // its number. Keying on the value meant every tile from 8 up got near-white
+    // ink over a mid-tone colour, at half the contrast a reader needs — and no
+    // cut-off on the value can fix that, because the tiles are not ordered by
+    // brightness: 64 is the darkest at L = 0.279 while 128 jumps back to 0.639.
+    return relativeLuminance(tileColour(value)) > kLightTileLuminance ? kDarkInk : kLightInk;
 }
 
 Twenty48View::Twenty48View(QWidget* parent)

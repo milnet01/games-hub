@@ -3,6 +3,7 @@
 // QT_QPA_PLATFORM=offscreen (the CMake test sets it) so it needs no display.
 
 #include "gameview.h"
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "canasta/canastaview.h"
@@ -121,6 +122,30 @@ int countPixels(const QImage& image, QRgb colour)
     return n;
 }
 
+// The only thing that can observe the legibility hook firing. The default
+// applyLegibility() only repaints, and no game changes appearance yet, so no
+// rendered pixel differs between a notified view and an unnotified one.
+//
+// It lives here rather than on GameView because a counter on the base class
+// would be production surface existing only to be asserted on. Free-standing
+// rather than installed as a hub page — deliberately: connected purely by the
+// GameView base constructor, it goes red under any implementation that instead
+// has the hub walk its own pages, which is the bug INV-2 exists to catch.
+class LegibilityProbe : public GameView
+{
+public:
+    using GameView::GameView;
+
+    void applyLegibility(bool enabled) override
+    {
+        ++calls;
+        last = enabled;
+    }
+
+    int calls = 0;
+    bool last = false;
+};
+
 QImage renderOf(QWidget* w)
 {
     QPixmap canvas(w->size());
@@ -139,6 +164,94 @@ int main(int argc, char* argv[])
     // player's real best scores.
     QCoreApplication::setOrganizationName(QStringLiteral("GamesHubTest"));
     QCoreApplication::setApplicationName(QStringLiteral("GamesSelfTest"));
+
+    // ---- legibilityDefaultsOff (INV-5) ----
+    //
+    // MUST BE THE FIRST BLOCK IN main(), before any GameView is constructed.
+    // Legibility is a singleton whose private constructor reads QSettings once,
+    // at first use, and every GameView constructor connects to it — so
+    // constructing any game instantiates it. A block that clears the key
+    // afterwards is asserting whatever the store happened to hold at process
+    // start, which is not the default and is not under this block's control.
+    //
+    // The clear is not redundant with the suite's own scope: Scores::clear()
+    // calls QSettings::clear(), which wipes the WHOLE store rather than just
+    // the scores, so what a previous run left here depends on which block ran
+    // last. Clearing makes this block say the same thing every time.
+    {
+        QSettings settings;
+        settings.remove(QStringLiteral("display/legibility"));
+        settings.sync();
+        check(!Legibility::instance().enabled(),
+              "legibility: with no stored value the switch is off");
+    }
+
+    // ---- legibilityPersists (INV-1) ----
+    //
+    // A freshly constructed QSettings reads the backing store rather than the
+    // singleton's cache, and it is the same check on both platforms —
+    // QFile::exists(QSettings().fileName()) is false on Windows however well
+    // saving works. Both sides name the literal key, which is what makes this
+    // the one block that can see the key being renamed in a later release.
+    // Both halves assert contains() as well as the value. Without it the "off"
+    // half is satisfied by the key being ABSENT — QVariant().toBool() is false
+    // — so a setEnabled() that wrote nothing at all would pass it.
+    {
+        Legibility::instance().setEnabled(true);
+        const QSettings afterOn;
+        check(afterOn.contains(QStringLiteral("display/legibility"))
+                  && afterOn.value(QStringLiteral("display/legibility")).toBool(),
+              "legibility: turning the switch on reaches the settings store");
+
+        Legibility::instance().setEnabled(false);
+        const QSettings afterOff;
+        check(afterOff.contains(QStringLiteral("display/legibility"))
+                  && !afterOff.value(QStringLiteral("display/legibility")).toBool(),
+              "legibility: and turning it off again does too");
+    }
+
+    // ---- legibilityReachesBackgroundGames (INV-2) ----
+    //
+    // Counter deltas, not absolute counts: setEnabled() is a no-op when
+    // unchanged, so a bare setEnabled(true) after an earlier block may emit
+    // nothing. Drive the switch to a known state first, then move it.
+    {
+        LegibilityProbe onScreen;
+        LegibilityProbe inBackground;
+        onScreen.show();
+
+        Legibility::instance().setEnabled(false);
+        const int seenOnScreen = onScreen.calls;
+        const int seenInBackground = inBackground.calls;
+
+        Legibility::instance().setEnabled(true);
+        check(onScreen.calls == seenOnScreen + 1,
+              "legibility: the visible game is told exactly once");
+        check(inBackground.calls == seenInBackground + 1,
+              "legibility: so is a game that is built but not on screen");
+        check(onScreen.last && inBackground.last,
+              "legibility: and both are told which way it went");
+
+        Legibility::instance().setEnabled(false);
+    }
+
+    // ---- twenty48InkIsReadable (INV-7) ----
+    //
+    // The switch is not consulted: 2048's ink is fixed for everyone, because a
+    // tile nobody can read is a defect rather than a preference. The trailing
+    // 4096 is tileColour()'s default: arm, which a loop over the enumerated
+    // cases alone never reaches.
+    {
+        bool readable = true;
+        for (int value : { 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096 }) {
+            const double ratio = contrastRatio(inkFor(value), tileColour(value));
+            if (ratio < 3.0) {
+                std::printf("      2048 tile %d has ink at only %.2f:1\n", value, ratio);
+                readable = false;
+            }
+        }
+        check(readable, "2048: every tile's ink clears 3:1 against its own colour");
+    }
 
     // ---- Best scores survive a restart ----
     {

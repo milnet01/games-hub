@@ -2,9 +2,23 @@
 
 #include "gameview.h"
 
+#include <QColor>
+
 #include <array>
 #include <random>
 #include <vector>
+
+// The tile palette and the ink that reads on it. Declared here rather than kept
+// in twenty48view.cpp's anonymous namespace so tests/uitest.cpp can assert the
+// contrast the player actually gets.
+QColor tileColour(int value);
+QColor inkFor(int value);
+
+// The WCAG 2.2 formulae. Exported alongside, because a test that re-derives
+// them is checking its own arithmetic and stays green over a wrong inkFor().
+// scripts/legibility-check.py holds the only other copy, in Python.
+double relativeLuminance(const QColor& c);
+double contrastRatio(const QColor& a, const QColor& b);
 
 // The sliding-tile number game: push everything one way, equal neighbours
 // merge, a new tile appears, keep going until nothing can move.

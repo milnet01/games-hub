@@ -213,7 +213,7 @@ void paintFace(QPainter& p, const QRectF& r, const Card& c)
 
     // Below this width the middle of the card is too small for pips to read,
     // so the corner index carries the card on its own.
-    if (r.width() < 46)
+    if (r.width() < kFaceMinWidth)
         return;
 
     if (joker) {

@@ -21,6 +21,9 @@ constexpr QColor kPaperAlt { 0xe9, 0xe4, 0xd4 };
 constexpr QColor kClueInk { 0x22, 0x26, 0x2b };
 constexpr QColor kOwnInk { 0x1f, 0x6f, 0xb2 };
 constexpr QColor kErrorInk { 0xc2, 0x39, 0x39 };
+// Pencil marks. Named rather than written inline at the call site so
+// scripts/legibility-check.py can read the value it measures out of the source.
+constexpr QColor kPencilInk { 0x6d, 0x6a, 0x5e };
 constexpr QColor kGridLine { 0x9a, 0x93, 0x82 };
 constexpr QColor kGridHeavy { 0x3c, 0x38, 0x30 };
 constexpr int kFrameWidth = 9;
@@ -341,7 +344,7 @@ void SudokuView::paintEvent(QPaintEvent*)
             if (marks == 0)
                 continue;
             p.setFont(markFont);
-            p.setPen(QColor(0x6d, 0x6a, 0x5e));
+            p.setPen(kPencilInk);
             for (int d = 1; d <= 9; ++d) {
                 if (!(marks & (1u << (d - 1))))
                     continue;

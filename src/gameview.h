@@ -13,10 +13,24 @@ class GameView : public QWidget
     Q_OBJECT
 
 public:
-    using QWidget::QWidget;
+    // Not `using QWidget::QWidget`: the base constructor is what connects every
+    // game to the hub's legibility switch, including the ones that are built
+    // but not on screen.
+    explicit GameView(QWidget* parent = nullptr);
 
     // Actions the hub puts on the toolbar while this game is on screen.
     virtual QList<QAction*> gameActions() { return {}; }
+
+    // Called when the hub's legibility switch changes, and never at
+    // construction: a game reads Legibility::instance().enabled() itself when
+    // it builds. The default repaints, which is enough for a game that reads
+    // the setting inside paintEvent; a game that caches geometry overrides it.
+    virtual void applyLegibility(bool enabled)
+    {
+        Q_UNUSED(enabled);
+        updateGeometry();
+        update();
+    }
 
     // Called when the game becomes visible in the hub. Games that need a fresh
     // deal on entry override this.

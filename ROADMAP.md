@@ -389,7 +389,7 @@ open.
 
 ### 🖥 Legibility and accessibility
 
-- 📋 [GHUB-0017] **The other thirteen games have had no legibility pass.** The
+- 🚧 [GHUB-0017] **The other thirteen games have had no legibility pass.** The
   owner is partially sighted and reads cards by their pip pattern rather than
   the corner index, which is why Canasta ended up with named discards, a wild
   count on every meld, cards drawn large enough for `CardArt::paintFace` to
@@ -430,6 +430,26 @@ open.
   withdrawn to the per-game pass contract: both were untestable against
   a change that adapts no game, and INV-3 was unwritable at all since
   cardWidth() is private on all six card views.
+  Mechanism shipped (2026-08-14): src/legibility.* (the singleton, key
+  display/legibility, default off), GameView::applyLegibility with the
+  connection made in the base constructor, the "🔍 Normal / 🔍 Large"
+  toolbar action, CardArt::kFaceMinWidth, 2048's ink replaced by a
+  luminance test, and scripts/legibility-check.py (17 contrast pairs +
+  INV-4's grep, both green). Four uitest blocks lock INV-1, INV-2, INV-5
+  and INV-7; each was seen failing against a deliberate break first.
+  ctest 3/3.
+
+  The bullet stays open: no game responds to the switch yet. The fourteen
+  per-game passes follow one at a time, each shown to the owner before
+  the next is started, and whichever lands first carries withdrawn INV-3
+  and INV-6 with its own numbers and owns making its layout observable.
+
+  Three spec clauses the build proved wrong are folded back into §12
+  rather than silently fixed — INV-5's "Breaks when" (a drifted block
+  does NOT stay green: Scores::clear() wipes the whole settings store),
+  INV-1's block needing contains() on both halves, and the script's own
+  array parser, which skipped a four-argument QColor and measured the
+  wrong Minesweeper colour. §2.3's hand-transcribed table was right.
 
 ### 🎨 Play
 

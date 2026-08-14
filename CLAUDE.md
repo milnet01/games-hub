@@ -117,9 +117,18 @@ widget.** That split is the reason the whole collection is testable without a
 display, and it is the rule to preserve when adding a game.
 
 - `src/gameview.h` — `GameView`, the contract between hub and game: a QWidget
-  that offers `gameActions()` for the toolbar and emits `statusChanged`. It has
-  a near-empty `gameview.cpp` on purpose: AUTOMOC only generates a Q_OBJECT
-  class's metaobject if its header has a matching source file in the build.
+  that offers `gameActions()` for the toolbar and emits `statusChanged`. It also
+  declares `applyLegibility(bool)`, called when the hub's legibility switch
+  moves; the base constructor is what makes that connection, so **every**
+  constructed game hears about it and not just the one on screen. `gameview.cpp`
+  holds that constructor and nothing else — a Q_OBJECT class needs a matching
+  source file in the build or AUTOMOC generates no metaobject for it.
+- `src/legibility.*` — `Legibility`, the one app-wide persisted preference
+  (`display/legibility`, default off). A singleton like `Sound`, but stored and
+  broadcasting: games are built lazily and live for the session, so one built
+  before the switch moved would never learn without the signal.
+  `docs/specs/GHUB-0017-legibility-switch.md` is the contract, and the fourteen
+  per-game passes that read the switch have not started yet.
 - `src/hubwindow.*` — the tile grid and one page per game in a `QStackedWidget`.
   Games are constructed lazily on first open. Each tile paints its own
   miniature; `openGameNamed()` backs the `--game` flag. It also owns two things
@@ -236,8 +245,14 @@ a card wide clipped "10" to a stray stroke and cut the tail off "Q".
 reads as a parser bug rather than a name collision. `signals` and `emit` are
 the same. Canasta's meld layout hit this.
 
-**`CardArt::paintFace` stops drawing the face below 46 pixels wide** and leaves
-only the corner index, because pips are unreadable smaller than that. Anything
+**`CardArt::paintFace` stops drawing the face below `CardArt::kFaceMinWidth`
+(46) pixels wide** and leaves
+only the corner index, because pips are unreadable smaller than that. That
+constant in `cardart.h` is the number's only definition, and
+`scripts/legibility-check.py --thresholds` fails if any other source states it
+as a literal. A game holding the threshold must hold it at the **smallest scale
+it draws a card at**, not at 1.0 — Canasta's melds at 0.74 need `cardWidth()`
+≥ 62.2, not 46. Anything
 drawing cards at reduced scale — Canasta's melds are `kMeldScale` = 0.74, its
 opponent hands 0.8 — gets a stack of
 slivers rather than cards, and has to name them some other way. The melds carry

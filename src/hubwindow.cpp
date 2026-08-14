@@ -1,6 +1,7 @@
 #include "hubwindow.h"
 
 #include "gameview.h"
+#include "legibility.h"
 #include "sound.h"
 #include "chess/chessart.h"
 #include "chess/chessview.h"
@@ -492,6 +493,29 @@ void HubWindow::buildChrome()
             Sound::instance().play(Sound::kClick);
     });
     m_toolBar->addAction(m_soundAction);
+
+    // The legibility switch, app-wide like the sound one and so visible on the
+    // tile grid as well as inside a game.
+    //
+    // The label names the CURRENT state, never the action — "🔍 Large" while
+    // large play is on — matching the sound switch beside it. The order below
+    // is the OPPOSITE of that switch's, and deliberately: m_soundAction is
+    // setChecked() before it is connected, which is harmless there because its
+    // state is hardcoded on and its construction text is already the on-label.
+    // This one restores a stored value, so connecting first is what lets
+    // setChecked() emit toggled and sync the label. Copy the precedent and a
+    // player who had the switch on launches with a checked button reading
+    // "🔍 Normal".
+    m_legibilityAction = new QAction(QStringLiteral("🔍 Normal"), this);
+    m_legibilityAction->setCheckable(true);
+    m_legibilityAction->setToolTip(QStringLiteral("Larger, higher-contrast play"));
+    connect(m_legibilityAction, &QAction::toggled, this, [this](bool on) {
+        Legibility::instance().setEnabled(on);
+        m_legibilityAction->setText(on ? QStringLiteral("🔍 Large")
+                                       : QStringLiteral("🔍 Normal"));
+    });
+    m_legibilityAction->setChecked(Legibility::instance().enabled());
+    m_toolBar->addAction(m_legibilityAction);
 
     m_status = new QLabel(this);
     statusBar()->addWidget(m_status, 1);

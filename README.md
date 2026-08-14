@@ -85,6 +85,14 @@ bar.
 
 ## Playing
 
+**The two switches at the right of the toolbar apply to every game.** 🔊 Sound
+turns the effects on and off. 🔍 reads **Normal** or **Large**: turn it on for
+larger, higher-contrast play. It is remembered, so you set it once. The label
+always says which way it is set now, not what clicking will do.
+
+> The games are still being adapted to that switch one at a time, so turning it
+> on does not change every board yet.
+
 **Chess.** You are White and move first. Click a piece to select it — the
 squares it can reach show a dot, and the ones it can capture show a ring.
 Click one to move. A pawn reaching the far rank asks which piece it should

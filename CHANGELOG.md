@@ -8,7 +8,23 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Added
+
+- **A legibility switch in the hub toolbar, on or off for the whole collection** (GHUB-0017)
+  Reads "🔍 Normal" or "🔍 Large", sits beside the sound switch, and
+  is remembered between sessions. This ships the mechanism only —
+  the fourteen games start reading it one at a time next, each shown
+  to the owner before the next is started.
+
 ### Fixed
+
+- **2048's numbers were unreadable on nine of its twelve tiles** (GHUB-0017)
+  The ink was picked from the tile's NUMBER, so every tile from 8
+  upward got near-white text on a mid-orange or mid-yellow square —
+  as low as 1.50:1 where 3:1 is the minimum anyone can read. It is
+  now picked from how bright the tile actually is, and every tile
+  clears 4.9:1. Fixed for everyone rather than hidden behind the new
+  switch: a tile nobody can read is a bug, not a preference.
 
 - **The pre-push check no longer skips itself on a release (GHUB-0027)**
   Pushing a release sends the branch and its tag together, and the

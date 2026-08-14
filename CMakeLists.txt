@@ -38,6 +38,9 @@ set(GAME_VIEW_SOURCES
     src/minesweeper/minesweeperview.cpp
     src/theme.cpp
     src/sound.cpp
+    # QtCore-only today, but a rules core has no business reading a display
+    # preference — so it links into the view half, not the self-test's.
+    src/legibility.cpp
     src/scores.cpp
     src/cards/cardart.cpp
     src/chess/chessart.cpp
