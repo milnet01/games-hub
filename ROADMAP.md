@@ -280,6 +280,27 @@ double-clicking a file.
   push, release, new branch); against the new one all seven pass.
   ctest is 3/3.
 
+- 📋 [GHUB-0031] **The Windows build rides on an action GitHub is deprecating the runtime under.**
+  Every CI run now annotates: `ilammy/msvc-dev-cmd@0b201ec74f` (v1.13.0)
+  targets Node.js 20 and is being FORCED onto Node.js 24. Today that is a
+  warning and the Windows leg is green. When the forcing is withdrawn the
+  action fails, and it is used in both workflows — `ci.yml:70` and
+  `release.yml:216` — so it takes the Windows build and the Windows half of
+  every release with it.
+
+  Not urgent and not silent: it prints on every run. The fix is a version
+  bump, and it must keep the pinned form — a commit SHA with the version in
+  a trailing comment — because these workflows publish binaries strangers
+  download and a moved tag on a third-party action would run arbitrary code
+  against them. Check upstream has a Node 24 release first; if it has not,
+  the fallback is calling `vcvarsall.bat` directly, which is fewer moving
+  parts than an unmaintained action.
+
+  Source: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  **Layman:** A helper GitHub uses to build the Windows version is running on an old engine that GitHub will switch off; when it does, Windows builds and releases stop.
+  Kind: chore.
+  Source: in-session-2026-08-14 (CI annotation on run 31811637751).
+
 ### 🎨 Games agreed and not yet started
 
 Asked for on 2026-08-10, in the order agreed. All are traditional or
@@ -450,6 +471,28 @@ open.
   INV-1's block needing contains() on both halves, and the script's own
   array parser, which skipped a four-argument QColor and measured the
   wrong Minesweeper colour. §2.3's hand-transcribed table was right.
+
+- 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
+  Not a defect today, and deliberately not fixed while filing: the
+  toolbar action is the only writer of Legibility, so its own toggled
+  signal keeps the label right, and spec GHUB-0017 §4.3 specifies
+  exactly that code after three cold-review loops.
+
+  It is a hazard for the per-game passes. The action subscribes to
+  itself, not to Legibility::changed, so a second writer — a keyboard
+  shortcut, a settings dialog, a game offering its own toggle — leaves
+  the button reading "🔍 Normal" while large play is on. Seen directly:
+  driving Legibility::instance().setEnabled(true) from a test renders a
+  toolbar still labelled Normal and unchecked.
+
+  The fix is one connect from Legibility::changed to the label, guarded
+  against the loop back through setEnabled. Worth doing the moment a
+  second writer appears, not before. Spec §10 already records that
+  nothing checks this label — it was found by rendering the toolbar,
+  which is the only thing that can see it.
+  **Layman:** The 'Large / Normal' button would show the wrong word if the setting were ever changed from somewhere other than that button.
+  Kind: accessibility.
+  Source: in-session-2026-08-14 (observed while rendering the hub for GHUB-0017).
 
 ### 🎨 Play
 
