@@ -66,6 +66,11 @@ Pinball high scores.
 separately as well as for the tile menu, so a game you like large opens large
 and the menu comes back where you left it.
 
+**So do the settings you choose.** Minesweeper reopens on the difficulty you
+last played, and Canasta on the rule set you last used — Classic or House. You
+pick them once rather than every time, and finishing a game no longer forgets
+them.
+
 **Ten of the games pick up where you left off.** Close the window in the middle
 of one and it comes back exactly as you left it — Chess, Canasta, Draughts,
 Reversi, Minesweeper, 2048, and all four card games (Klondike, Spider, FreeCell
@@ -90,8 +95,12 @@ turns the effects on and off. 🔍 reads **Normal** or **Large**: turn it on for
 larger, higher-contrast play. It is remembered, so you set it once. The label
 always says which way it is set now, not what clicking will do.
 
-> The games are still being adapted to that switch one at a time, so turning it
-> on does not change every board yet.
+> The games are being adapted to that switch one at a time, so turning it on
+> does not change every board yet. **Canasta** and **Sudoku** are done: Canasta
+> keeps the window large enough that a melded card still shows its pips instead
+> of becoming a sliver, and Sudoku grows its pencil marks — as far as they can
+> go while nine of them still fit in a square — and prints them bold. The other
+> twelve ignore the switch for now.
 
 **Chess.** You are White and move first. Click a piece to select it — the
 squares it can reach show a dot, and the ones it can capture show a ring.
@@ -148,7 +157,14 @@ at a table: wild cards first, then aces down to threes.
 
 A strip under the middle of the table says how much stock is left, whether the
 pile is frozen, and **what the last player threw away**, in words, until the
-next card replaces it.
+next card replaces it. If you are playing the house rule below that keeps the
+first round clear, the strip also says whether your throw can be taken — and
+warns you on the one turn where it can.
+
+**Each side's score plate says what that side still needs to open** — "needs
+90" until it does, then "opened". The two sides are often on different numbers,
+because the target rises with a side's score, so your own figure only ever told
+half the story.
 
 Every meld carries a badge naming what it holds — `10 ×4 ★1` is four tens with
 one wild card among them. A melded card is mostly hidden by the one on top of
@@ -177,11 +193,20 @@ is going.
 
 **Rules → House rules…** opens every number the game plays by: the opening
 minimums, the canasta bonuses, what a red three is worth, and whether a canasta
-is really needed to go out. Six of them are the owner's family's, all off in
-Classic (the last is ON in Classic, since Classic is the one that freezes):
+is really needed to go out. Six of them are the owner's family's. Classic never
+uses any of them except the last, which is Classic's own rule; the House set
+starts with the first one on and the rest off, and you can change any of it:
 
 - *Nobody lays down in the first round* keeps the table clear until every seat
   has played once, so the pile has something in it before anyone can open.
+  **It also means nobody can take the pile in that round**, since taking the
+  pile always melds the top card — so for the first three players a throw
+  cannot be punished, whatever it is. Two things follow. Don't waste a black
+  three there: its only job is blocking the pile, and there is nothing to
+  block. And if you are last to play in the round, you are the exception —
+  the next turn is the first player's second go, the rule has lifted by then,
+  and your throw is the one that can be taken. The computer knows all of this
+  and plays accordingly.
 - *The pile can be part of your opening*, turned off, means the meld that
   captures the top card counts nothing toward the minimum — so the pile can
   never be the thing that opens you.
