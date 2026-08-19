@@ -8,6 +8,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-19
+
+A release about being able to read the board and being remembered: a
+legibility switch that two games now answer, a Canasta computer that knows
+when its discard is safe, and settings that survive finishing a game.
+
 ### Added
 
 - **Canasta shows each team's opening minimum on its own score plate, and names the first round on the table**
@@ -19,7 +25,7 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 - **The computer plays the first round knowing its throw cannot be taken, and both teams' opening minimums are on the table.** (GHUB-0035)
   Under house rules nobody can take the pile in the first round, so the computer stops wasting its black threes there - and each team's "points needed to open" now shows on its own score plate.
 
-- **Canasta now answers the legibility switch — melds show a face instead of a sliver** (GHUB-0017)
+- **Canasta now answers the legibility switch — melds show a face instead of a sliver** (GHUB-0038)
   Turning on Large makes Canasta's window a little bigger and every card
   on the table with it, so the melded cards are drawn large enough to show
   their pips rather than just a letter in the corner. Turning it off puts
@@ -28,11 +34,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 - **A Canasta hand nobody goes out on can now be scored as dead.** (GHUB-0032)
   When the stock runs out and nobody has gone out, the round can now count for nothing instead of handing a big score to whoever sat on a frozen pile.
 
-- **A legibility switch in the hub toolbar, on or off for the whole collection** (GHUB-0017)
+- **A legibility switch in the hub toolbar, read by Canasta and Sudoku so far** (GHUB-0037)
   Reads "🔍 Normal" or "🔍 Large", sits beside the sound switch, and
-  is remembered between sessions. This ships the mechanism only —
-  the fourteen games start reading it one at a time next, each shown
-  to the owner before the next is started.
+  is remembered between sessions. **Two of the fourteen games answer it
+  in this release** — Canasta and Sudoku, described above. The rest
+  ignore it for now and are being done one at a time, each shown to the
+  owner before the next is started. 2048's unreadable tiles were fixed
+  for everyone rather than behind the switch; that one is below.
 
 ### Changed
 
@@ -40,7 +48,7 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   Only affects a profile that has never saved house rules — a stored choice
   stays a choice.
 
-- **Sudoku's pencil marks grow and embolden under the legibility switch (GHUB-0017)**
+- **Sudoku's pencil marks grow and embolden under the legibility switch (GHUB-0039)**
   The second of the fourteen per-game passes. Sudoku's contrast was
   never the problem — the pencil ink measures 4.88:1 — so the pass is
   about size: a mark grows from a fifth of a cell to the largest that
@@ -59,7 +67,7 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 - **The Canasta AI no longer feeds the meld you are one card from finishing.** (GHUB-0033)
   The computer used to throw away the card that completed your canasta. Now it works out which of your melds is furthest from finishing and throws into that one instead.
 
-- **2048's numbers were unreadable on nine of its twelve tiles** (GHUB-0017)
+- **2048's numbers were unreadable on nine of its twelve tiles** (GHUB-0037)
   The ink was picked from the tile's NUMBER, so every tile from 8
   upward got near-white text on a mid-orange or mid-yellow square —
   as low as 1.50:1 where 3:1 is the minimum anyone can read. It is

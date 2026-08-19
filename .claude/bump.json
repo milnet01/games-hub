@@ -1,0 +1,29 @@
+{
+  "$note": "Version-bearing files, enumerated once. Only files that must BECOME the new version belong here — never a historical marker. ROADMAP.md and docs/specs/ mention v0.3.1 as a record of what happened and must not be bumped; CHANGELOG's shipped headings likewise.",
+
+  "version_source": "CMakeLists.txt",
+  "version_pattern": "project\\([^)]*VERSION\\s+([0-9]+\\.[0-9]+\\.[0-9]+)",
+
+  "files": [
+    {
+      "$note": "The one the build and the release workflow's verify job read. The tag's v prefix is stripped and compared against this.",
+      "path": "CMakeLists.txt",
+      "pattern": "VERSION {OLD} LANGUAGES",
+      "replace": "VERSION {NEW} LANGUAGES"
+    },
+    {
+      "$note": "The line a reader sees before they download anything.",
+      "path": "README.md",
+      "pattern": "Current version {OLD}",
+      "replace": "Current version {NEW}"
+    }
+  ],
+
+  "tag": "v{NEW}",
+
+  "todos": [
+    "MECHANICAL: close CHANGELOG.md's [Unreleased] into '## [{NEW}] - {TODAY}' and open a fresh empty [Unreleased] above it. Use mcp__ants__changelog_log op:release with version {NEW}; it refuses nothing_to_release on an empty section and version_exists on a duplicate heading, both of which are the checks you want."
+  ],
+
+  "post_check": "v=$(sed -n 's/^project(gameshub VERSION \\([0-9.]*\\).*/\\1/p' CMakeLists.txt); r=$(sed -n 's/^Current version \\([0-9.]*\\).*/\\1/p' README.md); grep -q \"^## \\[$v\\] - \" CHANGELOG.md || { echo \"CHANGELOG has no dated section for $v\"; exit 1; }; [ \"$v\" = \"$r\" ] || { echo \"drift: CMakeLists $v vs README $r\"; exit 1; }; echo \"version $v consistent across CMakeLists.txt, README.md and CHANGELOG.md\""
+}

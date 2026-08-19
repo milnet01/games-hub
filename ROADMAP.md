@@ -724,6 +724,92 @@ open.
   Kind: accessibility.
   Source: in-session-2026-08-14 (observed while rendering the hub for GHUB-0017).
 
+- ✅ [GHUB-0037] **The legibility switch itself, hub-owned and read by every game that has had its pass.**
+  Split out of GHUB-0017 (2026-08-19) so the release ledger can say what
+  actually shipped. GHUB-0017 stays open: it tracks the fourteen per-game
+  passes, twelve of which are still to come, and an umbrella that cannot
+  be ticked made every changelog entry crediting it read as a claim that
+  the whole thing was done.
+
+  What shipped here is the MECHANISM and nothing that adapts a game:
+  src/legibility.* (the singleton, key display/legibility, default off),
+  GameView::applyLegibility with the connection made in the base
+  constructor so a game built earlier still hears the switch move, the
+  "Normal / Large" toolbar action, CardArt::kFaceMinWidth exported so a
+  game can compute against the threshold instead of a literal, and
+  scripts/legibility-check.py with its 17 contrast pairs.
+
+  2048's ink rides along and is the one thing here a player sees without
+  touching the switch. inkFor() picked the colour from the tile's NUMBER,
+  so every tile from 8 up got near-white text on mid-orange or mid-yellow
+  - as low as 1.50:1 against a 3:1 floor. It is now picked from the tile's
+  measured brightness and every tile clears 4.9:1. Fixed for everyone
+  rather than hidden behind the switch, because a tile nobody can read is
+  a defect and not a preference.
+
+  Contract: docs/specs/GHUB-0017-legibility-switch.md, accepted. Four
+  uitest blocks lock INV-1, INV-2, INV-5 and INV-7, each seen red against
+  a deliberate break.
+  **Layman:** The Large/Normal switch in the toolbar, and the 2048 tiles whose numbers nobody could read.
+  Kind: accessibility.
+  Source: in-session-2026-08-19 (split out of GHUB-0017 for the 0.4.0 release).
+
+- ✅ [GHUB-0038] **Canasta answers the legibility switch: a melded card shows a face instead of a sliver.**
+  The first of the fourteen per-game passes (GHUB-0017 section 9), split
+  out so it can be ticked. It carries the two invariants withdrawn from
+  the mechanism spec, INV-3 and INV-6, in its own numbers.
+
+  Under the switch CanastaView::minimumSizeHint() returns 900x656 and
+  cardWidth() floors at CardArt::kFaceMinWidth / kMeldScale, so a melded
+  card goes from 37.1 px at the smallest window to 46.4 and draws a face.
+  Growing the melds in place was tried first and cannot work: a face-
+  clearing seven-card canasta is about 130 px tall against the 107 px
+  bandFor() allows, and the overflow runs into the stock and discard row.
+
+  applyLegibility lands in-flight cards first - Flight::to is a point
+  captured at launch, so any geometry change mid-animation misplaces them
+  - and keeps the pre-clamp window size so turning the switch off is not
+  one-way. Four uitest blocks lock it, each seen red against a deliberate
+  break; the first version of INV-3 passed a broken build until
+  cardsFitTable() was added.
+
+  Measurement that shrank what was left: the other five card games need no
+  size pass. Every card view calls setMinimumSize(minimumSizeHint()), so
+  the smallest card each can reach is Klondike 67.9, FreeCell 67.4,
+  Pyramid 68.6, Spider 54.2 and Hearts 52.5 - all clear of the 46-px
+  threshold. Canasta was the only game drawing a faceless card.
+  **Layman:** Turn Large on and Canasta's melded cards get big enough to show their pips rather than a letter in the corner.
+  Kind: accessibility.
+  Source: in-session-2026-08-19 (split out of GHUB-0017 for the 0.4.0 release).
+
+- ✅ [GHUB-0039] **Sudoku answers the legibility switch: pencil marks grow to the largest that fit, and turn bold.**
+  The second per-game pass (GHUB-0017 section 9), split out so it can be
+  ticked. Contrast was never Sudoku's problem - the pencil ink measures
+  4.88:1 - so this is entirely size. No geometry and no minimum-size
+  change: the marks scale with the window, so a minimum-size pass of
+  Canasta's shape would have been invisible at any window a player uses.
+
+  The find was that cell*0.20 already sat against a ceiling nobody had
+  written down. drawText clips to its rect, each mark gets a cell third,
+  and it is the font's LINE box rather than the digit's ink that has to
+  fit - so raising the ratio alone clips every mark. Qt::TextDontClip
+  hands over the room between ink and line box.
+
+  The size is SOLVED, not tuned, and that cost three red Windows CI runs
+  to learn. A ratio measured here is a property of the platform's font and
+  its rasterisation at 7-11 point, not of this codebase. markFont() now
+  probes the font for its ink-per-point and steps down until the ink
+  measured at the size it will be drawn at fits, so the mark is the
+  largest each platform allows. The regression test became a portability
+  test over the machine's own font families; restoring the tuned constant
+  reddens it locally.
+
+  Standing lesson recorded on GHUB-0017: a test may ASSERT what the code
+  does and must only REPORT what the platform provides.
+  **Layman:** Turn Large on and Sudoku's little candidate numbers get as big as they can while nine still fit in a square.
+  Kind: accessibility.
+  Source: in-session-2026-08-19 (split out of GHUB-0017 for the 0.4.0 release).
+
 ### 🎨 Play
 
 - 💭 [GHUB-0018] **Canasta cannot take a move back.**

@@ -5,7 +5,7 @@ sized to sit beside whatever you are actually working on.
 
 ![the games hub](docs/hub.png)
 
-Current version 0.3.1 — see the [changelog](CHANGELOG.md) for what changed
+Current version 0.4.0 — see the [changelog](CHANGELOG.md) for what changed
 and the [roadmap](ROADMAP.md) for what is coming.
 
 ## Download
