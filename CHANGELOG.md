@@ -10,6 +10,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Canasta shows each team's opening minimum on its own score plate, and names the first round on the table**
+  Both on the play area rather than the status bar. The centre strip says
+  "FIRST ROUND — your throw is safe", and switches to "FIRST ROUND ENDS —
+  the next seat can take" on the last seat of the round, which is the moment
+  the protection stops.
+
+- **The computer plays the first round knowing its throw cannot be taken, and both teams' opening minimums are on the table.** (GHUB-0035)
+  Under house rules nobody can take the pile in the first round, so the computer stops wasting its black threes there - and each team's "points needed to open" now shows on its own score plate.
+
 - **Canasta now answers the legibility switch — melds show a face instead of a sliver** (GHUB-0017)
   Turning on Large makes Canasta's window a little bigger and every card
   on the table with it, so the melded cards are drawn large enough to show
@@ -26,6 +35,10 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   to the owner before the next is started.
 
 ### Changed
+
+- **The House rules set now has "nobody lays down in the first round" ticked by default**
+  Only affects a profile that has never saved house rules — a stored choice
+  stays a choice.
 
 - **Sudoku's pencil marks grow and embolden under the legibility switch (GHUB-0017)**
   The second of the fourteen per-game passes. Sudoku's contrast was

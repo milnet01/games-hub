@@ -419,6 +419,11 @@ Card Ai::chooseDiscard(const Engine& e) const
     const Team& mine = e.team(teamOf(seat));
     const Team& theirs = e.team(teamOf(seat) ^ 1);
     const int pileSize = int(e.pile().size());
+    // Nothing thrown this turn can be taken. See Engine::discardCannotBeTaken()
+    // for why the fourth seat of the first round is NOT covered — its throw is
+    // the one that is live, because the seat after it is the first seat playing
+    // a second time.
+    const bool freeThrow = e.discardCannotBeTaken();
 
     Card best = h.front();
     double bestScore = -1e9;
@@ -430,6 +435,13 @@ Card Ai::chooseDiscard(const Engine& e) const
         // Higher is more willing to throw.
         double score = -double(cardValue(c, r));
 
+        // Everything about whether this card would hand the pile over goes here
+        // rather than straight onto the score, because there is one turn in the
+        // hand where the whole question is moot. Applied in full below unless
+        // the throw cannot be taken, so play outside the first round is
+        // unchanged to the last decimal.
+        double safety = 0.0;
+
         if (m_level != Level::Easy) {
             // Do not break up your own holdings.
             score -= 7.0 * (countRank(h, c.rank) - 1);
@@ -440,19 +452,29 @@ Card Ai::chooseDiscard(const Engine& e) const
 
             // Feeding a rank the opponents have melded hands them the pile —
             // and the closer that meld is to a canasta, the bigger the gift.
-            score -= discardRisk(theirs, c.rank, pileSize, e.pileFrozen(), r);
+            safety -= discardRisk(theirs, c.rank, pileSize, e.pileFrozen(), r);
 
-            // A black three cannot be melded until someone goes out, so it is
-            // nearly free to throw, and it shuts the pile down for a round.
-            if (isBlackThree(c))
-                score += 12.0 + (pileSize >= 4 ? 10.0 : 0.0);
+            if (isBlackThree(c)) {
+                if (freeThrow)
+                    // A black three buys exactly one thing: it stops the next
+                    // seat taking the pile. That seat cannot take it anyway, so
+                    // throwing one now spends the block and gets nothing back,
+                    // while holding it keeps the block for a turn that matters.
+                    // Small enough that a hand with nothing else legal to throw
+                    // still throws it.
+                    score -= 15.0;
+                else
+                    // Cannot be melded until someone goes out, so it is nearly
+                    // free to throw, and it shuts the pile down for a round.
+                    score += 12.0 + (pileSize >= 4 ? 10.0 : 0.0);
+            }
         }
 
         if (m_level == Level::Hard || m_level == Level::Expert) {
             // The bigger the pile, the more it costs to hand it over, so lean
             // harder on ranks nobody has shown an interest in.
             const int shown = countRank(e.pile(), c.rank);
-            score -= 2.5 * shown;
+            safety -= 2.5 * shown;
             if (isWild(c))
                 score -= 25.0;
         }
@@ -462,7 +484,7 @@ Card Ai::chooseDiscard(const Engine& e) const
             // unlikely to hold a pair of, so it is SAFER to throw than a rank
             // nobody has let go. Hard reads the pile the other way round, the
             // way most players do.
-            score += 50.0 * double(countRank(e.pile(), c.rank));
+            safety += 50.0 * double(countRank(e.pile(), c.rank));
         }
 
         if (m_level == Level::Hard || m_level == Level::Expert) {
@@ -472,9 +494,9 @@ Card Ai::chooseDiscard(const Engine& e) const
             // it the safest card there is — and the fewer that are unseen, the
             // less likely the pair that would punish the throw.
             const int unseen = 8 - seen(e, c.rank);
-            score += 9.0 * (4 - std::min(4, unseen));
+            safety += 9.0 * (4 - std::min(4, unseen));
             // Weighted by what handing the pile over would actually cost.
-            score -= 0.9 * double(unseen) * (1.0 + 0.12 * pileSize);
+            safety -= 0.9 * double(unseen) * (1.0 + 0.12 * pileSize);
 
             // Never break a pair while an unpaired card would do, and never
             // feed a rank this seat is holding as bait for the pile.
@@ -488,6 +510,15 @@ Card Ai::chooseDiscard(const Engine& e) const
             if (e.stockCount() < 8)
                 score -= 0.5 * double(cardValue(c, r));
         }
+
+        // Nothing thrown now can be taken, so every judgement above about
+        // handing the pile over is measuring a risk that cannot happen. Dropped
+        // rather than reversed: with no meld on the table there is no such
+        // thing as a dangerous rank yet, so there is nothing to aim at — what
+        // is left is the honest question of which card this hand least wants,
+        // which is what the terms outside `safety` already answer.
+        if (!freeThrow)
+            score += safety;
 
         // A little noise so the same hand is not played identically every time.
         // Expert plays the card it thinks is best, every time: variety is a

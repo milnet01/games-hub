@@ -248,6 +248,20 @@ public:
     // reason given reads as a bug rather than as a rule.
     bool meldingAllowed() const;
 
+    // Whether what the current seat throws can be taken by anybody at all.
+    // False only while the first-round rule still bars the seat that plays
+    // NEXT — which is a different question from meldingAllowed(), and the
+    // difference is the whole of it. The fourth seat of the first round is
+    // itself barred from melding, but the turn after it is the first seat
+    // playing a SECOND time, by which point the rule has lifted. So the fourth
+    // seat is the one seat in the round whose discard is live, and this
+    // returns true for it while returning false for the three before it.
+    //
+    // The AI reads it to know when a throw is free: with nothing takeable, a
+    // black three's blocking power is worth nothing and the card it would
+    // never dare throw later costs nothing now.
+    bool discardCannotBeTaken() const;
+
     bool canDrawFromStock() const;
     bool canTakePile(const std::vector<Card>& layDown) const;
     // True when some legal way to take the pile exists for the current seat.

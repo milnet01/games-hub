@@ -1225,6 +1225,158 @@ void canastaDeadHand()
 // Nothing safe left to throw: the computer has to feed one of the melds facing
 // it, and the least damaging is the one with furthest to go. Checked on a
 // hand-built table rather than a position played into existence.
+// The house rule that bars melding for one round round bars taking the pile
+// with it, so for three seats a discard cannot be punished — and the fourth
+// seat is the exception, because the turn after it is the first seat playing a
+// second time. The computer has to know which of those two it is sitting in.
+void canastaFirstRoundSafeThrow()
+{
+    ca::Rules r = ca::Rules::classic();
+    r.noMeldingFirstRound = true;
+
+    // Where the window opens and shuts. Driven by playing real turns rather
+    // than by poking the counter, so the arithmetic is checked against the
+    // engine's own idea of whose turn it is.
+    {
+        std::array<std::vector<Card>, 4> hands;
+        for (int s = 0; s < ca::kSeats; ++s)
+            hands[std::size_t(s)] = filler(9 + s);
+
+        ca::Engine e { r };
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 5)), 0);
+
+        const bool expected[ca::kSeats] = { true, true, true, false };
+        for (int turn = 0; turn < ca::kSeats; ++turn) {
+            check(e.discardCannotBeTaken() == expected[turn],
+                  turn < 3 ? "canasta: inside the first round a throw cannot be taken"
+                           : "canasta: except on the last seat of the round, whose throw the "
+                             "first seat can take on its second turn");
+            check(!e.meldingAllowed(),
+                  "canasta: and no seat in the first round may lay anything down");
+            check(e.drawFromStock(), "canasta: the first round is draw and discard");
+            check(e.discard(e.hand(e.currentSeat()).front()),
+                  "canasta: and the turn ends on the throw");
+        }
+        check(e.meldingAllowed(),
+              "canasta: the round over, the first seat plays again and may lay down");
+        check(!e.discardCannotBeTaken(),
+              "canasta: and from then on every throw is live");
+    }
+
+    // With the rule off there is no window at all, which is what stops the
+    // block above passing on a build that ignores the rule and always says yes.
+    {
+        std::array<std::vector<Card>, 4> hands;
+        for (int s = 0; s < ca::kSeats; ++s)
+            hands[std::size_t(s)] = filler(9 + s);
+
+        ca::Engine plain;
+        plain.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 5)), 0);
+        check(!plain.discardCannotBeTaken(),
+              "canasta: without the house rule the very first throw is already live");
+        check(plain.meldingAllowed(), "canasta: and the first seat may open straight away");
+    }
+
+    // What the computer does with the knowledge. A black three's only worth is
+    // stopping the next seat taking the pile, so throwing one while nothing can
+    // be taken spends the block and buys nothing. Seat 1 holds exactly one and
+    // ten cards it has no use for, so there is always something else to throw.
+    const auto handWithBlackThree = [] {
+        std::vector<Card> v { cd(Suit::Spades, 3) };
+        const int junk[] = { 4, 5, 6, 7, 8, 9, 10, kJack, kQueen, kKing };
+        for (int rank : junk)
+            v.push_back(cd(Suit::Diamonds, rank));
+        return v;
+    };
+
+    for (ca::Level level : { ca::Level::Medium, ca::Level::Hard, ca::Level::Expert }) {
+        std::array<std::vector<Card>, 4> hands;
+        hands[0] = filler(9);
+        hands[1] = handWithBlackThree();
+        hands[2] = filler(10);
+        hands[3] = filler(kJack);
+
+        // An up-card of a rank nobody in this hand holds. With a matching rank
+        // on the pile, Expert's "they have parted with it, so it is safe" bonus
+        // is worth +50 and simply outbids the black three, which makes the two
+        // halves below differ by more than the rule they are meant to isolate.
+        ca::Engine e { r };
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, kAce)), 0);
+        check(e.currentSeat() == 1, "canasta: seat 1 leads");
+        ca::Ai ai { level };
+        e.drawFromStock();
+        ai.playAndDiscard(e);
+        check(!ca::isBlackThree(e.pile().back()),
+              "canasta: the computer keeps its black three while nobody can take the pile");
+    }
+
+    // The other half of knowing the throw is free: every judgement about
+    // HANDING THE PILE OVER is measuring a risk that cannot happen, so it is
+    // dropped rather than obeyed. Expert is the level that shows it — a rank
+    // already sitting in the pile reads to it as one the others have parted
+    // with, and therefore safe, worth +50. Nothing can be taken, so that is
+    // worth nothing, and the king it would have thrown is ten points the hand
+    // should keep over a four.
+    //
+    // This is the ONLY safety term with any force in the first round: nobody
+    // has melded, because the same rule forbids it, so discardRisk is zero for
+    // every rank in the hand. A test built on discardRisk would assert nothing.
+    {
+        const auto kingMatchingPile = [] {
+            std::vector<Card> v { cd(Suit::Diamonds, kKing) };
+            const int junk[] = { 4, 5, 6, 7, 8, 9, 10, kJack, kQueen, kAce };
+            for (int rank : junk)
+                v.push_back(cd(Suit::Clubs, rank));
+            return v;
+        };
+        std::array<std::vector<Card>, 4> hands;
+        hands[0] = filler(9);
+        hands[1] = kingMatchingPile();
+        hands[2] = filler(10);
+        hands[3] = filler(kJack);
+
+        ca::Engine e { r };
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Spades, kKing)), 0);
+        ca::Ai first { ca::Level::Expert };
+        e.drawFromStock();
+        first.playAndDiscard(e);
+        check(e.pile().back().rank != kKing,
+              "canasta: inside the first round the computer stops reading the pile for "
+              "safety, because there is no danger to read");
+
+        // Same position, rule off. Now the pile can be taken, the reading means
+        // something again, and the king goes — which is what stops the check
+        // above passing on a computer that never throws a king anyway.
+        ca::Engine plain;
+        plain.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Spades, kKing)), 0);
+        ca::Ai second { ca::Level::Expert };
+        plain.drawFromStock();
+        second.playAndDiscard(plain);
+        check(plain.pile().back().rank == kKing,
+              "canasta: with the pile live it throws the rank the others have already "
+              "let go of");
+    }
+
+    // And the same seat, same hand, with the rule off: the block is worth
+    // something again, so the black three goes. Without this half the check
+    // above passes on a computer that simply never throws a black three.
+    for (ca::Level level : { ca::Level::Medium, ca::Level::Hard, ca::Level::Expert }) {
+        std::array<std::vector<Card>, 4> hands;
+        hands[0] = filler(9);
+        hands[1] = handWithBlackThree();
+        hands[2] = filler(10);
+        hands[3] = filler(kJack);
+
+        ca::Engine plain;
+        plain.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, kAce)), 0);
+        ca::Ai ai { level };
+        plain.drawFromStock();
+        ai.playAndDiscard(plain);
+        check(ca::isBlackThree(plain.pile().back()),
+              "canasta: with the pile live again it throws the black three to block it");
+    }
+}
+
 void canastaLeastDamagingDiscard()
 {
     const auto meldOf = [](int rank, int n) {
@@ -2592,6 +2744,7 @@ int main()
     canastaLevelsDiffer();
     canastaHouseRules();
     canastaDeadHand();
+    canastaFirstRoundSafeThrow();
     canastaLeastDamagingDiscard();
     canastaMeldOrder();
     canastaAiOpens();

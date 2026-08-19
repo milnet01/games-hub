@@ -667,6 +667,62 @@ open.
   Kind: fix.
   Source: user-request-2026-08-19.
 
+- ✅ [GHUB-0035] **The computer plays the first round knowing its throw cannot be taken, and both teams' opening minimums are on the table.**
+  Three things, all from the owner in one sitting.
+
+  The RULE was already right and already implemented. noMeldingFirstRound
+  bars melding until every seat has played, and validateTake refuses while
+  that holds, on the stated grounds that taking the pile always melds the
+  top card. What was missing was that the AI had no idea: not one
+  reference to the first round anywhere in canastaai.cpp.
+
+  Two seats' worth of arithmetic decide it. m_turnsTaken counts finished
+  turns, so the seat playing now is turn m_turnsTaken and the seat after
+  it is m_turnsTaken + 1 - which is why Engine::discardCannotBeTaken() is
+  +1 and meldingAllowed() is not. Seats 1 to 3 throw into a pile nobody
+  can touch; the FOURTH seat's throw is live, because the next turn is the
+  first seat's second and the rule has lifted by then. Getting that wrong
+  is right three times in four.
+
+  What the AI does with it. A black three's only worth is stopping the
+  next seat taking the pile, so in the safe window the +12 bonus becomes a
+  -15 penalty - held, it still blocks later; thrown, it buys nothing. Kept
+  small enough that a hand with nothing else legal still throws one.
+
+  The other half is subtler and the first attempt at it was DEAD CODE.
+  "The throw is free, so dump your most dangerous card" cannot be built on
+  discardRisk, because that returns 0 for any rank the opponents have not
+  melded and under this very rule nobody has melded yet - so it is zero
+  for every card in the hand. What ships instead gathers every
+  pile-safety judgement into one `safety` accumulator and drops the lot
+  when the throw cannot be taken, leaving the hand-value terms to answer.
+  Play outside the first round is unchanged to the last decimal, which the
+  AI strength ladder confirms.
+
+  Display, and the owner's reason for it: he does not look at the status
+  bar during a game - his focus is the play area - so both additions are
+  ON THE TABLE. The centre strip gains "FIRST ROUND - your throw is safe",
+  switching to "FIRST ROUND ENDS - the next seat can take" on the fourth
+  seat, which is exactly the moment the protection stops. Each score plate
+  gains its team's opening requirement beside the team name, gold while
+  owed and dim once paid; the plate minimum widened from 150 to 178 px
+  because at 150 the two strings met in the middle at the smallest window.
+  Verified by rendering the table at 1000x720 and at the 720x560 minimum
+  and looking at both.
+
+  noMeldFirstRound now defaults ON in the House set - the owner's family
+  rule rather than a variation offered. Only reaches a profile that has
+  never saved house rules; a stored 0 is a choice and stays one.
+
+  Seven selftest assertions, each seen red against its own deliberate
+  break. selftest 397/397, uitest 137/137. The AI ladder still holds at
+  all four rungs, and one of the breaks toppled "expert beats hard",
+  which is the ladder proving it is sensitive to this change rather than
+  decorative.
+  **Layman:** Under house rules nobody can take the pile in the first round, so the computer stops wasting its black threes there - and each team's "points needed to open" now shows on its own score plate.
+  Kind: enhancement.
+  Source: user-request-2026-08-19.
+
 ### 🧰 Tests
 
 - 💭 [GHUB-0020] **A legality check that does not rely on the author's imagination.**

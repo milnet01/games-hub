@@ -564,6 +564,15 @@ bool Engine::meldingAllowed() const
     return !m_rules.noMeldingFirstRound || m_turnsTaken >= kSeats;
 }
 
+bool Engine::discardCannotBeTaken() const
+{
+    // m_turnsTaken counts turns already finished, so the seat playing now is
+    // turn m_turnsTaken and the seat after it is m_turnsTaken + 1. That next
+    // seat is barred exactly while its own turn number is still inside the
+    // round, which is why this is +1 and meldingAllowed() is not.
+    return m_rules.noMeldingFirstRound && m_turnsTaken + 1 < kSeats;
+}
+
 // ---------------------------------------------------------------------------
 // Lay-down validation
 // ---------------------------------------------------------------------------

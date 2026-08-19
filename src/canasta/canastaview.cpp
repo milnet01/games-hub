@@ -189,7 +189,11 @@ ca::Rules loadHouse()
     r.pileFrozenUntilOpened = get("frozenUntilOpen", 1) != 0;
     r.canastaNeededToScore = get("canastaToScore", 0) != 0;
     r.canastaMakesRankSafe = get("closedCanasta", 0) != 0;
-    r.noMeldingFirstRound = get("noMeldFirstRound", 0) != 0;
+    // On by default in the House set, unlike every other house flag: it is the
+    // owner's family rule rather than a variation offered. Only reaches a
+    // profile that has never saved house rules — a stored 0 is a choice and
+    // stays a 0.
+    r.noMeldingFirstRound = get("noMeldFirstRound", 1) != 0;
     r.pileMeldCountsToOpen = get("pileOpens", 1) != 0;
     // The one house default that deliberately differs from classic: a hand the
     // stock kills is void here unless it is turned off, because scoring a hand
@@ -1860,6 +1864,18 @@ void CanastaView::paintCentreStrip(QPainter& p)
     parts.push_back({ QStringLiteral("stock %1").arg(m_engine.stockCount()), kInkDim });
     if (m_engine.pileFrozen())
         parts.push_back({ QStringLiteral("FROZEN"), QColor(0x9a, 0xd8, 0xf0) });
+    // While the first round holds, nothing laid down and nothing taken — so the
+    // throw is safe, which is worth saying rather than leaving to be counted
+    // off the turn order. The wording splits on whether the seat that plays
+    // next is still inside the round: on the last seat of the round the pile
+    // comes alive again on the very next turn, and that is exactly the moment
+    // the rule stops protecting you.
+    if (!m_engine.meldingAllowed())
+        parts.push_back({ m_engine.discardCannotBeTaken()
+                              ? QStringLiteral("FIRST ROUND — your throw is safe")
+                              : QStringLiteral("FIRST ROUND ENDS — the next seat can take"),
+                          m_engine.discardCannotBeTaken() ? QColor(0x9f, 0xd8, 0xa8)
+                                                          : QColor(0xf0, 0xc2, 0x7a) });
     if (haveThrow) {
         parts.push_back({ QStringLiteral("%1 threw").arg(seatName(m_lastThrownBy)), kInkDim });
         // Suit colours as they are on the card, but lifted off the dark plate:
@@ -2014,7 +2030,12 @@ void CanastaView::paintFlights(QPainter& p)
 void CanastaView::paintScores(QPainter& p)
 {
     const QRectF table = tableRect();
-    const double w = std::max(150.0, table.width() * 0.21);
+    // Wider than it needs to be for the score alone: the plate now carries the
+    // team's opening requirement on the title row, and at the old 150 the two
+    // strings met in the middle at the smallest window. The pair still leaves
+    // the centre of the table clear — 2 x 178 against a 688-wide table at the
+    // minimum size.
+    const double w = std::max(178.0, table.width() * 0.235);
     const double h = std::max(52.0, table.height() * 0.095);
 
     struct Plate {
@@ -2022,10 +2043,22 @@ void CanastaView::paintScores(QPainter& p)
         int score;
         int hand;
         bool ours;
+        QString opening;
+    };
+    // What each side still has to put down to open. It is set per team when the
+    // hand is dealt and rises with that team's score, so the two are routinely
+    // different numbers — which is why showing only your own said less than it
+    // looked like it did. Spelled out on the plate that names the team rather
+    // than abbreviated: reading it should not need the rule book.
+    const auto opening = [this](int t) {
+        return m_engine.team(t).opened ? QStringLiteral("opened")
+                                       : QStringLiteral("needs %1").arg(m_engine.openRequirement(t));
     };
     const Plate plates[2] = {
-        { QStringLiteral("You & North"), m_engine.team(0).score, m_engine.team(0).handScore, true },
-        { QStringLiteral("West & East"), m_engine.team(1).score, m_engine.team(1).handScore, false },
+        { QStringLiteral("You & North"), m_engine.team(0).score, m_engine.team(0).handScore, true,
+          opening(0) },
+        { QStringLiteral("West & East"), m_engine.team(1).score, m_engine.team(1).handScore, false,
+          opening(1) },
     };
 
     // Sized off the plate's HEIGHT in pixels, not its width in points: point
@@ -2050,6 +2083,12 @@ void CanastaView::paintScores(QPainter& p)
         p.setFont(title);
         p.setPen(kInkDim);
         p.drawText(r.adjusted(10, 5, -10, 0), Qt::AlignLeft | Qt::AlignTop, plates[i].title);
+        // Opposite the team's name, so the number is read as belonging to that
+        // side. Lit gold while the side still owes it and dimmed once it is
+        // paid, because "opened" is a settled fact and the number is the one
+        // that is still being played against.
+        p.setPen(m_engine.team(i).opened ? kInkDim : Theme::kGold);
+        p.drawText(r.adjusted(10, 5, -10, 0), Qt::AlignRight | Qt::AlignTop, plates[i].opening);
         p.setFont(big);
         p.setPen(kInk);
         p.drawText(r.adjusted(10, 0, -10, -4), Qt::AlignLeft | Qt::AlignBottom,

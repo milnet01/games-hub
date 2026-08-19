@@ -299,6 +299,29 @@ constant, because a platform with taller digits should fail the check rather
 than draw marks that touch. 0.30 was tried and goes red at the smallest window,
 where a 34-pixel cell rounds the ink up a whole pixel.
 
+**Under `noMeldingFirstRound`, `discardRisk` is zero for every rank, so any AI
+rule written in terms of it is dead code.** The rule bars melding for one round
+and therefore bars taking the pile — `validateTake` refuses outright — which is
+what makes a first-round throw safe. But it also means no team has melded yet,
+and `discardRisk` returns 0 the moment `theirs.meldOfRank(rank)` is null. So
+"the throw is free, dump your most dangerous card" cannot be built on
+`discardRisk`: there is no dangerous card to find. What the AI does instead is
+drop the whole `safety` accumulator in `chooseDiscard` — every judgement about
+handing the pile over, gathered into one variable precisely so it can be
+dropped in one place — leaving the hand-value terms to answer honestly. The
+only safety term with real force in that window is Expert's `+50 ×
+countRank(pile, rank)`, which is why the test that locks this uses Expert and a
+king matching the up-card.
+
+**`Engine::meldingAllowed()` and `Engine::discardCannotBeTaken()` answer about
+DIFFERENT seats, and the fourth seat of the first round is where they part.**
+The first is about the seat playing now; the second about the seat that plays
+next, hence its `+1`. The last seat of the round is still barred from melding
+while the turn after it — the first seat playing a second time — is not, so it
+is the one seat in the round whose discard is live. An AI or a status line that
+reads `meldingAllowed()` for "is my throw safe?" gets it right three times and
+wrong on the fourth, which is the hardest quarter of a bug to notice.
+
 **Canasta can reach a position with no legal move, and the engine has to refuse
 the move that gets there.** Down to one card with no canasta, you may not go
 out, and discarding your last card *is* going out — so nothing is legal and the
