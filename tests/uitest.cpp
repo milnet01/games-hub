@@ -19,6 +19,7 @@
 #include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
 #include "spider/spiderview.h"
+#include "sudoku/sudokuview.h"
 #include "twenty48/twenty48view.h"
 
 #include <QApplication>
@@ -318,6 +319,80 @@ int main(int argc, char* argv[])
         check(canasta.minimumSize() == wasMinimum && canasta.size() == wasSize,
               "canasta: and turning it off puts the minimum and the window size "
               "back where they were");
+    }
+
+    // ---- sudokuLegibilityGrowsMarks (GHUB-0017 §9, Sudoku's per-game pass) --
+    //
+    // Sudoku's complaint is size and not colour: §2.3 measured the pencil ink at
+    // 4.88:1, comfortably past WCAG, while the mark font is a fifth of a cell
+    // against a real digit's half. So the pass makes the marks bigger, and the
+    // only thing that can stop it is the layout — nine marks share one cell.
+    //
+    // Both halves matter. The size assertion alone would pass on a build that
+    // grew the marks until they ran into each other, and marksFitCell() alone
+    // would pass on a build that had quietly stopped consulting the switch,
+    // since small marks fit best of all. The switch-OFF reading is what makes
+    // the growth assertion falsifiable rather than a statement about one
+    // number.
+    {
+        Legibility::instance().setEnabled(false);
+        SudokuView sudoku;
+        sudoku.resize(sudoku.minimumSize());
+
+        const double small = sudoku.markPointSize();
+        check(sudoku.marksFitCell(),
+              "sudoku: with the switch off nine pencil marks fit inside a cell");
+
+        Legibility::instance().setEnabled(true);
+        check(sudoku.markPointSize() >= small * 1.4,
+              "sudoku: the switch grows a pencil mark by at least half again, "
+              "at the smallest window the game allows");
+        check(sudoku.marksFitCell(),
+              "sudoku: and the grown mark's ink still clears its third of the "
+              "cell, so nine of them do not run into each other");
+
+        Legibility::instance().setEnabled(false);
+    }
+
+    // ---- sudokuLegibilityReverses (GHUB-0017 INV-6, in Sudoku's numbers) ----
+    //
+    // INV-6 was withdrawn from the mechanism spec as vacuously true — nothing
+    // adapted, so nothing could fail to be restored. Canasta's pass carried it
+    // as a size and minimum-size claim. Sudoku changes no geometry at all, so
+    // here it is what it was originally written as: two renders that must match
+    // exactly, with a third in between that must not.
+    //
+    // The board has to be carrying pencil marks or all three renders are
+    // identical and the block is green without having looked at anything. A
+    // sweep of the whole grid is what guarantees that — most cells are clues
+    // and refuse the mark, and which ones is decided by a freshly generated
+    // puzzle.
+    {
+        Legibility::instance().setEnabled(false);
+        SudokuView sudoku;
+        sudoku.resize(560, 600);
+
+        for (QAction* action : sudoku.gameActions())
+            if (action->text() == QStringLiteral("Pencil"))
+                action->setChecked(true);
+        for (int row = 0; row < 9; ++row) {
+            for (int col = 0; col < 9; ++col) {
+                pressKey(&sudoku, Qt::Key_5);
+                pressKey(&sudoku, Qt::Key_Right);
+            }
+            for (int col = 0; col < 9; ++col)
+                pressKey(&sudoku, Qt::Key_Left);
+            pressKey(&sudoku, Qt::Key_Down);
+        }
+
+        const QImage before = renderOf(&sudoku);
+        Legibility::instance().setEnabled(true);
+        check(renderOf(&sudoku) != before,
+              "sudoku: the switch actually changes what is painted");
+
+        Legibility::instance().setEnabled(false);
+        check(renderOf(&sudoku) == before,
+              "sudoku: and turning it off puts the board back pixel for pixel");
     }
 
     // ---- Best scores survive a restart ----

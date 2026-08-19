@@ -25,6 +25,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   the fourteen games start reading it one at a time next, each shown
   to the owner before the next is started.
 
+### Changed
+
+- **Sudoku's pencil marks grow and embolden under the legibility switch (GHUB-0017)**
+  The second of the fourteen per-game passes. Sudoku's contrast was
+  never the problem — the pencil ink measures 4.88:1 — so the pass is
+  about size: a mark goes from a fifth of a cell to 0.29 of one and is
+  drawn bold. Nothing else moves, and no minimum window size changes.
+
 ### Fixed
 
 - **The Canasta AI no longer feeds the meld you are one card from finishing.** (GHUB-0033)

@@ -283,6 +283,22 @@ reach is Klondike 67.9, FreeCell 67.4, Pyramid 68.6, Spider 54.2 and Hearts
 only game drawing faceless cards, and only in its melds: the opponents' hands
 are drawn at 0.8 but face **down**, so the threshold never applied to them.
 
+**`QPainter::drawText(rect, flags, text)` clips to the rect, so a font is
+bounded by its LINE box and not by its ink.** Sudoku's pencil marks are the
+case: nine sit in a fixed 3×3 pattern inside one cell, each centred in a cell
+third, and at `cell * 0.20` the marks were already close to the largest whose
+line box fits that third — so raising the ratio alone clips the top off every
+mark and draws a *worse* mark, not a bigger one. `Qt::TextDontClip` hands over
+the gap between the ink and the line box, and the legibility pass is what uses
+it. The flag is set in both switch states because at 0.20 it changes nothing.
+**Derive the ceiling from the ink, never from the point size:** this app font's
+digits are about 0.685 of an em, so mark ink lands at roughly `2.74 × ratio` as
+a fraction of the cell third. `SudokuView::marksFitCell()` measures it with
+`QFontMetricsF::tightBoundingRect` over all ten digits rather than trusting that
+constant, because a platform with taller digits should fail the check rather
+than draw marks that touch. 0.30 was tried and goes red at the smallest window,
+where a 34-pixel cell rounds the ink up a whole pixel.
+
 **Canasta can reach a position with no legal move, and the engine has to refuse
 the move that gets there.** Down to one card with no canasta, you may not go
 out, and discarding your last card *is* going out — so nothing is legal and the

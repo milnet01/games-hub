@@ -1,10 +1,12 @@
 #include "sudokuview.h"
 
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
 
 #include <QActionGroup>
+#include <QFontMetricsF>
 #include <QKeyEvent>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -27,6 +29,30 @@ constexpr QColor kPencilInk { 0x6d, 0x6a, 0x5e };
 constexpr QColor kGridLine { 0x9a, 0x93, 0x82 };
 constexpr QColor kGridHeavy { 0x3c, 0x38, 0x30 };
 constexpr int kFrameWidth = 9;
+
+// Nine pencil marks sit in a fixed 3x3 pattern inside one cell — 5 is always
+// the middle — so each gets a third of the cell and the pattern is how you
+// know which digit without reading it. Both ratios are of the cell, matching
+// the 0.52 a real digit uses.
+//
+// kMarkRatio is about as large as the font's LINE box can be and still fit a
+// cell third, which is why it stopped there. kMarkRatioLegible is deliberately
+// past that: a digit's ink is far shorter than the line box it is measured in,
+// so the marks have room the line box says they do not. Qt::TextDontClip at
+// the drawText below is what hands that room over — without it the glyph is
+// clipped to its third and the larger font draws a worse mark, not a bigger
+// one. marksFitCell() is what holds the ratio to ink that really fits.
+//
+// 0.29 is measured rather than chosen. The app font's digits are about 0.685
+// of an em, so ink comes to roughly 2.74 x the ratio as a fraction of the cell
+// third: 0.29 lands at 0.795 and 0.30 at 0.822, and at the smallest window the
+// whole-pixel rounding of a 34-pixel cell pushes 0.30 to 0.882 — past what
+// marksFitCell() allows. **A platform whose digits are more than about 0.73 of
+// an em would fail that check rather than draw marks that touch**, which is the
+// intended direction and is worth knowing: Windows has produced font and
+// library differences here before, and the fix is this constant, not the test.
+constexpr double kMarkRatio = 0.20;
+constexpr double kMarkRatioLegible = 0.29;
 
 QString levelKey(SudokuGrid::Level level)
 {
@@ -187,6 +213,40 @@ QRect SudokuView::boardRect() const
     return { (width() - side) / 2, (height() - side) / 2, side, side };
 }
 
+// The one place the mark font is decided, so paintEvent and the two accessors
+// below cannot disagree about what is being drawn. Bold as well as bigger:
+// at this size stroke weight buys more than the extra points do.
+QFont SudokuView::markFont() const
+{
+    const bool large = Legibility::instance().enabled();
+    QFont f = font();
+    f.setPointSizeF(cellSize() * (large ? kMarkRatioLegible : kMarkRatio));
+    f.setBold(large);
+    return f;
+}
+
+double SudokuView::markPointSize() const
+{
+    return markFont().pointSizeF();
+}
+
+// A mark fits when its INK — not its line box — clears the cell third it is
+// centred in, with room left over so two marks in adjacent rows have visible
+// paper between them rather than merely failing to overlap. tightBoundingRect
+// is the ink; the 0.85 leaves a seventh of the third as that paper. Measured
+// over all ten digits because they are not the same height in every font.
+//
+// The bar is deliberately not a restatement of kMarkRatioLegible: it is set
+// where the marks stop reading as a 3x3 pattern, so it still has something to
+// say if the ratio, the font or the cell arithmetic moves.
+bool SudokuView::marksFitCell() const
+{
+    const QFontMetricsF fm(markFont());
+    const double ink = fm.tightBoundingRect(QStringLiteral("0123456789")).height();
+    const double third = cellSize() / 3.0;
+    return ink <= third * 0.85;
+}
+
 void SudokuView::enter(int digit)
 {
     if (m_solved || m_grid.isClue(m_row, m_col))
@@ -322,8 +382,7 @@ void SudokuView::paintEvent(QPaintEvent*)
 
     QFont digitFont = font();
     digitFont.setPointSizeF(cell * 0.52);
-    QFont markFont = font();
-    markFont.setPointSizeF(cell * 0.20);
+    const QFont pencilFont = markFont();
 
     for (int row = 0; row < SudokuGrid::kSize; ++row) {
         for (int col = 0; col < SudokuGrid::kSize; ++col) {
@@ -343,15 +402,19 @@ void SudokuView::paintEvent(QPaintEvent*)
             const std::uint16_t marks = m_grid.marks(row, col);
             if (marks == 0)
                 continue;
-            p.setFont(markFont);
+            p.setFont(pencilFont);
             p.setPen(kPencilInk);
             for (int d = 1; d <= 9; ++d) {
                 if (!(marks & (1u << (d - 1))))
                     continue;
                 const int mr = (d - 1) / 3;
                 const int mc = (d - 1) % 3;
+                // TextDontClip: the mark is centred on its third but allowed to
+                // paint outside it, because the font's line box is taller than
+                // the digit's ink. Without this the legible size is clipped to
+                // the third and loses the top of every mark.
                 p.drawText(QRectF(box.x() + mc * cell / 3, box.y() + mr * cell / 3, cell / 3, cell / 3),
-                           Qt::AlignCenter, QString::number(d));
+                           Qt::AlignCenter | Qt::TextDontClip, QString::number(d));
             }
         }
     }

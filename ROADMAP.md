@@ -560,6 +560,36 @@ open.
   true. Cut 0.4.0 once one or two more passes land, or reword the
   changelog entry to say what the switch actually reaches today; do not
   re-derive this from scratch.
+  Sudoku's pass shipped (2026-08-19) — the second of the fourteen, and the
+  first that changes no geometry at all. Contrast was never Sudoku's problem
+  (pencil ink 4.88:1); the mark font was. Under the switch it goes from
+  cell*0.20 to cell*0.29 and turns bold, and nothing else on the board moves —
+  no minimum-size change, because Sudoku has no cliff of Canasta's kind and
+  the marks scale smoothly with the window. A minimum-size pass here would
+  have been invisible at any window a player actually uses.
+
+  Two things worth not re-deriving. Qt::TextDontClip is what the pass really
+  turns on: drawText clips to its rect, each mark gets a cell third, and the
+  font's LINE box rather than the digit's ink is what has to fit — so 0.20 was
+  already near the ceiling and raising the ratio alone clips every mark. And
+  the ratio is measured, not chosen: the app font's digits are ~0.685 of an em,
+  so ink lands at ~2.74x the ratio as a fraction of the cell third; 0.30 goes
+  red at the smallest window, where a 34-px cell rounds the ink up a whole
+  pixel. marksFitCell() checks the ink with QFontMetricsF rather than trusting
+  that constant, so a platform with taller digits fails rather than drawing
+  marks that touch.
+
+  INV-6 lands here as originally written - two renders that must match with a
+  third between them that must not. It needed a per-view latch to be seen
+  failing; a static one latched during the earlier test block and made all
+  three renders symmetric, which is a bad break rather than a passing test.
+  INV-3 stays Canasta's - Sudoku draws no cards, and marksFitCell() is this
+  pass's equivalent. Five uitest assertions, each seen red against its own
+  deliberate break. selftest 366/366, uitest 131/131, ctest 3/3.
+
+  Still open: twelve games unvisited. Sudoku is now off that list, so what is
+  left is reading pace, contrast and what a game says out loud - Hearts naming
+  the led suit, Chess and Draughts announcing nothing.
 
 - 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
   Not a defect today, and deliberately not fixed while filing: the

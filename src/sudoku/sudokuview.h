@@ -4,6 +4,7 @@
 #include "sudokugrid.h"
 
 #include <QElapsedTimer>
+#include <QFont>
 
 class QTimer;
 
@@ -17,6 +18,16 @@ public:
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
     void deactivate() override;
+
+    // Named for the contract rather than exposing the font: GHUB-0017 §9 makes
+    // whichever per-game pass lands responsible for its own layout being
+    // checkable, and what a pencil mark owes is to be as large as it can be
+    // while nine of them still sit in one cell without touching. The size is
+    // the point of the pass; marksFitCell() is what stops the size growing
+    // past the layout that has to hold it — Canasta's cardsFitTable() plays
+    // exactly this part against its own floor.
+    double markPointSize() const;
+    bool marksFitCell() const;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -34,6 +45,7 @@ private:
 
     QRect boardRect() const;
     double cellSize() const;
+    QFont markFont() const;
 
     QList<QAction*> m_actions;
     SudokuGrid m_grid;
