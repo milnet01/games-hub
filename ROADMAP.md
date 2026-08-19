@@ -568,6 +568,40 @@ public-domain; see the standing rules for why each is safe.
   Kind: doc-fix.
   Source: in-session-2026-08-13 (found building the GHUB-0017 review packet).
 
+- 📋 [GHUB-0042] **The README promises a window size that nothing says how to judge.**
+  Found 2026-08-19 by an adopt-project run — a cold reader given the README,
+  CLAUDE.md and SECURITY.md, then the two specs, and forbidden the source.
+
+  The README opens "A small collection of desktop games for Linux and
+  Windows, in one window / sized to sit beside whatever you are actually
+  working on." Three of the four things the project is for have a real bar
+  somewhere: rules correctness is chess perft against published totals,
+  legibility is the owner's own eye per game before the next pass starts
+  (GHUB-0017 § 10, which says outright that nothing mechanical substitutes),
+  and the download is "still alive when the timeout fires" in a container
+  with no Qt in it (GHUB-0025 INV-5/6).
+
+  This clause has nothing. No size, no bar, no judge, no way to tell. It is
+  in the most prominent sentence the project has, and six documents later
+  nobody has said what it would have to be true for.
+
+  Two honest fixes and they are opposite. Write the bar down — a default
+  window that fits beside a browser at 1080p, say, checkable the way
+  kLegibleMinimum is checked. Or delete the clause, on the grounds that it
+  was scene-setting rather than a promise. Deleting is not a cop-out: an
+  unjudgeable promise in the first sentence is worse than no promise, and
+  the reader who found this said the gap is real rather than hidden in a
+  file it was denied.
+
+  Worth knowing about the run that found it: the first pass, given only the
+  three root documents, wrongly reported that LEGIBILITY had no stated sign
+  of success. It named the spec it had been refused, was given it, and
+  overturned its own answer. A candidate list that stops at the repository
+  root gets this project wrong, because its bars live in docs/specs/.
+  **Layman:** The README's first sentence makes a promise about the window fitting beside your work, and nothing anywhere says what would count as keeping it.
+  Kind: doc.
+  Source: adopt-project-2026-08-19.
+
 ## P03 — Considered
 
 Nothing here is agreed. 💭 means the scope, the value or the decision is still
