@@ -619,6 +619,34 @@ open.
 
   Standing note for future passes: a per-game legibility number derived from
   font metrics is a platform property. Solve it, do not tune it.
+  Correction to the note above (2026-08-19, same day). Two figures in it are
+  not comparable and the conclusion drawn from them was wrong. "This machine
+  0.685 of an em" was measured at 7-10 POINT sizes, where hinting rounds the
+  ink by a whole pixel; the Windows figures (Segoe UI 0.728, Arial 0.731,
+  Tahoma 0.760) were measured via GDI+ at em 100, unbold. Measured properly at
+  em 100 this machine's bold face is 0.742 - TALLER than Segoe UI, not shorter.
+  So "Windows draws taller digits" is not supported, and the operative cause is
+  rasterisation at the small sizes a mark is drawn at rather than the typeface.
+
+  The fix is unaffected and is if anything better justified: solving against the
+  ink measured AT THE SIZE IT WILL BE DRAWN is right precisely because the
+  rounded number is the one that decides, and no ratio taken at another size
+  predicts it.
+
+  The second CI run then failed differently and usefully. "as large as it fits"
+  PASSED on Windows - so the solve works there - while an absolute growth
+  assertion (1.15x) failed, and the font-family count assertion (>= 5) failed
+  because a bare runner installs few faces. Both were assertions about the
+  ENVIRONMENT wearing the clothes of assertions about the code. They now ask the
+  font what growth is arithmetically available (0.2125 / inkPerEm / 0.20) and
+  assert only where there is room, printing the measured figures either way; the
+  family count asserts >= 1 and prints what it tried. This machine reports 0.742
+  of an em, a mark solved to 9.73pt against 6.80pt normal, and 13 families.
+
+  Lesson worth keeping past this item: a test may assert what the code does, and
+  must only REPORT what the platform happens to provide. Three attempts were
+  needed here because each rewrite put a new environment constant in the
+  assertion.
 
 - 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
   Not a defect today, and deliberately not fixed while filing: the

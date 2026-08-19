@@ -291,15 +291,20 @@ line box fits that third — so raising the ratio alone clips the top off every
 mark and draws a *worse* mark, not a bigger one. `Qt::TextDontClip` hands over
 the gap between the ink and the line box, and the legibility pass is what uses
 it. The flag is set in both switch states because at 0.20 it changes nothing.
-**A font ratio tuned on one machine is not portable, and this one cost a red
-Windows CI leg to learn.** How tall a font draws a digit varies: measured, this
-machine is 0.685 of an em, and on the Windows box Segoe UI is 0.728, Arial
-0.731 and Tahoma 0.760. A mark tuned to 0.29 of the cell here comes to 0.845 of
-its cell third under Segoe UI in exact arithmetic — inside the 0.85 limit — and
-tips past it the moment `tightBoundingRect` rounds to whole pixels at the
-smallest cell. It passed locally and failed on `windows-2022`, and no Linux run
-could have caught it: `scripts/local-ci.sh` executes `ci.yml`'s own steps, but
-nothing on Linux drives the Windows leg.
+**A font ratio tuned on one machine is not portable, and this one cost two red
+Windows CI legs to learn.** A mark tuned to 0.29 of the cell passed here and
+failed on `windows-2022`, and no Linux run could have caught it:
+`scripts/local-ci.sh` executes `ci.yml`'s own steps, but nothing on Linux
+drives the Windows leg.
+
+**Do not reason about it from typographic ratios — that was the second
+mistake.** Measured at em 100 the faces are close (this font 0.742 of an em
+bold; Segoe UI 0.728, Arial 0.731, Tahoma 0.760 unbold on the owner's Windows
+box via GDI+), while the *same* font here measures about 0.685 at the 7-to-11
+point sizes a mark is actually drawn at. That gap is hinting rounding the ink
+by a whole pixel, not the typeface — so a figure taken at one size says very
+little about the other, and comparing a large-size measurement on one platform
+against a small-size one on another says nothing at all.
 
 So `SudokuView::markFont()` **solves** rather than scales: one metric probe
 fixes the font's ink-per-point, then it steps down until the ink measured at

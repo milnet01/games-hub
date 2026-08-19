@@ -44,12 +44,16 @@ constexpr int kFrameWidth = 9;
 //
 // **There is no legible RATIO, and that is the point.** A constant cannot be
 // right on two platforms, because the ceiling depends on how tall the font
-// draws a digit. Measured: this machine 0.685 of an em, and on the Windows box
-// Segoe UI 0.728, Arial 0.731, Tahoma 0.760. A tuned 0.29 came to 0.845 of the
-// cell third under Segoe UI in exact arithmetic — inside the limit — and tipped
-// past it once tightBoundingRect rounds to whole pixels at the smallest cell.
-// It passed here and failed the Windows CI leg, which is the failure this
-// solve exists to make impossible rather than to re-tune.
+// draws a digit AND on how its rasteriser rounds that at the sizes a mark is
+// actually drawn at — 7 to 11 points, where hinting moves the ink by a whole
+// pixel at a time. A tuned 0.29 passed here and failed the Windows CI leg.
+//
+// Do not reason about this from typographic ratios alone. Measured at em 100
+// the faces are close (this font 0.742 bold; on the owner's Windows box Segoe
+// UI 0.728, Arial 0.731, Tahoma 0.760 unbold via GDI+), and the SAME font here
+// measures about 0.685 at mark sizes — the gap is quantisation, not the
+// typeface. That is precisely why the solve below measures at the size it will
+// draw rather than scaling a ratio: the number that matters is the rounded one.
 //
 // So markFont() measures the font in hand and takes the largest size whose ink
 // really fits, floored at kMarkRatio, which has always fitted.
