@@ -8,6 +8,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Changed
+
+- **Canasta explains a refused move on the table instead of in the status bar** (GHUB-0040)
+  When the game will not let you do something it now says why on an amber
+  panel just above your hand, and the sentence stays there until you make
+  a move of your own. Every click used to wipe it — including the clicks
+  you make while doing what it told you.
+
 ## [0.4.0] - 2026-08-19
 
 A release about being able to read the board and being remembered: a

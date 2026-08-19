@@ -906,6 +906,42 @@ int main(int argc, char* argv[])
             check(status.contains(QStringLiteral("throw")) || !status.isEmpty(),
                   "canasta: the game responds to a draw");
 
+            // ---- GHUB-0040: a refused move says why ON THE TABLE ----
+            // The status bar still carries the sentence, but the owner never
+            // looks there, so the contract under test is the panel: it is
+            // absent while there is nothing to say, it appears above the hand
+            // where the click happened, and it survives every click that is
+            // not itself a move — reading it slowly is the whole point.
+            check(waitUntilStill(), "canasta: the table settles before the refusal check");
+            check(canasta.messageRect().isNull(),
+                  "canasta: with nothing to say the table shows no message panel");
+
+            const QImage quiet = renderOf(&canasta);
+            // Throwing a card away with nothing picked up is refused every
+            // time, whatever the deal — no seed hunting, no engine setup.
+            clickAt(&canasta, pile, Qt::LeftButton);
+            const QRectF said = canasta.messageRect();
+            check(!said.isNull(), "canasta: a refused move puts its reason on the table");
+            check(said.top() > 0.0 && said.left() > 0.0 && said.right() < canasta.width()
+                      && said.bottom() < card.y(),
+                  "canasta: and it sits above your hand, inside the table");
+            check(renderOf(&canasta) != quiet, "canasta: the table repaints to show it");
+
+            // An idle click used to wipe it: mousePressEvent cleared the
+            // message before working out what had been clicked.
+            clickAt(&canasta, QPointF(canasta.width() * 0.06, canasta.height() * 0.5),
+                    Qt::LeftButton);
+            check(canasta.messageRect() == said,
+                  "canasta: an idle click leaves the message where it is");
+
+            // Making a move of your own is what takes it away.
+            clickAt(&canasta, card, Qt::LeftButton);
+            pump(80);
+            clickAt(&canasta, pile, Qt::LeftButton);
+            pump(200);
+            check(canasta.messageRect().isNull(),
+                  "canasta: a move of your own is what clears it");
+
             // Play a stretch of the hand for real: draw, pick a card, throw it,
             // and let the three computer seats answer. A rule that stalls a
             // turn shows up here as a table that stops changing.

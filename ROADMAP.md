@@ -378,6 +378,31 @@ double-clicking a file.
   Legibility is the same constraint as everywhere else here: whatever it
   is, it says in words what it does and where it will take you before it
   opens a browser, rather than showing a bare icon.
+  Decided 2026-08-19 by the owner, closing the two open questions above.
+  It lives in the Help menu — so the tile grid keeps all fourteen of its
+  slots for games, and the entry is where a stranger already looks for
+  "about this program".
+
+  And it asks. Every 150th launch of the app shows a popup inviting a
+  donation. That needs a launch counter in QSettings beside the other
+  persisted preferences, incremented once per process start rather than
+  per game opened, so a session that plays six games still counts as one.
+  150 is roughly a prompt every few months at a game a day, which is the
+  point: rare enough not to be a nag.
+
+  Three things the popup owes, none of them decided yet and none of them
+  expensive. It says what it is before it says what it wants, in words
+  large enough to read (the legibility switch applies to it like anything
+  else). It offers a way to stop being asked, because a popup that cannot
+  be turned off is one the player learns to dismiss without reading, which
+  loses the request as well as the goodwill. And it never appears over a
+  game in progress — a startup prompt is an interruption, but an
+  interruption at the hub is a different thing from one on your turn.
+
+  Worth testing rather than assuming: the counter must survive the app
+  being killed rather than closed, and 149 → 150 → 151 must show the popup
+  exactly once. An off-by-one here shows the prompt every launch, which is
+  the failure everyone remembers.
   **Layman:** A way to support the project from inside the game, using the same donation links the repository already lists.
   Kind: feature.
   Source: user-request-2026-08-19.
@@ -858,7 +883,7 @@ open.
   Kind: accessibility.
   Source: in-session-2026-08-19 (split out of GHUB-0017 for the 0.4.0 release).
 
-- 📋 [GHUB-0040] **Canasta says why a move was refused in the status bar, which the owner never looks at.**
+- ✅ [GHUB-0040] **Canasta says why a move was refused in the status bar, which the owner never looks at.**
   Raised with the owner 2026-08-19 while adding the first-round notice
   and the opening minimums; not answered, so it is filed rather than built.
 
@@ -892,6 +917,40 @@ open.
   Scope is Canasta only as filed. The other thirteen games route their own
   text the same way, so if this lands well it becomes the pattern - but
   that is a second item, not this one.
+  Resolved 2026-08-19. The two open design questions were put to the owner
+  and both answered: the message gets its own panel above the hand rather
+  than taking the centre strip over, and it holds until his next move
+  rather than timing out.
+
+  What landed. CanastaView::messageRect() places a near-opaque amber plate
+  directly above the hand — above the Lay down button when that is showing,
+  since the message is usually the reason the button refused — and
+  paintMessagePanel() draws it, word-wrapped rather than elided, because
+  the half of a refusal that says what to do instead is at the END of the
+  sentence. The amber is kAlert, named once and shared with the centre
+  strip's first-round warning, which had the same literal.
+
+  The lifetime change is the smaller diff and the larger fix.
+  mousePressEvent() cleared m_message before it had worked out what had
+  been clicked, so ANY click wiped the explanation — including the clicks
+  you make while acting on it. It now clears only where a move actually
+  succeeds: the four human moves, and the deal of a new hand.
+
+  Scope stayed Canasta, as filed. The other thirteen games route their
+  text the same way and the panel is now the pattern to copy, but that is
+  a second item.
+
+  One trade taken knowingly: the panel sits in the lower part of your meld
+  band, which is where the Lay down button already sits, so with a full
+  band it covers the bottom of a melded card while it is showing. It is
+  transient and it is the most important thing on the table while it is up,
+  so it wins that lane.
+
+  Checked: six new UI checks in tests/uitest.cpp, each proved able to fail
+  — restoring the old clear-on-any-click reddens the idle-click check and
+  nothing else, and removing the clear from a successful discard reddens
+  the clearing check and nothing else. Frame captured and read by eye
+  before and after; 2,384 pixels changed.
   **Layman:** When the game refuses a move it explains why in a place he never looks; the explanation should be on the table.
   Kind: accessibility.
   Source: in-session-2026-08-19 (owner: "with a game my focus is on the play area and thus I never look at the status bar").

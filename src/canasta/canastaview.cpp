@@ -65,6 +65,12 @@ constexpr QSize kLegibleMinimum { 900, 656 };
 const QColor kInk { 0xf4, 0xea, 0xdd };
 const QColor kInkDim { 0xc9, 0xb6, 0xa2 };
 const QColor kPanel { 0x2a, 0x0d, 0x14, 0xe6 };
+// Warm enough to read as "attention" against the claret table without being an
+// error red, which on this cloth turns to mud. The centre strip already used
+// this exact amber for the moment the first round stops protecting your throw;
+// the refusal panel is the same kind of statement, so it is one colour rather
+// than two literals that will drift.
+const QColor kAlert { 0xf0, 0xc2, 0x7a };
 
 // Cards `after` holds that `before` did not. Used instead of index arithmetic
 // because placing a red three removes from the middle and appends at the end.
@@ -1176,6 +1182,7 @@ void CanastaView::humanDraw()
         announce(m_engine.lastError());
         return;
     }
+    m_message.clear();
     Sound::instance().play(Sound::kCardDeal);
     sortHand();
     double delay = 0.0;
@@ -1198,6 +1205,7 @@ void CanastaView::humanTakePile()
         announce(m_engine.lastError());
         return;
     }
+    m_message.clear();
     Sound::instance().play(Sound::kCardPlace);
     clearSelection();
     sortHand();
@@ -1231,6 +1239,7 @@ void CanastaView::humanMeld(int targetRank)
         announce(m_engine.lastError());
         return;
     }
+    m_message.clear();
     Sound::instance().play(Sound::kCardPlace);
     clearSelection();
 
@@ -1259,6 +1268,7 @@ void CanastaView::humanDiscard()
         announce(m_engine.lastError());
         return;
     }
+    m_message.clear();
     Sound::instance().play(Sound::kCardPlace);
     clearSelection();
     flyToPile(c, from);
@@ -1396,13 +1406,13 @@ void CanastaView::refresh()
 void CanastaView::mousePressEvent(QMouseEvent* event)
 {
     const QPointF pos = event->position();
-    m_message.clear();
 
     if (m_awaitingContinue) {
         if (m_engine.phase() == ca::Engine::Phase::GameOver) {
             newGame();
         } else {
             m_awaitingContinue = false;
+            m_message.clear();
             m_engine.nextHand();
             m_canastasShown = 0;
             m_lastThrownBy = -1;
@@ -1604,6 +1614,7 @@ void CanastaView::paintEvent(QPaintEvent* event)
     paintCentreStrip(p);
     paintHand(p);
     paintLayDown(p);
+    paintMessagePanel(p);
     paintFlights(p);
     paintDrag(p);
     paintScores(p);
@@ -1846,6 +1857,62 @@ void CanastaView::paintCentre(QPainter& p)
 
 }
 
+QFont CanastaView::messageFont() const
+{
+    QFont f = font();
+    // A shade larger than the centre strip: this is the one sentence on the
+    // table that has to be read rather than glanced at.
+    f.setPixelSize(std::max(14, int(cardWidth() * 0.30)));
+    f.setBold(true);
+    return f;
+}
+
+QRectF CanastaView::messageRect() const
+{
+    if (m_message.isEmpty())
+        return {};
+
+    const QRectF r = tableRect();
+    const QFontMetricsF fm(messageFont());
+    const double pad = fm.horizontalAdvance(QLatin1Char('0')) * 1.4;
+    // Wrapped, never elided. The half of a refusal that says what to do
+    // instead is at the END of the sentence — "you need two matching cards
+    // from your hand" — so a cut-short explanation is worse than none.
+    const QRectF text = fm.boundingRect(QRectF(0, 0, r.width() * 0.86 - pad * 2.0, r.height()),
+                                        Qt::TextWordWrap | Qt::AlignCenter, m_message);
+    const double w = text.width() + pad * 2.0;
+    const double h = text.height() + pad;
+
+    // Directly above your hand, which is where you were already looking when
+    // the click did nothing — and above the Lay down button when that is
+    // showing, since the message is usually the reason the button refused.
+    const QRectF button = layDownButton();
+    const double handTop = handCentre(0, 1, true).y() - cardHeight() * 0.5;
+    const double bottom = (button.isNull() ? handTop : button.top()) - cardHeight() * 0.09;
+    return QRectF(r.center().x() - w * 0.5, bottom - h, w, h);
+}
+
+void CanastaView::paintMessagePanel(QPainter& p)
+{
+    const QRectF plate = messageRect();
+    if (plate.isNull())
+        return;
+
+    QPainterPath path;
+    const double radius = std::min(plate.height() * 0.3, 18.0);
+    path.addRoundedRect(plate, radius, radius);
+    p.fillPath(path, kPanel);
+    // drawPath fills with the current brush as well as stroking it, and the
+    // plate is already filled.
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(kAlert, 1.6));
+    p.drawPath(path);
+
+    p.setFont(messageFont());
+    p.setPen(kAlert);
+    p.drawText(plate, Qt::TextWordWrap | Qt::AlignCenter, m_message);
+}
+
 // One strip under the centre row carrying everything about it in words: how
 // much stock is left, whether the pile is frozen, and what was just thrown and
 // by whom. The last of those is the point — three computer seats play faster
@@ -1875,7 +1942,7 @@ void CanastaView::paintCentreStrip(QPainter& p)
                               ? QStringLiteral("FIRST ROUND — your throw is safe")
                               : QStringLiteral("FIRST ROUND ENDS — the next seat can take"),
                           m_engine.discardCannotBeTaken() ? QColor(0x9f, 0xd8, 0xa8)
-                                                          : QColor(0xf0, 0xc2, 0x7a) });
+                                                          : kAlert });
     if (haveThrow) {
         parts.push_back({ QStringLiteral("%1 threw").arg(seatName(m_lastThrownBy)), kInkDim });
         // Suit colours as they are on the card, but lifted off the dark plate:

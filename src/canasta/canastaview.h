@@ -4,6 +4,7 @@
 #include "canasta/canastaengine.h"
 #include "gameview.h"
 
+#include <QFont>
 #include <QPointF>
 #include <QRectF>
 
@@ -48,6 +49,13 @@ public:
     // room for, and it overflows rather than reading better. A test that
     // asserts only the width has therefore seen half the contract.
     bool cardsFitTable() const;
+
+    // Where the table says why a move was refused, and an empty rect when it
+    // has nothing to say. The refusals are the most useful sentences this game
+    // produces, and until GHUB-0040 they were delivered only to the status bar
+    // — which is the one place the player never looks. Public because it is
+    // what the UI test asserts; the panel itself is drawn from it.
+    QRectF messageRect() const;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -156,6 +164,8 @@ private:
     void paintCentreStrip(QPainter& p);
     void paintHand(QPainter& p);
     void paintLayDown(QPainter& p);
+    void paintMessagePanel(QPainter& p);
+    QFont messageFont() const;
     void paintDrag(QPainter& p);
     void paintFlights(QPainter& p);
     void paintScores(QPainter& p);
