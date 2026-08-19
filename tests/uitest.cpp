@@ -7,6 +7,7 @@
 #include "scores.h"
 #include "sound.h"
 #include "canasta/canastaview.h"
+#include "cards/cardart.h"
 #include "chess/chessview.h"
 #include "draughts/draughtsview.h"
 #include "freecell/freecellview.h"
@@ -251,6 +252,72 @@ int main(int argc, char* argv[])
             }
         }
         check(readable, "2048: every tile's ink clears 3:1 against its own colour");
+    }
+
+    // ---- canastaLegibleMelds (GHUB-0017 INV-3, in Canasta's own numbers) ----
+    //
+    // The mechanism's spec withdrew INV-3 and INV-6 to whichever per-game pass
+    // landed first (§ 9), to be restated against that game's layout. This is
+    // that pass. Canasta draws melds at kMeldScale, and at every window size it
+    // could previously reach that put a melded card under
+    // CardArt::kFaceMinWidth — the shared art then draws the corner index alone
+    // and a meld becomes a column of slivers.
+    //
+    // The switch-OFF half is what stops this block being vacuously green. It
+    // asserts the defect is still there with the switch off, so a build that had
+    // quietly stopped consulting the switch fails here instead of passing twice.
+    {
+        CanastaView canasta;
+
+        Legibility::instance().setEnabled(false);
+        canasta.resize(canasta.minimumSize());
+        check(canasta.smallestFaceWidth() < CardArt::kFaceMinWidth,
+              "canasta: with the switch off a meld at the smallest window is "
+              "still faceless — the defect the switch exists to fix");
+
+        Legibility::instance().setEnabled(true);
+        // Ask for a window smaller than the raised minimum. Qt clamps back up to
+        // it, which is the half that proves the minimum moved rather than that
+        // the test happened to leave the widget large.
+        canasta.resize(400, 300);
+        check(canasta.smallestFaceWidth() >= CardArt::kFaceMinWidth,
+              "canasta: with the switch on a meld shows a face even when the "
+              "window is driven below the minimum");
+        // And the table has room for that card rather than cardWidth()'s floor
+        // having lifted it. Without this the block passes on a build where only
+        // the floor moved — measured, it did — and a floored card overflows the
+        // table instead of reading better.
+        check(canasta.cardsFitTable(),
+              "canasta: and the raised minimum gives the table room for it, "
+              "rather than the floor clamping a card that does not fit");
+
+        Legibility::instance().setEnabled(false);
+    }
+
+    // ---- canastaLegibilityReverses (GHUB-0017 INV-6, in Canasta's own numbers)
+    //
+    // The second withdrawn invariant. The switch raises the minimum size, so Qt
+    // clamps the window larger — and HubWindow::rememberPage() writes that
+    // enlarged geometry over the stored one on the next page change. Turning the
+    // switch off therefore has to put back BOTH the minimum and the size, or
+    // large mode is one-way and the player cannot undo it.
+    {
+        Legibility::instance().setEnabled(false);
+        CanastaView canasta;
+        canasta.resize(canasta.minimumSize());
+        const QSize wasMinimum = canasta.minimumSize();
+        const QSize wasSize = canasta.size();
+
+        Legibility::instance().setEnabled(true);
+        check(canasta.minimumSize().width() > wasMinimum.width()
+                  && canasta.size().width() > wasSize.width(),
+              "canasta: turning the switch on raises the minimum and Qt clamps "
+              "the window up to it");
+
+        Legibility::instance().setEnabled(false);
+        check(canasta.minimumSize() == wasMinimum && canasta.size() == wasSize,
+              "canasta: and turning it off puts the minimum and the window size "
+              "back where they were");
     }
 
     // ---- Best scores survive a restart ----

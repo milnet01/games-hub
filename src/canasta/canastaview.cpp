@@ -1,6 +1,7 @@
 #include "canastaview.h"
 
 #include "cards/cardart.h"
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
@@ -37,13 +38,29 @@ constexpr double kTick = 1.0 / 60.0;
 // fine if you can read a card at a glance and far too fast if you cannot.
 constexpr double kAiPause = 0.95;
 constexpr double kFlourish = 1.3;
-// Melds are drawn smaller than a hand card, but not so small that the face
-// stops being drawn: below about 46 pixels wide CardArt gives up on the pips
-// and leaves only the corner index, which reads as a sliver rather than a card.
-// Melded cards are drawn smaller than the ones in your hand, but not so small
-// that the shared card art gives up on the face — below 46 pixels wide it draws
-// the corner index alone, and a column of corner indices is unreadable.
+// Melded cards are drawn smaller than the ones in your hand: six melds a side
+// plus the red threes leave no room for full-size stacks. At every table size
+// this game actually reaches that is under CardArt::kFaceMinWidth, so the
+// shared art draws the corner index alone and a meld becomes a column of
+// slivers — which is why each one carries a "K ×5" badge naming it. The
+// legibility switch buys the face back, by way of kLegibleCardWidth.
 constexpr double kMeldScale = 0.74;
+
+// A meld is the smallest card Canasta draws a FACE on. The opponents' hands are
+// drawn at 0.8 but face DOWN, so the threshold never applies to them, and the
+// hand and the piles are drawn full size — so this one scale sets the floor.
+// Floor, smallest scale and minimum size move together or not at all
+// (docs/specs/GHUB-0017-legibility-switch.md § 4.4).
+constexpr double kLegibleCardWidth = CardArt::kFaceMinWidth / kMeldScale;
+
+// The smallest window at which cardWidth() reaches kLegibleCardWidth on its
+// own, so the floor never has to clamp — a clamped card is one the table has no
+// room for. tableRect() insets by 2.2% of the shorter side and cardWidth() then
+// takes min(0.072 × table width, 0.10 × table height); both terms solve to
+// about 893×651, rounded up here, and deliberately still inside a 1024×768
+// desktop (spec § 6). cardsFitTable() is what checks this number is big
+// enough, without a second copy of the arithmetic to go stale.
+constexpr QSize kLegibleMinimum { 900, 656 };
 
 const QColor kInk { 0xf4, 0xea, 0xdd };
 const QColor kInkDim { 0xc9, 0xb6, 0xa2 };
@@ -700,16 +717,77 @@ void CanastaView::tick()
 // Geometry
 // ---------------------------------------------------------------------------
 
+// Kept here rather than beside activate()/deactivate(): its whole job is to
+// move the minimum size, and the arithmetic that decides that number is the
+// block of constants at the top of this file.
+QSize CanastaView::minimumSizeHint() const
+{
+    return Legibility::instance().enabled() ? kLegibleMinimum : QSize(720, 560);
+}
+
+void CanastaView::applyLegibility(bool enabled)
+{
+    // Every card in the air is heading for a destination worked out from the
+    // geometry as it was when that card left — Flight::to is a point, not a
+    // lookup — and the line below moves the geometry. So land them all first:
+    // the engine was already updated when each flight was launched, and
+    // suppressed() is what hides the card at the far end until it arrives, so
+    // clearing the list simply puts every card where it was going.
+    m_flights.clear();
+
+    const QSize was = window()->size();
+    setMinimumSize(minimumSizeHint());
+
+    if (enabled) {
+        // Qt clamps the window up to the new minimum, and HubWindow writes that
+        // enlarged geometry over the stored one on the next page change. Without
+        // the size from before the clamp the switch would be one-way: turning it
+        // off again would leave the window permanently large.
+        m_normalWindowSize = was;
+    } else if (m_normalWindowSize.isValid()) {
+        window()->resize(m_normalWindowSize);
+        m_normalWindowSize = QSize();
+    }
+
+    GameView::applyLegibility(enabled);
+}
+
 QRectF CanastaView::tableRect() const
 {
     const double inset = std::max(8.0, std::min(width(), height()) * 0.022);
     return QRectF(rect()).adjusted(inset, inset, -inset, -inset);
 }
 
-double CanastaView::cardWidth() const
+// The width the table would give a card if no floor lifted it. Split out so
+// cardsFitTable() can ask whether the floor had to, without restating the
+// arithmetic — a second copy of it is a copy that drifts.
+double CanastaView::naturalCardWidth() const
 {
     const QRectF r = tableRect();
-    return std::clamp(std::min(r.width() * 0.072, r.height() * 0.10), 34.0, 88.0);
+    return std::min(r.width() * 0.072, r.height() * 0.10);
+}
+
+// The legibility floor is deliberately redundant while kLegibleMinimum is
+// right: at that window the table already gives a card more than
+// kLegibleCardWidth, so the clamp never lifts anything and removing it changes
+// no pixel — measured, by removing it and watching the UI test stay green. It
+// stays because § 4.4 pairs it with the minimum, and because cardsFitTable() is
+// what asserts it stays redundant: the day that check goes red is the day the
+// floor starts doing work, and a floored card is one the table has no room for.
+double CanastaView::cardWidth() const
+{
+    const double smallest = Legibility::instance().enabled() ? kLegibleCardWidth : 34.0;
+    return std::clamp(naturalCardWidth(), smallest, 88.0);
+}
+
+bool CanastaView::cardsFitTable() const
+{
+    return naturalCardWidth() >= cardWidth();
+}
+
+double CanastaView::smallestFaceWidth() const
+{
+    return cardWidth() * kMeldScale;
 }
 
 double CanastaView::cardHeight() const

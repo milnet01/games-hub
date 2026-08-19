@@ -10,6 +10,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Canasta now answers the legibility switch — melds show a face instead of a sliver** (GHUB-0017)
+  Turning on Large makes Canasta's window a little bigger and every card
+  on the table with it, so the melded cards are drawn large enough to show
+  their pips rather than just a letter in the corner. Turning it off puts
+  the window back where it was.
+
 - **A Canasta hand nobody goes out on can now be scored as dead.** (GHUB-0032)
   When the stock runs out and nobody has gone out, the round can now count for nothing instead of handing a big score to whoever sat on a frozen pile.
 

@@ -24,11 +24,30 @@ public:
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
     void deactivate() override;
+    // Canasta caches nothing, but it does hold cards in the air whose
+    // destinations were worked out from the old geometry, and the switch moves
+    // the geometry — so this is a re-layout point rather than a repaint.
+    void applyLegibility(bool enabled) override;
     // A game to 5000 is several sittings, so the whole table is kept and put
     // back. Nothing in the air is saved — a restored game shows the position as
     // it settles, which is where the cards were going anyway.
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
+
+    // The width of the smallest card this game draws a FACE on — a melded one.
+    // The legibility contract is about that number rather than about
+    // cardWidth(): a game holds CardArt::kFaceMinWidth at the smallest scale it
+    // actually draws at, not at 1.0
+    // (docs/specs/GHUB-0017-legibility-switch.md § 4.4). Public because it is
+    // what the UI test asserts; nothing in the game calls it.
+    double smallestFaceWidth() const;
+
+    // True when the table is big enough to lay this card out on its own, with
+    // cardWidth()'s floor never having to lift it. Floor and minimum size move
+    // together or not at all (§ 4.4): a floored card is one the table has no
+    // room for, and it overflows rather than reading better. A test that
+    // asserts only the width has therefore seen half the contract.
+    bool cardsFitTable() const;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -37,7 +56,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void leaveEvent(QEvent* event) override;
     QSize sizeHint() const override { return { 1000, 740 }; }
-    QSize minimumSizeHint() const override { return { 720, 560 }; }
+    QSize minimumSizeHint() const override;
 
 private:
     // Where a card in the air is heading. Arrivals are suppressed at their
@@ -72,6 +91,7 @@ private:
 
     // --- geometry ---
     QRectF tableRect() const;
+    double naturalCardWidth() const;
     double cardWidth() const;
     double cardHeight() const;
     QPointF stockCentre() const;
@@ -183,6 +203,11 @@ private:
     // replaces it. Three computer seats play faster than a card can be read.
     Card m_lastThrown;
     int m_lastThrownBy = -1;
+
+    // The window size from before the legibility switch clamped it larger, so
+    // turning the switch off puts the window back. Invalid while the switch is
+    // off. See CanastaView::applyLegibility.
+    QSize m_normalWindowSize;
 
     QTimer* m_timer = nullptr;
     double m_pause = 0.0;    // seconds to wait before the next computer move

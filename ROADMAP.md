@@ -12,8 +12,7 @@ only, so they are not in order and are never renumbered.
 
 ### 🎨 Games
 
-- ✅ [GHUB-0001] **Chess, with a full rule set and an opponent at three
-strengths.**
+- ✅ [GHUB-0001] **Chess, with a full rule set and an opponent at three strengths.**
   Castling, en passant, promotion and every draw rule. The move
   generator is proved by perft against the published node counts for four
   reference positions rather than by playing it.
@@ -21,8 +20,7 @@ strengths.**
   Kind: feature.
   Source: user-request-2026-08-10.
 
-- ✅ [GHUB-0002] **Canasta for four, in partnerships, with an editable second
-rule set.**
+- ✅ [GHUB-0002] **Canasta for four, in partnerships, with an editable second rule set.**
   Melds, wild cards, red threes, freezing and taking the discard
   pile, going out and the full scoring table. Every number the game plays by
   lives in one `canasta::Rules` struct, which is what let the owner's six
@@ -529,6 +527,30 @@ open.
   INV-1's block needing contains() on both halves, and the script's own
   array parser, which skipped a four-argument QColor and measured the
   wrong Minesweeper colour. §2.3's hand-transcribed table was right.
+  Canasta's pass shipped (2026-08-19) — the first of the fourteen, so it
+  carries withdrawn INV-3 and INV-6 in its own numbers. Under the switch
+  CanastaView::minimumSizeHint() returns 900x656 and cardWidth() floors at
+  CardArt::kFaceMinWidth / kMeldScale, so a melded card goes from 37.1 px
+  at the smallest window to 46.4 and shows a face. applyLegibility lands
+  in-flight cards first (Flight::to is captured at launch) and keeps the
+  pre-clamp window size, so turning the switch off is not one-way. Four
+  uitest blocks lock it; each was seen red against a deliberate break, and
+  the first version of INV-3 passed a broken build until cardsFitTable()
+  was added. selftest 366/366, uitest 126/126, ctest 3/3.
+
+  Measurement that shrinks what is left: the other five card games do NOT
+  need a size pass. Every card view calls setMinimumSize(minimumSizeHint()),
+  so the smallest card each can be driven to is Klondike 67.9, FreeCell
+  67.4, Pyramid 68.6, Spider 54.2 and Hearts 52.5 - all clear of the 46-px
+  threshold. The spec's 2.1 reasoned from the floor CONSTANTS (30/32/34)
+  and named Spider the likeliest to go faceless; no window can drive any of
+  them there. Canasta was the only game drawing a faceless card, and only
+  in its melds - the opponents' hands are drawn at 0.8 but face DOWN, so
+  the threshold never applied to them either.
+
+  Still open: thirteen games unvisited. What is left for them is reading
+  pace, contrast and what a game says out loud (Hearts naming the led suit,
+  Sudoku's pencil marks at a fifth of a cell), not card size.
 
 - 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
   Not a defect today, and deliberately not fixed while filing: the
@@ -574,8 +596,7 @@ open.
 
 ### 🧰 Tests
 
-- 💭 [GHUB-0020] **A legality check that does not rely on the author's
-imagination.**
+- 💭 [GHUB-0020] **A legality check that does not rely on the author's imagination.**
   Four separate bugs on 2026-08-11 were positions where a move
   the player could see was legal got refused, all in one corner: where wild
   cards go. Every one passed the self-test, because the self-test checks
@@ -638,8 +659,7 @@ again.
   Kind: investigate.
   Source: user-request-2026-08-10.
 
-- 💭 [GHUB-0024] **Choosing your colour, in Chess or Draughts — scope, not
-oversight.**
+- 💭 [GHUB-0024] **Choosing your colour, in Chess or Draughts — scope, not oversight.**
   Both put the human on the side that moves first, White and Red,
   and neither offers a swap or a board flip. That keeps `advance()` a single
   path with one `m_human`, which is the shape every engine game in the hub

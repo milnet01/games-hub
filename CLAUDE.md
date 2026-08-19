@@ -258,6 +258,31 @@ opponent hands 0.8 — gets a stack of
 slivers rather than cards, and has to name them some other way. The melds carry
 a "K ×5" badge for exactly this reason. Check the width before assuming a face.
 
+**Canasta's legibility pass raises the window's minimum size; it does not grow
+the melds where they stand.** Growing them in place was tried first and cannot
+work: a meld card wide enough to show a face makes a seven-card canasta about
+130 px tall at the smallest window, and `bandFor()` gives it 107 — the overflow
+runs into the stock and discard row above. So `minimumSizeHint()` returns
+900×656 while the switch is on, the smallest window at which `cardWidth()`
+reaches `CardArt::kFaceMinWidth / kMeldScale` unaided, and every card on the
+table grows together. **Floor, smallest scale and minimum size move together or
+not at all**; `cardsFitTable()` is what asserts the floor never actually has to
+clamp, because a clamped card is one the table has no room for. **And the switch
+has to put the window back** — Qt clamps the window up to the new minimum and
+`HubWindow::rememberPage()` writes that enlarged geometry over the stored one,
+so `applyLegibility` keeps the pre-clamp size and restores it on the way out. It
+clears `m_flights` first: `Flight::to` is a point captured when the card left,
+so a card in the air would otherwise land where its destination used to be.
+
+**The other five card games do not need a size pass, and the floors that say
+they do are unreachable.** Measured, not assumed: every card view calls
+`setMinimumSize(minimumSizeHint())`, so the smallest card each can actually
+reach is Klondike 67.9, FreeCell 67.4, Pyramid 68.6, Spider 54.2 and Hearts
+52.5 — all clear of `kFaceMinWidth`. Their `std::max(30.0, …)` … `std::max(34.0,
+…)` floors read alarming and no window can drive them there. Canasta was the
+only game drawing faceless cards, and only in its melds: the opponents' hands
+are drawn at 0.8 but face **down**, so the threshold never applied to them.
+
 **Canasta can reach a position with no legal move, and the engine has to refuse
 the move that gets there.** Down to one card with no canasta, you may not go
 out, and discarding your last card *is* going out — so nothing is legal and the
