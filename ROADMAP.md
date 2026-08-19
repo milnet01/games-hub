@@ -390,6 +390,60 @@ public-domain; see the standing rules for why each is safe.
   Kind: feature.
   Source: user-request-2026-08-10.
 
+- 📋 [GHUB-0036] **Poker against three computer players, with chips and betting.**
+  Asked for 2026-08-19, after the owner noticed the collection has
+  no poker. Clears the standing-rules test outright: poker's rules are
+  public domain and "Poker" is a generic name, as are "five-card draw" and
+  "Texas hold'em" (a place plus a game). Nothing here needs a new asset -
+  the shared deck in cards/card.* and cards/cardart.* already draws
+  everything a poker table shows.
+
+  VARIANT NOT YET CHOSEN, and it decides most of the work. Five-card draw
+  is the smallest honest poker: one draw, two betting rounds, no shared
+  cards, and it is the variant most people learn first. Texas hold'em is
+  what most people now mean by the word, needs community cards and four
+  betting rounds, and has far more written about its strategy for an AI to
+  be measured against. Seven-card stud sits between them. Pick one and
+  ship it rather than building a variant framework nobody asked for.
+
+  What is genuinely new, and why this is bigger than another solitaire.
+  None of the fourteen games has money in it, so a chip stack, a pot, side
+  pots when someone is all-in, and a betting round that goes round until
+  the bets are level are all new machinery. A hand evaluator that ranks
+  any five of seven cards is new too, and is the one part with an exact
+  right answer - it should be checked exhaustively in the selftest rather
+  than by playing, the way chess move generation is checked by perft
+  rather than by eye.
+
+  The AI is the interesting half and the reason to give this room. Every
+  other opponent here plays a game of complete or nearly complete
+  information; poker is the first where the computer must bet on what it
+  CANNOT see, and where bluffing is part of correct play rather than a
+  flourish. Expect the four-rung ladder Canasta uses - and expect it to
+  need canastaLevelsDiffer()'s treatment, each rung played against the one
+  below it, because a poker AI that is merely described as harder is
+  indistinguishable from one that is not.
+
+  Legibility is a first-class constraint here, not a pass to be done
+  afterwards. The owner is partially sighted and reads cards by their pip
+  pattern, so the table must SAY what you hold - "two pair, kings and
+  fours" in words under the hand, the way Canasta names the last discard -
+  rather than leaving the player to read five cards and rank them. The
+  same goes for the bet: what it costs to call, in figures, without
+  arithmetic. Design that in from the start; GHUB-0017's per-game passes
+  exist because it was not.
+
+  Saving follows Chess's shape where it can: a hand in progress is a
+  position plus a betting history, and the pack check that cardcodec's
+  matchesPack does for the solitaires applies here too.
+
+  Open question for the owner beyond the variant: play money only, with a
+  stack that resets, or a running bankroll across sessions the way best
+  scores persist?
+  **Layman:** A poker table against three computer opponents, with chips to bet and a hand that says in words what you are holding.
+  Kind: feature.
+  Source: user-request-2026-08-19.
+
 ### 📚 Documentation
 
 - 📋 [GHUB-0016] **Every game explains its own rules, inside the app.**
