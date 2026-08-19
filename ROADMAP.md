@@ -701,6 +701,23 @@ open.
   must only REPORT what the platform happens to provide. Three attempts were
   needed here because each rewrite put a new environment constant in the
   assertion.
+  0.4.0 cut (2026-08-19), which settles the release decision recorded above.
+  The condition it named - "cut once one or two more passes land, or reword
+  the changelog entry" - was met both ways: Canasta and Sudoku both landed,
+  and the switch's changelog entry now says it is read by those two rather
+  than by the whole collection.
+
+  The shipped parts of this bullet were split out first so the release could
+  credit finished work: GHUB-0037 (the switch, the hook, kFaceMinWidth and
+  2048's ink), GHUB-0038 (Canasta's pass) and GHUB-0039 (Sudoku's pass).
+  This bullet stays open for the twelve games still to come. Crediting an
+  in-progress umbrella in a changelog reads as a claim the whole thing
+  landed, and cut-release stops on it - correctly.
+
+  Published: both artifacts on the releases page, AppImage 49.1 MB and
+  Windows zip 61.8 MB, each smoke-tested by the workflow. The published
+  AppImage was downloaded here afterwards and confirmed to report 0.4.0 and
+  to still be running after six seconds under the offscreen platform.
 
 - 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
   Not a defect today, and deliberately not fixed while filing: the
