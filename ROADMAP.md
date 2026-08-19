@@ -351,7 +351,7 @@ double-clicking a file.
   Kind: chore.
   Source: in-session-2026-08-14 (CI annotation on run 31811637751).
 
-- 📋 [GHUB-0041] **A donate entry in the hub, pointing at the funding links this repo already declares.**
+- ✅ [GHUB-0041] **A donate entry in the hub, pointing at the funding links this repo already declares.**
   Asked for 2026-08-19. `.github/FUNDING.yml` was missing from this repo and
   was copied in from the other projects on the same day, so the three links
   now exist in one place and are already the sidebar button on GitHub:
@@ -403,6 +403,39 @@ double-clicking a file.
   being killed rather than closed, and 149 → 150 → 151 must show the popup
   exactly once. An off-by-one here shows the prompt every launch, which is
   the failure everyone remembers.
+  Resolved 2026-08-20. The Help menu is new — the hub had no menu bar at
+  all — and carries one entry, Support this project…, which opens a
+  dialog rather than a browser. The dialog says what it is before what it
+  wants, then offers one named button per link with the address spelled
+  out underneath, so the destination is readable before the browser opens
+  rather than after. The legibility switch reaches it: it reads the
+  setting at construction and enlarges its own font, which is enough for
+  something that lives a few seconds.
+
+  The link question was settled by generating rather than checking.
+  CMakeLists.txt reads .github/FUNDING.yml at configure time and writes
+  src/funding.h.in out to funding.h, so there is no second copy to drift
+  and nothing to keep in step. A funding key the loop has no rule for
+  STOPS THE BUILD, which is the property that matters: a silently dropped
+  link looks exactly like a working build. Proved by adding
+  `ko_fi: antsprojects` to the YAML and watching cmake refuse. A uitest
+  check counts the non-comment keys back out of the file and demands the
+  same number of entries, as a second guard on the same thing.
+
+  The prompt is every 150th launch, counted per process in QSettings
+  (`donate/launches`) and written as it is read, so a killed process still
+  counted. `donate::launchOwesPrompt` is pure, which is what makes the
+  off-by-one everyone remembers checkable without touching stored
+  settings — 149 does not ask, 150 asks, 151 does not ask again, and 600
+  launches owe exactly four prompts. The prompt carries a "Keep asking me
+  now and then" switch, stored as it is toggled rather than on accept, so
+  closing with the window button honours the choice. It never appears over
+  a game: `--game` goes straight into play, and that launch is skipped. It
+  is also deferred to the event loop so the window is up and painted
+  first.
+
+  17 new UI checks, each proved able to fail by breaking the code it
+  guards. uitest 168/168, ctest 3/3, `scripts/local-ci.sh` green.
   **Layman:** A way to support the project from inside the game, using the same donation links the repository already lists.
   Kind: feature.
   Source: user-request-2026-08-19.
@@ -568,7 +601,7 @@ public-domain; see the standing rules for why each is safe.
   Kind: doc-fix.
   Source: in-session-2026-08-13 (found building the GHUB-0017 review packet).
 
-- 📋 [GHUB-0042] **The README promises a window size that nothing says how to judge.**
+- ✅ [GHUB-0042] **The README promises a window size that nothing says how to judge.**
   Found 2026-08-19 by an adopt-project run — a cold reader given the README,
   CLAUDE.md and SECURITY.md, then the two specs, and forbidden the source.
 
@@ -598,6 +631,29 @@ public-domain; see the standing rules for why each is safe.
   of success. It named the spec it had been refused, was given it, and
   overturned its own answer. A candidate list that stops at the repository
   root gets this project wrong, because its bars live in docs/specs/.
+  Resolved 2026-08-20. The owner chose to write the bar rather than delete
+  the clause. It is `HubWindow::kFitsBesideYourWork` (960x1000) — half a
+  1920x1080 desktop across, its height less a panel and a title bar — and
+  the README now says so in words: every game can be made as small as half
+  a 1920x1080 screen.
+
+  Writing the bar found the promise was false, which is the argument for
+  having written it. A QStackedWidget takes the largest minimum size of
+  every page it has built, so the tile grid was deciding how small Chess
+  could be made: fourteen 190-pixel tiles are five rows deep, and every
+  page measured 638x1170 — taller than a 1080p screen, so the window could
+  not fit beside anything, or even fit at all. The grid now lives in a
+  QScrollArea and asks for nothing. Measured after: the least shrinkable
+  game is Canasta at 720x644, or 900x740 with large play on, and the tile
+  grid alone is 68x144.
+
+  The check gives each game its own hub, because measured through one
+  window every game reports the worst one's floor and thirteen innocent
+  games go red together. It also asserts the tile grid never sets that
+  floor again, and that a first run opens inside the bar unaided
+  (880x680). All four proved able to fail — tightening the bar to 800x600
+  reddens three of them, and putting a minimum height back on the scroller
+  reddens all four.
   **Layman:** The README's first sentence makes a promise about the window fitting beside your work, and nothing anywhere says what would count as keeping it.
   Kind: doc.
   Source: adopt-project-2026-08-19.
@@ -808,6 +864,12 @@ open.
   Windows zip 61.8 MB, each smoke-tested by the workflow. The published
   AppImage was downloaded here afterwards and confirmed to report 0.4.0 and
   to still be running after six seconds under the offscreen platform.
+  Count correction 2026-08-20. The headline says thirteen and it is now
+  twelve — Sudoku's pass (GHUB-0039) shipped after this bullet was
+  written, alongside Canasta's (GHUB-0038). The headline is a store
+  column and cannot be amended in place, so the number lives here.
+  Found by a cold lane reviewing CLAUDE.md, which carried the same stale
+  figure.
 
 - 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
   Not a defect today, and deliberately not fixed while filing: the

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A Qt 6 Widgets game collection — a hub window holding fourteen games: Chess,
-Reversi, Draughts, Minesweeper, Klondike, Spider, FreeCell, Pyramid, Sudoku,
+Reversi, Draughts, Minesweeper, Solitaire, Spider, FreeCell, Pyramid, Sudoku,
 Hearts, Canasta, Snake, 2048 and Pinball. Started 2026-08-10 as a single
 Reversi game and expanded the same day. `ROADMAP.md` holds the queue of games
 still to come.
@@ -20,6 +20,10 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 cmake --build build                     # build everything
 ./build/gameshub                        # the hub
 ./build/gameshub --game spider          # straight into one game
+
+# --game takes the REGISTERED name, which is what the tile shows. Klondike is
+# registered as "Solitaire" (Klondike is its blurb), and an unknown name warns
+# and opens the tile grid rather than failing.
 
 cd build && ctest --output-on-failure   # both test binaries + the hook test
 cmake --install build                   # refresh the installed copy
@@ -63,7 +67,7 @@ MSVC, so that half is verified by CI and nowhere else. And the `uses:` steps
 are stood in for by this machine's own Qt and Ninja rather than executed.
 
 The `pre-push` hook runs it automatically. A push touching only `.md` files,
-`docs/`, or the licence texts runs the workflow linters and stops; anything
+`docs/`, `.gitignore` or the licence texts runs the workflow linters and stops; anything
 touching code, CMake or a workflow runs the full pipeline. `SKIP_LOCAL_CI=1
 git push` bypasses it when you mean to.
 
@@ -88,21 +92,33 @@ line, silently.
 
 Two workflows in `.github/workflows/`, contract in
 `docs/specs/GHUB-0025-downloadable-builds.md`. `ci.yml` builds and runs both
-test binaries on `ubuntu-24.04` and `windows-2022` for every push. `release.yml`
+test binaries on `ubuntu-24.04` and `windows-2022` for every push **to
+`master`** and every pull request. A push to any other branch runs nothing, so
+the Windows leg — the only place MSVC is exercised — does not run on branch
+work until a pull request opens. `release.yml`
 turns a tag into a Linux AppImage and a Windows zip on the releases page.
 
 Cutting a release is three edits and a tag, **in this order**:
 
 1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`.
-2. Close `## [Unreleased]` in `CHANGELOG.md` into `## [X.Y.Z] - <date>`, and
+2. Bump `Current version X.Y.Z` in `README.md`.
+3. Close `## [Unreleased]` in `CHANGELOG.md` into `## [X.Y.Z] - <date>`, and
    leave a fresh empty `[Unreleased]` above it.
-3. Commit, then `git tag vX.Y.Z && git push --follow-tags`.
+4. Commit, then `git tag vX.Y.Z && git push --follow-tags`.
+
+**`.claude/bump.json` is the one enumeration of version-bearing files** — it
+names `CMakeLists.txt` and `README.md`, and its `post_check` is what catches
+drift between them and the changelog. Read it rather than this list if the two
+ever disagree; a file added there and not here is how this list goes stale.
 
 The tag's `v` prefix is stripped and compared against `CMakeLists.txt`, and
 the changelog must already have a `## [X.Y.Z]` block — the `verify` job
 checks both before either build starts, because the release notes are read
 from that block and a forgotten step would otherwise publish an empty one.
 Get it wrong and the fix is to delete the tag; nothing is published.
+**That job does NOT look at `README.md`**, so a forgotten step 2 is caught
+only by `bump.json`'s `post_check` — and otherwise publishes a release page
+still advertising the previous version.
 
 Every action is pinned to a commit SHA with the version in a trailing
 comment. That is not decoration: these workflows publish binaries that
@@ -123,12 +139,32 @@ display, and it is the rule to preserve when adding a game.
   constructed game hears about it and not just the one on screen. `gameview.cpp`
   holds that constructor and nothing else — a Q_OBJECT class needs a matching
   source file in the build or AUTOMOC generates no metaobject for it.
-- `src/legibility.*` — `Legibility`, the one app-wide persisted preference
-  (`display/legibility`, default off). A singleton like `Sound`, but stored and
+- `src/legibility.*` — `Legibility`, the app-wide legibility preference
+  (`display/legibility`, default off). It is no longer the only thing this app
+  stores outside a game's own group: `donate/ask` and `donate/launches` are
+  app-wide too, and `window/geometry/<page>` and `saved/<game>` are written
+  per page and per game by `hubwindow.cpp`'s `geometryKey()` and `saveKey()`.
+  **Anything sweeping stored state — a settings reset, a migration — has all
+  four families to handle**, and getting it wrong is quiet: clearing the donate
+  switch but leaving the counter at 149 fires the prompt on the very next
+  start, and leaving `saved/` behind resumes games a "reset" was meant to
+  forget.
+  A singleton like `Sound`, but stored and
   broadcasting: games are built lazily and live for the session, so one built
   before the switch moved would never learn without the signal.
-  `docs/specs/GHUB-0017-legibility-switch.md` is the contract, and the fourteen
-  per-game passes that read the switch have not started yet.
+  `docs/specs/GHUB-0017-legibility-switch.md` is the contract. Two of the
+  fourteen per-game passes have shipped — Canasta (GHUB-0038) and Sudoku
+  (GHUB-0039), both described under Traps below — and twelve are still to
+  come.
+- `src/donate.*` and `src/donatedialog.*` — the one place the app asks for
+  money, reached from Help → Support this project and from the every-150th-
+  launch prompt. **A `--game` launch advances the count and shows nothing** —
+  a startup prompt is an interruption, but one landing on your turn is a
+  different thing — so a launch that skips the prompt is deliberate rather
+  than an off-by-one. `donate::launchOwesPrompt` is pure so the off-by-one everyone
+  remembers is checkable without touching stored settings; the counter is per
+  process, written as it is read, so a killed process still counted. The links
+  themselves are generated, never written — see the trap below.
 - `src/hubwindow.*` — the tile grid and one page per game in a `QStackedWidget`.
   Games are constructed lazily on first open. Each tile paints its own
   miniature; `openGameNamed()` backs the `--game` flag. It also owns two things
@@ -410,8 +446,13 @@ one place and the card in another. Sort before the flights are built.
 **A card game with animation must not let the model and the picture disagree.**
 Each flight carries where it is going, and the destination skips drawing that
 card until it lands (`suppressed()`); otherwise a card in the air is also drawn
-at its destination and the eye sees it twice. The matching one-per-flight, so
-several cards arriving at once each get their own slot.
+at its destination and the eye sees it twice. **The match is CONSUMED one per
+flight** — `CanastaView::m_consumed` marks a flight the moment it answers, so a
+second identical card in the air finds the next unmarked flight rather than the
+same one. Without that, two identical cards arriving together suppress both
+destination copies and one card disappears; Canasta shuffles two packs and
+`Card::deck` sits outside `operator==`, so identical cards in flight together
+are routine here rather than exotic.
 
 **A UI check that clicks a Canasta card has to wait twice** — once for the turn
 to come round to the human, and again for the cards to land, since the board
@@ -491,6 +532,38 @@ Qt's `plugins/<group>/` layout, while `windeployqt` mirrors each group into
 the deployment root. A missing *multimedia* plugin is likewise caught only
 there — the app runs in silence rather than failing.
 
+**A `QStackedWidget` takes the largest minimum size of every page it has
+built, so one page can decide how small every other one can be made.** The tile
+grid was doing exactly that: fourteen 190-pixel tiles are five rows deep, which
+put a floor of about 1170 pixels on Chess as well as on the grid — taller than a
+1080p screen, and the opposite of the README's opening promise. The grid now
+lives in a `QScrollArea` and asks for nothing. `HubWindow::kFitsBesideYourWork`
+(960x1000) is that promise written as a number — half a 1920x1080 desktop
+across, its height less a panel and a title bar — and **any** game whose minimum size
+exceeds it fails the check in `tests/uitest.cpp` — in either legibility state,
+so a per-game legibility pass that raises a minimum is bound by it too.
+Canasta already sits at 900 wide against a 960 bar, which is 60 pixels of
+headroom rather than a comfortable margin. **That check gives each
+game its own hub**, because measured through one window every game reports the
+worst one's floor and thirteen innocent games go red together.
+
+**The three donate URLs are generated from `.github/FUNDING.yml` at configure
+time and must never be typed into a C++ file.** That YAML is already GitHub's
+sponsor button, so it is the copy that stays maintained; a list in a .cpp is a
+second copy that drifts the day one link changes, with nothing to catch it.
+`CMakeLists.txt` writes `funding.h` from it and **stops the build on a funding
+key it has no rule for** — a dropped link otherwise looks exactly like a working
+build. A uitest check counts the keys back out of the YAML as a second guard.
+
+**A new platform's rule goes in that mapping loop, not under `custom:`.** The
+handle-to-URL stems (`https://github.com/sponsors/`, `https://www.patreon.com/`)
+do live in `CMakeLists.txt`, because FUNDING.yml stores account names rather
+than addresses for the platforms GitHub knows — so the ban above is on C++, and
+the loop is where a rule for `ko_fi:` belongs. Routing it through `custom:`
+instead does not even build: the loop reads a one-URL `custom:` list and refuses
+a two-entry one, though GitHub's `custom:` key takes a list. Widening that
+regex is the fix if a second custom link is ever wanted.
+
 **`pkill -f <pattern>` will kill this session's own shell** when the pattern
 appears in the command line being run. Use `pkill -x gameshub`.
 
@@ -508,9 +581,12 @@ debugging code that is not broken.
 That signature expects a resource name plus a `FILES` list, so handing it a
 `.qrc` gives no error, no warning and no content — every sound lookup then
 fails at runtime. Sounds are embedded by listing `sounds.qrc` as a target
-source with `CMAKE_AUTORCC ON`. The binary is ~800 KB with the audio and
-~425 KB without, which is the quickest check; `tests/uitest.cpp` asserts every
-effect is present and non-trivial in size.
+source with `CMAKE_AUTORCC ON`. **`tests/uitest.cpp` asserting every effect is
+present and non-trivial in size is the check.** `assets/sounds/` is 17 files
+and about 380 KB, and the compiled resource object matches it — but the
+binary's own total grows with every game added, so it says nothing on its own.
+It was ~800 KB when this trap was written and is ~1.6 MB now; a build that had
+silently dropped the audio would sit well above the old figure too.
 
 **QPainter's `drawRect` fills with the current brush as well as outlining it.**
 A brush set for one thing leaks into everything drawn after it: the flag's red
@@ -522,6 +598,12 @@ immediately before a shape call rather than trusting what came before.
 17 effects from a fixed seed, so re-running it is byte-identical. That is a
 licensing decision rather than a stylistic one — see `ROADMAP.md` § Standing
 rules before adding any asset.
+
+## Review history
+
+This file has been through `review-contract` as a standard. The loop log is
+kept in `docs/claude-md-review-2026-08-20.md` rather than here, because a table
+appended to forever is a cost every session pays and almost none reads.
 
 ## Testing notes
 

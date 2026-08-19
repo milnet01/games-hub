@@ -8,6 +8,16 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Added
+
+- **A way to support the project, in the Help menu** (GHUB-0041)
+  Help → Support this project… opens a panel that explains itself
+  before it asks, with one named button per donation link and the web
+  address spelled out underneath, so you can see where a button will
+  take you before it takes you there. Every 150th time you start the
+  game it offers the same panel unprompted, and that one carries a
+  switch to stop it asking.
+
 ### Changed
 
 - **Canasta explains a refused move on the table instead of in the status bar** (GHUB-0040)
@@ -15,6 +25,16 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   panel just above your hand, and the sentence stays there until you make
   a move of your own. Every click used to wipe it — including the clicks
   you make while doing what it told you.
+
+### Fixed
+
+- **Every game can be made small enough to sit beside your work** (GHUB-0042)
+  The window could not be made shorter than about 1170 pixels — taller
+  than a 1080p screen — because the grid of fourteen game tiles set the
+  floor for every page, not just its own. The grid now scrolls, so each
+  game asks only for the room it needs: the largest is Canasta at
+  900x740 with large play on. The README's opening promise now says
+  what that means, and a test holds the game to it.
 
 ## [0.4.0] - 2026-08-19
 
