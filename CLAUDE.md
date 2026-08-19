@@ -306,6 +306,21 @@ by a whole pixel, not the typeface — so a figure taken at one size says very
 little about the other, and comparing a large-size measurement on one platform
 against a small-size one on another says nothing at all.
 
+**`windows-2022` under `QT_QPA_PLATFORM=offscreen` has no font environment at
+all, and this is the number to remember: `QFontDatabase::families()` returns
+EMPTY and the default face measures digits at 0.997 of an em** — the full em
+box, which is a headless stub rather than any real typeface. Anything derived
+from font metrics therefore degrades to its floor on that runner and must be
+allowed to. It is not evidence about what a Windows *player* sees: a real
+desktop has Segoe UI and behaves like this machine.
+
+**The rule the three red runs taught: a test may ASSERT what the code does, and
+must only REPORT what the platform happens to provide.** Each rewrite here put
+a fresh environment constant into an assertion — a tuned ratio, then a growth
+multiple, then a minimum font count — and each passed locally and failed on
+`windows-2022`. If a number describes the machine rather than the change, print
+it and assert something else.
+
 So `SudokuView::markFont()` **solves** rather than scales: one metric probe
 fixes the font's ink-per-point, then it steps down until the ink measured at
 the size it will really be drawn at fits. `marksFitAt(pointSize)` exists so a
