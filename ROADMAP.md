@@ -590,6 +590,35 @@ open.
   Still open: twelve games unvisited. Sudoku is now off that list, so what is
   left is reading pace, contrast and what a game says out loud - Hearts naming
   the led suit, Chess and Draughts announcing nothing.
+  Corrected (2026-08-19) after the Windows CI leg went red. The 0.29 ratio
+  recorded above was measured on the wrong thing: it is the largest that fits
+  THIS machine's font, and the ceiling is not a property of this codebase but
+  of how tall the platform draws a digit. Measured on the owner's Windows box
+  over SSH: Segoe UI 0.728 of an em, Arial 0.731, Tahoma 0.760, against 0.685
+  here. Under Segoe UI a 0.29 mark is 0.845 of its cell third in exact
+  arithmetic - inside the 0.85 limit - and tips past it once tightBoundingRect
+  rounds to whole pixels at the smallest cell. windows-2022 failed on exactly
+  the assertion written to catch it while ubuntu-24.04 passed.
+
+  No local run could have caught it and that is not drift: scripts/local-ci.sh
+  executes ci.yml's own run: blocks, but nothing on Linux drives MSVC, and the
+  script says so on every run.
+
+  The fix removes the constant instead of re-tuning it. markFont() probes the
+  font once for its ink-per-point, takes the analytic size, then steps down
+  until the ink MEASURED AT THE SIZE IT WILL BE DRAWN AT fits - so the mark is
+  the largest each platform allows rather than a number right in one place and
+  wrong or timid elsewhere. marksFitAt(pointSize) was added because once the
+  size is solved "it fits" is true by construction; the assertion with teeth
+  is "a step larger would not".
+
+  The regression test became a portability test: it loops over the machine's
+  own font families, locally spanning 0.49 to 0.99 of an em, which brackets
+  every Windows candidate. Restoring the tuned constant reddens it LOCALLY,
+  which is the whole point - verified by doing exactly that.
+
+  Standing note for future passes: a per-game legibility number derived from
+  font metrics is a platform property. Solve it, do not tune it.
 
 - 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
   Not a defect today, and deliberately not fixed while filing: the

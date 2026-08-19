@@ -36,23 +36,34 @@ constexpr int kFrameWidth = 9;
 // the 0.52 a real digit uses.
 //
 // kMarkRatio is about as large as the font's LINE box can be and still fit a
-// cell third, which is why it stopped there. kMarkRatioLegible is deliberately
-// past that: a digit's ink is far shorter than the line box it is measured in,
-// so the marks have room the line box says they do not. Qt::TextDontClip at
-// the drawText below is what hands that room over — without it the glyph is
-// clipped to its third and the larger font draws a worse mark, not a bigger
-// one. marksFitCell() is what holds the ratio to ink that really fits.
+// cell third, which is why it stopped there. The legible size goes deliberately
+// past it: a digit's ink is far shorter than the line box it is measured in, so
+// the marks have room the line box says they do not. Qt::TextDontClip at the
+// drawText below is what hands that room over — without it the glyph is clipped
+// to its third and the larger font draws a worse mark, not a bigger one.
 //
-// 0.29 is measured rather than chosen. The app font's digits are about 0.685
-// of an em, so ink comes to roughly 2.74 x the ratio as a fraction of the cell
-// third: 0.29 lands at 0.795 and 0.30 at 0.822, and at the smallest window the
-// whole-pixel rounding of a 34-pixel cell pushes 0.30 to 0.882 — past what
-// marksFitCell() allows. **A platform whose digits are more than about 0.73 of
-// an em would fail that check rather than draw marks that touch**, which is the
-// intended direction and is worth knowing: Windows has produced font and
-// library differences here before, and the fix is this constant, not the test.
+// **There is no legible RATIO, and that is the point.** A constant cannot be
+// right on two platforms, because the ceiling depends on how tall the font
+// draws a digit. Measured: this machine 0.685 of an em, and on the Windows box
+// Segoe UI 0.728, Arial 0.731, Tahoma 0.760. A tuned 0.29 came to 0.845 of the
+// cell third under Segoe UI in exact arithmetic — inside the limit — and tipped
+// past it once tightBoundingRect rounds to whole pixels at the smallest cell.
+// It passed here and failed the Windows CI leg, which is the failure this
+// solve exists to make impossible rather than to re-tune.
+//
+// So markFont() measures the font in hand and takes the largest size whose ink
+// really fits, floored at kMarkRatio, which has always fitted.
 constexpr double kMarkRatio = 0.20;
-constexpr double kMarkRatioLegible = 0.29;
+// How much of its third of the cell a mark's ink may fill. The remainder is the
+// paper that keeps nine marks reading as a 3x3 pattern rather than a block.
+constexpr double kMarkInkShare = 0.85;
+
+// The drawn height of the digits, which is shorter than the line box they are
+// measured in and is the only number the fit actually depends on.
+double markInkHeight(const QFont& f)
+{
+    return QFontMetricsF(f).tightBoundingRect(QStringLiteral("0123456789")).height();
+}
 
 QString levelKey(SudokuGrid::Level level)
 {
@@ -219,9 +230,33 @@ QRect SudokuView::boardRect() const
 QFont SudokuView::markFont() const
 {
     const bool large = Legibility::instance().enabled();
+    const double cell = cellSize();
     QFont f = font();
-    f.setPointSizeF(cellSize() * (large ? kMarkRatioLegible : kMarkRatio));
     f.setBold(large);
+    if (!large) {
+        f.setPointSizeF(cell * kMarkRatio);
+        return f;
+    }
+
+    // One measurement fixes how much ink this font spends per point, which is
+    // the whole of the analytic answer. The steps after it pay only for the
+    // rounding that analysis cannot see — and rounding is exactly what broke a
+    // tuned constant, so the loop asks the metric at the size it will really be
+    // drawn at rather than trusting the arithmetic.
+    const double room = cell / 3.0 * kMarkInkShare;
+    const double floor = cell * kMarkRatio;
+    QFont probe = f;
+    probe.setPointSizeF(100.0);
+    const double inkPerPoint = markInkHeight(probe) / 100.0;
+
+    double points = inkPerPoint > 0.0 ? room / inkPerPoint : floor;
+    for (int step = 0; step < 12 && points > floor; ++step) {
+        f.setPointSizeF(points);
+        if (markInkHeight(f) <= room)
+            return f;
+        points *= 0.96;
+    }
+    f.setPointSizeF(floor);
     return f;
 }
 
@@ -230,21 +265,22 @@ double SudokuView::markPointSize() const
     return markFont().pointSizeF();
 }
 
-// A mark fits when its INK — not its line box — clears the cell third it is
-// centred in, with room left over so two marks in adjacent rows have visible
-// paper between them rather than merely failing to overlap. tightBoundingRect
-// is the ink; the 0.85 leaves a seventh of the third as that paper. Measured
-// over all ten digits because they are not the same height in every font.
-//
-// The bar is deliberately not a restatement of kMarkRatioLegible: it is set
-// where the marks stop reading as a 3x3 pattern, so it still has something to
-// say if the ratio, the font or the cell arithmetic moves.
+// Whether a mark at this size would clear the cell third it is centred in, with
+// paper left over so two marks in adjacent rows read apart rather than merely
+// failing to overlap. Takes a size the view did NOT choose so a test can ask
+// about one — which is how "as large as it fits" gets checked rather than the
+// far weaker "it fits", the only thing markFont() could fail to satisfy now
+// that it solves for the answer.
+bool SudokuView::marksFitAt(double pointSize) const
+{
+    QFont f = markFont();
+    f.setPointSizeF(pointSize);
+    return markInkHeight(f) <= cellSize() / 3.0 * kMarkInkShare;
+}
+
 bool SudokuView::marksFitCell() const
 {
-    const QFontMetricsF fm(markFont());
-    const double ink = fm.tightBoundingRect(QStringLiteral("0123456789")).height();
-    const double third = cellSize() / 3.0;
-    return ink <= third * 0.85;
+    return marksFitAt(markPointSize());
 }
 
 void SudokuView::enter(int digit)

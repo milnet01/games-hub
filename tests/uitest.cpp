@@ -28,6 +28,8 @@
 #include <QFile>
 #include <QSettings>
 #include <QLabel>
+#include <QFontDatabase>
+#include <QFontMetricsF>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPixmap>
@@ -344,12 +346,23 @@ int main(int argc, char* argv[])
               "sudoku: with the switch off nine pencil marks fit inside a cell");
 
         Legibility::instance().setEnabled(true);
-        check(sudoku.markPointSize() >= small * 1.4,
-              "sudoku: the switch grows a pencil mark by at least half again, "
-              "at the smallest window the game allows");
+        // Deliberately NOT a number tuned to this machine's font. The first
+        // version asked for half again, which held here at 0.685 of an em and
+        // failed the Windows leg at Segoe UI's 0.728 — the ceiling is a
+        // property of the font, so a test that pins it is testing the wrong
+        // thing. 1.15 is clear of every real font's ceiling; the maximality
+        // check below is what stops that looseness mattering.
+        check(sudoku.markPointSize() > small * 1.15,
+              "sudoku: the switch grows a pencil mark by a real amount, at the "
+              "smallest window the game allows");
         check(sudoku.marksFitCell(),
               "sudoku: and the grown mark's ink still clears its third of the "
               "cell, so nine of them do not run into each other");
+        // The assertion that actually has teeth now the size is solved rather
+        // than tuned: it is as large as it can be, not merely legal. A timid
+        // solve passes both checks above and fails this one.
+        check(!sudoku.marksFitAt(sudoku.markPointSize() * 1.12),
+              "sudoku: and it is as large as it fits — a step bigger would not");
 
         Legibility::instance().setEnabled(false);
     }
@@ -1010,6 +1023,61 @@ int main(int argc, char* argv[])
             }
             QSettings().remove(QStringLiteral("minesweeper/level"));
         }
+    }
+
+    // ---- sudokuMarksFitAnyFont ----
+    //
+    // The mark size is solved against the font in hand rather than tuned, and
+    // this is the check that says so. A tuned 0.29 passed on this machine, at
+    // 0.685 of an em, and failed the Windows CI leg on Segoe UI at 0.728 —
+    // measured on the real box, along with Arial 0.731 and Tahoma 0.760. So a
+    // green run here proved nothing about the platform it broke on.
+    //
+    // The families below are whatever this machine has, sampled across the
+    // list: locally they span 0.49 to 0.99 of an em, which is far past
+    // anything a desktop would choose as a UI font and comfortably brackets
+    // every Windows candidate. Symbol fonts with no digits are skipped rather
+    // than counted — there is nothing to fit — and the count is asserted so a
+    // machine with an empty font database fails here instead of passing an
+    // empty loop.
+    {
+        Legibility::instance().setEnabled(true);
+        SudokuView sudoku;
+        sudoku.resize(sudoku.minimumSize());
+        const QFont original = sudoku.font();
+
+        const QStringList families = QFontDatabase::families();
+        const int stride = std::max(1, int(families.size()) / 12);
+        int exercised = 0;
+        int misfit = 0;
+        int timid = 0;
+        for (int i = 0; i < families.size(); i += stride) {
+            QFont probe(families.at(i));
+            probe.setPointSizeF(100.0);
+            probe.setBold(true);
+            if (QFontMetricsF(probe).tightBoundingRect(QStringLiteral("0123456789")).height()
+                <= 0.0)
+                continue;
+
+            sudoku.setFont(QFont(families.at(i)));
+            if (!sudoku.marksFitCell())
+                ++misfit;
+            if (sudoku.marksFitAt(sudoku.markPointSize() * 1.12))
+                ++timid;
+            ++exercised;
+        }
+        sudoku.setFont(original);
+
+        check(exercised >= 5,
+              "sudoku: enough font families to say anything about portability");
+        check(misfit == 0,
+              "sudoku: the solved mark fits its cell third in every font tried, however "
+              "tall that font draws a digit");
+        check(timid == 0,
+              "sudoku: and is the largest that fits in each of them, rather than a size "
+              "that merely happens to be safe");
+
+        Legibility::instance().setEnabled(false);
     }
 
     std::printf("\n%s\n", g_failures == 0 ? "All UI checks passed." : "FAILURES PRESENT.");

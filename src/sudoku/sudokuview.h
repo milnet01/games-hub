@@ -28,6 +28,7 @@ public:
     // exactly this part against its own floor.
     double markPointSize() const;
     bool marksFitCell() const;
+    bool marksFitAt(double pointSize) const;
 
 protected:
     void paintEvent(QPaintEvent* event) override;

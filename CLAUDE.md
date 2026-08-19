@@ -291,13 +291,26 @@ line box fits that third — so raising the ratio alone clips the top off every
 mark and draws a *worse* mark, not a bigger one. `Qt::TextDontClip` hands over
 the gap between the ink and the line box, and the legibility pass is what uses
 it. The flag is set in both switch states because at 0.20 it changes nothing.
-**Derive the ceiling from the ink, never from the point size:** this app font's
-digits are about 0.685 of an em, so mark ink lands at roughly `2.74 × ratio` as
-a fraction of the cell third. `SudokuView::marksFitCell()` measures it with
-`QFontMetricsF::tightBoundingRect` over all ten digits rather than trusting that
-constant, because a platform with taller digits should fail the check rather
-than draw marks that touch. 0.30 was tried and goes red at the smallest window,
-where a 34-pixel cell rounds the ink up a whole pixel.
+**A font ratio tuned on one machine is not portable, and this one cost a red
+Windows CI leg to learn.** How tall a font draws a digit varies: measured, this
+machine is 0.685 of an em, and on the Windows box Segoe UI is 0.728, Arial
+0.731 and Tahoma 0.760. A mark tuned to 0.29 of the cell here comes to 0.845 of
+its cell third under Segoe UI in exact arithmetic — inside the 0.85 limit — and
+tips past it the moment `tightBoundingRect` rounds to whole pixels at the
+smallest cell. It passed locally and failed on `windows-2022`, and no Linux run
+could have caught it: `scripts/local-ci.sh` executes `ci.yml`'s own steps, but
+nothing on Linux drives the Windows leg.
+
+So `SudokuView::markFont()` **solves** rather than scales: one metric probe
+fixes the font's ink-per-point, then it steps down until the ink measured at
+the size it will really be drawn at fits. `marksFitAt(pointSize)` exists so a
+test can ask about a size the view did *not* pick — with the size solved,
+"it fits" is true by construction and only "it is the largest that fits" has
+teeth. **The test that guards this loops over the machine's own font families**
+(locally 0.49 to 0.99 of an em, bracketing anything a desktop would pick), and
+putting the tuned constant back reddens it here rather than three minutes into
+CI. Reach for that shape whenever a constant is really a property of the
+platform's font, not of this codebase.
 
 **Under `noMeldingFirstRound`, `discardRisk` is zero for every rank, so any AI
 rule written in terms of it is dead code.** The rule bars melding for one round

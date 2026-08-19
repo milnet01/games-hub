@@ -43,8 +43,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 - **Sudoku's pencil marks grow and embolden under the legibility switch (GHUB-0017)**
   The second of the fourteen per-game passes. Sudoku's contrast was
   never the problem — the pencil ink measures 4.88:1 — so the pass is
-  about size: a mark goes from a fifth of a cell to 0.29 of one and is
-  drawn bold. Nothing else moves, and no minimum window size changes.
+  about size: a mark grows from a fifth of a cell to the largest that
+  still fits beside its eight neighbours, and is drawn bold. That size is
+  solved against the font in use rather than fixed, so it is as large as
+  each platform's digits allow. Nothing else moves, and no minimum window
+  size changes.
 
 ### Fixed
 
