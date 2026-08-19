@@ -351,6 +351,37 @@ double-clicking a file.
   Kind: chore.
   Source: in-session-2026-08-14 (CI annotation on run 31811637751).
 
+- 📋 [GHUB-0041] **A donate entry in the hub, pointing at the funding links this repo already declares.**
+  Asked for 2026-08-19. `.github/FUNDING.yml` was missing from this repo and
+  was copied in from the other projects on the same day, so the three links
+  now exist in one place and are already the sidebar button on GitHub:
+  GitHub Sponsors (milnet01), Patreon (AntsProjectsHub) and the PayBru tip
+  page.
+
+  The links live in FUNDING.yml and the code must not restate them by hand.
+  A hardcoded URL in a .cpp is a fourth copy that drifts the day one of the
+  three changes, and nothing would catch it. Two honest options and the
+  choice is not made: read the YAML at build time and generate the entries,
+  or list them once in a small table with a check that fails if it and
+  FUNDING.yml disagree. Prefer whichever is smaller.
+
+  Prior art to copy rather than invent: Ants_Terminal's mainwindow.cpp has
+  a Donate submenu that opens each link with QDesktopServices::openUrl and
+  says so in the status bar. The mechanism transfers; the status-bar part
+  does not, because GHUB-0040 is on file precisely for that reason.
+
+  Where it goes is open. The hub has a tile grid and a toolbar, and neither
+  obviously owns it — a Help menu entry is the conventional answer, a small
+  tile is the discoverable one, and a tile costs a slot in a grid that is
+  already fourteen games wide. Worth asking rather than deciding.
+
+  Legibility is the same constraint as everywhere else here: whatever it
+  is, it says in words what it does and where it will take you before it
+  opens a browser, rather than showing a bare icon.
+  **Layman:** A way to support the project from inside the game, using the same donation links the repository already lists.
+  Kind: feature.
+  Source: user-request-2026-08-19.
+
 ### 🎨 Games agreed and not yet started
 
 Asked for on 2026-08-10, in the order agreed. All are traditional or
