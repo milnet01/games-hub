@@ -6,6 +6,7 @@
 #include <QDataStream>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSettings>
 #include <QMouseEvent>
 #include <QLinearGradient>
 #include <QPainter>
@@ -49,6 +50,17 @@ MinesweeperView::MinesweeperView(QWidget* parent)
     m_tick = new QTimer(this);
     m_tick->setInterval(500);
     connect(m_tick, &QTimer::timeout, this, &MinesweeperView::refresh);
+
+    // Read before buildActions(), which ticks the level actions against
+    // m_level. A saved game carries its own level, but saveState() returns
+    // nothing for a field that has been won, lost or never dug into — so
+    // without this the difficulty falls back to the default the moment a game
+    // finishes, and the player re-picks Expert every session.
+    //
+    // Clamped rather than trusted: the store is a file the game does not own,
+    // and an out-of-range index reads kLevels past its end.
+    m_level = std::clamp(QSettings().value(QStringLiteral("minesweeper/level"), m_level).toInt(),
+                         0, int(std::size(kLevels)) - 1);
 
     buildActions();
     newGame(m_level);
@@ -107,6 +119,10 @@ qint64 MinesweeperView::elapsedMs() const
 void MinesweeperView::newGame(int levelIndex)
 {
     m_level = std::clamp(levelIndex, 0, int(std::size(kLevels)) - 1);
+    // Every explicit choice of difficulty routes through here, so this is where
+    // it is remembered. restoreState() sets m_level directly and deliberately
+    // does not write: resuming a saved game should not re-point the preference.
+    QSettings().setValue(QStringLiteral("minesweeper/level"), m_level);
     const Level& l = kLevels[m_level];
     m_field = std::make_unique<Minefield>(l.width, l.height, l.mines);
     m_started = false;

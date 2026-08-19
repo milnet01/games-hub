@@ -932,6 +932,86 @@ int main(int argc, char* argv[])
     pump(400);
     check(true, "the running game survives 400ms of live updates");
 
+    // ---- A chosen setting outlives the game it was chosen for ----
+    //
+    // Both of these already survived inside a SAVED game and only there:
+    // Canasta writes m_useHouse into its blob, Minesweeper writes m_level into
+    // its own. But saveState() returns an empty blob for a game that is over —
+    // that is how a finished game avoids resuming onto its own final scores —
+    // and an empty state clears the stored one. So the setting was kept
+    // precisely as long as the game was unfinished, and a player who finished a
+    // hand under House rules, or won on Expert, came back to Classic and
+    // Intermediate.
+    //
+    // Each block is written the way a player meets it: choose, close, reopen.
+    // Asserting the QSettings key alone would pass on a build that writes it
+    // and never reads it back, which is half the defect.
+    {
+        const auto actionNamed = [](GameView& view, const char* name) -> QAction* {
+            for (QAction* a : view.gameActions())
+                if (a->text() == QString::fromUtf8(name))
+                    return a;
+            return nullptr;
+        };
+
+        // ---- canastaRemembersItsRuleSet ----
+        {
+            QSettings().remove(QStringLiteral("canasta/useHouse"));
+            {
+                CanastaView fresh;
+                check(actionNamed(fresh, "Classic") != nullptr
+                          && actionNamed(fresh, "Classic")->isChecked(),
+                      "canasta: with nothing stored a table opens on Classic");
+                actionNamed(fresh, "House")->trigger();
+            }
+            {
+                CanastaView reopened;
+                check(actionNamed(reopened, "House")->isChecked()
+                          && !actionNamed(reopened, "Classic")->isChecked(),
+                      "canasta: a table opened later is still on House, and the "
+                      "toolbar says so");
+            }
+            // And back, so the memory is not one-way — the failure a player
+            // would hit is being stuck on the set they tried once.
+            {
+                CanastaView reopened;
+                actionNamed(reopened, "Classic")->trigger();
+            }
+            {
+                CanastaView again;
+                check(actionNamed(again, "Classic")->isChecked(),
+                      "canasta: and choosing Classic again is remembered too");
+            }
+            QSettings().remove(QStringLiteral("canasta/useHouse"));
+        }
+
+        // ---- minesweeperRemembersItsDifficulty ----
+        {
+            {
+                MinesweeperView fresh;
+                actionNamed(fresh, "Expert")->trigger();
+            }
+            {
+                MinesweeperView reopened;
+                check(actionNamed(reopened, "Expert")->isChecked(),
+                      "minesweeper: a field opened later is still Expert");
+                // The level actually in play, not just the tick: newGame() sizes
+                // the field from m_level, so a build that restored the tick and
+                // not the field would pass on the assertion above alone.
+                check(reopened.saveState().isEmpty(),
+                      "minesweeper: and an undug field stores nothing, so the "
+                      "difficulty is not riding on a saved game");
+                actionNamed(reopened, "Beginner")->trigger();
+            }
+            {
+                MinesweeperView again;
+                check(actionNamed(again, "Beginner")->isChecked(),
+                      "minesweeper: and a different choice replaces it");
+            }
+            QSettings().remove(QStringLiteral("minesweeper/level"));
+        }
+    }
+
     std::printf("\n%s\n", g_failures == 0 ? "All UI checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;
 }

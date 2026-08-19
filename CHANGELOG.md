@@ -35,6 +35,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Canasta's rule set and Minesweeper's difficulty are remembered between sessions.** (GHUB-0034)
+  Both were already saved, but only inside a game still in progress —
+  so finishing a hand under House rules, or winning on Expert, put you
+  back on Classic and Intermediate.
+
 - **The Canasta AI no longer feeds the meld you are one card from finishing.** (GHUB-0033)
   The computer used to throw away the card that completed your canasta. Now it works out which of your melds is furthest from finishing and throws into that one instead.
 

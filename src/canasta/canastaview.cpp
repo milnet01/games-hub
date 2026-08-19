@@ -357,6 +357,7 @@ CanastaView::CanastaView(QWidget* parent)
     m_timer->setInterval(16);
     connect(m_timer, &QTimer::timeout, this, &CanastaView::tick);
 
+    m_useHouse = QSettings().value(QStringLiteral("canasta/useHouse"), false).toBool();
     m_sortHand = QSettings().value(QStringLiteral("canasta/sortHand"), true).toBool();
     m_sharpPartner = QSettings().value(QStringLiteral("canasta/sharpPartner"), false).toBool();
     buildActions();
@@ -433,7 +434,10 @@ void CanastaView::buildActions()
     sets->setExclusive(true);
     auto* classic = new QAction(QStringLiteral("Classic"), this);
     classic->setCheckable(true);
-    classic->setChecked(true);
+    // Both ticks are set from the remembered choice rather than Classic being
+    // hardcoded on: the toolbar is the only thing that says which rule set is
+    // in force, so a tick that disagrees with m_useHouse is worse than no tick.
+    classic->setChecked(!m_useHouse);
     sets->addAction(classic);
     connect(classic, &QAction::triggered, this, [this] {
         m_useHouse = false;
@@ -443,6 +447,7 @@ void CanastaView::buildActions()
 
     auto* house = new QAction(QStringLiteral("House"), this);
     house->setCheckable(true);
+    house->setChecked(m_useHouse);
     sets->addAction(house);
     connect(house, &QAction::triggered, this, [this] {
         m_useHouse = true;
@@ -521,6 +526,13 @@ void CanastaView::applyLevels()
 // next hand.
 void CanastaView::applyRules()
 {
+    // Every route that changes the rule set comes through here, so this is the
+    // one place the choice has to be remembered. A saved game carries its own
+    // m_useHouse, but a finished game stores nothing at all — so without this
+    // the table silently goes back to Classic the next time it is opened, and
+    // a player who has set up their family's rules has to pick them again.
+    QSettings().setValue(QStringLiteral("canasta/useHouse"), m_useHouse);
+
     ca::Rules r = m_useHouse ? m_house : ca::Rules::classic();
     r.targetScore = m_target;
     m_engine.applyRules(r);

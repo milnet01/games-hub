@@ -633,6 +633,40 @@ open.
   Kind: ux.
   Source: in-session-2026-08-11.
 
+- ✅ [GHUB-0034] **Canasta's rule set and Minesweeper's difficulty are remembered between sessions.**
+  One defect shape in two games. Both settings were already
+  persisted - but only inside a SAVED game, which is exactly as long as
+  the game stays unfinished. CanastaView writes m_useHouse into its blob
+  and MinesweeperView writes m_level into its own; saveState() returns an
+  empty blob for a game that is over, and HubWindow treats an empty state
+  as "clear whatever was stored". So finishing a hand under House rules,
+  or winning on Expert, put the player back on Classic and Intermediate
+  with nothing to show they had ever chosen otherwise.
+
+  Fixed the way Canasta already stored canasta/sortHand and
+  canasta/target: a QSettings key written at the one point every explicit
+  choice funnels through, and read in the constructor before the toolbar
+  actions are ticked. canasta/useHouse is written in applyRules(), which
+  all three rule-set routes call; minesweeper/level is written in
+  newGame(), which every level action calls. Minesweeper's read is
+  clamped, because the store is a file the game does not own and an
+  out-of-range index reads kLevels past its end.
+
+  restoreState() deliberately does NOT write either key: resuming a saved
+  game should not re-point the preference at the game being resumed.
+
+  Six uitest assertions, each written as the player meets the setting -
+  choose, close, reopen - and each seen red against its own deliberate
+  break. Asserting the key alone would pass on a build that writes it and
+  never reads it back, which is half the defect. selftest 366/366, uitest
+  137/137.
+
+  Not done here, and not asked for: Sudoku's Easy/Medium/Hard is the same
+  shape and is still forgotten, as is Spider's suit count.
+  **Layman:** Pick House rules or Expert once and the game opens that way next time, instead of forgetting as soon as you finish a game.
+  Kind: fix.
+  Source: user-request-2026-08-19.
+
 ### 🧰 Tests
 
 - 💭 [GHUB-0020] **A legality check that does not rely on the author's imagination.**
