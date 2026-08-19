@@ -2,6 +2,9 @@
 // lay out, paint and respond without crashing. Run with
 // QT_QPA_PLATFORM=offscreen (the CMake test sets it) so it needs no display.
 
+#include "donate.h"
+#include "donatedialog.h"
+#include "funding.h"
 #include "gameview.h"
 #include "legibility.h"
 #include "scores.h"
@@ -23,11 +26,14 @@
 #include "twenty48/twenty48view.h"
 
 #include <QApplication>
+#include <QAction>
+#include <QCheckBox>
 #include <QDataStream>
 #include <QDeadlineTimer>
 #include <QFile>
 #include <QSettings>
 #include <QLabel>
+#include <QMenuBar>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QKeyEvent>
@@ -1000,6 +1006,34 @@ int main(int argc, char* argv[])
     }
     check(opened == expected, "every tile opens without crashing");
 
+    // And "All Games" actually comes back. The tile grid is a grandchild of the
+    // QStackedWidget rather than a page of it (it sits inside a QScrollArea), and
+    // setCurrentWidget() on a widget the stack does not hold does nothing at all
+    // and says nothing — a dead back button that every other check passes around.
+    {
+        QAction* back = nullptr;
+        for (QAction* a : hub.findChildren<QAction*>()) {
+            if (a->text().contains(QStringLiteral("All Games")))
+                back = a;
+        }
+        check(back != nullptr, "the hub has an All Games action");
+        if (back != nullptr) {
+            tiles.first()->click();
+            pump(120);
+            const bool inGame = hub.centralWidget()->findChild<QWidget*>(
+                                    QStringLiteral("gamesHubTileGrid"))
+                                    ->isVisibleTo(&hub)
+                == false;
+            back->trigger();
+            pump(120);
+            check(inGame
+                      && hub.centralWidget()
+                             ->findChild<QWidget*>(QStringLiteral("gamesHubTileGrid"))
+                             ->isVisibleTo(&hub),
+                  "All Games goes back to the tile grid");
+        }
+    }
+
     // Pinball runs a physics timer; let it spin so a bad step would surface.
     for (QPushButton* tile : tiles)
         tile->click();
@@ -1150,6 +1184,234 @@ int main(int argc, char* argv[])
               "that merely happens to be safe");
 
         Legibility::instance().setEnabled(false);
+    }
+
+
+    // ---- The donate entry, and the every-150th-launch prompt ----
+    //
+    // The links are generated from .github/FUNDING.yml at configure time, so
+    // the interesting failures are not "is the URL right" — the build cannot
+    // produce a wrong one — but "did the generator quietly drop a link", "does
+    // the prompt fire exactly once at 150", and "can it be turned off".
+    {
+        QSettings settings;
+        settings.remove(QStringLiteral("donate"));
+
+        check(funding::kLinkCount > 0, "donate: the build generated at least one funding link");
+
+        bool linksWellFormed = true;
+        for (const funding::Link& link : funding::kLinks) {
+            if (QString::fromLatin1(link.label).isEmpty()
+                || !QString::fromLatin1(link.url).startsWith(QStringLiteral("https://")))
+                linksWellFormed = false;
+        }
+        check(linksWellFormed,
+              "donate: every generated link has a name to read and an https address");
+
+        // Independently of the generator: count the funding keys the repository
+        // actually declares and demand the same number of entries. A key the
+        // CMake loop has no rule for already fails the build, so this is the
+        // second guard on the same thing — a link that exists on the sponsor
+        // button and not in the app.
+        QFile funding(QStringLiteral(GAMESHUB_SOURCE_DIR "/.github/FUNDING.yml"));
+        if (funding.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            int declared = 0;
+            while (!funding.atEnd()) {
+                const QString line = QString::fromUtf8(funding.readLine()).trimmed();
+                if (!line.isEmpty() && !line.startsWith(QLatin1Char('#')))
+                    ++declared;
+            }
+            std::printf("      donate: FUNDING.yml declares %d links, the build carries %d\n",
+                        declared, funding::kLinkCount);
+            check(declared == funding::kLinkCount,
+                  "donate: the app offers exactly the links the repository declares");
+        } else {
+            check(false, "donate: .github/FUNDING.yml is readable from the source tree");
+        }
+
+        // The off-by-one everyone remembers, in both directions: a prompt every
+        // launch, or one that never arrives.
+        int prompts = 0;
+        for (int launch = 1; launch <= 600; ++launch) {
+            if (donate::launchOwesPrompt(launch))
+                ++prompts;
+        }
+        check(prompts == 4, "donate: 600 launches owe exactly four prompts");
+        check(!donate::launchOwesPrompt(149) && donate::launchOwesPrompt(150)
+                  && !donate::launchOwesPrompt(151),
+              "donate: 149 does not ask, 150 asks, 151 does not ask again");
+        check(!donate::launchOwesPrompt(0),
+              "donate: a launch count of zero owes nothing, so a fresh install is not asked");
+
+        // The counter is written as it is read, so a process that is killed
+        // still counted. Reading it back through a second QSettings is the only
+        // check that means anything on Windows, where there is no settings file
+        // to look at.
+        settings.remove(QStringLiteral("donate"));
+        settings.sync();
+        const int first = donate::recordLaunch();
+        const int second = donate::recordLaunch();
+        check(first == 1 && second == 2, "donate: the launch counter starts at one and climbs");
+        check(QSettings().value(QStringLiteral("donate/launches")).toInt() == 2,
+              "donate: the count is on disk as it is taken, not at exit");
+
+        // 149 -> 150 -> 151 through the real stored counter.
+        QSettings().setValue(QStringLiteral("donate/launches"), donate::kPromptEvery - 2);
+        const bool at149 = donate::recordLaunchAndAsk();
+        const bool at150 = donate::recordLaunchAndAsk();
+        const bool at151 = donate::recordLaunchAndAsk();
+        check(!at149 && at150 && !at151,
+              "donate: crossing the 150th launch shows the prompt exactly once");
+
+        // Turned off, it stays off — and the counter keeps climbing underneath,
+        // so turning it back on does not fire immediately.
+        donate::setAsksEnabled(false);
+        QSettings().setValue(QStringLiteral("donate/launches"), donate::kPromptEvery - 1);
+        const bool silenced = donate::recordLaunchAndAsk();
+        check(!silenced, "donate: \"don't ask again\" silences the 150th launch");
+        check(QSettings().value(QStringLiteral("donate/launches")).toInt() == donate::kPromptEvery,
+              "donate: and the count still advances while it is silenced");
+        donate::setAsksEnabled(true);
+
+        // The dialog itself. It is never allowed to open a browser on its own,
+        // so nothing here presses a link button — what is checked is that every
+        // link is offered by name.
+        {
+            DonateDialog prompt(true, nullptr);
+            const QList<QPushButton*> buttons = prompt.findChildren<QPushButton*>();
+            int named = 0;
+            for (const funding::Link& link : funding::kLinks) {
+                for (QPushButton* b : buttons) {
+                    if (b->text().contains(QString::fromLatin1(link.label)))
+                        ++named;
+                }
+            }
+            check(named == funding::kLinkCount,
+                  "donate: the dialog offers one named button per funding link");
+
+            auto* keepAsking = prompt.findChild<QCheckBox*>(QStringLiteral("donateKeepAsking"));
+            check(keepAsking != nullptr,
+                  "donate: the launch prompt offers a way to stop being asked");
+            if (keepAsking != nullptr) {
+                keepAsking->setChecked(false);
+                check(!donate::asksEnabled(),
+                      "donate: unticking it is stored at once, so closing the window honours it");
+                donate::setAsksEnabled(true);
+            }
+        }
+
+        // Opened from the Help menu there is nothing to silence — the player
+        // asked for it.
+        {
+            DonateDialog invited(false, nullptr);
+            check(invited.findChild<QCheckBox*>(QStringLiteral("donateKeepAsking")) == nullptr,
+                  "donate: the Help menu entry offers no \"stop asking\" switch");
+        }
+
+        // The legibility switch reaches the dialog like it reaches a game.
+        {
+            Legibility::instance().setEnabled(false);
+            DonateDialog normal(false, nullptr);
+            const double small = normal.font().pointSizeF();
+            Legibility::instance().setEnabled(true);
+            DonateDialog large(false, nullptr);
+            const double big = large.font().pointSizeF();
+            Legibility::instance().setEnabled(false);
+            check(big > small, "donate: large play makes the dialog's text bigger too");
+        }
+
+        settings.remove(QStringLiteral("donate"));
+    }
+
+    // ---- Help menu ----
+    {
+        HubWindow help;
+        auto* donateAction = help.findChild<QAction*>(QStringLiteral("donateAction"));
+        check(donateAction != nullptr, "the hub has a Help entry that reaches the donate dialog");
+        bool hasHelpMenu = false;
+        for (QAction* a : help.menuBar()->actions()) {
+            if (a->text().contains(QStringLiteral("Help")))
+                hasHelpMenu = true;
+        }
+        check(hasHelpMenu, "the hub has a Help menu for it to live in");
+    }
+
+
+    // ---- The window fits beside your work (GHUB-0042) ----
+    //
+    // The README's first sentence promises a window "sized to sit beside
+    // whatever you are actually working on", and HubWindow::kFitsBesideYourWork
+    // is what that means as a number: half a 1920x1080 desktop across, its
+    // height less a panel and a title bar.
+    //
+    // What is checked is the SMALLEST every page can be dragged to, not the
+    // size it opens at — a game that cannot be made small breaks the promise
+    // exactly when the player is trying to make room. Each game gets its own
+    // hub, because a QStackedWidget takes the largest minimum of every page it
+    // has built, so measuring them through one window would report the worst
+    // game's floor against all fourteen names.
+    {
+        const QSize bar = HubWindow::kFitsBesideYourWork;
+        for (const bool large : { false, true }) {
+            Legibility::instance().setEnabled(large);
+
+            // Widest and tallest are tracked SEPARATELY, and that is the whole
+            // point: reducing to one "worst" page by area lets a wide, short
+            // game hide behind a tall one. At 1100x300 it never wins on area
+            // against Canasta's 900x740, so its 1100 would never meet the 960
+            // bar at all and the check would stay green on a window that
+            // cannot sit beside anything.
+            int widest = 0;
+            int tallest = 0;
+            QString widestPage;
+            QString tallestPage;
+            HubWindow probe;
+            for (const QString& name : probe.gameNames()) {
+                HubWindow one;
+                one.openGameNamed(name);
+                one.show();
+                pump(30);
+                const QSize floorSize = one.minimumSizeHint();
+                if (floorSize.width() > widest) {
+                    widest = floorSize.width();
+                    widestPage = name;
+                }
+                if (floorSize.height() > tallest) {
+                    tallest = floorSize.height();
+                    tallestPage = name;
+                }
+            }
+
+            std::printf("      window: %s play, widest is %s at %d and tallest is %s at %d, "
+                        "against a %dx%d bar\n",
+                        large ? "large" : "normal", qPrintable(widestPage), widest,
+                        qPrintable(tallestPage), tallest, bar.width(), bar.height());
+            check(widest <= bar.width() && tallest <= bar.height(),
+                  large ? "every game can still be sized to sit beside your work with large "
+                          "play on"
+                        : "every game can be sized to sit beside your work");
+        }
+        Legibility::instance().setEnabled(false);
+
+        // The tile grid is the page that used to decide this for everyone: at
+        // 190px a tile, fourteen of them are five rows deep, and an unscrolled
+        // grid put a floor of about 1170px on Chess as well as on itself.
+        HubWindow grid;
+        grid.show();
+        pump(30);
+        check(grid.minimumSizeHint().height() <= bar.height() / 2,
+              "the tile grid scrolls rather than setting a floor for every game");
+
+        // And a first run opens inside the bar without anyone dragging it.
+        QSettings().remove(QStringLiteral("window/geometry"));
+        QSettings().sync();
+        HubWindow fresh;
+        fresh.show();
+        pump(30);
+        std::printf("      window: a first run opens at %dx%d\n", fresh.size().width(),
+                    fresh.size().height());
+        check(fresh.size().width() <= bar.width() && fresh.size().height() <= bar.height(),
+              "a first run opens at a size that already fits beside your work");
     }
 
     std::printf("\n%s\n", g_failures == 0 ? "All UI checks passed." : "FAILURES PRESENT.");

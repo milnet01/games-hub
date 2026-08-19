@@ -1,0 +1,26 @@
+// GENERATED at configure time from .github/FUNDING.yml — do not edit this
+// file, and do not add a URL to it by hand.
+//
+// The three donation links have exactly one home: .github/FUNDING.yml, which
+// is also the sponsor button GitHub shows on the repository page. Restating
+// them in a .cpp would make a second copy that drifts silently the day one of
+// them changes. CMakeLists.txt reads that file and writes this one, and stops
+// the build on a funding key it has no rule for — so a fourth link added to
+// the YAML either appears here or fails the build, never disappears.
+#pragma once
+
+namespace funding {
+
+struct Link {
+    // What the player is told they are opening, in words rather than an icon.
+    const char* label;
+    const char* url;
+};
+
+inline constexpr Link kLinks[] = {
+@GAMESHUB_FUNDING_ENTRIES@
+};
+
+inline constexpr int kLinkCount = int(sizeof(kLinks) / sizeof(kLinks[0]));
+
+} // namespace funding

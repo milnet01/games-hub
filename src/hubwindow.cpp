@@ -1,5 +1,6 @@
 #include "hubwindow.h"
 
+#include "donatedialog.h"
 #include "gameview.h"
 #include "legibility.h"
 #include "sound.h"
@@ -22,9 +23,12 @@
 #include <QApplication>
 #include <QGridLayout>
 #include <QLabel>
+#include <QMenu>
+#include <QMenuBar>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSettings>
 #include <QSizePolicy>
 #include <QStackedWidget>
@@ -437,6 +441,7 @@ void HubWindow::buildChrome()
     setCentralWidget(m_stack);
 
     m_menuPage = new QWidget(this);
+    m_menuPage->setObjectName(QStringLiteral("gamesHubTileGrid"));
     auto* outer = new QVBoxLayout(m_menuPage);
     outer->setContentsMargins(20, 18, 20, 20);
 
@@ -462,7 +467,20 @@ void HubWindow::buildChrome()
     outer->addLayout(grid);
     outer->addStretch(1);
 
-    m_stack->addWidget(m_menuPage);
+    // The grid goes in a scroller, and that is what makes the window's promise
+    // keepable. Fourteen 190px tiles are five rows deep, so an un-scrolled grid
+    // sets a floor of about 1170px on EVERY page — a QStackedWidget takes the
+    // largest minimum of all its pages, so the tile grid was deciding how short
+    // Chess could be made. That floor is taller than a 1080p screen, which is
+    // the opposite of "sized to sit beside whatever you are actually working
+    // on" (HubWindow::kFitsBesideYourWork). Scrolled, the grid asks for nothing
+    // and each game's own minimum is its own.
+    auto* menuScroller = new QScrollArea(this);
+    menuScroller->setWidget(m_menuPage);
+    menuScroller->setWidgetResizable(true);
+    menuScroller->setFrameShape(QFrame::NoFrame);
+    m_menuHost = menuScroller;
+    m_stack->addWidget(menuScroller);
 
     m_toolBar = addToolBar(QStringLiteral("Game"));
     m_toolBar->setMovable(false);
@@ -516,6 +534,20 @@ void HubWindow::buildChrome()
     });
     m_legibilityAction->setChecked(Legibility::instance().enabled());
     m_toolBar->addAction(m_legibilityAction);
+
+    // A Help menu rather than a fifteenth tile: the grid keeps all of its slots
+    // for games, and "about this program" is where a stranger already looks.
+    // The ellipsis is the standard promise that pressing it opens something
+    // rather than doing something.
+    auto* helpMenu = menuBar()->addMenu(QStringLiteral("&Help"));
+    auto* donateAction = new QAction(QStringLiteral("Support this project…"), this);
+    donateAction->setObjectName(QStringLiteral("donateAction"));
+    donateAction->setStatusTip(QStringLiteral("Ways to support the collection"));
+    connect(donateAction, &QAction::triggered, this, [this] {
+        DonateDialog dialog(false, this);
+        dialog.exec();
+    });
+    helpMenu->addAction(donateAction);
 
     m_status = new QLabel(this);
     statusBar()->addWidget(m_status, 1);
@@ -609,7 +641,7 @@ void HubWindow::showMenu()
         leaving->deactivate();
     setGameActions(nullptr);
     m_backAction->setVisible(false);
-    m_stack->setCurrentWidget(m_menuPage);
+    m_stack->setCurrentWidget(m_menuHost);
     setWindowTitle(QStringLiteral("Games"));
     m_status->setText(QStringLiteral("%1 games. Pick one.").arg(m_entries.size()));
     applyPageGeometry(QString());

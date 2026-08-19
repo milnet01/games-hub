@@ -12,6 +12,49 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Multimedia)
 qt_standard_project_setup()
 
 
+# The donate links live in .github/FUNDING.yml and nowhere else. That file is
+# already GitHub's sponsor button, so it is the copy that is guaranteed to be
+# maintained; a list of URLs in a .cpp would be a second copy that drifts the
+# day one of them changes, with nothing to catch it. So the header is generated
+# from the YAML at configure time, and a key this loop has no rule for is a
+# hard error rather than a silently dropped link — which is the whole point,
+# since a dropped link looks exactly like a working build.
+set(FUNDING_FILE "${CMAKE_CURRENT_SOURCE_DIR}/.github/FUNDING.yml")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FUNDING_FILE}")
+file(STRINGS "${FUNDING_FILE}" funding_lines)
+set(funding_entries "")
+foreach(funding_line IN LISTS funding_lines)
+    string(STRIP "${funding_line}" funding_line)
+    if(funding_line STREQUAL "" OR funding_line MATCHES "^#")
+        continue()
+    endif()
+    # The handle-to-URL mapping is GitHub's, not this project's: FUNDING.yml
+    # stores account names for the platforms it knows and a full URL only for
+    # `custom`. That mapping has to live somewhere, and here is the one place
+    # it is not a copy of a link.
+    if(funding_line MATCHES "^github:[ \t]*\\[?([A-Za-z0-9._-]+)\\]?$")
+        list(APPEND funding_entries
+             "    { \"GitHub Sponsors\", \"https://github.com/sponsors/${CMAKE_MATCH_1}\" },")
+    elseif(funding_line MATCHES "^patreon:[ \t]*\\[?([A-Za-z0-9._-]+)\\]?$")
+        list(APPEND funding_entries
+             "    { \"Patreon\", \"https://www.patreon.com/${CMAKE_MATCH_1}\" },")
+    elseif(funding_line MATCHES "^custom:[ \t]*\\[?\"?(https://[^\"]+)\"?\\]?$")
+        list(APPEND funding_entries
+             "    { \"Tip page\", \"${CMAKE_MATCH_1}\" },")
+    else()
+        message(FATAL_ERROR
+                "CMakeLists.txt cannot turn this line of .github/FUNDING.yml into a "
+                "donate entry, so the app would quietly offer fewer links than the "
+                "repository declares: \"${funding_line}\". Add a rule for it here.")
+    endif()
+endforeach()
+if(funding_entries STREQUAL "")
+    message(FATAL_ERROR ".github/FUNDING.yml declares no funding links this build can use.")
+endif()
+string(JOIN "\n" GAMESHUB_FUNDING_ENTRIES ${funding_entries})
+configure_file(src/funding.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/funding.h" @ONLY)
+
+
 # Every game's rules live in a Qt-free core plus a QWidget view. The core files
 # are listed separately so the headless self-test can link them without Qt
 # Widgets.
@@ -41,6 +84,8 @@ set(GAME_VIEW_SOURCES
     # QtCore-only today, but a rules core has no business reading a display
     # preference — so it links into the view half, not the self-test's.
     src/legibility.cpp
+    src/donate.cpp
+    src/donatedialog.cpp
     src/scores.cpp
     src/cards/cardart.cpp
     src/chess/chessart.cpp
@@ -64,7 +109,7 @@ qt_add_executable(gameshub
     ${GAME_CORE_SOURCES}
     ${GAME_VIEW_SOURCES}
 )
-target_include_directories(gameshub PRIVATE src)
+target_include_directories(gameshub PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_compile_definitions(gameshub PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
 target_link_libraries(gameshub PRIVATE Qt6::Widgets Qt6::Multimedia)
 
@@ -84,8 +129,14 @@ qt_add_executable(gameshub_uitest
     ${GAME_CORE_SOURCES}
     ${GAME_VIEW_SOURCES}
 )
-target_include_directories(gameshub_uitest PRIVATE src)
-target_compile_definitions(gameshub_uitest PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
+target_include_directories(gameshub_uitest PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
+# The UI test reads .github/FUNDING.yml back and counts it against the links the
+# build generated, so it needs to know where the source tree is. TO_CMAKE_PATH
+# keeps the separators forward-slashed, which a C string literal survives on
+# Windows and a native path does not.
+file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" GAMESHUB_SOURCE_DIR_FWD)
+target_compile_definitions(gameshub_uitest PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}"
+                                                   GAMESHUB_SOURCE_DIR="${GAMESHUB_SOURCE_DIR_FWD}")
 target_link_libraries(gameshub_uitest PRIVATE Qt6::Widgets Qt6::Multimedia)
 
 enable_testing()

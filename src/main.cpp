@@ -1,8 +1,11 @@
+#include "donate.h"
+#include "donatedialog.h"
 #include "hubwindow.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QIcon>
+#include <QTimer>
 
 #include <cstdio>
 #include <string_view>
@@ -55,6 +58,11 @@ int main(int argc, char* argv[])
     parser.addOption(gameOption);
     parser.process(app);
 
+    // Counted here rather than before the parser, so `--help` and `--version`
+    // are not launches: neither one plays anything, and both would otherwise
+    // walk the counter towards a prompt nobody earned.
+    const bool owesDonatePrompt = donate::recordLaunchAndAsk();
+
     if (parser.isSet(gameOption) && !window.openGameNamed(parser.value(gameOption))) {
         qWarning("No game called \"%s\". Known games: %s",
                  qPrintable(parser.value(gameOption)),
@@ -62,6 +70,17 @@ int main(int argc, char* argv[])
     }
 
     window.show();
+
+    // Never over a game in progress. `--game` goes straight into play, and a
+    // prompt landing on someone's turn is a different thing from one at the
+    // tile grid. Deferred to the event loop so the window is up and painted
+    // first — a dialog over a blank frame reads as a startup error.
+    if (owesDonatePrompt && !parser.isSet(gameOption)) {
+        QTimer::singleShot(0, &window, [&window] {
+            DonateDialog dialog(true, &window);
+            dialog.exec();
+        });
+    }
 
     return app.exec();
 }
