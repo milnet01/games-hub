@@ -173,16 +173,33 @@ void minesweeperWinAndLoss()
                 f.reveal(r, c);
     check(f.state() == Minefield::State::Won, "minesweeper: clearing every safe square wins");
 
-    Minefield g(5, 5, 3);
-    g.reveal(0, 0);
-    bool hitOne = false;
-    for (int r = 0; r < 5 && !hitOne; ++r)
-        for (int c = 0; c < 5 && !hitOne; ++c)
-            if (g.at(r, c).mine) {
-                g.reveal(r, c);
-                hitOne = true;
-            }
-    check(g.state() == Minefield::State::Lost, "minesweeper: digging a mine loses");
+    // The opening click can win the game outright, and often enough to matter:
+    // 25 squares, 3 mines, and first-click safety clears a 2x2 corner, so the
+    // flood fill reaches every safe square in 2.7% of deals — measured over
+    // 200,000. reveal() returns early unless the state is Playing, so digging a
+    // mine afterwards is a no-op and the field stays Won. That is this check
+    // failing about one run in thirty-seven, and on 2026-08-19 it took down a
+    // documentation-only commit's Windows leg, which is a bad way to spend a
+    // morning.
+    //
+    // Minefield seeds itself from std::random_device and exposes no way to pin
+    // it, so there is no seed to fix. Deal until the field is still playable —
+    // and say so if it never is, rather than reporting a check that never ran.
+    bool checked = false;
+    for (int attempt = 0; attempt < 100 && !checked; ++attempt) {
+        Minefield g(5, 5, 3);
+        g.reveal(0, 0);
+        if (g.state() != Minefield::State::Playing)
+            continue;
+        for (int r = 0; r < 5 && !checked; ++r)
+            for (int c = 0; c < 5 && !checked; ++c)
+                if (g.at(r, c).mine) {
+                    g.reveal(r, c);
+                    checked = true;
+                }
+        check(g.state() == Minefield::State::Lost, "minesweeper: digging a mine loses");
+    }
+    check(checked, "minesweeper: and a still-playable field was found to check it on");
 }
 
 // ---------------------------------------------------------------------------
