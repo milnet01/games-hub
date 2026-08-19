@@ -551,6 +551,15 @@ open.
   Still open: thirteen games unvisited. What is left for them is reading
   pace, contrast and what a game says out loud (Hearts naming the led suit,
   Sudoku's pencil marks at a fifth of a cell), not card size.
+  Release decision (2026-08-19): 0.4.0 was considered and deliberately
+  NOT cut. [Unreleased] holds six entries and is arguably owed one, but it
+  advertises "a legibility switch, on or off for the whole collection"
+  while thirteen of the fourteen games still ignore it — so cutting now
+  ships a switch that visibly does nothing outside Canasta and 2048's
+  unconditional ink fix. Canasta's pass was done first to make that line
+  true. Cut 0.4.0 once one or two more passes land, or reword the
+  changelog entry to say what the switch actually reaches today; do not
+  re-derive this from scratch.
 
 - 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
   Not a defect today, and deliberately not fixed while filing: the
