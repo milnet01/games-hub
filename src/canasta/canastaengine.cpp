@@ -343,6 +343,8 @@ void Engine::save(QDataStream& out) const
     // the stream carries.
     out << m_rules.canastaNeededToScore << m_pendingRules.canastaNeededToScore;   // tail 1
     out << m_rules.pileFrozenUntilOpened << m_pendingRules.pileFrozenUntilOpened; // tail 2
+    out << m_rules.deadHandIfNobodyGoesOut
+        << m_pendingRules.deadHandIfNobodyGoesOut; // tail 3
 }
 
 bool Engine::load(QDataStream& in, int tail)
@@ -408,6 +410,8 @@ bool Engine::load(QDataStream& in, int tail)
         readPair(e.m_rules.canastaNeededToScore, e.m_pendingRules.canastaNeededToScore);
     if (tail >= 2)
         readPair(e.m_rules.pileFrozenUntilOpened, e.m_pendingRules.pileFrozenUntilOpened);
+    if (tail >= 3)
+        readPair(e.m_rules.deadHandIfNobodyGoesOut, e.m_pendingRules.deadHandIfNobodyGoesOut);
     if (in.status() != QDataStream::Ok)
         return false;
 
@@ -1273,12 +1277,18 @@ std::vector<int> Engine::meldableRanks(int seat) const
 
 void Engine::scoreHand()
 {
+    // A house rule voids a hand nobody went out on: the stock ran dry and the
+    // position froze where it stood, so neither side scores it and the next
+    // hand is dealt from the same totals. Classic scores it as it lies.
+    const bool dead = m_rules.deadHandIfNobodyGoesOut && m_outSeat < 0;
+
     for (int t = 0; t < kTeams; ++t) {
         Team& team = m_teams[std::size_t(t)];
         const bool wentOut = m_outSeat >= 0 && teamOf(m_outSeat) == t;
-        team.handScore = handScoreFor(team, m_hands[std::size_t(t)],
-                                      m_hands[std::size_t(t + 2)], wentOut, m_outConcealed,
-                                      m_rules);
+        team.handScore = dead ? 0
+                              : handScoreFor(team, m_hands[std::size_t(t)],
+                                             m_hands[std::size_t(t + 2)], wentOut,
+                                             m_outConcealed, m_rules);
         team.score += team.handScore;
     }
 

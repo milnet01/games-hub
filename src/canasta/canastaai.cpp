@@ -22,6 +22,33 @@ int countRank(const std::vector<Card>& h, int rank)
 
 } // namespace
 
+double discardRisk(const Team& theirs, int rank, int pileSize, bool frozen, const Rules& r)
+{
+    const Meld* m = theirs.meldOfRank(rank);
+    if (m == nullptr)
+        return 0.0;
+    // A frozen pile needs a matching PAIR out of hand before the top card is
+    // worth anything, which is rare enough that feeding their meld is an
+    // ordinary throw rather than a dangerous one.
+    if (frozen)
+        return 0.0;
+    // And a rank they have already closed cannot take the pile off anybody once
+    // the house rule says so, which makes it the safest card in the hand.
+    if (r.canastaMakesRankSafe && m->isCanasta(r))
+        return -20.0;
+
+    // Handing the pile over at all, which costs more the bigger it is.
+    double risk = 25.0 + 0.4 * double(pileSize);
+    // On top of that, the closer their meld stands to a canasta the bigger the
+    // gift: six of a rank on the table is one card short of 500 points, three
+    // is not. This is what picks the least damaging throw when the hand holds
+    // nothing safe at all — feed the meld with furthest to go.
+    const int away = r.canastaSize - m->size();
+    if (away > 0)
+        risk += 140.0 / double(away);
+    return risk;
+}
+
 int Ai::seen(const Engine& e, int rank) const
 {
     int n = countRank(e.hand(e.currentSeat()), rank);
@@ -411,9 +438,9 @@ Card Ai::chooseDiscard(const Engine& e) const
             if (isWild(c))
                 score -= 45.0;
 
-            // Feeding a rank the opponents have melded hands them the pile.
-            if (theirs.meldOfRank(c.rank) != nullptr && !e.pileFrozen())
-                score -= 25.0 + 0.4 * pileSize;
+            // Feeding a rank the opponents have melded hands them the pile —
+            // and the closer that meld is to a canasta, the bigger the gift.
+            score -= discardRisk(theirs, c.rank, pileSize, e.pileFrozen(), r);
 
             // A black three cannot be melded until someone goes out, so it is
             // nearly free to throw, and it shuts the pile down for a round.

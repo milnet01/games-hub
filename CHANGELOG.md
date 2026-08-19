@@ -10,6 +10,9 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **A Canasta hand nobody goes out on can now be scored as dead.** (GHUB-0032)
+  When the stock runs out and nobody has gone out, the round can now count for nothing instead of handing a big score to whoever sat on a frozen pile.
+
 - **A legibility switch in the hub toolbar, on or off for the whole collection** (GHUB-0017)
   Reads "🔍 Normal" or "🔍 Large", sits beside the sound switch, and
   is remembered between sessions. This ships the mechanism only —
@@ -17,6 +20,9 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   to the owner before the next is started.
 
 ### Fixed
+
+- **The Canasta AI no longer feeds the meld you are one card from finishing.** (GHUB-0033)
+  The computer used to throw away the card that completed your canasta. Now it works out which of your melds is furthest from finishing and throws into that one instead.
 
 - **2048's numbers were unreadable on nine of its twelve tiles** (GHUB-0017)
   The ink was picked from the tile's NUMBER, so every tile from 8

@@ -1187,6 +1187,85 @@ void canastaPileRules()
     check(!blocked.canTakePileAtAll(), "canasta: but a black three on top blocks it");
 }
 
+// A hand that dies with the stock gone and nobody out. Four hands sharing no
+// rank with the up-card and nothing behind it to draw, so the very first turn
+// finds an empty stock and a pile nobody can take. Classic scores that where it
+// stands; the house rule voids it and the next hand is dealt from the same
+// totals.
+void canastaDeadHand()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(4);
+    hands[1] = filler(5);
+    hands[2] = filler(6);
+    hands[3] = filler(7);
+    const Card up = cd(Suit::Spades, 9);
+
+    ca::Engine scored;
+    scored.newGameFromStock(canastaStock(hands, 0, {}, up), 0);
+    check(scored.phase() == ca::Engine::Phase::HandOver,
+          "canasta: an empty stock nobody can take the pile against ends the hand");
+    check(scored.wentOutSeat() < 0, "canasta: and it ends with nobody having gone out");
+    check(scored.team(0).score == -110 && scored.team(1).score == -110,
+          "canasta: classic scores that hand where it stands");
+
+    ca::Rules dead = ca::Rules::classic();
+    dead.deadHandIfNobodyGoesOut = true;
+    ca::Engine e;
+    e.setRules(dead);
+    e.newGameFromStock(canastaStock(hands, 0, {}, up), 0);
+    check(e.phase() == ca::Engine::Phase::HandOver, "canasta: the dead hand ends the same way");
+    check(e.wentOutSeat() < 0, "canasta: still with nobody out");
+    check(e.team(0).handScore == 0 && e.team(1).handScore == 0,
+          "canasta: but the house rule scores it nothing either way");
+    check(e.team(0).score == 0 && e.team(1).score == 0,
+          "canasta: so neither total moves and the next hand is dealt level");
+}
+
+// Nothing safe left to throw: the computer has to feed one of the melds facing
+// it, and the least damaging is the one with furthest to go. Checked on a
+// hand-built table rather than a position played into existence.
+void canastaLeastDamagingDiscard()
+{
+    const auto meldOf = [](int rank, int n) {
+        ca::Meld m;
+        m.rank = rank;
+        for (int i = 0; i < n; ++i)
+            m.cards.push_back(cd(i % 2 == 0 ? Suit::Spades : Suit::Hearts, rank));
+        return m;
+    };
+    const ca::Rules r = ca::Rules::classic();
+
+    // Three melds on the other side: three fours, six fives, five sevens.
+    ca::Team them;
+    them.melds.push_back(meldOf(4, 3));
+    them.melds.push_back(meldOf(5, 6));
+    them.melds.push_back(meldOf(7, 5));
+
+    const double four = ca::discardRisk(them, 4, 20, false, r);
+    const double five = ca::discardRisk(them, 5, 20, false, r);
+    const double seven = ca::discardRisk(them, 7, 20, false, r);
+    check(four < seven && seven < five,
+          "canasta: the least damaging throw is the meld with furthest to go");
+    check(ca::discardRisk(them, 9, 20, false, r) == 0.0,
+          "canasta: a rank they have not melded costs nothing to throw");
+    check(ca::discardRisk(them, 5, 20, true, r) == 0.0,
+          "canasta: a frozen pile needs a pair, so even their best meld is safe to feed");
+    // The bigger the pile the more it costs to hand over, whatever the meld.
+    check(ca::discardRisk(them, 4, 40, false, r) > four,
+          "canasta: and a bigger pile costs more to hand over");
+
+    // Once a canasta has closed the rank against them it is the safest card there is.
+    ca::Rules safe = r;
+    safe.canastaMakesRankSafe = true;
+    ca::Team closed;
+    closed.melds.push_back(meldOf(6, 7));
+    check(ca::discardRisk(closed, 6, 20, false, safe) < 0.0,
+          "canasta: a rank they have closed is the safest throw in the hand");
+    check(ca::discardRisk(closed, 6, 20, false, r) > 0.0,
+          "canasta: without that house rule it still hands them the pile");
+}
+
 // Frozen and unfrozen, from identical positions. The only difference between
 // the two runs is whether seat 1 threw a wild card or an ordinary one.
 void canastaFrozenPile()
@@ -2512,6 +2591,8 @@ int main()
     canastaFullGames();
     canastaLevelsDiffer();
     canastaHouseRules();
+    canastaDeadHand();
+    canastaLeastDamagingDiscard();
     canastaMeldOrder();
     canastaAiOpens();
     canastaTakeAndOpenTogether();

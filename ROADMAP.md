@@ -13,7 +13,8 @@ only, so they are not in order and are never renumbered.
 ### 🎨 Games
 
 - ✅ [GHUB-0001] **Chess, with a full rule set and an opponent at three
-  strengths.** Castling, en passant, promotion and every draw rule. The move
+strengths.**
+  Castling, en passant, promotion and every draw rule. The move
   generator is proved by perft against the published node counts for four
   reference positions rather than by playing it.
   Layman: A proper game of chess against the computer.
@@ -21,7 +22,8 @@ only, so they are not in order and are never renumbered.
   Source: user-request-2026-08-10.
 
 - ✅ [GHUB-0002] **Canasta for four, in partnerships, with an editable second
-  rule set.** Melds, wild cards, red threes, freezing and taking the discard
+rule set.**
+  Melds, wild cards, red threes, freezing and taking the discard
   pile, going out and the full scoring table. Every number the game plays by
   lives in one `canasta::Rules` struct, which is what let the owner's six
   family rules land as values rather than as branches.
@@ -30,12 +32,58 @@ only, so they are not in order and are never renumbered.
   Kind: feature.
   Source: user-request-2026-08-10.
 
-- ✅ [GHUB-0003] **The other twelve games of the collection.** Reversi,
+- ✅ [GHUB-0003] **The other twelve games of the collection.**
+  Reversi,
   Draughts, Minesweeper, Klondike, Spider, FreeCell, Pyramid, Sudoku, Hearts,
   Snake, 2048 and Pinball, all behind one hub window and one toolbar.
   Layman: Twelve more games, all in the same window.
   Kind: feature.
   Source: user-request-2026-08-10.
+
+- ✅ [GHUB-0032] **A Canasta hand nobody goes out on can now be scored as dead.**
+  New house rule `deadHandIfNobodyGoesOut` in canasta::Rules, off in
+  Rules::classic() and ON by default in the House set — the one house
+  default that deliberately differs from classic. Engine::scoreHand()
+  scores both sides zero when it is on and m_outSeat < 0, which covers
+  both ways a hand can die: the stock emptying with nobody able to take
+  the pile, and the last stock card being a red three with nothing left
+  to replace it.
+
+  Reported after a real game ended 5215-1160 on an exhausted stock with a
+  48-card frozen pile nobody could break into. The ending itself was
+  correct Canasta and is unchanged; what was missing was the option not
+  to score it. The summary panel now says the hand is dead rather than
+  only "The stock ran out.", because two zeroes with no explanation reads
+  as a lost score rather than a voided hand.
+
+  Save format grows a tail pair (Engine::kTail 2 to 3, view blob version
+  3 to 4); a game saved by an older build still loads and comes back
+  without the rule.
+  **Layman:** When the stock runs out and nobody has gone out, the round can now count for nothing instead of handing a big score to whoever sat on a frozen pile.
+  Kind: feature.
+  Source: user-report-2026-08-19.
+
+- ✅ [GHUB-0033] **The Canasta AI no longer feeds the meld you are one card from finishing.**
+  Ai::chooseDiscard already avoided ranks the opponents had melded, but
+  with a flat penalty: feeding a six-card meld cost exactly what feeding
+  a three-card meld cost. So with nothing safe in hand it would hand over
+  a natural canasta as readily as a harmless card.
+
+  The penalty is now canasta::discardRisk(), a free function beside
+  handScoreFor so the ranking can be checked on a hand-built table rather
+  than a position played into existence. It scales with the meld's
+  distance from a canasta, so the least damaging throw is the meld with
+  furthest to go, and it inverts for a rank a canasta has already closed
+  under canastaMakesRankSafe — that rank cannot take the pile off anyone,
+  which makes it the safest card in hand rather than the most dangerous.
+
+  Unchanged by decision: a frozen pile still costs nothing to feed (it
+  needs a matching pair out of hand), and Easy still ignores opponent
+  melds entirely so that it stays beatable. canastaLevelsDiffer() still
+  passes, so the strength ladder holds.
+  **Layman:** The computer used to throw away the card that completed your canasta. Now it works out which of your melds is furthest from finishing and throws into that one instead.
+  Kind: fix.
+  Source: user-report-2026-08-19.
 
 ### 🎨 Saving a game in progress
 
@@ -49,7 +97,8 @@ only, so they are not in order and are never renumbered.
   Kind: implement.
   Source: user-request-2026-08-11.
 
-- ✅ [GHUB-0005] **Canasta saves and resumes.** The whole engine writes through
+- ✅ [GHUB-0005] **Canasta saves and resumes.**
+  The whole engine writes through
   `QDataStream` behind a version number that refuses an older or truncated
   save rather than misreading it. Rules added later append to a counted tail,
   so a save from an earlier build still loads and comes back without the rules
@@ -81,13 +130,15 @@ Worked top to bottom. Nothing here is started.
 The shape is GHUB-0006's: save what the game was *told*, replay it, and match
 each step against the rules on the way back in.
 
-- 📋 [GHUB-0007] **Hearts saves and resumes.** Hands, tricks taken, passing
+- 📋 [GHUB-0007] **Hearts saves and resumes.**
+  Hands, tricks taken, passing
   direction and the running scores. The longest game in the hub after Canasta.
   Layman: Close Hearts mid-game and come back to it.
   Kind: implement.
   Lanes: hearts.
 
-- ✅ [GHUB-0008] **The four solitaires save and resume.** Klondike, Spider,
+- ✅ [GHUB-0008] **The four solitaires save and resume.**
+  Klondike, Spider,
   FreeCell and Pyramid: piles and stock. A shared card codec does all four at
   once and is worth writing first — these are also the games most often left
   half-finished.
@@ -105,7 +156,8 @@ each step against the rules on the way back in.
   after a round trip, a corrupt save is refused without disturbing the
   table. GHUB-0010's four small games can now reuse the codec.
 
-- 📋 [GHUB-0009] **Sudoku saves and resumes.** Grid, pencil marks and elapsed
+- 📋 [GHUB-0009] **Sudoku saves and resumes.**
+  Grid, pencil marks and elapsed
   time. Pause already covers the walk-away case, so this is the smaller half.
   Layman: Close a puzzle part way and come back to it.
   Kind: implement.
@@ -306,19 +358,22 @@ double-clicking a file.
 Asked for on 2026-08-10, in the order agreed. All are traditional or
 public-domain; see the standing rules for why each is safe.
 
-- 📋 [GHUB-0011] **Gin Rummy, two-handed against the computer.** Knocking,
+- 📋 [GHUB-0011] **Gin Rummy, two-handed against the computer.**
+  Knocking,
   deadwood, gin and undercut. Medium.
   Layman: The classic two-player rummy game.
   Kind: feature.
   Source: user-request-2026-08-10.
 
-- 📋 [GHUB-0012] **Cribbage, two-handed, with the pegging board.** The crib and
+- 📋 [GHUB-0012] **Cribbage, two-handed, with the pegging board.**
+  The crib and
   the show included. Medium.
   Layman: Cribbage, board and all.
   Kind: feature.
   Source: user-request-2026-08-10.
 
-- 📋 [GHUB-0013] **Blackjack against a dealer.** Traditional twenty-one. Small.
+- 📋 [GHUB-0013] **Blackjack against a dealer.**
+  Traditional twenty-one. Small.
   Layman: Twenty-one against the house.
   Kind: feature.
   Source: user-request-2026-08-10.
@@ -329,7 +384,8 @@ public-domain; see the standing rules for why each is safe.
   Kind: feature.
   Source: user-request-2026-08-10.
 
-- 📋 [GHUB-0015] **TriPeaks, Golf and Yukon.** Three more solitaires, and the
+- 📋 [GHUB-0015] **TriPeaks, Golf and Yukon.**
+  Three more solitaires, and the
   cheapest work on this page: they reuse the card engine and the drag-and-drop
   wholesale. Small each.
   Layman: Three more games of patience.
@@ -338,7 +394,8 @@ public-domain; see the standing rules for why each is safe.
 
 ### 📚 Documentation
 
-- 📋 [GHUB-0016] **Every game explains its own rules, inside the app.** Fourteen
+- 📋 [GHUB-0016] **Every game explains its own rules, inside the app.**
+  Fourteen
   games ship with no instructions anywhere — a player who has never met Reversi
   or Canasta has to leave the program to learn it. Give `GameView` a virtual
   returning the game's rules as rich text, so a game carries its explanation in
@@ -410,7 +467,8 @@ open.
 
 ### 🖥 Legibility and accessibility
 
-- 🚧 [GHUB-0017] **The other thirteen games have had no legibility pass.** The
+- 🚧 [GHUB-0017] **The other thirteen games have had no legibility pass.**
+  The
   owner is partially sighted and reads cards by their pip pattern rather than
   the corner index, which is why Canasta ended up with named discards, a wild
   count on every meld, cards drawn large enough for `CardArt::paintFace` to
@@ -496,7 +554,8 @@ open.
 
 ### 🎨 Play
 
-- 💭 [GHUB-0018] **Canasta cannot take a move back.** Chess and Reversi can. A
+- 💭 [GHUB-0018] **Canasta cannot take a move back.**
+  Chess and Reversi can. A
   mis-clicked discard is gone, and it is the game whose cards are hardest to
   read — the two facts compound. One step is enough: the discard, or the last
   lay-down. Small.
@@ -516,7 +575,8 @@ open.
 ### 🧰 Tests
 
 - 💭 [GHUB-0020] **A legality check that does not rely on the author's
-  imagination.** Four separate bugs on 2026-08-11 were positions where a move
+imagination.**
+  Four separate bugs on 2026-08-11 were positions where a move
   the player could see was legal got refused, all in one corner: where wild
   cards go. Every one passed the self-test, because the self-test checks
   positions somebody thought of. The check that would have caught at least two:
@@ -529,7 +589,8 @@ open.
 
 ### 🎨 More games, if wanted
 
-- 💭 [GHUB-0021] **More card games, none of which need a new asset.** Beyond the
+- 💭 [GHUB-0021] **More card games, none of which need a new asset.**
+  Beyond the
   queue above the traditional catalogue is enormous and entirely free, roughly
   cheapest first: **War**, **Go Fish**, **Old Maid**, **Beggar-my-neighbour**
   (trivial rules, and the first genuinely child-friendly games here);
@@ -563,7 +624,8 @@ open.
 Kept because the reasoning is the useful part: without it these get proposed
 again.
 
-- 💭 [GHUB-0023] **Cutting the pack, in Canasta — not built, deliberately.** At
+- 💭 [GHUB-0023] **Cutting the pack, in Canasta — not built, deliberately.**
+  At
   a table the cut stops the dealer stacking the deck and breaks up cards left
   clumped from the last hand. Neither can happen here, because every deal is a
   fresh random ordering, so a cut would be an animation that changes nothing
@@ -577,7 +639,8 @@ again.
   Source: user-request-2026-08-10.
 
 - 💭 [GHUB-0024] **Choosing your colour, in Chess or Draughts — scope, not
-  oversight.** Both put the human on the side that moves first, White and Red,
+oversight.**
+  Both put the human on the side that moves first, White and Red,
   and neither offers a swap or a board flip. That keeps `advance()` a single
   path with one `m_human`, which is the shape every engine game in the hub
   shares. Worth adding one day, but add it to *both* games at once and to that

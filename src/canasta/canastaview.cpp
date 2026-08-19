@@ -141,6 +141,7 @@ void storeHouse(const ca::Rules& r)
     put("closedCanasta", r.canastaMakesRankSafe ? 1 : 0);
     put("noMeldFirstRound", r.noMeldingFirstRound ? 1 : 0);
     put("pileOpens", r.pileMeldCountsToOpen ? 1 : 0);
+    put("deadHand", r.deadHandIfNobodyGoesOut ? 1 : 0);
 }
 
 ca::Rules loadHouse()
@@ -173,6 +174,10 @@ ca::Rules loadHouse()
     r.canastaMakesRankSafe = get("closedCanasta", 0) != 0;
     r.noMeldingFirstRound = get("noMeldFirstRound", 0) != 0;
     r.pileMeldCountsToOpen = get("pileOpens", 1) != 0;
+    // The one house default that deliberately differs from classic: a hand the
+    // stock kills is void here unless it is turned off, because scoring a hand
+    // nobody could finish rewards the side that sat on a frozen pile.
+    r.deadHandIfNobodyGoesOut = get("deadHand", 1) != 0;
     return r;
 }
 
@@ -242,6 +247,8 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                             rules.noMeldingFirstRound);
     auto* pileOpens = tick(QStringLiteral("The pile can be part of your opening"),
                            rules.pileMeldCountsToOpen);
+    auto* deadHand = tick(QStringLiteral("A hand nobody goes out on scores nothing"),
+                          rules.deadHandIfNobodyGoesOut);
 
     auto* layout = new QVBoxLayout(&dlg);
     auto* blurb = new QLabel(
@@ -283,6 +290,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                          closedCanasta->setChecked(c.canastaMakesRankSafe);
                          firstRound->setChecked(c.noMeldingFirstRound);
                          pileOpens->setChecked(c.pileMeldCountsToOpen);
+                         deadHand->setChecked(c.deadHandIfNobodyGoesOut);
                      });
 
     if (dlg.exec() != QDialog::Accepted)
@@ -310,6 +318,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
     rules.canastaMakesRankSafe = closedCanasta->isChecked();
     rules.noMeldingFirstRound = firstRound->isChecked();
     rules.pileMeldCountsToOpen = pileOpens->isChecked();
+    rules.deadHandIfNobodyGoesOut = deadHand->isChecked();
     storeHouse(rules);
     return true;
 }
@@ -548,7 +557,7 @@ QByteArray CanastaView::saveState() const
     out.setVersion(QDataStream::Qt_6_0);
     // Each version adds another pair to the engine's tail: rules that did not
     // exist when the version before it was written.
-    out << quint32(3);
+    out << quint32(4);
     m_engine.save(out);
     out << qint32(m_level) << m_useHouse << qint32(m_target) << m_sortHand;
     return blob;
@@ -562,7 +571,7 @@ bool CanastaView::restoreState(const QByteArray& blob)
     in >> version;
     // A game saved by an older build still comes back; it simply predates the
     // rules its tail does not carry, and their defaults stand.
-    if (version < 1 || version > 3 || !m_engine.load(in, int(version) - 1))
+    if (version < 1 || version > 4 || !m_engine.load(in, int(version) - 1))
         return false;
 
     qint32 level = 0;
@@ -2010,7 +2019,11 @@ void CanastaView::paintSummary(QPainter& p)
         ? QStringLiteral("%1 went out%2.")
               .arg(seatName(m_engine.wentOutSeat()))
               .arg(m_engine.wasConcealed() ? QStringLiteral(", concealed") : QString())
-        : QStringLiteral("The stock ran out.");
+        : m_engine.rules().deadHandIfNobodyGoesOut
+            // Two zeroes with nothing said reads as the game having lost the
+            // score rather than having voided the hand on purpose.
+            ? QStringLiteral("The stock ran out — nobody went out, so the hand is dead.")
+            : QStringLiteral("The stock ran out.");
     const QString lines = QStringLiteral("%1\n\nYou & North   %2%3     →  %4\n"
                                          "West & East   %5%6     →  %7\n\n%8")
                               .arg(out)

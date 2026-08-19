@@ -109,6 +109,12 @@ struct Rules {
     // other melds laid down in the same move — so the pile can never be what
     // opens you.
     bool pileMeldCountsToOpen = true;
+    // A hand that runs the stock out with nobody going out is void: neither
+    // side scores it at all, and the next hand is dealt from the same totals.
+    // The classic game scores such a hand where it stands, which can hand a
+    // large total to a side that did nothing but sit on its cards while the
+    // pile stayed frozen.
+    bool deadHandIfNobodyGoesOut = false;
 
     static Rules classic() { return {}; }
 };
@@ -273,7 +279,7 @@ public:
     void save(QDataStream& out) const;
     // The number of appended-rule pairs the current save() writes. A caller
     // reading an older stream passes how many that stream has.
-    static constexpr int kTail = 2;
+    static constexpr int kTail = 3;
     // Leaves the engine untouched and returns false if the stream is from a
     // different version or runs out part way. `tail` says how many of the
     // fields added after the format was first written the stream carries: only

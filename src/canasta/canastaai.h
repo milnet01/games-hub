@@ -10,11 +10,20 @@ namespace canasta {
 
 enum class Level { Easy, Medium, Hard, Expert };
 
+// What it costs to throw a card into a rank the other side has melded. Bigger
+// is worse; a negative figure means the card is SAFER than an ordinary one.
+//
+// A free function, like handScoreFor and openRequirementFor, so the ranking it
+// produces can be checked against a hand-built position rather than one played
+// into existence.
+
 // A computer seat.
 //
 // Judgement rather than search: it scores the handful of moves in front of it
 // instead of looking ahead. A whole turn costs microseconds, so unlike the chess
 // engine this needs no work budget to keep the window responsive.
+double discardRisk(const Team& theirs, int rank, int pileSize, bool frozen, const Rules& r);
+
 class Ai
 {
 public:
