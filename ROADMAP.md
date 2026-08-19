@@ -827,6 +827,44 @@ open.
   Kind: accessibility.
   Source: in-session-2026-08-19 (split out of GHUB-0017 for the 0.4.0 release).
 
+- 📋 [GHUB-0040] **Canasta says why a move was refused in the status bar, which the owner never looks at.**
+  Raised with the owner 2026-08-19 while adding the first-round notice
+  and the opening minimums; not answered, so it is filed rather than built.
+
+  The owner said plainly: "In many apps the status bar is very, very useful
+  but for games, I don't think so (at least not for me). With a game my
+  focus is on the play area and thus I never look at the status bar." He is
+  also partially sighted, so scanning to the window edge and back is a real
+  cost rather than a glance.
+
+  What that makes a defect rather than a preference: CanastaView::announce()
+  puts its text in m_message, which refresh() folds into the statusChanged
+  signal and nowhere else. That text is where every REFUSAL lands - "The
+  pile is frozen: you need two matching cards from your hand", "Your side
+  needs 90 to open, and that is only 50", "You have no way to use the 7 on
+  top". Those sentences are the most valuable text the game produces,
+  because they are the only thing that explains why a click did nothing,
+  and they are delivered exclusively to the one place he does not read.
+
+  Both of this session's display additions went on the table for this
+  reason - the first-round notice on the centre strip and each side's
+  opening minimum on its score plate - so the pattern and the space are
+  already there. paintCentreStrip() is the model: it spells the last
+  discard out in words under the middle of the table.
+
+  Design note, not decided: an error needs to persist long enough to be
+  read slowly and then get out of the way, which is a different lifetime
+  from the centre strip's "until the next card replaces it". A timed panel
+  near the hand, or the strip switching to the message and back, are both
+  plausible. Worth asking him which reads better rather than choosing.
+
+  Scope is Canasta only as filed. The other thirteen games route their own
+  text the same way, so if this lands well it becomes the pattern - but
+  that is a second item, not this one.
+  **Layman:** When the game refuses a move it explains why in a place he never looks; the explanation should be on the table.
+  Kind: accessibility.
+  Source: in-session-2026-08-19 (owner: "with a game my focus is on the play area and thus I never look at the status bar").
+
 ### 🎨 Play
 
 - 💭 [GHUB-0018] **Canasta cannot take a move back.**
