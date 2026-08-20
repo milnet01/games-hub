@@ -569,7 +569,7 @@ of the four cannot be proved fixed with anything this project currently owns —
 
 which is the reason it is filed rather than an excuse for not filing the rest.
 
-- 📋 [GHUB-0046] **A game you have left keeps playing itself, and Pinball costs a fifth of a CPU core to do it.**
+- ✅ [GHUB-0046] **A game you have left keeps playing itself, and Pinball costs a fifth of a CPU core to do it.**
   Measured rather than suspected. A hub sitting on the Pinball page used 1120 ms
   of CPU in a five-second window -- 22% of one core -- with the ball parked and
   nobody touching it. The tile grid over the same window used 0 ms. The table
@@ -595,6 +595,29 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   activated, deactivated, and asserted quiet. Written as a property of the whole
   registry rather than three named games, a fifteenth game with a timer is caught
   the day it lands rather than the day someone measures again.
+  Shipped (2026-08-20) as GHUB-0073 (Pinball) and GHUB-0074 (Snake
+  and Hearts) — all three deactivate() overrides this bullet names,
+  plus gamesStopTheirClocks, which is the registry-wide test it asks
+  for: every game the hub can open is activated, deactivated and
+  asserted to have no QTimer still running, so a fifteenth game with a
+  clock is caught the day it lands.
+
+  Recorded plainly because it is a process failure worth not
+  repeating: this bullet already existed, with the diagnosis, the three
+  named games and the shape of the test, and the work was done without
+  finding it. It was reached the long way round — a cold-review lane
+  asked whether the new stop-on-leave assertion really reached only
+  Pinball — and two duplicate items were filed before anyone looked
+  here. The roadmap is the first place to check when a defect turns
+  up, not the last.
+
+  What is NOT covered by those two, and stays with this bullet's
+  neighbours: the CPU measurement is not re-taken. This bullet's 1120
+  ms per five seconds was measured with the ball parked on an open
+  Pinball page; stopping the clock on leave removes the cost of
+  carrying Pinball into other games, which is what the measurement was
+  about, but nothing here re-measures it. GHUB-0049 owns the fact that
+  nothing in the project can measure a frame at all.
   **Layman:** Open Pinball once and the fan stays on for the rest of the session, even while you are playing Chess.
   Kind: fix.
   Source: in-session-2026-08-20.
