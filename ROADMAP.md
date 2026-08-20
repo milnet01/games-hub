@@ -1042,6 +1042,130 @@ fourteen games and worth watching at thirty.
   Kind: fix.
   Source: in-session-2026-08-20.
 
+### 🪟 The window and getting around it
+
+Reported by the owner on 2026-08-20: *"a new window opens for every game and
+
+every window is of a different size. I was hoping for more of a unified
+
+window."*
+
+Worth stating what is actually happening, because the diagnosis changes the fix.
+
+There is only ever ONE window. `HubWindow` holds a `QStackedWidget` with a page
+
+per game, and no game has ever opened a window of its own. What the report
+
+describes is that single window resizing and MOVING on every switch, which is
+
+indistinguishable from a new window appearing — and it is a deliberate feature
+
+doing it. The first item below reverses that feature; the other two are about
+
+the same complaint from a different angle, which is that the app gives you no
+
+way to go from one game to another and no sign of what you already have in
+
+progress.
+
+- 📋 [GHUB-0060] **One window that stays where you put it, instead of fifteen remembered shapes fighting each other.**
+  **This reverses a deliberate feature, and the owner has asked for it.**
+  `hubwindow.cpp`'s `geometryKey()` stores a separate geometry per page --
+  `window/geometry/<game>` for each of the fourteen, plus `window/geometry/menu`
+  for the tile grid -- and `applyPageGeometry()` restores it on every switch. The
+  intention was that each game reopens at the size it was last played at, and
+  CLAUDE.md records it as a feature of the hub.
+
+  In use it produces exactly the reported symptom, and two details make it worse
+  than it sounds. `restoreGeometry()` restores POSITION as well as size, so the
+  window does not merely resize -- it jumps across the screen. And the tile grid
+  owns a geometry too, so a round trip of grid to Chess to grid to Spider resizes
+  and relocates the window four times. Fifteen geometries drifting apart
+  independently is not a set of remembered preferences; it is a window that will
+  not sit still.
+
+  The replacement is one key. One window geometry for the whole app, written when
+  it closes, restored when it opens, and untouched by switching pages.
+
+  **The trap that will break a naive version of this, and the pattern that already
+  solves it.** Games have different minimum sizes -- Canasta's `minimumSizeHint()`
+  returns 900x656 while the legibility switch is on -- and Qt CLAMPS a window up
+  to the current page's minimum. With one shared geometry, opening Canasta once
+  would grow the window, `rememberPage()` would write that grown size back as the
+  user's preference, and every other game would inherit it permanently. That is
+  the identical trap CLAUDE.md documents for the legibility switch, and
+  `applyLegibility` already solves it: keep the pre-clamp size and put the window
+  back on the way out. Copy that, do not reinvent it.
+
+  Two smaller things to carry. The fifteen old keys should be removed rather than
+  left behind, and CLAUDE.md warns that anything sweeping stored state has four
+  families to handle -- `display/legibility`, `donate/*`, `window/geometry/*` and
+  `saved/*` -- so touch only the one. And the first-run default is 880x680 while
+  `kFitsBesideYourWork` is 960x1000; a single remembered size makes that opening
+  number matter more than it did, since it is now the shape everything starts in.
+  **Layman:** The window should stay the size and place you left it, rather than resizing and hopping about every time you open a game.
+  Kind: ux.
+  Source: user-request-2026-08-20.
+
+- 📋 [GHUB-0061] **There is no way to get from one game to another without going back to the front door.**
+  The menu bar holds one menu, `&Help`. Every move between games goes through the
+  tile grid: Escape or the toolbar's back button to the grid, scroll to the tile,
+  click it. For a collection whose whole premise is fourteen games in one place,
+  the only route between any two of them is via the lobby.
+
+  A `&Games` menu listing all of them, each opening its page directly, is a small
+  addition that does most of the work of making this feel like one application
+  rather than a launcher. The tile grid stays exactly as it is -- it is a good
+  front door, and the miniatures are part of the character of the thing. This is
+  the route for someone who already knows where they are going.
+
+  Three things it gets for free. It makes the REGISTERED game names visible, which
+  is what `--game` takes and is a documented trip hazard -- Klondike is registered
+  as "Solitaire" and the flag wants the registered name. It gives every game a
+  natural home for a `Ctrl+<n>` accelerator if that turns out to be wanted. And it
+  scales where the grid does not: fourteen tiles at 190 pixels are already five
+  rows deep and the first-run window is 880x680, so the bottom rows need scrolling
+  on a fresh install today. Nine more games are queued and Bridge has just joined
+  them -- at twenty-four tiles the grid is a scrolling list with pictures, while a
+  menu is still a menu.
+
+  The grid's own density is worth a look at that point, but it is a separate
+  question and should not be bundled here.
+  **Layman:** To switch games you must always return to the tile screen first; there is no menu listing the games.
+  Kind: ux.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0062] **The hub knows which games you have left half-played and shows it in the one place he does not look.**
+  The save machinery works and is invisible. A game that overrides `saveState()`
+  is stored on close and restored the next time it is opened, with no dialogue
+  anywhere -- which is the right design. But the hub then announces it with
+  `m_status->setText("Carried on from where you left off.")`, and the status bar is
+  specifically the place the owner does not read during play. So the one signal
+  that a half-finished game came back sits where it will not be seen, and the
+  first indication that anything resumed is recognising the position on the board.
+
+  The tiles have the same gap in the other direction. Each paints its name, its
+  blurb and its miniature, and a game with a hand in progress is indistinguishable
+  from one that has never been opened. The information exists -- `openGame()`
+  already reads `QSettings().value(saveKey(e.name))` -- it is simply never shown
+  until you are inside.
+
+  So: mark a game that has something stored, on its tile and on the `&Games` menu
+  entry above. "Continue" rather than "Play", or a small corner mark; the wording
+  matters less than the fact that the front door stops lying about what is behind
+  it. And say it on the play surface when a game resumes rather than only in the
+  status bar.
+
+  Two cautions. **Do not read settings from `paintEvent`** -- fourteen QSettings
+  lookups per repaint of the grid, which hovers repaint constantly, is exactly the
+  kind of cost the Performance section is about; read once when the grid is shown
+  and hold it. And the existing rule that an empty state clears the stored save is
+  what keeps this honest: a finished game correctly carries no mark, so the
+  indicator means "in progress" rather than "has ever been played".
+  **Layman:** Games you have in progress look exactly like games you have never opened, and the only notice that a game resumed appears in the status bar.
+  Kind: ux.
+  Source: in-session-2026-08-20.
+
 ### 🎨 Games agreed and not yet started
 
 Asked for on 2026-08-10, in the order agreed. All are traditional or
