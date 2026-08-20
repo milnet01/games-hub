@@ -10,6 +10,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **A written answer to "what would make this 1.0?"** (GHUB-0077)
+  `docs/standards/versioning-overrides.md` names what a change here can break —
+  your saved games, your settings, the command line — and lists the six things
+  that have to be true before the version stops starting with a zero.
+
 - **Every game now answers the Large play switch** (GHUB-0071)
   Chess, Reversi, Draughts, Minesweeper, Solitaire, Spider, FreeCell,
   Pyramid, Hearts, Snake, 2048 and Pinball join Canasta and Sudoku, so

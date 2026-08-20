@@ -551,6 +551,55 @@ double-clicking a file.
   Kind: package.
   Source: user-request-2026-08-20.
 
+- 💭 [GHUB-0076] **A release candidate cannot be tagged at all — the verify job rejects the suffix.**
+  release.yml's verify job compares the WHOLE tag against
+  CMakeLists.txt:
+
+    tag="${GITHUB_REF_NAME#v}"
+    cmake_version=$(sed -n 's/^project(gameshub VERSION \([0-9.]*\).*/\1/p' ...)
+    if [ "$tag" != "$cmake_version" ]; then exit 1
+
+  Measured 2026-08-20: a v0.5.0-rc.1 tag gives tag=0.5.0-rc.1 against
+  cmake_version=0.5.0, so the job exits 1 before any build starts.
+
+  The global standard (~/.claude/standards/versioning.md § 5) puts the
+  -rc.N suffix on the tag and never in a source file, which is right --
+  and on this project leaves no route at all, because the mismatch is
+  on the tag string the workflow reads back rather than on anything a
+  recipe writes. cut-release cannot help either: it validates its
+  target against ^[0-9]+\.[0-9]+\.[0-9]+$.
+
+  The fix is in the verify job: split the tag into its triple and its
+  optional suffix, compare the triple against CMakeLists.txt and the
+  CHANGELOG heading, and use the presence of a suffix to decide
+  prerelease vs latest when publishing. The changelog heading carries
+  the plain triple per global § 5, so the grep must use the triple
+  rather than the whole tag.
+
+  Not urgent -- nothing here has ever needed a candidate build. Worth
+  doing before the first release that wants testers, and worth knowing
+  about before someone discovers it from a red workflow.
+  Not wanted (2026-08-20). Owner's call: this project has no
+  testers, so a candidate build is a release cycle bought for
+  nothing. docs/standards/versioning-overrides.md § 3 records the
+  decision.
+
+  Kept as considered rather than deleted because the measurement
+  above is the expensive half and should not have to be redone. If
+  candidates are ever wanted, the work is three places in
+  release.yml, not one: both verify checks compare the whole tag
+  (against CMakeLists.txt, and again in the CHANGELOG grep), and
+  gh release create carries no --prerelease at all, so a candidate
+  would be rejected twice and then published as latest.
+
+  Note the second and third of those were found by the cold gate on
+  the standard, not by the original measurement -- the first draft
+  said "one check" and would have sent an implementer to fix a
+  third of the problem.
+  **Layman:** There is no way to publish a test build for people to try before the real release.
+  Kind: fix.
+  Source: in-session-2026-08-20 (docs/standards/versioning-overrides.md § 3).
+
 ### ⚡ Performance
 
 Nothing in this collection is slow in the way a spreadsheet is slow. The cost
@@ -1709,6 +1758,64 @@ public-domain; see the standing rules for why each is safe.
   Kind: doc.
   Source: adopt-project-2026-08-19.
 
+- ✅ [GHUB-0077] **This project now says which version number to pick, and what would make it 1.0.**
+  docs/standards/versioning-overrides.md, gated with review-contract
+  --genre standard: 3 loops, 3 cold lanes each, 18 verified findings
+  all fixed.
+
+  It is a case-2 OVERRIDE, not a project versioning standard. The
+  machine-wide ~/.claude/standards/versioning.md was written the same
+  day and owns which level to bump, the 0.x shift, the security
+  carve-out, the changelog tests and the -rc.N spelling. This file
+  answers only the two questions that standard deliberately refuses
+  to answer for a project -- what a breaking change can break here,
+  and what would make this 1.0 -- plus the local facts a conformer
+  needs. A first draft restated the global rules and was cut.
+
+  The 1.0 bar (owner, 2026-08-20): the release that ships the last of
+  six items IS 1.0.0 -- nothing a player does can lose a saved game,
+  and a published build can be checked against what built it.
+  GHUB-0067, 0075, 0054, 0050, 0031, 0053. New games do not gate it.
+
+  The breaking surfaces are the saved game, the settings store, the
+  command line including what --version prints, keyboard shortcuts,
+  and -- because packaging is coming -- install targets and the
+  configure-time prefix contract.
+
+  Three things the gate found that nothing else would have. The save
+  rule was keyed on the STAMP moving when the dangerous case is
+  changing what saveState() writes and leaving the stamp at 1. The
+  --version output line turned out to be a contract already, asserted
+  by both CI legs, with nobody having written it down -- while the -v
+  alias is exercised by nothing. And gh release create carries no
+  --prerelease at all.
+
+  The cap was violent: all five of loop 3's findings landed on text
+  the run itself wrote. Recorded in the loop log with the reason --
+  the document was still being authored during its own gate, so each
+  loop read largely new text. Not a size problem at 139 lines.
+  **Layman:** The leading zero in 0.4.0 now means something: there is a written list of what has to be true before version 1.0.
+  Kind: doc.
+  Source: user-request-2026-08-20.
+
+- ✅ [GHUB-0078] **The bump recipe now says why the save-format versions are not in it.**
+  ~/.claude/standards/versioning.md section 7 requires an independent
+  version line to be absent from the release recipe AND for the
+  recipe to say so, in a $-prefixed comment key the recipe format
+  defines as ignored -- because an unexplained absence reads as an
+  omission and the next person auditing lockstep adds it.
+
+  .claude/bump.json now carries $note_save_versions: ten games stamp
+  their own quint32 save-format version, those move on a different
+  clock from a release, and a release that walked them would silently
+  discard every player's saved game.
+
+  Verified after the edit: post_check still reports version 0.4.0
+  consistent across CMakeLists.txt, README.md and CHANGELOG.md.
+  **Layman:** A note stops someone helpfully adding ten numbers to the release checklist that must never be there.
+  Kind: chore.
+  Source: in-session-2026-08-20.
+
 ## P03 — Considered
 
 Nothing here is agreed. 💭 means the scope, the value or the decision is still
@@ -2463,6 +2570,34 @@ open.
   **Layman:** Six of the fourteen games have their rules mixed into the drawing code, which is why the test suite cannot check them at all.
   Kind: refactor.
   Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0075] **Nothing checks that a save written by an older build still loads.**
+  Ten of the fourteen games save, and each stamps its own
+  save-format version and refuses anything else —
+  KlondikeView::restoreState returns false unless the quint32 it
+  reads is 1. A refused save is not a crash: the hub keeps the fresh
+  deal it already made.
+
+  Which is exactly what makes this dangerous. The app still runs,
+  nothing looks broken, and the player's half-finished game is gone
+  without being told. docs/standards/versioning.md § 3 calls that a
+  breaking change and requires a MAJOR for it — and § What checks this
+  records, honestly, that nothing enforces it.
+
+  What would: a stored corpus of save blobs, one per saving game,
+  written by the build of the day and checked into the tree, with a
+  test that restores each one and asserts it loads. A deliberate
+  format change then reddens the suite and the author has to choose —
+  bump the MAJOR, or write a migration — rather than finding out from
+  a player.
+
+  Not large: saveState() already produces the blob, so the corpus is
+  generated once per game and the test is a loop. The judgement is
+  whether a refused old save should ever be acceptable, and § 3 says
+  it is not without a MAJOR.
+  **Layman:** If a change quietly makes old saved games unreadable, the game you left half-finished just disappears and nobody is told.
+  Kind: test.
+  Source: in-session-2026-08-20 (docs/standards/versioning.md § 3).
 
 ### 🎨 More games, if wanted
 
