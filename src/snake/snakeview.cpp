@@ -183,15 +183,18 @@ void SnakeView::refresh()
 
 double SnakeView::cellSize() const
 {
-    return std::max(6.0, std::floor(std::min((width() - 24.0) / kGridWidth,
-                                             (height() - 24.0) / kGridHeight)));
+    // The caption's strip comes off the height before the cells are sized.
+    return std::max(6.0, std::floor(std::min(
+                             (width() - 24.0) / kGridWidth,
+                             (height() - 24.0 - captionBand(QRectF(rect()))) / kGridHeight)));
 }
 
 QRect SnakeView::boardRect() const
 {
     const int w = int(cellSize()) * kGridWidth;
     const int h = int(cellSize()) * kGridHeight;
-    return { (width() - w) / 2, (height() - h) / 2, w, h };
+    const int band = int(captionBand(QRectF(rect())));
+    return { (width() - w) / 2, (height() - band - h) / 2, w, h };
 }
 
 void SnakeView::paintEvent(QPaintEvent*)
@@ -251,6 +254,10 @@ void SnakeView::paintEvent(QPaintEvent*)
             p.drawEllipse(centre + along * 1.3 - side, cell * 0.045, cell * 0.045);
         }
     }
+
+    // Snake never wrote a word on its own board — not the score, and not
+    // "game over". Both were in the status bar only.
+    paintStatusCaption(p, QRectF(rect()));
 }
 
 void SnakeView::keyPressEvent(QKeyEvent* event)

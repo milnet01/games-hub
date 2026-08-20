@@ -1,5 +1,6 @@
 #include "minesweeperview.h"
 
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include <QActionGroup>
@@ -165,8 +166,10 @@ double MinesweeperView::cellSize() const
         return 0;
     // One square size for the whole grid, so cells stay square at any window
     // shape; the grid is then centred in whatever space is left.
+    // The caption's strip comes off the height before the cells are sized, so
+    // the sentence sits under the field rather than over the bottom row.
     const double byWidth = (width() - 24.0) / m_field->width();
-    const double byHeight = (height() - 24.0) / m_field->height();
+    const double byHeight = (height() - 24.0 - captionBand(QRectF(rect()))) / m_field->height();
     return std::max(8.0, std::floor(std::min(byWidth, byHeight)));
 }
 
@@ -177,7 +180,8 @@ QRect MinesweeperView::fieldRect() const
     const double cell = cellSize();
     const int w = int(cell * m_field->width());
     const int h = int(cell * m_field->height());
-    return { (width() - w) / 2, (height() - h) / 2, w, h };
+    const int band = int(captionBand(QRectF(rect())));
+    return { (width() - w) / 2, (height() - band - h) / 2, w, h };
 }
 
 bool MinesweeperView::cellAt(QPointF pos, int& row, int& col) const
@@ -286,7 +290,11 @@ void MinesweeperView::paintEvent(QPaintEvent*)
 
     QFont numberFont = font();
     numberFont.setBold(true);
-    numberFont.setPointSizeF(std::max(7.0, cell * 0.46));
+    // The neighbour count is the only thing on this board that has to be read
+    // rather than seen, and at 0.46 of a cell it is the smallest ink in the
+    // collection after Sudoku's pencil marks.
+    numberFont.setPointSizeF(
+        std::max(7.0, cell * (Legibility::instance().enabled() ? 0.58 : 0.46)));
 
     for (int row = 0; row < m_field->height(); ++row) {
         for (int col = 0; col < m_field->width(); ++col) {
@@ -363,10 +371,15 @@ void MinesweeperView::paintEvent(QPaintEvent*)
             if (s.neighbours > 0) {
                 p.setFont(numberFont);
                 p.setPen(kNumberColours[std::clamp(s.neighbours, 0, 8)]);
-                p.drawText(c, Qt::AlignCenter, QString::number(s.neighbours));
+                // TextDontClip: drawText clips to the rect, and a digit whose
+                // LINE box is taller than the cell loses its top otherwise —
+                // which draws a worse number, not a bigger one.
+                p.drawText(c, Qt::AlignCenter | Qt::TextDontClip, QString::number(s.neighbours));
             }
         }
     }
+
+    paintStatusCaption(p, QRectF(rect()));
 }
 
 void MinesweeperView::mousePressEvent(QMouseEvent* event)

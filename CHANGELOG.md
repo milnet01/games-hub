@@ -10,6 +10,16 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Every game now answers the Large play switch** (GHUB-0071)
+  Chess, Reversi, Draughts, Minesweeper, Solitaire, Spider, FreeCell,
+  Pyramid, Hearts, Snake, 2048 and Pinball join Canasta and Sudoku, so
+  the switch reaches the whole collection. Nine of them previously drew
+  no words at all on their own board — not the score, not whose turn it
+  is, not "game over" — and now say it on the play surface instead of
+  only in the status bar. Hearts names the suit that was led. Minesweeper's
+  neighbour counts, Chess's board coordinates, both games' last-move
+  highlights, 2048's tile numbers and Pinball's score all grow with it.
+
 - **A way to support the project, in the Help menu** (GHUB-0041)
   Help → Support this project… opens a panel that explains itself
   before it asks, with one named button per donation link and the web
@@ -27,6 +37,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   you make while doing what it told you.
 
 ### Fixed
+
+- **Pinball kept playing after you switched to another game** (GHUB-0073)
+  The ball carried on rolling, and could drain while you were elsewhere.
+
+- **Turning Large play off in Canasta left the window enlarged** (GHUB-0072)
+  Only inside the hub, which is the only place you would ever see it.
 
 - **Every game can be made small enough to sit beside your work** (GHUB-0042)
   The window could not be made shorter than about 1170 pixels — taller

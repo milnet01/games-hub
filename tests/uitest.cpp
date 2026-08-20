@@ -9,6 +9,7 @@
 #include "legibility.h"
 #include "scores.h"
 #include "sound.h"
+#include "theme.h"
 #include "canasta/canastaview.h"
 #include "cards/cardart.h"
 #include "chess/chessview.h"
@@ -437,6 +438,201 @@ int main(int argc, char* argv[])
         Legibility::instance().setEnabled(false);
         check(renderOf(&sudoku) == before,
               "sudoku: and turning it off puts the board back pixel for pixel");
+    }
+
+    // ---- everyGameAnswersTheSwitch (GHUB-0017, the umbrella's own claim) ----
+    //
+    // GHUB-0017 says the hub owns one switch "every game reads". For most of
+    // this item's life that was false of twelve of the fourteen, and nothing
+    // said so: the mechanism's own blocks prove the SIGNAL arrives, which a
+    // game is free to receive and ignore. This asks the only question that
+    // settles it — does the picture change — of every game the hub can open,
+    // so a fifteenth game added without a pass reddens here rather than
+    // shipping silently.
+    //
+    // Each game is deactivated first. Snake's timer, Pinball's ball and
+    // Hearts' opponents would otherwise redraw between the two renders, and a
+    // difference that came from a moving ball proves nothing about the switch.
+    // A game that still moves after deactivate() is REPORTED and left out
+    // rather than asserted about: a suite that fails one run in three costs
+    // more than the check is worth.
+    //
+    // Measured at each game's OWN minimum size, which is where a pass bites
+    // hardest — Canasta's whole pass is a raised minimum, and at a comfortable
+    // window it changes nothing at all. Run at 960x940 first, this block
+    // reported Canasta as ignoring the switch, which was the block being
+    // wrong rather than Canasta.
+    //
+    // Sudoku is the one exclusion and it is named rather than filtered out by
+    // a rule. Its pass grows PENCIL MARKS, and a freshly generated board has
+    // none — so all three renders are identical and no window size changes
+    // that. Its own block above puts a mark in every cell it will take before
+    // asserting, which is the only way to ask this question of Sudoku.
+    {
+        Legibility::instance().setEnabled(false);
+        HubWindow probe;
+        QStringList silent;
+        QStringList notRestored;
+        QStringList restless;
+        QStringList mute;
+        int measured = 0;
+
+        for (const QString& name : probe.gameNames()) {
+            if (name == QStringLiteral("Sudoku"))
+                continue;
+
+            HubWindow one;
+            one.openGameNamed(name);
+            one.show();
+            pump(30);
+            one.resize(one.minimumSizeHint());
+            pump(30);
+
+            GameView* view = one.findChild<GameView*>();
+            if (view == nullptr) {
+                restless << name + QStringLiteral(" (no view)");
+                continue;
+            }
+            view->deactivate();
+            pump(20);
+
+            // Three renders spread over time, not two. Pinball's ball can sit
+            // between two physics ticks and give two identical renders while
+            // still moving — which then shows up as a game that "did not go
+            // back", blaming the switch for a ball that rolled.
+            const QImage before = renderOf(view);
+            bool still = true;
+            for (int probe = 0; probe < 2; ++probe) {
+                pump(25);
+                still = still && renderOf(view) == before;
+            }
+            if (!still) {
+                restless << name;
+                continue;
+            }
+            ++measured;
+            if (view->captionText().isEmpty())
+                mute << name;
+
+            Legibility::instance().setEnabled(true);
+            pump(20);
+            if (renderOf(view) == before)
+                silent << name;
+
+            Legibility::instance().setEnabled(false);
+            pump(20);
+            if (renderOf(view) != before) {
+                notRestored << name;
+                // The sizes, because "did not go back" on its own sends you
+                // looking at the painting when the cause is the geometry.
+                std::printf("        %s: view was %dx%d, is now %dx%d, window %dx%d\n",
+                            qPrintable(name), before.width(), before.height(),
+                            view->width(), view->height(),
+                            one.width(), one.height());
+            }
+        }
+        Legibility::instance().setEnabled(false);
+
+        std::printf("      legibility: %d of %d games held still enough to measure "
+                    "(Sudoku is asserted in its own block above)\n",
+                    measured, int(probe.gameNames().size()) - 1);
+        if (!restless.isEmpty())
+            std::printf("      not measured (still animating after deactivate): %s\n",
+                        qPrintable(restless.join(QStringLiteral(", "))));
+        if (!mute.isEmpty())
+            std::printf("      nothing to say on the surface: %s\n",
+                        qPrintable(mute.join(QStringLiteral(", "))));
+        if (!silent.isEmpty())
+            std::printf("      IGNORED THE SWITCH: %s\n",
+                        qPrintable(silent.join(QStringLiteral(", "))));
+        if (!notRestored.isEmpty())
+            std::printf("      DID NOT GO BACK: %s\n",
+                        qPrintable(notRestored.join(QStringLiteral(", "))));
+
+        // Asserted rather than reported: GameView::deactivate() promises that a
+        // game with a clock or an animation stops it when the hub leaves, and
+        // this block is the only thing that has ever asked. It caught Pinball,
+        // which had no override at all and left the ball rolling — and
+        // draining — on a table nobody was looking at.
+        check(restless.isEmpty(),
+              "every game stops moving when the hub leaves it, as deactivate() promises");
+        check(measured > 0, "legibility: at least one game held still long enough to measure");
+        check(silent.isEmpty(), "legibility: every measured game changes what it paints");
+        check(notRestored.isEmpty(),
+              "legibility: and every one of them goes back pixel for pixel");
+    }
+
+    // ---- cardsKeepTheirFaces (GHUB-0017 INV-3, withdrawn and now writable) --
+    //
+    // INV-3 — "no game draws a card too small to show its pips" — was withdrawn
+    // from the mechanism spec because cardWidth() is private on all six card
+    // views and no test could reach it. GameView::smallestCardWidth() is that
+    // access, so the invariant can finally be held against every card game at
+    // once rather than against Canasta alone.
+    //
+    // Measured at the SMALLEST window each game allows, because that is where a
+    // card is narrowest, and with large play ON, because that is where the
+    // caption's strip comes off the height and the cards pay for it. A game
+    // that draws no cards answers 0 and is skipped.
+    {
+        Legibility::instance().setEnabled(true);
+        HubWindow probe;
+        QStringList tooSmall;
+        int checked = 0;
+        for (const QString& name : probe.gameNames()) {
+            HubWindow one;
+            one.openGameNamed(name);
+            one.show();
+            pump(20);
+            GameView* view = one.findChild<GameView*>();
+            if (view == nullptr)
+                continue;
+            one.resize(one.minimumSizeHint());
+            pump(20);
+            const double smallest = view->smallestCardWidth();
+            if (smallest <= 0.0)
+                continue;
+            ++checked;
+            std::printf("      %-12s smallest card %.1f px against a %.0f px floor\n",
+                        qPrintable(name), smallest, CardArt::kFaceMinWidth);
+            if (smallest < CardArt::kFaceMinWidth)
+                tooSmall << name;
+        }
+        Legibility::instance().setEnabled(false);
+        check(checked >= 6, "six games draw cards and every one of them was measured");
+        check(tooSmall.isEmpty(),
+              "no card game is driven below the width that still shows a face");
+    }
+
+    // ---- captionStaysInside (the caption plate's own arithmetic) ----
+    //
+    // The plate is what a game gives up board space for, so it has to be
+    // honest about how much: wider than the area it was given, or taller than
+    // the band captionBand() reserves, and the game has shrunk itself for
+    // nothing. A long sentence must wrap rather than grow sideways — the
+    // failure a caption cannot have is a line running off the window.
+    {
+        const QRectF area(0, 0, 600, 400);
+        QFont f;
+        f.setPointSizeF(16.0);
+
+        check(Theme::captionRect(area, QString(), f).isNull(),
+              "caption: empty text asks for no plate at all");
+
+        const QRectF one = Theme::captionRect(area, QStringLiteral("Your move."), f);
+        check(area.contains(one), "caption: a short sentence sits inside its area");
+
+        const QString essay = QStringLiteral(
+            "West led hearts, so follow suit if you can, and remember the queen "
+            "of spades is still out there somewhere among the other three hands.");
+        const QRectF many = Theme::captionRect(area, essay, f);
+        check(many.width() <= area.width(),
+              "caption: a long sentence wraps rather than running off the side");
+        check(many.height() > one.height(),
+              "caption: and it is taller for having wrapped");
+        check(area.contains(many), "caption: the wrapped plate is still inside the area");
+        check(qFuzzyCompare(one.center().x(), many.center().x()),
+              "caption: both are centred on the same line");
     }
 
     // ---- Best scores survive a restart ----

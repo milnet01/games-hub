@@ -16,6 +16,7 @@ public:
     explicit DraughtsView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    QString captionText() const override { return m_caption; }
     void activate() override;
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
@@ -61,4 +62,5 @@ private:
     std::vector<Snapshot> m_history;
     bool m_thinking = false;
     bool m_finished = false;
+    QString m_caption;
 };

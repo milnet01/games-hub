@@ -42,6 +42,10 @@ public:
     // (docs/specs/GHUB-0017-legibility-switch.md § 4.4). Public because it is
     // what the UI test asserts; nothing in the game calls it.
     double smallestFaceWidth() const;
+    // The same number, under the name every game answers to. Canasta's melds
+    // are the smallest scale it draws a card at, which is exactly what the
+    // base class asks for.
+    double smallestCardWidth() const override { return smallestFaceWidth(); }
 
     // True when the table is big enough to lay this card out on its own, with
     // cardWidth()'s floor never having to lift it. Floor and minimum size move

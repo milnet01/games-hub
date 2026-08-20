@@ -25,6 +25,17 @@ QString suitSymbol(Suit s)
     return {};
 }
 
+QString suitName(Suit s)
+{
+    switch (s) {
+    case Suit::Clubs:    return QStringLiteral("clubs");
+    case Suit::Diamonds: return QStringLiteral("diamonds");
+    case Suit::Hearts:   return QStringLiteral("hearts");
+    case Suit::Spades:   return QStringLiteral("spades");
+    }
+    return {};
+}
+
 std::vector<Card> makeDeck(int decks, int suitsUsed, int jokers)
 {
     // Spades, then Hearts, then Diamonds, then Clubs, so a one-suit Spider

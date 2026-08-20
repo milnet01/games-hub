@@ -239,9 +239,12 @@ QRect ReversiView::boardRect() const
 {
     // Keep cells on whole pixels so the grid lines stay crisp, and leave room
     // for the frame drawn around the playing surface.
-    const int available = std::min(width(), height()) - 2 * (kFrameWidth + 4);
+    // Under the legibility switch the board gives up a strip at the bottom for
+    // the caption, and moves up by it, so the sentence never covers a piece.
+    const int band = int(captionBand(QRectF(rect())));
+    const int available = std::min(width(), height() - band) - 2 * (kFrameWidth + 4);
     const int side = std::max(kSize, (available / kSize) * kSize);
-    return { (width() - side) / 2, (height() - side) / 2, side, side };
+    return { (width() - side) / 2, (height() - band - side) / 2, side, side };
 }
 
 std::optional<Move> ReversiView::cellAt(QPointF pos) const
@@ -331,6 +334,11 @@ void ReversiView::paintEvent(QPaintEvent*)
         p.setPen(QPen(QColor(0xff, 0xd5, 0x4f), std::max(2.0, cell * 0.05)));
         p.drawEllipse(centre, cell * 0.45, cell * 0.45);
     }
+
+    // Reversi's status line is already the right sentence for the board: whose
+    // turn it is AND the score, which is the number a player checks most and
+    // the one the corner counters make you add up by eye.
+    paintStatusCaption(p, QRectF(rect()));
 }
 
 void ReversiView::mousePressEvent(QMouseEvent* event)

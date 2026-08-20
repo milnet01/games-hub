@@ -1,13 +1,15 @@
 #include "twenty48view.h"
 
-#include <QDataStream>
-
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
 
+#include <QDataStream>
+
 #include <QKeyEvent>
 #include <QMessageBox>
+#include <QFontMetricsF>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
@@ -278,8 +280,11 @@ void Twenty48View::paintEvent(QPaintEvent*)
     p.setRenderHint(QPainter::Antialiasing, true);
     p.fillRect(rect(), palette().window());
 
-    const double side = std::min(width(), height()) - 32.0;
-    const QRectF board((width() - side) / 2, (height() - side) / 2, side, side);
+    // The caption's strip comes off the height first, so the sentence sits
+    // under the board rather than over the bottom row of tiles.
+    const double band = captionBand(QRectF(rect()));
+    const double side = std::min(double(width()), height() - band) - 32.0;
+    const QRectF board((width() - side) / 2, (height() - band - side) / 2, side, side);
 
     QPainterPath boardPath;
     boardPath.addRoundedRect(board, side * 0.02, side * 0.02);
@@ -302,16 +307,55 @@ void Twenty48View::paintEvent(QPaintEvent*)
             }
 
             p.fillPath(path, tileColour(v));
-            QFont f = font();
-            f.setBold(true);
-            // Long numbers get a smaller face so 1024 still fits its tile.
-            const int digits = QString::number(v).size();
-            f.setPointSizeF(cell * (digits <= 2 ? 0.40 : digits == 3 ? 0.32 : 0.26));
-            p.setFont(f);
+            p.setFont(tileFont(v, cell));
             p.setPen(inkFor(v));
             p.drawText(box, Qt::AlignCenter, QString::number(v));
         }
     }
+
+    paintStatusCaption(p, QRectF(rect()));
+}
+
+QFont Twenty48View::tileFont(int value, double cell) const
+{
+    const QString text = QString::number(value);
+    QFont f = font();
+    f.setBold(true);
+    // Long numbers get a smaller face so 1024 still fits its tile.
+    const double base = cell * (text.size() <= 2 ? 0.40 : text.size() == 3 ? 0.32 : 0.26);
+    if (!Legibility::instance().enabled()) {
+        f.setPointSizeF(base);
+        return f;
+    }
+
+    // How much of the tile the ink may take. Both are the whole answer to
+    // "how big can this go": beyond them the number touches its own tile edge.
+    const double room = cell * 0.82;
+    const double tall = cell * 0.62;
+
+    QFont probe = f;
+    probe.setPointSizeF(100.0);
+    const QFontMetricsF pm(probe);
+    const double perPointWide = pm.horizontalAdvance(text) / 100.0;
+    const double perPointTall = pm.tightBoundingRect(text).height() / 100.0;
+    if (perPointWide <= 0.0 || perPointTall <= 0.0) {
+        f.setPointSizeF(base);
+        return f;
+    }
+
+    // The analytic answer, then a few steps down for the rounding analysis
+    // cannot see — the metric is asked again at the size it will really be
+    // drawn at, which is what a tuned ratio gets wrong on another platform.
+    double points = std::min(room / perPointWide, tall / perPointTall);
+    for (int step = 0; step < 8 && points > base; ++step) {
+        f.setPointSizeF(points);
+        const QFontMetricsF fm(f);
+        if (fm.horizontalAdvance(text) <= room && fm.tightBoundingRect(text).height() <= tall)
+            return f;
+        points *= 0.96;
+    }
+    f.setPointSizeF(base);
+    return f;
 }
 
 void Twenty48View::keyPressEvent(QKeyEvent* event)

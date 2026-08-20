@@ -1,5 +1,6 @@
 #include "theme.h"
 
+#include <QFontMetricsF>
 #include <QLinearGradient>
 #include <QPainterPath>
 #include <QRadialGradient>
@@ -110,6 +111,52 @@ void paintInlay(QPainter& p, const QRectF& r, double radius, const QColor& colou
     p.setBrush(Qt::NoBrush);
     p.setPen(QPen(colour, 1.2));
     p.drawRoundedRect(r, radius, radius);
+}
+
+QRectF captionRect(const QRectF& area, const QString& text, const QFont& f, Qt::Alignment where)
+{
+    if (text.isEmpty() || area.width() <= 0.0)
+        return {};
+
+    const QFontMetricsF fm(f);
+    const double pad = std::max(6.0, fm.horizontalAdvance(QLatin1Char('0')) * 1.1);
+    // Wrapped, never elided. A caption exists to be read slowly; a sentence cut
+    // short at the point it was about to say what to do is worse than none.
+    const double room = std::max(40.0, area.width() * 0.94 - pad * 2.0);
+    const QRectF ink = fm.boundingRect(QRectF(0, 0, room, area.height()),
+                                       Qt::TextWordWrap | Qt::AlignCenter, text);
+    const double w = std::min(area.width(), ink.width() + pad * 2.0);
+    const double h = ink.height() + pad * 0.9;
+    const double margin = std::min(pad * 0.7, area.height() * 0.04);
+    const double y = (where & Qt::AlignTop) ? area.top() + margin : area.bottom() - margin - h;
+    return { area.center().x() - w * 0.5, y, w, h };
+}
+
+void paintCaption(QPainter& p, const QRectF& area, const QString& text, const QFont& f,
+                  Qt::Alignment where)
+{
+    const QRectF plate = captionRect(area, text, f, where);
+    if (plate.isNull())
+        return;
+
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+    QPainterPath path;
+    const double radius = std::min(plate.height() * 0.30, 16.0);
+    path.addRoundedRect(plate, radius, radius);
+    // Opaque, not translucent: the board underneath is patterned, and a
+    // sentence read slowly cannot have a chequerboard showing through it.
+    p.fillPath(path, kCaptionPlate);
+    // drawPath fills with the current brush as well as stroking it, and the
+    // plate is already filled.
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(kGold, 1.4));
+    p.drawPath(path);
+
+    p.setFont(f);
+    p.setPen(kCaptionInk);
+    p.drawText(plate, Qt::TextWordWrap | Qt::AlignCenter, text);
+    p.restore();
 }
 
 } // namespace Theme

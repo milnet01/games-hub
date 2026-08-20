@@ -1,5 +1,6 @@
 #include "klondikeview.h"
 
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "cards/cardart.h"
@@ -237,7 +238,11 @@ double KlondikeView::cardWidth() const
     // and the fourth foundation on screen.
     constexpr double kRowCost = 7.0 + 6.0 * 0.14;
     const double byWidth = (width() - 2 * kMargin) / kRowCost;
-    const double byHeight = (height() - 2 * kMargin) / (1.4 * 2.6);
+    // The caption's strip comes off the height before the card is sized: the
+    // piles are anchored to the top, so a smaller card is what keeps the tail
+    // of a long column clear of the sentence under it.
+    const double byHeight =
+        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * 2.6);
     return std::max(34.0, std::min(byWidth, byHeight));
 }
 
@@ -504,6 +509,8 @@ void KlondikeView::paintEvent(QPaintEvent*)
             p.restore();
         }
     }
+
+    paintStatusCaption(p, QRectF(rect()));
 }
 
 // ---------------------------------------------------------------------------

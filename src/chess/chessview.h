@@ -15,6 +15,9 @@ public:
     explicit ChessView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    // The state sentence alone. The status line adds material and a win count
+    // after it, which are worth a glance but not worth a line of the board.
+    QString captionText() const override { return m_caption; }
     void activate() override;
     // A game in progress is kept as the moves that made it, and replayed to
     // restore it — see saveState() for why that beats storing the position.
@@ -56,4 +59,5 @@ private:
     std::optional<chess::Move> m_lastMove;
     bool m_thinking = false;
     bool m_finished = false;
+    QString m_caption;
 };

@@ -207,6 +207,37 @@ void HeartsView::announceHand()
     });
 }
 
+QString HeartsView::captionText() const
+{
+    switch (m_engine.phase()) {
+    case HeartsEngine::Phase::Passing:
+        return QStringLiteral("Choose 3 cards to pass %1 — %2 chosen.")
+            .arg(directionName(m_engine.passDirection()))
+            .arg(m_selected.size());
+    case HeartsEngine::Phase::HandOver:
+        return QStringLiteral("Hand over.");
+    case HeartsEngine::Phase::GameOver:
+        return QStringLiteral("Game over.");
+    case HeartsEngine::Phase::Playing:
+        break;
+    }
+
+    const std::vector<std::pair<int, Card>>& trick = m_engine.trick();
+    const QString turn = m_engine.currentPlayer() == 0
+        ? QStringLiteral("Your turn.")
+        : QStringLiteral("%1 is thinking…").arg(QString::fromUtf8(kSeatNames[m_engine.currentPlayer()]));
+    if (trick.empty())
+        return m_engine.currentPlayer() == 0 ? QStringLiteral("Your lead.") : turn;
+
+    // Spelled out rather than a ♥ glyph: the suit led is the one fact that
+    // decides what you may play, and a symbol at sentence size is what the
+    // legibility switch exists to stop the player squinting at.
+    return QStringLiteral("%1 led %2.  %3")
+        .arg(QString::fromUtf8(kSeatNames[trick.front().first]))
+        .arg(suitName(trick.front().second.suit))
+        .arg(turn);
+}
+
 void HeartsView::refresh()
 {
     QString state;
@@ -376,6 +407,11 @@ void HeartsView::paintEvent(QPaintEvent*)
         if (std::find(m_selected.begin(), m_selected.end(), hand[std::size_t(i)]) != m_selected.end())
             CardArt::paintHighlight(p, r, QColor(0xff, 0xd5, 0x4f));
     }
+
+    // In the gap between the trick and the hand rather than at the window's
+    // edge: the hand is anchored to the bottom, so a caption there would sit
+    // on the player's own cards.
+    paintStatusCaption(p, QRectF(0, 0, width(), height() - cardHeight() - 16));
 }
 
 void HeartsView::mousePressEvent(QMouseEvent* event)

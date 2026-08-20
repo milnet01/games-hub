@@ -17,6 +17,11 @@ public:
     explicit HeartsView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    double smallestCardWidth() const override { return cardWidth(); }
+    // Names the suit that was led. That sentence exists nowhere else in this
+    // game: the led card is one of up to four in a heap in the middle, and
+    // which suit it is decides every legal play you have.
+    QString captionText() const override;
     void activate() override;
 
 protected:

@@ -42,6 +42,11 @@ inline bool isJoker(const Card& c) { return c.rank == kJoker; }
 
 QString rankLabel(int rank);
 QString suitSymbol(Suit s);
+// The suit spelled out — "hearts", not "♥". suitSymbol() is what a card is
+// DRAWN with; this is what a game SAYS out loud on its surface, and a glyph at
+// sentence size is exactly what the legibility switch exists to stop a player
+// having to squint at.
+QString suitName(Suit s);
 
 // A deck of `decks` × 52 cards, plus `jokers` jokers. `suitsUsed` limits how
 // many distinct suits appear, which is how Spider sets its difficulty: one suit

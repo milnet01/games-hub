@@ -1,5 +1,6 @@
 #include "draughtsview.h"
 
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
@@ -186,6 +187,12 @@ void DraughtsView::refresh(const QString& message)
     else
         state = QStringLiteral("Computer thinking…");
 
+    // State and the piece counts, but not the win tally: a running total of
+    // past games is worth a glance in the status bar and not a line of board.
+    m_caption = QStringLiteral("%1   You %2 — %3 Computer")
+                    .arg(state)
+                    .arg(m_board.count(m_human))
+                    .arg(m_board.count(other(m_human)));
     Q_EMIT statusChanged(QStringLiteral("%1   You %2 — %3 Computer   Won %4")
                              .arg(state)
                              .arg(m_board.count(m_human))
@@ -199,9 +206,12 @@ void DraughtsView::refresh(const QString& message)
 
 QRect DraughtsView::boardRect() const
 {
-    const int available = std::min(width(), height()) - 2 * (kFrameWidth + 4);
+    // Under the legibility switch the board gives up a strip at the bottom for
+    // the caption, and moves up by it, so the sentence never covers a piece.
+    const int band = int(captionBand(QRectF(rect())));
+    const int available = std::min(width(), height() - band) - 2 * (kFrameWidth + 4);
     const int side = std::max(kBoardSize, (available / kBoardSize) * kBoardSize);
-    return { (width() - side) / 2, (height() - side) / 2, side, side };
+    return { (width() - side) / 2, (height() - band - side) / 2, side, side };
 }
 
 std::optional<Square> DraughtsView::squareAt(QPointF pos) const
@@ -252,7 +262,9 @@ void DraughtsView::paintEvent(QPaintEvent*)
 
     // The move just played, so the computer's reply is easy to follow.
     if (m_lastMove) {
-        p.setBrush(QColor(0xff, 0xd5, 0x4f, 60));
+        // 60 is a hint you can look past, which is the wrong thing to be for the
+        // player the switch is for.
+        p.setBrush(QColor(0xff, 0xd5, 0x4f, Legibility::instance().enabled() ? 150 : 60));
         p.setPen(Qt::NoPen);
         for (const Square& s : { m_lastMove->from, m_lastMove->destination() })
             p.drawRect(QRectF(r.x() + s.col * cell, r.y() + s.row * cell, cell, cell));
@@ -311,6 +323,8 @@ void DraughtsView::paintEvent(QPaintEvent*)
             }
         }
     }
+
+    paintStatusCaption(p, QRectF(rect()));
 }
 
 void DraughtsView::mousePressEvent(QMouseEvent* event)

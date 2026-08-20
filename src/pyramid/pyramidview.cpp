@@ -1,5 +1,6 @@
 #include "pyramidview.h"
 
+#include "legibility.h"
 #include "cards/cardart.h"
 #include "cards/cardcodec.h"
 #include "scores.h"
@@ -202,7 +203,11 @@ double PyramidView::cardWidth() const
 {
     // The widest row is seven cards, overlapping by half a card each side.
     const double byWidth = (width() - 40.0) / (kRows * 0.62 + 0.4) / 1.6;
-    const double byHeight = (height() - 40.0) / (1.4 + (kRows - 1) * 0.52 + 1.6);
+    // The caption's strip comes off the height before the card is sized: the
+    // piles are anchored to the top, so a smaller card is what keeps the tail
+    // of a long column clear of the sentence under it.
+    const double byHeight =
+        (height() - 40.0 - captionBand(QRectF(rect()))) / (1.4 + (kRows - 1) * 0.52 + 1.6);
     return std::max(30.0, std::min(byWidth * 1.6, byHeight));
 }
 
@@ -454,6 +459,8 @@ void PyramidView::paintEvent(QPaintEvent*)
         if (m_hasSelection && m_selectedSource == Source::Waste)
             CardArt::paintHighlight(p, wasteRect(), QColor(0xff, 0xd5, 0x4f));
     }
+
+    paintStatusCaption(p, QRectF(rect()));
 }
 
 void PyramidView::mousePressEvent(QMouseEvent* event)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QFont>
 #include <QPainter>
 #include <QRectF>
 
@@ -43,5 +44,27 @@ void paintDropShadow(QPainter& p, const QRectF& r, double radius, double depth =
 
 // A thin engraved line, used for inlays and panel edges.
 void paintInlay(QPainter& p, const QRectF& r, double radius, const QColor& colour);
+
+// Ink and plate for paintCaption(). Measured at 13.15:1 by
+// scripts/legibility-check.py, which holds the pair and requires 4.5 of it —
+// WCAG's bar for body text rather than the 3.0 a large glyph would need,
+// because a caption is a sentence read slowly and not a shape spotted.
+inline constexpr QColor kCaptionPlate { 0x11, 0x16, 0x14 };
+inline constexpr QColor kCaptionInk { 0xf0, 0xd9, 0x9b };
+
+// One short sentence drawn ON the play surface. The hub has a status bar and
+// it is not read during play, so a game that only speaks there says nothing
+// to the player it most needs to reach — under the legibility switch a game
+// says whose turn it is, what the computer just played and what was led here
+// instead. Returns the plate, or a null rect for empty text.
+//
+// `area` is the surface to centre in; the plate sits against its bottom edge
+// unless Qt::AlignTop is passed. Split in two so a test can ask where the
+// plate landed without painting one, which is how the size assertions get
+// teeth — same reason CanastaView::messageRect() is separate.
+QRectF captionRect(const QRectF& area, const QString& text, const QFont& f,
+                   Qt::Alignment where = Qt::AlignBottom);
+void paintCaption(QPainter& p, const QRectF& area, const QString& text, const QFont& f,
+                  Qt::Alignment where = Qt::AlignBottom);
 
 } // namespace Theme

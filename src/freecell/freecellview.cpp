@@ -1,5 +1,6 @@
 #include "freecellview.h"
 
+#include "legibility.h"
 #include "cards/cardart.h"
 #include "cards/cardcodec.h"
 #include "scores.h"
@@ -195,7 +196,11 @@ double FreeCellView::cardWidth() const
 {
     constexpr double kRowCost = kColumns + (kColumns - 1) * 0.12;
     const double byWidth = (width() - 2 * kMargin) / kRowCost;
-    const double byHeight = (height() - 2 * kMargin) / (1.4 * 2.5);
+    // The caption's strip comes off the height before the card is sized: the
+    // piles are anchored to the top, so a smaller card is what keeps the tail
+    // of a long column clear of the sentence under it.
+    const double byHeight =
+        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * 2.5);
     return std::max(32.0, std::min(byWidth, byHeight));
 }
 
@@ -443,6 +448,8 @@ void FreeCellView::paintEvent(QPaintEvent*)
             p.restore();
         }
     }
+
+    paintStatusCaption(p, QRectF(rect()));
 }
 
 // ---------------------------------------------------------------------------

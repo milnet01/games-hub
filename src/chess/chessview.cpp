@@ -1,6 +1,7 @@
 #include "chessview.h"
 
 #include "chessart.h"
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
@@ -348,6 +349,7 @@ void ChessView::refresh(const QString& message)
     else
         state = QStringLiteral("Computer to move.");
 
+    m_caption = state;
     Q_EMIT statusChanged(QStringLiteral("%1   Material %2 — %3   Won %4")
                              .arg(state)
                              .arg(m_game.board().material(m_human))
@@ -361,9 +363,12 @@ void ChessView::refresh(const QString& message)
 
 QRect ChessView::boardRect() const
 {
-    const int available = std::min(width(), height()) - 2 * (kFrameWidth + 4);
+    // Under the legibility switch the board gives up a strip at the bottom for
+    // the caption, and moves up by it, so the sentence never covers a piece.
+    const int band = int(captionBand(QRectF(rect())));
+    const int available = std::min(width(), height() - band) - 2 * (kFrameWidth + 4);
     const int side = std::max(kFiles, (available / kFiles) * kFiles);
-    return { (width() - side) / 2, (height() - side) / 2, side, side };
+    return { (width() - side) / 2, (height() - band - side) / 2, side, side };
 }
 
 std::optional<Square> ChessView::squareAt(QPointF pos) const
@@ -410,15 +415,18 @@ void ChessView::paintEvent(QPaintEvent*)
     // Files and ranks, engraved on the frame — the notation in the status line
     // is unreadable without them.
     QFont labels = font();
-    labels.setPointSizeF(std::max(6.0, cell * 0.20));
+    // The frame is only as thick as kFrameWidth, so the label cannot simply be
+    // scaled up — Qt::TextDontClip below is what hands over the gap between the
+    // glyph's ink and its line box, the same trick Sudoku's pencil marks need.
+    labels.setPointSizeF(std::max(6.0, cell * (Legibility::instance().enabled() ? 0.28 : 0.20)));
     labels.setBold(true);
     p.setFont(labels);
     p.setPen(Theme::kGold);
     for (int i = 0; i < kFiles; ++i) {
         p.drawText(QRectF(r.x() + i * cell, r.bottom(), cell, kFrameWidth),
-                   Qt::AlignCenter, QString(QChar('a' + i)));
+                   Qt::AlignCenter | Qt::TextDontClip, QString(QChar('a' + i)));
         p.drawText(QRectF(r.x() - kFrameWidth, r.y() + i * cell, kFrameWidth, cell),
-                   Qt::AlignCenter, QString::number(kRanks - i));
+                   Qt::AlignCenter | Qt::TextDontClip, QString::number(kRanks - i));
     }
 
     const auto squareRect = [&](Square s) {
@@ -428,7 +436,9 @@ void ChessView::paintEvent(QPaintEvent*)
     // The move just played, so the computer's reply is easy to follow.
     if (m_lastMove) {
         p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0xff, 0xd5, 0x4f, 70));
+        // Faint enough to be missed at 70; the switch is exactly the player who
+        // would miss it, so it goes to a wash you cannot look past.
+        p.setBrush(QColor(0xff, 0xd5, 0x4f, Legibility::instance().enabled() ? 150 : 70));
         for (const Square& s : { m_lastMove->from, m_lastMove->to })
             p.drawRect(squareRect(s));
     }
@@ -479,6 +489,8 @@ void ChessView::paintEvent(QPaintEvent*)
                                  piece.type, piece.colour);
         }
     }
+
+    paintStatusCaption(p, QRectF(rect()));
 }
 
 void ChessView::mousePressEvent(QMouseEvent* event)

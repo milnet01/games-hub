@@ -57,6 +57,10 @@ private:
     bool canMove() const;
     void checkEnd();
     void refresh(const QString& message = {});
+    // The face a tile's number is drawn in. Solved against the font in use
+    // rather than scaled by a tuned ratio while the legibility switch is on —
+    // how tall a platform draws a digit is a property of the platform.
+    QFont tileFont(int value, double cell) const;
 
     int& at(int row, int col) { return m_board[std::size_t(row * kSize + col)]; }
     int at(int row, int col) const { return m_board[std::size_t(row * kSize + col)]; }

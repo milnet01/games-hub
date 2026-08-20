@@ -12,6 +12,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QLabel>
+#include <QLayout>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -767,6 +768,22 @@ void CanastaView::applyLegibility(bool enabled)
         // off again would leave the window permanently large.
         m_normalWindowSize = was;
     } else if (m_normalWindowSize.isValid()) {
+        // The layout has to be told before the window is resized. setMinimumSize
+        // above lowers THIS widget's floor, but the hub's own minimum is
+        // computed from its central widget through a QStackedWidget, and that
+        // chain is recalculated lazily — so a resize() issued in the same
+        // breath is clamped straight back up by the stale figure. On a bare
+        // CanastaView window() is the view itself and the problem does not
+        // exist, which is why the block that checks this passed while the
+        // switch was one-way inside the hub, the only place a player ever
+        // sees it.
+        updateGeometry();
+        for (QWidget* w = this; w != nullptr; w = w->parentWidget()) {
+            if (QLayout* l = w->layout())
+                l->activate();
+            if (w->isWindow())
+                break;
+        }
         window()->resize(m_normalWindowSize);
         m_normalWindowSize = QSize();
     }

@@ -1,5 +1,6 @@
 #include "pinballview.h"
 
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
@@ -74,6 +75,11 @@ void PinballView::activate()
     if (!m_table.gameOver())
         m_timer->start();
     refresh();
+}
+
+void PinballView::deactivate()
+{
+    m_timer->stop();
 }
 
 void PinballView::tick()
@@ -438,7 +444,13 @@ void PinballView::paintEvent(QPaintEvent*)
     p.restore();
 
     // Backglass strip across the top of the cabinet.
-    const QRectF glass(table.left(), table.top(), table.width(), std::max(20.0, 30.0 * s));
+    // Pinball is the one game that already spoke on its own surface, so its
+    // pass is to grow what it says rather than to add a caption: the backglass
+    // and both labels on it come up together, which is the only way the strip
+    // does not simply clip a bigger number.
+    const bool large = Legibility::instance().enabled();
+    const QRectF glass(table.left(), table.top(), table.width(),
+                       std::max(large ? 30.0 : 20.0, (large ? 44.0 : 30.0) * s));
     p.setPen(Qt::NoPen);
     QLinearGradient strip(glass.topLeft(), glass.bottomLeft());
     strip.setColorAt(0.0, QColor(0x0e, 0x12, 0x22, 235));
@@ -448,7 +460,7 @@ void PinballView::paintEvent(QPaintEvent*)
 
     QFont f = font();
     f.setBold(true);
-    f.setPointSizeF(std::max(9.0, 13.0 * s));
+    f.setPointSizeF(std::max(large ? 13.0 : 9.0, (large ? 19.0 : 13.0) * s));
     p.setFont(f);
     p.setPen(Theme::kGold);
     p.drawText(glass.adjusted(12, 0, -12, 0), Qt::AlignLeft | Qt::AlignVCenter,

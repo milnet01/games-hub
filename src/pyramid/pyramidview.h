@@ -20,6 +20,7 @@ public:
     explicit PyramidView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    double smallestCardWidth() const override { return cardWidth(); }
     void activate() override;
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;

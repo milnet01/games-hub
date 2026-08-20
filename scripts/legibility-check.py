@@ -155,6 +155,16 @@ PAIRS: list[tuple[str, object, object, float]] = [
     ("Minesweeper kNumberColours[1] on kDug",
      lambda: array_colour("minesweeper/minesweeperview.cpp", "kNumberColours", 1),
      lambda: named_colour("minesweeper/minesweeperview.cpp", "kDug"), 3.0),
+    # The one pair in this list required at 4.5, and the reason the note above
+    # says "nothing HERE is small body text" rather than "nothing ever is". The
+    # caption is a sentence a partially sighted player reads slowly, not a
+    # glyph they spot, so WCAG's normal-text bar is the one that applies to it.
+    # It is also the only pair whose two colours exist solely to be read
+    # against each other, so there is no third constraint pulling either way
+    # and no reason to accept less.
+    ("Theme kCaptionInk on kCaptionPlate",
+     lambda: named_colour("theme.h", "kCaptionInk"),
+     lambda: named_colour("theme.h", "kCaptionPlate"), 4.5),
 ]
 
 # Every tile 2048 can paint, its own ink against its own colour — the post-fix

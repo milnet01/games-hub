@@ -1,5 +1,6 @@
 #include "spiderview.h"
 
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "cards/cardart.h"
@@ -216,7 +217,11 @@ bool SpiderView::restoreState(const QByteArray& blob)
 double SpiderView::cardWidth() const
 {
     const double byWidth = (width() - 2 * kMargin - (kColumns - 1) * 6.0) / kColumns;
-    const double byHeight = (height() - 2 * kMargin) / (1.4 * 2.2);
+    // The caption's strip comes off the height before the card is sized: the
+    // piles are anchored to the top, so a smaller card is what keeps the tail
+    // of a long column clear of the sentence under it.
+    const double byHeight =
+        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * 2.2);
     return std::max(30.0, std::min(byWidth, byHeight));
 }
 
@@ -411,6 +416,8 @@ void SpiderView::paintEvent(QPaintEvent*)
             p.restore();
         }
     }
+
+    paintStatusCaption(p, QRectF(rect()));
 }
 
 void SpiderView::mousePressEvent(QMouseEvent* event)

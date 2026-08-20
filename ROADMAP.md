@@ -1658,7 +1658,7 @@ open.
 
 ### 🖥 Legibility and accessibility
 
-- 🚧 [GHUB-0017] **The other thirteen games have had no legibility pass.**
+- ✅ [GHUB-0017] **The other thirteen games have had no legibility pass.**
   The
   owner is partially sighted and reads cards by their pip pattern rather than
   the corner index, which is why Canasta ended up with named discards, a wild
@@ -1863,6 +1863,21 @@ open.
   column and cannot be amended in place, so the number lives here.
   Found by a cold lane reviewing CLAUDE.md, which carried the same stale
   figure.
+  Closed (2026-08-20) by GHUB-0071, which carries the last twelve
+  passes. All fourteen games now change what they paint when the
+  switch moves, and a uitest block walks every game the hub can open
+  and asserts it — so the umbrella is not closed on a count of
+  bullets but on a check that fails if a fifteenth game arrives
+  without a pass.
+
+  Two adjacent defects fell out of writing that check and are filed
+  separately rather than folded in: GHUB-0072 (Canasta's switch was
+  one-way inside the hub, invisible to a bare-view test) and
+  GHUB-0073 (Pinball never stopped its ball on deactivate).
+
+  The headline is a store column and still reads "thirteen"; the
+  count correction note above already records that it became twelve
+  when Sudoku shipped, and it is now zero.
 
 - 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
   Not a defect today, and deliberately not fixed while filing: the
@@ -2103,6 +2118,109 @@ open.
   asks.
   **Layman:** Screen-reader software would find the games completely blank; whether that matters here is a real question, not an assumption.
   Kind: accessibility.
+  Source: in-session-2026-08-20.
+
+- ✅ [GHUB-0071] **The last twelve games answer the legibility switch.**
+  Closes the GHUB-0017 umbrella: Chess, Reversi, Draughts,
+  Minesweeper, Klondike, Spider, FreeCell, Pyramid, Hearts, Snake,
+  2048 and Pinball, in one pass.
+
+  The finding that shaped it: NINE of the twelve drew no text on
+  their own play surface at all — not the score, not whose turn it
+  is, not "game over". Everything they said went to the hub's
+  status bar, which the owner does not read during play. Card SIZE
+  was already measured as a non-issue for these games (the floors
+  are unreachable), so what was left really was "what a game says
+  out loud", exactly as the umbrella predicted.
+
+  So the shared piece is a CAPTION rather than a per-game tweak.
+  GameView::captionText() defaults to the status line each game
+  already composes, so a pass is three lines in paintEvent instead
+  of twelve copies of a block; Theme::paintCaption draws the plate;
+  GameView::captionBand reserves the strip so a board SHRINKS by
+  exactly what the sentence takes rather than being covered by it.
+  Chess, Draughts and Hearts override the text — Hearts names the
+  suit that was led, which existed nowhere in that game before and
+  decides every legal play you have.
+
+  The band is a fixed two lines, never the height of the current
+  sentence: a band that tracked the text would resize the board
+  every time the text changed length. It is also capped at 22% of
+  the surface, and that cap is not tidiness — fm.height() is a
+  platform property, windows-2022 under offscreen has no font
+  environment, and an uncapped band could drive a card below
+  CardArt::kFaceMinWidth on a runner and nowhere else.
+
+  Size work where it was earned rather than everywhere: Minesweeper
+  neighbour counts 0.46 to 0.58 of a cell, Chess frame coordinates
+  0.20 to 0.28, both with Qt::TextDontClip because drawText clips
+  to its rect; Chess and Draughts last-move washes from alpha 60-70
+  to 150; Pinball's backglass and both its labels together, since
+  it is the one game that already spoke on its own surface. 2048's
+  tile digits are SOLVED against the font in use rather than
+  scaled by a ratio, per the standing note Sudoku's three red
+  Windows legs bought.
+
+  GameView::smallestCardWidth() is what makes GHUB-0017's withdrawn
+  INV-3 writable at last — it was withdrawn because cardWidth() is
+  private on all six card views. One line per game, and one check
+  now holds all six against kFaceMinWidth at their smallest window
+  with the switch on: Klondike 67.9, FreeCell 67.4, Spider 54.2,
+  Hearts 52.5, Pyramid 52.1, Canasta 46.4. Only Pyramid pays for
+  its band (68.6 to 52.1) and it still clears by 13%.
+
+  The check with the real teeth walks every game the hub can open,
+  renders it with the switch off and on, and asserts the picture
+  changed and then went back — so a fifteenth game added without a
+  pass reddens rather than shipping silently. Sudoku is excluded by
+  name with the reason (its pass grows pencil marks and a fresh
+  board has none; its own block asserts it). Twelve new uitest
+  assertions, each seen red against a deliberate break.
+
+  selftest 398/398, uitest 183/183, ctest 3/3, local-ci green.
+  **Layman:** Every game in the collection now changes when you turn Large play on, not just Canasta and Sudoku.
+  Kind: accessibility.
+  Source: in-session-2026-08-20.
+
+- ✅ [GHUB-0072] **Canasta's legibility switch was one-way inside the hub.**
+  Found by the new every-game check, which measures each game
+  through a real HubWindow. CanastaView::applyLegibility lowers its
+  own minimum and then resizes the window back to the size it had
+  before the switch — but the hub's minimum is computed from its
+  central widget THROUGH a QStackedWidget, and that chain is
+  recalculated lazily, so the resize was clamped straight back up
+  by the stale figure. The view stayed at 900x656 instead of
+  returning to 720x560.
+
+  Why it survived GHUB-0038's own reversibility check: that check
+  uses a bare CanastaView, where window() is the view itself and
+  the stale-minimum chain does not exist. The bug was only ever
+  present in the hub — the only place a player sees it.
+
+  The fix walks up to the window activating each layout before the
+  resize. Proved by removing it again and watching the new check go
+  red.
+  **Layman:** Turning Large play off in Canasta left the window stuck at the bigger size.
+  Kind: fix.
+  Source: in-session-2026-08-20.
+
+- ✅ [GHUB-0073] **Pinball kept its ball rolling after you left the table.**
+  GameView::deactivate() exists precisely so a game with a clock or
+  an animation stops it when the hub moves on — its own comment
+  names the cost, a Minesweeper time you never spent. PinballView
+  had no override at all, so the physics timer ran on a table
+  nobody was looking at and a ball could drain unseen.
+
+  Surfaced by the new every-game legibility check, which deactivates
+  each game before rendering it: Pinball was the one game that would
+  not hold still, and three renders spread over time were needed to
+  catch it — two in a row can land between physics ticks and match.
+
+  The check now ASSERTS that no game moves after deactivate(),
+  rather than reporting it, so the next game to forget this is
+  caught. Seen red against the override removed again.
+  **Layman:** Switching to another game left the pinball still in play, and it could drain while you were not looking.
+  Kind: fix.
   Source: in-session-2026-08-20.
 
 ### 🎨 Play

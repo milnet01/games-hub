@@ -137,8 +137,27 @@ display, and it is the rule to preserve when adding a game.
   declares `applyLegibility(bool)`, called when the hub's legibility switch
   moves; the base constructor is what makes that connection, so **every**
   constructed game hears about it and not just the one on screen. `gameview.cpp`
-  holds that constructor and nothing else — a Q_OBJECT class needs a matching
-  source file in the build or AUTOMOC generates no metaobject for it.
+  holds that constructor, the caption helpers below, and nothing else — a
+  Q_OBJECT class needs a matching source file in the build or AUTOMOC generates
+  no metaobject for it.
+
+  Four members are what a new game's legibility pass is built from, and using
+  them is cheaper than inventing anything. `captionText()` defaults to the last
+  string the game emitted through `statusChanged`, which the base remembers, so
+  no game keeps a second copy of a sentence it has already composed; override it
+  only where the surface needs something the status bar does not carry.
+  `paintStatusCaption()` draws that sentence on a plate and does nothing at all
+  while the switch is off, so a pass is three lines at the end of `paintEvent`.
+  `captionBand()` is the strip to keep clear for it — subtract it from the
+  height the game lays out in, and the board shrinks by exactly what the
+  sentence takes rather than being covered by it. `smallestCardWidth()` is the
+  narrowest card the game draws, **at the smallest scale it draws one at**, and
+  a game with no cards returns 0.
+
+  `deactivate()` is not optional for a game with a clock or an animation, and
+  `tests/uitest.cpp` now asserts it: every game must hold still once the hub
+  leaves it. Pinball had no override at all and its ball kept rolling — and
+  draining — on a table nobody was looking at (GHUB-0073).
 - `src/legibility.*` — `Legibility`, the app-wide legibility preference
   (`display/legibility`, default off). It is no longer the only thing this app
   stores outside a game's own group: `donate/ask` and `donate/launches` are
@@ -152,10 +171,13 @@ display, and it is the rule to preserve when adding a game.
   A singleton like `Sound`, but stored and
   broadcasting: games are built lazily and live for the session, so one built
   before the switch moved would never learn without the signal.
-  `docs/specs/GHUB-0017-legibility-switch.md` is the contract. Two of the
-  fourteen per-game passes have shipped — Canasta (GHUB-0038) and Sudoku
-  (GHUB-0039), both described under Traps below — and twelve are still to
-  come.
+  `docs/specs/GHUB-0017-legibility-switch.md` is the contract. **All fourteen
+  per-game passes have shipped** — Canasta (GHUB-0038) and Sudoku (GHUB-0039)
+  first, both described under Traps below, and the other twelve as GHUB-0071.
+  What holds that true is not the count: `tests/uitest.cpp` opens every game
+  the hub knows, renders it with the switch off and on, and asserts the picture
+  changed and then went back. **A fifteenth game added without a pass reddens
+  that block**, which is the point of it.
 - `src/donate.*` and `src/donatedialog.*` — the one place the app asks for
   money, reached from Help → Support this project and from the every-150th-
   launch prompt. **A `--game` launch advances the count and shows nothing** —
@@ -240,6 +262,30 @@ display, and it is the rule to preserve when adding a game.
   only draws it and feeds input.
 
 ## Traps worth knowing
+
+**The caption band is a FIXED two lines, and it is capped, and both are load
+bearing.** A band sized to the current sentence would resize the board every
+time the sentence changed length, and a board that jumps between moves is
+worse than a slightly smaller one. The cap — 22% of the surface — is the
+Windows lesson again in a new place: the band comes off the height a card game
+solves its card width from, and `fm.height()` is a property of the platform's
+font, not of this code. `windows-2022` under the offscreen platform has no font
+environment at all, so an uncapped band would be far wider there than here and
+could drive a card below `CardArt::kFaceMinWidth` on a runner and nowhere else.
+A capped band can be narrower than the sentence needs, and then the caption
+just overlaps a little; a faceless card cannot be recovered from.
+
+**A widget that resizes its own window after lowering its minimum must let the
+layout catch up first.** `setMinimumSize()` lowers *that widget's* floor, but
+the hub's minimum is computed from its central widget **through a
+`QStackedWidget`**, and that chain is recalculated lazily — so a `resize()`
+issued in the same breath is clamped straight back up by the stale figure.
+Canasta's legibility switch was one-way inside the hub for this reason
+(GHUB-0072), and **its own reversibility check passed the whole time**: that
+check uses a bare `CanastaView`, where `window()` is the view itself and the
+stale chain does not exist. A widget test can be green about a bug that only
+exists in the real window. Walk up to the window activating each layout before
+resizing.
 
 **Alpha-beta only resolves the BEST move's score exactly.** Every other root
 move comes back as an upper bound, and a bad move whose search fails low can be

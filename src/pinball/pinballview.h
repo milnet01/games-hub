@@ -20,6 +20,10 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    // The base class asks every game with a clock or an animation to stop it
+    // here, and Pinball had no override at all: leaving the table for another
+    // game left the ball rolling, and it drained while nobody was watching.
+    void deactivate() override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
