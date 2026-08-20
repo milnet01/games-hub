@@ -1166,6 +1166,74 @@ progress.
   Kind: ux.
   Source: in-session-2026-08-20.
 
+- 📋 [GHUB-0067] **A saved game survives a clean exit and nothing else, and two copies of the app quietly overwrite each other.**
+  Two halves of one question: when is progress actually written to disk?
+
+  **Only on the way out.** `rememberPage()` stores the current page's game when
+  you leave it, and `closeEvent()` stores every game that was opened. Both are
+  clean-exit paths. A crash, an out-of-memory kill, a power cut or a `pkill` while
+  you are sitting in a game loses that game entirely — every other game was
+  banked when you left it, so the exposure is exactly the one you were playing,
+  which is also the only one you cared about. `pkill` is not hypothetical here:
+  CLAUDE.md documents killing the app that way as routine, with a warning about
+  the pattern rather than about the lost state.
+
+  Saving after each completed move is the obvious answer and is probably cheap for
+  every game but Canasta, which serialises its whole engine. If a timer is used
+  instead, it belongs to the active page only and must stop on `deactivate()` —
+  GHUB-0046 is about exactly the timer that does not.
+
+  **And two copies fight.** Nothing stops the app running twice — a second click
+  on the panel launcher, or `gameshub --game spider` while the hub is already
+  open, which is a documented and encouraged way to start. Both processes write
+  the same `QSettings`, so the second to exit overwrites the first's saves,
+  geometry and best scores with its own older view of them. Silently, and with no
+  way to tell afterwards.
+
+  The donate counter has the same shape and is worth checking while in there:
+  `donate/launches` is read and written per process, so two instances count
+  against each other.
+
+  finbreak solved this with a single-instance guard (FIBR-0189) and hit a real
+  trap doing it, which is worth reading before writing one here: its guard held a
+  socket that the update relaunch had to release explicitly, or the replacement
+  process saw a live owner and quietly exited. GHUB-0043 introduces exactly that
+  relaunch. The two items should be built with each other in mind rather than in
+  either order by accident.
+  **Layman:** If the app crashes, the game you were in is lost — and opening it twice means whichever copy you close last wipes the other's saves.
+  Kind: fix.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0068] **There are five places to change a setting and no place to change settings.**
+  Sound is a toolbar toggle. Legibility is the toolbar toggle beside it.
+  Minesweeper's difficulty is a toolbar action inside Minesweeper. Canasta's house
+  rules are a dialog reached from inside Canasta. The donate prompt's on/off lives
+  in the donate dialog under Help. Each one is sensibly placed for the moment you
+  want it, and there is nowhere to go to see what the app can be told.
+
+  That has been survivable at fourteen games and two app-wide switches. It gets
+  worse on a schedule: GHUB-0043 adds "check for updates automatically", which is
+  the first setting with no natural home at all — it belongs to no game and to no
+  toolbar — and the first-run question it asks has to be changeable afterwards or
+  it is a decision the player is stuck with.
+
+  A single Preferences dialog, reached from a menu, holding the app-wide switches
+  — sound, volume, legibility, update checking, the donate prompt — with per-game
+  rules staying where they are. The toolbar toggles stay too; a settings dialog
+  that removes the one-click sound switch is a worse app, and this is about having
+  a place where everything is visible, not about taking the shortcuts away.
+
+  One thing to get right, because the app already has a rule about it. CLAUDE.md
+  notes that stored state comes in four families — `display/legibility`,
+  `donate/*`, `window/geometry/*` and `saved/*` — and that anything sweeping them
+  has all four to handle. A Preferences dialog is where somebody eventually adds a
+  "reset everything" button, and the warning already written down is that clearing
+  the donate switch while leaving the counter fires the prompt on the very next
+  start. If that button is built, it handles all four or it is not built.
+  **Layman:** Preferences are scattered across the toolbar, a menu and a dialog, with no single settings window.
+  Kind: ux.
+  Source: in-session-2026-08-20.
+
 ### ✨ Look and feel
 
 Not decoration. Every item here is a piece of information the game currently
@@ -1976,6 +2044,67 @@ open.
   Kind: accessibility.
   Source: in-session-2026-08-19 (owner: "with a game my focus is on the play area and thus I never look at the status bar").
 
+- 📋 [GHUB-0069] **Every card move needs a drag, except the one move that does not.**
+  Klondike and FreeCell already answer part of this: a double-click sends a card
+  to its foundation, which is the most frequent move in both games and the one
+  players most resent dragging. Everything else — a run between tableau columns, a
+  card into a free cell, a Spider sequence onto another column, a Pyramid pairing
+  — is drag-only. Press, hold, travel, release, and if the release lands wrong the
+  run goes back where it came from.
+
+  A press-hold-drag over a long distance is a fine interaction for someone with a
+  steady hand and a clear view of both ends of the journey, and a poor one
+  otherwise. This project already treats that as a design constraint rather than a
+  preference everywhere else — it is why melds are drawn large, why the computer
+  pauses long enough to follow, and why the last discard is spelled out in words.
+  The input side has not had the same attention.
+
+  Click-to-select then click-to-place, alongside dragging rather than instead of
+  it. The selected run lifts exactly as it does mid-drag, the legal destinations
+  can be marked while it is held, and the second click completes or a click
+  elsewhere cancels. Chess already works this way — `ChessView` highlights
+  destinations on selection — so the interaction exists in the codebase and the
+  question is bringing the card games in line with the board games.
+
+  It costs nothing to keep drag working, and the two can share a path: a drag is
+  already a lift plus a drop, and this makes the lift and the drop independent of
+  whether the button stayed down. Whichever game gets a rules core first under
+  GHUB-0066 is the natural place to try it, since the lift/drop logic is exactly
+  what that extraction has to pull out of the mouse handlers anyway.
+  **Layman:** You have to drag cards with the mouse held down; only sending a card to a foundation can be done with a double-click.
+  Kind: accessibility.
+  Source: in-session-2026-08-20.
+
+- 💭 [GHUB-0070] **Nothing in the app has a name a screen reader could read — recorded, with an honest doubt about whether it is wanted.**
+  There is not one `setAccessibleName`, `setAccessibleDescription` or
+  `QAccessible` anywhere in `src/`. Qt gives standard widgets — the toolbar, the
+  menu, the tile buttons — some default accessibility, but every game is a
+  custom-painted `QWidget` that draws itself and exposes nothing. To assistive
+  software the play area is an empty rectangle.
+
+  **Filed as considered rather than planned, and the honest reason is that it may
+  not be the right work.** The owner is partially sighted and reads the screen;
+  every accessibility decision in this project so far — card size, pip patterns,
+  named discards, pacing — has been about making the picture readable, which is a
+  different axis from making it audible. Building a screen-reader surface nobody
+  here uses would be effort spent away from GHUB-0017's twelve outstanding
+  legibility passes, which are known to matter.
+
+  What argues the other way is that the app is now published to strangers, with
+  OBS and Flathub queued, and some of these games are genuinely playable without
+  sight: Chess, Draughts, Reversi, Sudoku and 2048 are all grid games with a small
+  vocabulary of announcements. Card games mostly are not. So the honest scope is
+  never "make the collection accessible" but "five grid games could announce their
+  state," which is a much smaller and more truthful proposition.
+
+  The cheap part is worth doing whatever is decided about the rest: naming the
+  toolbar actions and the fourteen tiles costs almost nothing and makes the hub
+  navigable even if no game ever is. Do that much; leave the rest until somebody
+  asks.
+  **Layman:** Screen-reader software would find the games completely blank; whether that matters here is a real question, not an assumption.
+  Kind: accessibility.
+  Source: in-session-2026-08-20.
+
 ### 🎨 Play
 
 - 💭 [GHUB-0018] **Canasta cannot take a move back.**
@@ -2099,6 +2228,52 @@ open.
   Layman: Have the tests find the illegal-move bugs instead of the player.
   Kind: test.
   Source: in-session-2026-08-11.
+
+- 📋 [GHUB-0066] **Six games have no rules core, and they are exactly the six whose rules nothing tests.**
+  CLAUDE.md opens the architecture section with the rule: every game is a rules
+  core plus a view, the core never includes a widget, *that split is the reason the
+  whole collection is testable without a display, and it is the rule to preserve
+  when adding a game.* Eight games follow it. Six do not, and nobody noticed
+  because the consequence is silent.
+
+  Klondike, Spider, FreeCell, Pyramid, Snake and 2048 ship exactly one `.cpp` each
+  — `klondikeview.cpp`, `spiderview.cpp`, and so on. There is no board, no engine,
+  no grid: the rules live inside the widget. `GAME_CORE_SOURCES` lists thirteen
+  files and none of them belongs to those six, and `gameshub_selftest` links only
+  the cores. **So the self-test cannot reach their rules even in principle.**
+
+  The coverage numbers fall out of that exactly, counting how often each game is
+  named in `tests/selftest.cpp`: Canasta 378, Hearts 144, Chess 116, Draughts 43,
+  Reversi and Sudoku 27, Minesweeper 19, Pinball 18 — then Spider 6, Klondike 1,
+  and FreeCell, Pyramid, 2048 and Snake at **zero**. Snake is zero in the UI test
+  as well, so nothing anywhere touches it. A keyword count is not a coverage
+  measurement and should not be quoted as one, but the gap between 378 and 0 is
+  not a measurement artefact, and it lands on precisely the six games named above.
+
+  **This matters now rather than eventually, because three queued items all edit
+  these games.** GHUB-0056 changes how their undo copies snapshots. GHUB-0052
+  wants to fuzz the very `restoreState()` implementations they own. GHUB-0065 adds
+  animation to their auto-moves. Three changes to six games whose rules no test
+  would notice breaking.
+
+  The fix is the rule the project already wrote down: lift the rules out into a
+  core per game and let the self-test link it. The solitaires then get an obvious
+  and powerful property, and the machinery for it is already built — deal, play
+  legal moves at random until the game is won or stuck, and assert after every
+  single move that the pack is still intact, which is exactly what
+  `cardcodec::matchesPack` and `fitsPack` do for saves today. 2048's tiles must
+  always be powers of two; Snake must never occupy a square twice and must die
+  exactly when it leaves the grid or meets itself.
+
+  Worth doing one game at a time, cheapest first, rather than as a six-game
+  refactor. Pyramid and FreeCell are the smallest views; Klondike is the one most
+  other code resembles.
+
+  The UI test does construct and render all six, so *does it crash while
+  painting* is covered. It is the rules that are not.
+  **Layman:** Six of the fourteen games have their rules mixed into the drawing code, which is why the test suite cannot check them at all.
+  Kind: refactor.
+  Source: in-session-2026-08-20.
 
 ### 🎨 More games, if wanted
 
