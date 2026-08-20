@@ -1234,6 +1234,41 @@ progress.
   Kind: ux.
   Source: in-session-2026-08-20.
 
+- ✅ [GHUB-0074] **Snake and Hearts kept playing after you left them.**
+  The same defect as GHUB-0073, in two more games. Both own a QTimer
+  and neither overrode GameView::deactivate(), whose whole purpose is
+  to stop a clock when the hub moves on.
+
+  Found by a lane question rather than by a finding: it asked whether
+  the new stop-on-leave assertion really reaches only Pinball. It does
+  — and the reason is that a pixel probe can only catch a game that
+  HAPPENS to be moving when the hub leaves, and every clock here except
+  Pinball's is idle on a freshly opened board. So both games passed
+  every green run.
+
+  Hearts needed the resume as much as the stop. Its activate() only
+  refreshed, so stopping the clock without adding one would have left
+  the computers frozen mid-trick — a worse bug than the one being
+  fixed. It now restarts when a trick is pending or a computer is due.
+
+  gamesStopTheirClocks replaces the observation with a structural rule:
+  no QTimer may be active after deactivate(), asserted for all fourteen
+  games whether or not anything was visibly moving. Snake's and
+  Pinball's stop-and-resume are checked directly.
+
+  Honest gap: removing Hearts' resume reddens nothing, because reaching
+  a state where its clock is due means driving the pass first. Snake's
+  break was seen red; Hearts' was not, and that is recorded rather than
+  implied away.
+
+  The block cost a lesson too. Leaving the two views running inside it
+  kept their timers alive through the rest of the suite, and Pinball
+  repaints on every pump — a 34-second run had not finished in two
+  minutes. Each view is now scoped and left stopped.
+  **Layman:** Leaving Snake mid-game ran the snake into a wall while you were elsewhere, and leaving Hearts finished the hand without you.
+  Kind: fix.
+  Source: in-session-2026-08-20 (CLAUDE.md cold gate, loop 3).
+
 ### ✨ Look and feel
 
 Not decoration. Every item here is a piece of information the game currently

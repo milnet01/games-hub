@@ -38,6 +38,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Snake and Hearts kept playing after you switched away** (GHUB-0074)
+  Leaving Snake mid-game ran the snake into a wall while you were in another
+  game; leaving Hearts finished the hand without you. Coming back picks
+  either up where you left it.
+
 - **Pinball kept playing after you switched to another game** (GHUB-0073)
   The ball carried on rolling, and could drain while you were elsewhere.
 
