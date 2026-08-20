@@ -1633,6 +1633,108 @@ public-domain; see the standing rules for why each is safe.
   Kind: feature.
   Source: user-request-2026-08-20.
 
+### 🌐 Playing against other people
+
+Every game here plays against the computer or against nobody. This section is
+
+for playing against a person — at the same machine, on the same network, or
+
+over the internet — and for the pieces that need to exist first.
+
+Four games have an opponent at all today (Chess, Reversi, Draughts, Hearts,
+
+and Canasta makes five with three computer seats); the other nine are
+
+solitaire, puzzle or arcade games where a second player has no meaning without
+
+inventing one.
+
+- 📋 [GHUB-0080] **Play against another person — same machine, same network, or over the internet — with Windows and Linux in the same game.**
+  Large, and deliberately filed rather than started. What follows is
+  what is already known so a later session does not re-derive it.
+
+  **Five games can use it and nine cannot.** Chess, Reversi, Draughts
+  and Hearts have a computer opponent today; Canasta has three. The
+  four solitaires, Sudoku, Minesweeper, Snake, 2048 and Pinball are
+  single-player, and a second player there means inventing a mode
+  (shared board, race, best-of-three on score) rather than swapping a
+  human in for the AI. Do not treat "multiplayer" as one job across
+  fourteen games.
+
+  **Cross-platform is the requirement with a known trap already in
+  this tree.** A seed does not mean the same deal on two compilers:
+  the standard pins what std::mt19937 emits but not how std::shuffle
+  consumes it, so libstdc++ and MSVC deal different hands from
+  identical state. cards/card.cpp already avoids it with a
+  hand-written Fisher-Yates -- that was found the hard way, by
+  Canasta's AI ladder passing on Linux and failing on the Windows
+  runner with no engine change. **sudokugrid.cpp (two calls) and
+  minefield.cpp (one) still call std::shuffle**, so any mode that
+  deals or generates a shared board from a seed must fix those first.
+  CLAUDE.md's trap entry says the same and is the place to re-read.
+
+  **Send moves, not positions.** Chess already saves its game as the
+  move list and replays it through ChessGame::play(), which rebuilds
+  the board, the undo stack and the threefold-repetition keys from
+  one list -- and every move is re-checked against legalMoves() on
+  the way in, so a move the build would not play is refused rather
+  than half-applied. That is exactly the shape a wire protocol wants,
+  and it is the shape to prefer where a game offers the choice.
+  Canasta cannot do it (no move log, so its engine serialises
+  directly), which is why the two look different.
+
+  **The security cost is real and lands on code that has never seen a
+  stranger.** Today restoreState() only ever reads bytes this app
+  wrote. Networked play means parsing input from an untrusted peer,
+  and GHUB-0052 already records ten hand-audited parsers with nothing
+  but hands checking them. Fuzzing those is close to a prerequisite
+  rather than a nice-to-have, and SECURITY.md would need to say what
+  the app does and does not accept over a socket.
+
+  **A wire protocol is a new breaking surface.** See
+  docs/standards/versioning-overrides.md section 1 -- it would join
+  the saved game, the settings store and the command line, and
+  changing it after two people have installed different versions is
+  the thing a version number exists to warn about.
+
+  **Nothing in the tree is networked.** No QTcpSocket, no QNetwork
+  anything, and Qt6::Network is not linked. That is a clean start
+  rather than a problem, but it means CMakeLists.txt, the AppImage
+  bundle and the Windows zip all grow, and the release smoke tests
+  would want something to say about it.
+
+  **Pacing is a design constraint here, not a preference.** The
+  computer pauses nearly a second on purpose because the owner reads
+  a card by its pip pattern and needs time. A human opponent will not
+  wait, so no move clock by default, and the on-surface captions
+  added under GHUB-0071 -- what was just played, whose turn it is --
+  matter more with a person on the other end, not less.
+
+  **Three decisions needed before any of this is scoped, and they
+  change the work completely:**
+
+  1. What "local" means -- two people at one keyboard (hot-seat, no
+     networking at all, much the cheapest and worth doing first), or
+     two machines on a home network.
+  2. How two machines find each other over the internet -- a typed
+     IP and port forwarding, which is free and most people cannot do;
+     or a relay/matchmaking service, which works and is an ongoing
+     cost and an operational burden for a project shipped as an
+     AppImage and a zip.
+  3. Whether a disconnected game is abandoned, resumable, or handed
+     to the AI.
+
+  Suggested order if it goes ahead: hot-seat first (proves the games
+  can take a second human at all, no network, no security surface),
+  then direct connection on a LAN, then the internet question. Each
+  of those is its own bullet under this section when it is picked up.
+  Filed 2026-08-20 on the owner's request, for later. Not started,
+  and the three decisions listed above are what a session picking
+  this up should ask before scoping anything.
+  **Layman:** Play Chess or Hearts against a real person instead of the computer, whether they are sitting beside you or on the other side of the world, and it should not matter which system either of you uses.
+  Kind: feature.
+  Source: user-request-2026-08-20.
+
 ### 📚 Documentation
 
 - 📋 [GHUB-0016] **Every game explains its own rules, inside the app.**
