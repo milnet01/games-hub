@@ -2537,6 +2537,38 @@ open.
   Kind: fix.
   Source: in-session-2026-08-20.
 
+- 📋 [GHUB-0081] **Nobody has looked at the twelve new legibility passes, and one of them is the risky one.**
+  GHUB-0017's spec says every per-game pass is judged BY EYE (§ 3.2,
+  § 9). GHUB-0071 shipped twelve of them in one session and none has
+  been seen. Everything asserted about them is measured -- card widths
+  against kFaceMinWidth, contrast ratios, font solves, off/on/off
+  renders -- and measurement cannot answer "can he read this".
+
+  **Hearts is the one to look at first, and the reason is
+  structural.** Ten games reserve a caption band and shrink the board
+  by it. Hearts does not: its hand is anchored to the bottom, so a
+  band would come off the cards instead, and its caption goes in the
+  gap that already exists between the trick and the hand. That gap is
+  generous at a comfortable window and tightest at the minimum (620 x
+  480), where the trick cards and the hand are closest together. If
+  the caption overlaps the trick anywhere, it is there.
+
+  Canasta is second, for the opposite reason: it sits 900 wide against
+  the 960 kFitsBesideYourWork bar with 60 px of headroom, and its
+  melds clear the face-width floor by 0.4 px.
+
+  The rest are low risk -- a caption in a reserved band, or a font that
+  was solved rather than tuned -- but "low risk" is a measurement
+  talking again.
+
+  What would close this: open each of the twelve with the switch on
+  and off at a small window and at a comfortable one, and say which
+  look wrong. It is looking rather than typing, and it is the half of
+  GHUB-0017 that a session cannot do for him.
+  **Layman:** The twelve games changed today were checked by measurement, not by eye. Someone has to actually look at them.
+  Kind: accessibility.
+  Source: in-session-2026-08-20.
+
 ### 🎨 Play
 
 - 💭 [GHUB-0018] **Canasta cannot take a move back.**
