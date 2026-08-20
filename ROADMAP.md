@@ -542,6 +542,163 @@ double-clicking a file.
   Kind: package.
   Source: user-request-2026-08-20.
 
+### ⚡ Performance
+
+Nothing in this collection is slow in the way a spreadsheet is slow. The cost
+
+shows up in the two places a game can afford it least: a window that stops
+
+answering while the computer thinks, and a laptop fan that comes on and stays
+
+on.
+
+Every item here was found by reading the source on 2026-08-20, and the first one
+
+carries a measurement rather than an opinion. The last one exists because three
+
+of the four cannot be proved fixed with anything this project currently owns —
+
+which is the reason it is filed rather than an excuse for not filing the rest.
+
+- 📋 [GHUB-0046] **A game you have left keeps playing itself, and Pinball costs a fifth of a CPU core to do it.**
+  Measured rather than suspected. A hub sitting on the Pinball page used 1120 ms
+  of CPU in a five-second window -- 22% of one core -- with the ball parked and
+  nobody touching it. The tile grid over the same window used 0 ms. The table
+  steps every 16 ms whether or not anyone is watching.
+
+  The hub already has the seam that fixes this. `openGame()` calls `deactivate()`
+  on the page being left and `activate()` on the one arriving, and Minesweeper,
+  Sudoku and Canasta all override `deactivate()` -- Minesweeper's even banks its
+  clock so the timer resumes where it was left rather than where it would have
+  got to unattended. **Pinball, Snake and Hearts own a `QTimer` and override
+  nothing.** Pinball's timer stops only at `gameOver()`, so once the page has
+  been opened the cost follows you into every other game until the app closes.
+
+  It is not only CPU, and the other two symptoms are worse. `PinballView::tick()`
+  plays the bumper, slingshot and drain effects, so an invisible table makes
+  noises over the game you are actually playing. And the simulation keeps running,
+  so the ball drains and the balls are spent while you are elsewhere -- the same
+  for Snake, which keeps moving and dies unattended. A player who ducks out to
+  the tile grid mid-ball comes back to a game that played itself badly.
+
+  The work is three `deactivate()` overrides following the pattern already in the
+  tree, plus the test that stops this recurring: every registered game gets
+  activated, deactivated, and asserted quiet. Written as a property of the whole
+  registry rather than three named games, a fifteenth game with a timer is caught
+  the day it lands rather than the day someone measures again.
+  **Layman:** Open Pinball once and the fan stays on for the rest of the session, even while you are playing Chess.
+  Kind: fix.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0047] **The computer thinks on the drawing thread, so the window stops answering while it does.**
+  There is no `QThread` and no `QtConcurrent` anywhere in `src/`. Every engine
+  runs inside the signal handler that started it, on the thread that also paints
+  and handles input, so the window is genuinely frozen for the duration: no
+  repaint, no resize, no menu, and on some desktops a "not responding" prompt.
+
+  CLAUDE.md already records the consequence for Chess -- Hard's worst observed
+  middlegame answer is about 1.2 seconds -- and records the workaround, which is
+  that `planFor()` hands each level a node budget rather than a depth, because
+  depth alone would freeze the window. **That budget is currently doing two jobs:
+  choosing how strong the engine is, and keeping the UI alive.** Only the first
+  is a game-design decision. Reversi at depth 6 and Draughts sit behind the same
+  constraint.
+
+  The architecture is already most of the way there, and this is the argument for
+  doing it here rather than living with the freeze. The rule that a rules core
+  never includes a widget means every engine is Qt-free or QtCore-only, takes a
+  value-type position, and returns a move -- which is exactly the shape that moves
+  to a worker thread without redesign. `Board` is copied per search node by
+  design; nothing is shared to race over.
+
+  Two things the item must not lose. `ChessView::advance()` is the single point
+  that moves the game on, and a threaded reply must route back through it rather
+  than becoming a second path -- CLAUDE.md names that trap for Reversi in the same
+  words. And a search that is still running when the player starts a new game,
+  switches level, or leaves the page has to be abandoned rather than awaited; that
+  cancellation, not the threading, is where this kind of change usually goes
+  wrong.
+
+  The visible win is a window that stays alive and a "thinking" indicator that can
+  actually animate. The strength win is separate and optional: with the UI no
+  longer hostage to it, the node budget can be reconsidered on merit.
+  **Layman:** When the computer is working out its move the whole window freezes -- it cannot even be resized until it finishes.
+  Kind: perf.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0048] **Every card is drawn from scratch, every frame, and nothing is ever cached.**
+  There is no `QPixmap` and no `QPixmapCache` in the entire source tree. Every
+  pixel is painted by `QPainter` on every paint event.
+
+  What one card costs, from `CardArt::paintFace` and `Theme::paintDropShadow`:
+  three stacked translucent rounded rectangles for the shadow, a rounded-rect
+  path, a linear-gradient fill, a stroked outline, then the corner index twice
+  -- once rotated 180 degrees -- with four `QFont` mutations between them, and
+  finally up to ten pips. All antialiased. Canasta drives a 16 ms timer during
+  its card flights and repaints the whole table, so roughly fifty cards pay that
+  price sixty times a second while a single card is in the air. The fourteen hub
+  tile miniatures are the same story on a smaller scale: each repaints its whole
+  illustration on hover in and hover out.
+
+  A face is a pure function of rank, suit, width and the legibility state. It is
+  the textbook cache, and the drawing code is already isolated behind
+  `cards/cardart.*` so the change has one home.
+
+  Three traps, and the first is a hard requirement rather than a refinement. **A
+  cached pixmap must carry its device pixel ratio** or every card goes soft on a
+  HiDPI screen -- for a partially sighted player that trades a cost he cannot see
+  for a blur he can, which is a straight loss however fast it runs. **The
+  legibility switch belongs in the cache key**, since it is exactly what changes
+  the size a card is drawn at, and Canasta already draws melds at 0.74 and
+  opponents' hands at 0.8 of the base width -- three live sizes per card in one
+  view. And **`CardArt::kFaceMinWidth` still decides what gets drawn**: below 46
+  pixels there is no face to cache, only a corner index.
+
+  The second half of the same problem, and deliberately second: every `update()`
+  in the tree is the whole-widget form. A card crossing the table invalidates the
+  forty that did not move. `update(QRect)` over the union of where a flight was
+  and where it now is would cut that, but it is fiddly and easy to get subtly
+  wrong -- a missed rectangle leaves smears on screen. Do the cache first, measure
+  again, and only reach for this if the number still justifies it.
+  **Layman:** The card games redraw all fifty-odd cards sixty times a second, even the ones sitting still.
+  Kind: perf.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0049] **Nothing in the project can measure a frame, so no painting fix can be proved.**
+  The three items above were found by reading source, and only the first carries a
+  number -- taken by hand from `/proc` against a running process on 2026-08-20,
+  under the offscreen platform, and not repeatable by anything in the repository.
+  That is the gap. `gameshub_selftest` proves rules and `gameshub_uitest` proves
+  widgets, and neither has ever asked how long anything takes.
+
+  This project already knows what to do when a number matters, and does it well.
+  Chess move generation is proved by perft against published totals rather than by
+  eyeballing. Canasta's four AI levels are played against each other rather than
+  described, which is how Hard was caught being weaker than Medium. Sudoku's mark
+  font is solved against measured ink and the test loops over the machine's own
+  font families. The same instinct has simply never been pointed at frame cost.
+
+  The smallest useful version: a check that renders a view into a `QPixmap` a
+  fixed number of times and reports the milliseconds -- the `render()` trick the
+  UI tests already use to force `paintEvent` through, with a clock around it.
+  Canasta mid-flight, a full Klondike tableau and the fourteen-tile grid are the
+  three that would say the most.
+
+  **Report the number; do not assert a threshold.** CLAUDE.md's own rule from the
+  three red Windows runs is that a test may assert what the code does and must
+  only report what the platform happens to provide, and a frame time is a property
+  of the machine, the compositor and the graphics stack -- exactly the kind of
+  constant that passes here and reddens on `windows-2022`. A printed figure that a
+  human compares before and after is worth having; a hardcoded budget is a red CI
+  leg waiting for a slow runner.
+
+  One thing it can assert honestly, because it is a property of the code rather
+  than the machine: a view that has been deactivated does no work at all. That is
+  the permanent guard for the first item in this section.
+  **Layman:** There is no way to check whether a speed-up actually sped anything up.
+  Kind: test.
+  Source: in-session-2026-08-20.
+
 ### 🎨 Games agreed and not yet started
 
 Asked for on 2026-08-10, in the order agreed. All are traditional or
