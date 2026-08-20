@@ -1166,6 +1166,153 @@ progress.
   Kind: ux.
   Source: in-session-2026-08-20.
 
+### ✨ Look and feel
+
+Not decoration. Every item here is a piece of information the game currently
+
+states in words — usually in the status bar, which § Legibility has already
+
+established the owner does not read during play (GHUB-0040) — and could instead
+
+show, where the eye finds it without being sent to look.
+
+That is the through-line, and it is why the owner's own suggestion opens the
+
+section: a soft light on whoever is playing answers *is it my turn yet* the way
+
+a lit room answers *is anyone home*. The other two are the same trade in
+
+different places — a suit that is a drawn shape rather than a borrowed font
+
+glyph, and a card that visibly travels rather than teleporting.
+
+The existing legibility work is GHUB-0017's, not this section's. That item owns
+
+the twelve remaining per-game passes; these three are about what every game
+
+draws, whether or not it has had one.
+
+- 📋 [GHUB-0063] **A soft light on whoever is playing, so whose turn it is needs no reading.**
+  The owner's suggestion, and it is the right answer to a problem this project
+  keeps hitting from other directions.
+
+  What the games do today is all text, and all small. Hearts recolours a seat
+  label to gold and leaves everything else identical -- a few words changing
+  colour at the edge of the table. Canasta writes a sentence, "North is playing."
+  The two-player board games mostly leave it to the status bar, which GHUB-0040
+  already established is the one place the owner does not look while playing. In
+  every case the information is present and phrased as something to be read.
+
+  A glow is not read. Brightness and area register before attention is directed at
+  them, which is exactly the property wanted for a question the player is not
+  asking on purpose -- *is it me yet* -- and it is worth more to a partially
+  sighted player than any wording could be. It applies in three places: the four
+  seats in Hearts, the four around the Canasta table, and the two sides of Chess,
+  Draughts and Reversi, where "the computer is thinking" and "it is your move" are
+  the same two states seen from opposite ends.
+
+  **It pairs with GHUB-0047.** Once the engine stops running on the drawing
+  thread, the window stays alive while the computer thinks -- and a light sitting
+  on the computer's side is then a genuine progress indicator rather than a frozen
+  picture.
+
+  Four design constraints, and the last two are the ones that bite.
+
+  Do not let the glow be the only cue. Luminance and area are already better than
+  hue, but pairing the light with something structural -- a lifted seat panel, a
+  thickened edge -- means it survives any display, any contrast setting, and a
+  player who is also colour-blind.
+
+  It should strengthen when the legibility switch is on, in the same way the rest
+  of that work does. `Legibility::instance()` broadcasts to every constructed
+  game, so the hook already exists.
+
+  **Fake the blur; do not compute one.** `Theme::paintDropShadow` already sets the
+  house precedent -- three stacked translucent rounded rectangles, with a comment
+  saying a real blur is not worth it at card size. One radial gradient is the
+  equivalent here. A genuine blur per frame is the sort of thing the Performance
+  section exists to prevent.
+
+  **Fade in once and hold. Do not pulse.** A pulsing light means a repaint every
+  frame, forever, in games that currently repaint only when something changes --
+  turning a still screen into a 60 Hz one and undoing GHUB-0046 by a different
+  route. A short fade when the turn passes, then a steady light, gives the eye the
+  movement that draws it and costs nothing while it sits. In Canasta the fade must
+  also keep clear of `m_flights` and `animating()`, which already own that view's
+  timing.
+  **Layman:** The seat of the player whose turn it is gets a gentle glow, so you can see at a glance who is up.
+  Kind: ux.
+  Source: user-request-2026-08-20.
+
+- 📋 [GHUB-0064] **The pip pattern is how he reads a card, and its shape is chosen by whatever font the operating system supplies.**
+  `CardArt::drawPip` sets a font size and calls `p.drawText()` with the Unicode
+  character for the suit. So do both corner indices. The pips are typography, not
+  artwork.
+
+  That matters more here than it would in most card games. The owner reads a card
+  by its pip pattern rather than its corner index -- CLAUDE.md states it as a
+  design constraint, and it is the reason melds put wild cards first and are drawn
+  at 0.74 rather than as slivers. The single most load-bearing graphic in the
+  collection is currently whatever glyph the host system decides to hand over.
+
+  The consequences are the ones this project has already paid for once. A glyph's
+  weight and proportion differ between platforms, so the same hand does not look
+  the same on Windows and Linux. Hinting rounds the ink by a whole pixel at small
+  sizes -- measured during the Sudoku work, where one font came out at 0.742 of an
+  em at size 100 and about 0.685 at the 7-to-11 point sizes actually drawn. And a
+  host with no suitable font gives replacement boxes; `windows-2022` under the
+  offscreen platform returns an EMPTY font family list, which is recorded in
+  CLAUDE.md as the number to remember.
+
+  Four `QPainterPath` shapes remove all of it. They are identical on every
+  platform, they scale cleanly instead of being hinted, and -- the part a font
+  cannot do -- they can be given extra weight or a heavier outline when the
+  legibility switch is on, so the pattern thickens for the person who needs it
+  rather than merely getting bigger.
+
+  **The court cards are NOT part of this, and the current design is right.**
+  `drawCourt` gives J, Q and K a ruled panel with a letter rather than figure art,
+  and its comment says why: it reads as a court card at any size and never turns
+  to mush when cards are small. Keep that. The only opening there is at the large
+  end -- with the legibility switch on and room to spare, a richer court could be
+  shown -- and that is a separate question from getting the pips under our own
+  control.
+  **Layman:** The club, diamond, heart and spade symbols are typed as text, so they look different on different computers instead of being drawn by us.
+  Kind: ux.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0065] **One game animates and thirteen teleport.**
+  Canasta has card flights. Nothing else does. In every other game a card is in
+  one place, and then it is in another, with nothing in between: a deal arrives
+  fully formed, a run lands on a foundation, a trick gathers itself up. The move
+  happened and the screen reports the result.
+
+  Motion is information, and it is the kind this player can use. It answers *what
+  just changed and where did it go* -- which a redraw of the finished position
+  does not answer at all, because by the time you look, the change is over. An
+  auto-move to a foundation in Klondike, FreeCell or Spider is the clearest case:
+  cards leave on their own, several at a time, with no indication of which ones
+  went or where from.
+
+  **Reuse Canasta's design, and read its traps before writing a second
+  implementation.** They are documented and they were expensive. A card in the air
+  must be suppressed at its destination or the eye sees it twice. The match
+  between a flight and a card is consumed one per flight -- without that, two
+  identical cards arriving together suppress both destination copies and one card
+  vanishes, which is routine rather than exotic in a two-pack game. And a flight
+  carries a captured destination point, so anything that moves the layout has to
+  clear the flights first or a card lands where its target used to be.
+
+  Two boundaries. **An animation timer is a timer**, so whatever gets built here
+  owes GHUB-0046 a `deactivate()` that stops it -- adding motion to thirteen games
+  without that would multiply the exact fault that section is about. And this is a
+  large surface if taken all at once; the auto-moves above are where the ambiguity
+  actually is, and dealing animations are the pretty part rather than the useful
+  part. Start where a player currently cannot tell what happened.
+  **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
+  Kind: ux.
+  Source: in-session-2026-08-20.
+
 ### 🎨 Games agreed and not yet started
 
 Asked for on 2026-08-10, in the order agreed. All are traditional or
