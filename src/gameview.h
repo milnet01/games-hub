@@ -54,6 +54,19 @@ public:
     // case the game keeps the fresh one it already dealt.
     virtual bool restoreState(const QByteArray&) { return false; }
 
+    // True while this game holds animation state that a settings change would
+    // CONSUME rather than pause. Canasta's cards in flight carry a destination
+    // captured when they left, so applyLegibility lands them — correctly, and
+    // irreversibly. A game whose animation can simply be stopped and picked up
+    // where it was answers false, which is why Pinball does not override it: a
+    // frozen ball is exactly where it was.
+    //
+    // It exists because deactivate() FREEZES a game without SETTLING it, and
+    // those are different things. A board frozen mid-deal is static — it will
+    // pass any stillness probe — while still holding state the next settings
+    // change will eat.
+    virtual bool hasPendingAnimation() const { return false; }
+
     // The narrowest card this game draws at its current size, measured at the
     // SMALLEST scale it draws one at — Canasta's melds are at 0.74, so its
     // answer is 0.74 of a full card. 0 for a game that draws no cards.

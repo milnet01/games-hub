@@ -453,9 +453,10 @@ int main(int argc, char* argv[])
     // Each game is deactivated first. Snake's timer, Pinball's ball and
     // Hearts' opponents would otherwise redraw between the two renders, and a
     // difference that came from a moving ball proves nothing about the switch.
-    // A game that still moves after deactivate() is REPORTED and left out
-    // rather than asserted about: a suite that fails one run in three costs
-    // more than the check is worth.
+    // A game that still moves after deactivate() is left out of the picture
+    // comparison — a difference that came from motion proves nothing — AND
+    // fails the stop-on-leave assertion below, because GameView::deactivate()
+    // promises it stopped.
     //
     // Measured at each game's OWN minimum size, which is where a pass bites
     // hardest — Canasta's whole pass is a raised minimum, and at a comfortable
@@ -478,9 +479,6 @@ int main(int argc, char* argv[])
         int measured = 0;
 
         for (const QString& name : probe.gameNames()) {
-            if (name == QStringLiteral("Sudoku"))
-                continue;
-
             HubWindow one;
             one.openGameNamed(name);
             one.show();
@@ -493,6 +491,32 @@ int main(int argc, char* argv[])
                 restless << name + QStringLiteral(" (no view)");
                 continue;
             }
+            // Let the game SETTLE before freezing it, and the distinction is
+            // the whole reason this loop exists. deactivate() stops a timer
+            // where it stands, which makes a board static without making it
+            // finished: Canasta's opening deal freezes with cards still in
+            // the air, and CanastaView::applyLegibility deliberately LANDS
+            // them (Flight::to is a point captured at launch, so a card must
+            // not be left to arrive at a destination that has moved). That
+            // landing is correct and cannot be undone, so a board frozen
+            // mid-deal fails a reversibility check for a reason that is not a
+            // defect.
+            //
+            // It passed locally every time and failed on BOTH CI legs, which
+            // is the signature of a race rather than a bug: this machine
+            // finishes the deal before this point and a loaded runner does not.
+            //
+            // Asked of the game rather than guessed from pixels. A staggered
+            // deal has lulls — every remaining card still counting down its
+            // delay — so two matching renders do NOT mean settled, and the
+            // probe below would clear a board that is merely pausing.
+            int settling = 0;
+            for (; settling < 80 && view->hasPendingAnimation(); ++settling)
+                pump(50);
+            if (settling > 0)
+                std::printf("      %s settled after %d ms of dealing\n",
+                            qPrintable(name), settling * 50);
+
             view->deactivate();
             pump(20);
 
@@ -510,6 +534,13 @@ int main(int argc, char* argv[])
                 restless << name;
                 continue;
             }
+            // Sudoku sits out the PICTURE comparison only, and it has to be
+            // here rather than at the top of the loop: skipping it outright
+            // also excused it from the stop-on-leave assertion above, so a
+            // timer added to SudokuView would have been guarded by nothing.
+            if (name == QStringLiteral("Sudoku"))
+                continue;
+
             ++measured;
             if (view->captionText().isEmpty())
                 mute << name;
@@ -533,9 +564,10 @@ int main(int argc, char* argv[])
         }
         Legibility::instance().setEnabled(false);
 
-        std::printf("      legibility: %d of %d games held still enough to measure "
-                    "(Sudoku is asserted in its own block above)\n",
-                    measured, int(probe.gameNames().size()) - 1);
+        std::printf("      legibility: %d of %d compared off/on (all %d checked for "
+                    "stop-on-leave; Sudoku's picture is asserted in its own block)\n",
+                    measured, int(probe.gameNames().size()) - 1,
+                    int(probe.gameNames().size()));
         if (!restless.isEmpty())
             std::printf("      not measured (still animating after deactivate): %s\n",
                         qPrintable(restless.join(QStringLiteral(", "))));
@@ -1030,9 +1062,32 @@ int main(int argc, char* argv[])
             // The deal is animated, so the table only settles after the cards
             // have finished flying.
             const QImage dealing = renderOf(&canasta);
+            // hasPendingAnimation() is what the every-game legibility block
+            // settles on before it measures anything. A signal stuck at false
+            // would turn that wait into a no-op that still looks like it works,
+            // and the block would go back to measuring a board frozen mid-deal
+            // — which is what reddened both CI legs. So prove it rises here.
+            check(canasta.hasPendingAnimation(),
+                  "canasta: the table reports cards in flight while it is dealing");
             pump(2500);
             const QImage dealt = renderOf(&canasta);
             check(dealing != dealt, "canasta: the deal animates rather than appearing at once");
+            // A bounded wait for the FALLING edge, not an assertion at a fixed
+            // instant. The computers carry on playing once the deal is over and
+            // every AI move puts more cards in the air, so "no flights at
+            // 2500ms" is a race — it failed one run in six. What has to be true
+            // is that the signal comes back down, or the every-game block's
+            // settle loop would spin to its budget.
+            const auto reportsNoneEventually = [&canasta] {
+                for (int i = 0; i < 60; ++i) {
+                    if (!canasta.hasPendingAnimation())
+                        return true;
+                    pump(50);
+                }
+                return false;
+            };
+            check(reportsNoneEventually(),
+                  "canasta: and reports none once they have landed");
 
             check(status.contains(QStringLiteral("Classic")),
                   "canasta: the status line names the rule set in force");

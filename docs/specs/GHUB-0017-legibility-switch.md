@@ -4,10 +4,14 @@
 cap without an empty loop; §12 records why that is growth rather than an
 unsettled contract. **§4's mechanism was built on 2026-08-14** and §12 carries
 a fold-back row for the three clauses that survived the gate and were proved
-wrong by the build. **Two of the fourteen per-game passes (§9) have landed** —
-Canasta on 2026-08-19 and Sudoku the same day — each with a fold-back row of its
-own. §4.6 therefore no longer describes the tree: it was a statement about the
-mechanism change, and twelve games still ignore the switch.
+wrong by the build. **All fourteen per-game passes (§9) have landed** —
+Canasta and Sudoku on 2026-08-19, each with a fold-back row of its own, and the
+remaining twelve on 2026-08-20 as GHUB-0071. §4.6 therefore no longer describes
+the tree: it was a statement about the mechanism change, and no game ignores
+the switch now. `everyGameAnswersTheSwitch` in `tests/uitest.cpp` is what holds
+that true — it renders each game with the switch off and on and asserts the
+picture changed and then went back, so the claim is a check rather than a
+count.
 **Kind:** accessibility.
 **Source:** ROADMAP GHUB-0017 (owner request; shape agreed 2026-08-11, start
 agreed 2026-08-12).

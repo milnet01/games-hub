@@ -98,13 +98,16 @@ the Windows leg — the only place MSVC is exercised — does not run on branch
 work until a pull request opens. `release.yml`
 turns a tag into a Linux AppImage and a Windows zip on the releases page.
 
-Cutting a release is three edits and a tag, **in this order**:
+Cutting a release is three edits, a check and a tag, **in this order**:
 
 1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`.
 2. Bump `Current version X.Y.Z` in `README.md`.
 3. Close `## [Unreleased]` in `CHANGELOG.md` into `## [X.Y.Z] - <date>`, and
    leave a fresh empty `[Unreleased]` above it.
-4. Commit, then `git tag vX.Y.Z && git push --follow-tags`.
+4. Run `.claude/bump.json`'s `post_check` and see it print `version X.Y.Z
+   consistent`. **Nothing else runs it** — not a hook, not `local-ci.sh`, not
+   the workflow — so a step skipped above is caught here or nowhere.
+5. Commit, then `git tag vX.Y.Z && git push --follow-tags`.
 
 **`.claude/bump.json` is the one enumeration of version-bearing files** — it
 names `CMakeLists.txt` and `README.md`, and its `post_check` is what catches
@@ -116,9 +119,9 @@ the changelog must already have a `## [X.Y.Z]` block — the `verify` job
 checks both before either build starts, because the release notes are read
 from that block and a forgotten step would otherwise publish an empty one.
 Get it wrong and the fix is to delete the tag; nothing is published.
-**That job does NOT look at `README.md`**, so a forgotten step 2 is caught
-only by `bump.json`'s `post_check` — and otherwise publishes a release page
-still advertising the previous version.
+**That job does NOT look at `README.md`**, which is what step 4 is for: skip
+both and the release page still advertises the previous version, with nothing
+having said so.
 
 Every action is pinned to a commit SHA with the version in a trailing
 comment. That is not decoration: these workflows publish binaries that
@@ -128,9 +131,17 @@ clean and are the check before pushing a workflow edit.
 
 ## Architecture
 
-**Every game is a rules core plus a view, and the core never includes a
-widget.** That split is the reason the whole collection is testable without a
-display, and it is the rule to preserve when adding a game.
+**A game is a rules core plus a view, and the core never includes a widget.**
+That split is what makes a game's rules testable without a display, and it is
+the rule to hold when adding one.
+
+**It holds for eight of the fourteen, and the six it does not hold for are
+exactly the six whose rules nothing tests** — Klondike, Spider, FreeCell,
+Pyramid, Snake and 2048 have no core file at all, only a view, so
+`gameshub_selftest` cannot link their rules and does not check them.
+`GAME_CORE_SOURCES` in `CMakeLists.txt` is the list of record. **So a rules
+check for one of those six needs a core extracted first** — writing it into the
+self-test as it stands will not link. GHUB-0066 is the open item.
 
 - `src/gameview.h` — `GameView`, the contract between hub and game: a QWidget
   that offers `gameActions()` for the toolbar and emits `statusChanged`. It also
@@ -149,15 +160,42 @@ display, and it is the rule to preserve when adding a game.
   `paintStatusCaption()` draws that sentence on a plate and does nothing at all
   while the switch is off, so a pass is three lines at the end of `paintEvent`.
   `captionBand()` is the strip to keep clear for it — subtract it from the
-  height the game lays out in, and the board shrinks by exactly what the
-  sentence takes rather than being covered by it. `smallestCardWidth()` is the
+  height the game lays out in. It is a **fixed** two-line strip, capped, and
+  deliberately not the height of the current sentence; under the cap a caption
+  may overlap the board slightly, and that is the accepted outcome rather than
+  a bug. The caption-band trap below owns both reasons. `smallestCardWidth()` is the
   narrowest card the game draws, **at the smallest scale it draws one at**, and
   a game with no cards returns 0.
 
+  **`applyLegibility` is never called at construction** — `gameview.h` says so
+  — and games are built lazily, so a game opened for the first time while the
+  switch is already on gets no callback at all. Every game here is safe from
+  that because each reads `Legibility::instance().enabled()` **live**, at the
+  point it is used: inside `paintEvent`, a font accessor or `minimumSizeHint`.
+  **That is the rule, not an accident.** A game that instead caches anything
+  derived from the switch must read it in its own constructor as well, and no
+  test catches the omission — `everyGameAnswersTheSwitch` builds every game
+  with the switch off, so a game that ignores its initial state looks perfect.
+
   `deactivate()` is not optional for a game with a clock or an animation, and
-  `tests/uitest.cpp` now asserts it: every game must hold still once the hub
-  leaves it. Pinball had no override at all and its ball kept rolling — and
-  draining — on a table nobody was looking at (GHUB-0073).
+  `tests/uitest.cpp` asserts it over all fourteen: no game may still be moving
+  once the hub has left it. Pinball had no override at all and its ball kept
+  rolling — and draining — on a table nobody was looking at (GHUB-0073).
+  **What that assertion can catch is a game that is actually in motion when the
+  hub leaves**, which at the moment is Pinball alone: every other clock here is
+  idle on a freshly opened board, so deleting its `stop()` reddens nothing.
+  Measured by deleting Sudoku's and watching the suite stay green.
+
+  **`deactivate()` freezes a game; it does not settle it, and the two are
+  different.** A board frozen mid-deal is static and will pass any stillness
+  probe while still holding state the next settings change consumes — Canasta's
+  cards in flight carry a destination captured when they left, so
+  `applyLegibility` lands them, correctly and irreversibly.
+  `hasPendingAnimation()` is how a game says so, and Canasta is the only one
+  that answers true. **Asking pixels instead does not work**: a staggered deal
+  has lulls where every remaining card is counting down its delay, so two
+  matching renders mean nothing. That mistake passed here every time and
+  reddened both CI legs.
 - `src/legibility.*` — `Legibility`, the app-wide legibility preference
   (`display/legibility`, default off). It is no longer the only thing this app
   stores outside a game's own group: `donate/ask` and `donate/launches` are
@@ -174,10 +212,24 @@ display, and it is the rule to preserve when adding a game.
   `docs/specs/GHUB-0017-legibility-switch.md` is the contract. **All fourteen
   per-game passes have shipped** — Canasta (GHUB-0038) and Sudoku (GHUB-0039)
   first, both described under Traps below, and the other twelve as GHUB-0071.
-  What holds that true is not the count: `tests/uitest.cpp` opens every game
-  the hub knows, renders it with the switch off and on, and asserts the picture
-  changed and then went back. **A fifteenth game added without a pass reddens
-  that block**, which is the point of it.
+  **A pass does not have to be a caption, and two of the fourteen are not.**
+  Ten games reserve a band and draw one. **Hearts draws a caption but reserves
+  nothing** — it puts the sentence in the gap that already exists between the
+  trick and your hand, because its hand is anchored to the bottom and a band
+  would take space off the cards instead. **Pinball draws no caption at all**:
+  it is the one game that already spoke on its own surface, so its pass grows
+  the backglass and both labels on it. What is required is that the game answer
+  the switch, not that it answer in one particular shape.
+
+  What holds that true is not the count: `tests/uitest.cpp` walks the games the
+  hub can open, renders each at its own smallest size with the switch off and
+  on, and asserts the picture changed and then went back. **A fifteenth game
+  added without a pass reddens that block**, which is the point of it — it
+  lands in `silent` if it holds still, and fails the `deactivate()` assertion
+  if it does not. **Sudoku is excluded by name**, because its pass grows pencil
+  marks and a freshly generated board has none, so all three renders match at
+  any window size; its own block puts a mark in every cell that will take one
+  before asserting.
 - `src/donate.*` and `src/donatedialog.*` — the one place the app asks for
   money, reached from Help → Support this project and from the every-150th-
   launch prompt. **A `--game` launch advances the count and shows nothing** —
@@ -196,9 +248,16 @@ display, and it is the rule to preserve when adding a game.
   next time it is opened, with no save dialog anywhere. An empty state means
   "nothing worth keeping" and clears the stored one, which is how a finished
   game avoids resuming onto its own final scores.
-- `CMakeLists.txt` splits `GAME_CORE_SOURCES` (Qt-free or QtCore-only) from
-  `GAME_VIEW_SOURCES`. `gameshub_selftest` links only the cores, so anything
-  that pulls in QtWidgets belongs in the view half.
+- `CMakeLists.txt` splits `GAME_CORE_SOURCES` from `GAME_VIEW_SOURCES`, and
+  `gameshub_selftest` links only the cores. **Two things put a file in the view
+  half, not one.** Pulling in QtWidgets is the obvious one. The other is being
+  something a rules core has no business reading — a display preference, a
+  stored score, a session counter — **even when the file is QtCore-only**, and
+  that is not a style rule: it is what keeps the self-test from acquiring a
+  dependency on stored state. `legibility.cpp`, `scores.cpp` and `donate.cpp`
+  are all QtCore-only and all live in the view half; `legibility.cpp` carries
+  the reason inline. Judging by the QtWidgets test alone puts a new preference
+  store in the core half, where it links, passes, and tells you nothing.
 
 ### Per game
 
@@ -263,10 +322,11 @@ display, and it is the rule to preserve when adding a game.
 
 ## Traps worth knowing
 
-**The caption band is a FIXED two lines, and it is capped, and both are load
-bearing.** A band sized to the current sentence would resize the board every
-time the sentence changed length, and a board that jumps between moves is
-worse than a slightly smaller one. The cap — 22% of the surface — is the
+**The caption band is a FIXED height — two lines of the caption font plus its
+plate, `fm.height() * 3.1` — and it is capped, and both are load bearing.** A
+band sized to the current sentence would resize the board every time the
+sentence changed length, and a board that jumps between moves is
+worse than a slightly smaller one. The cap — 22% of the surface's height — is the
 Windows lesson again in a new place: the band comes off the height a card game
 solves its card width from, and `fm.height()` is a property of the platform's
 font, not of this code. `windows-2022` under the offscreen platform has no font
@@ -359,8 +419,13 @@ so a card in the air would otherwise land where its destination used to be.
 **The other five card games do not need a size pass, and the floors that say
 they do are unreachable.** Measured, not assumed: every card view calls
 `setMinimumSize(minimumSizeHint())`, so the smallest card each can actually
-reach is Klondike 67.9, FreeCell 67.4, Pyramid 68.6, Spider 54.2 and Hearts
-52.5 — all clear of `kFaceMinWidth`. Their `std::max(30.0, …)` … `std::max(34.0,
+reach — at its smallest window, **with the legibility switch on, so the caption
+band is already subtracted** — is Klondike 67.9, FreeCell 67.4, Spider 54.2,
+Hearts 52.5, Pyramid 52.1 and Canasta's melds 46.4, all clear of
+`kFaceMinWidth`. **Pyramid is the only one the band costs anything** (68.6
+before it) and it still clears by 13%. `cardsKeepTheirFaces` in
+`tests/uitest.cpp` prints all six every run, so these are readings rather than
+history. Their `std::max(30.0, …)` … `std::max(34.0,
 …)` floors read alarming and no window can drive them there. Canasta was the
 only game drawing faceless cards, and only in its melds: the opponents' hands
 are drawn at 0.8 but face **down**, so the threshold never applied to them.
@@ -472,8 +537,9 @@ back, nothing missing and nothing doubled. Spider and Pyramid do remove cards
 (a harvested run, a matched pair), so they get `fitsPack` plus a count of their
 own. Without that check a corrupt blob restores into a deal that cannot be won,
 and the player finds out an hour later. Minesweeper, Reversi, Draughts and 2048
-have no pack at all, so each core's `restore()` is the equivalent and refuses a
-board the game could not have reached: the mine count must match the level and
+have no pack at all, so what stands in is the check their `restore()` makes,
+refusing a board the game could not have reached (in a core for the first
+three, and in the view for 2048, which has none): the mine count must match the level and
 the numbers are recomputed rather than read, a Reversi board must hold at least
 the opening four discs, a draughts piece may not stand on a light square, and
 every 2048 tile must be a power of two. **A drag is the other half:** a run

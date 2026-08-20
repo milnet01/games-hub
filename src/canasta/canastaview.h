@@ -46,6 +46,9 @@ public:
     // are the smallest scale it draws a card at, which is exactly what the
     // base class asks for.
     double smallestCardWidth() const override { return smallestFaceWidth(); }
+    // The one game in the collection that answers this true: applyLegibility
+    // lands every card in flight, and a landed card cannot be un-landed.
+    bool hasPendingAnimation() const override { return animating(); }
 
     // True when the table is big enough to lay this card out on its own, with
     // cardWidth()'s floor never having to lift it. Floor and minimum size move

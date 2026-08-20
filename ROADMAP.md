@@ -2389,6 +2389,19 @@ open.
 
   The UI test does construct and render all six, so *does it crash while
   painting* is covered. It is the rules that are not.
+  Premise updated (2026-08-20). The sentence this bullet quotes from
+  CLAUDE.md no longer reads that way: all three lanes of that file's
+  cold gate found the same defect independently, and the architecture
+  section now states the split as the rule for a new game AND names
+  the six games that do not hold it, with the consequence spelled out
+  — a rules check for one of them will not link until a core is
+  extracted, and this bullet is cited there as the open item.
+
+  So the quoted text is a record of what the document said when this
+  was filed, not of what it says now. The item itself is unchanged and
+  still open: six games still have no core, and their rules are still
+  reachable only from a UI test. What changed is that the gap is
+  written down where someone would hit it.
   **Layman:** Six of the fourteen games have their rules mixed into the drawing code, which is why the test suite cannot check them at all.
   Kind: refactor.
   Source: in-session-2026-08-20.
