@@ -23,6 +23,9 @@ public:
     // which suit it is decides every legal play you have.
     QString captionText() const override;
     void activate() override;
+    // The computers stop playing when nobody is watching. Without it a hand
+    // finishes while you are in another game and you come back to a score.
+    void deactivate() override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;

@@ -19,6 +19,10 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    // A pause, not a stop: activate() picks the game back up. Without it the
+    // snake keeps moving on a board nobody is watching and runs into a wall
+    // while you are in another game.
+    void deactivate() override;
 
     static constexpr int kGridWidth = 24;
     static constexpr int kGridHeight = 18;

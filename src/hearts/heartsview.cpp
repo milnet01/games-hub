@@ -75,7 +75,18 @@ void HeartsView::newGame()
 
 void HeartsView::activate()
 {
+    // Pick the hand back up. deactivate() stops the clock wherever it stood,
+    // so without this the computers stay frozen mid-trick and the game is
+    // stuck — a worse bug than the one stopping them fixes.
+    if (m_awaitingCollect
+        || (m_engine.phase() == HeartsEngine::Phase::Playing && m_engine.currentPlayer() != 0))
+        m_timer->start(kAiDelayMs);
     refresh();
+}
+
+void HeartsView::deactivate()
+{
+    m_timer->stop();
 }
 
 void HeartsView::confirmPass()

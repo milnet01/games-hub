@@ -22,11 +22,13 @@
 #include "pinball/pinballview.h"
 #include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
+#include "snake/snakeview.h"
 #include "spider/spiderview.h"
 #include "sudoku/sudokuview.h"
 #include "twenty48/twenty48view.h"
 
 #include <QApplication>
+#include <QTimer>
 #include <QAction>
 #include <QCheckBox>
 #include <QDataStream>
@@ -592,6 +594,84 @@ int main(int argc, char* argv[])
         check(silent.isEmpty(), "legibility: every measured game changes what it paints");
         check(notRestored.isEmpty(),
               "legibility: and every one of them goes back pixel for pixel");
+    }
+
+    // ---- gamesStopTheirClocks (GHUB-0073, generalised) ----
+    //
+    // deactivate() promises that a game with a clock stopped it. The block
+    // above can only catch a game that HAPPENS to be moving when the hub
+    // leaves, and every clock here except Pinball's is idle on a freshly
+    // opened board — so Snake and Hearts kept theirs running through every
+    // green run of it. Leaving Snake mid-game drove the snake into a wall;
+    // leaving Hearts finished the hand without you.
+    //
+    // So this starts the game first, then leaves it. **The coming-back half
+    // matters as much as the leaving half**: a deactivate() with no resume
+    // freezes the game, which is a worse bug than the one it fixes.
+    {
+        const auto activeTimers = [](QWidget* w) {
+            int running = 0;
+            for (QTimer* timer : w->findChildren<QTimer*>())
+                if (timer->isActive())
+                    ++running;
+            return running;
+        };
+
+        // Each in its own scope, ending stopped. A view left running here keeps
+        // its timer alive through everything below — Pinball's physics ticks
+        // and repaints on every pump, which turned a 34-second suite into one
+        // that had not finished in two minutes.
+        {
+            SnakeView snake;
+            snake.resize(640, 480);
+            snake.activate();
+            pressKey(&snake, Qt::Key_Right);
+            check(activeTimers(&snake) > 0, "snake: the clock runs once the game has started");
+            snake.deactivate();
+            check(activeTimers(&snake) == 0, "snake: and stops when the hub leaves the table");
+            snake.activate();
+            check(activeTimers(&snake) > 0, "snake: and picks up again when you come back");
+            snake.deactivate();
+        }
+
+        // Pinball is the case that was found first, and the one game whose
+        // clock is already running before anything is pressed.
+        {
+            PinballView pinball;
+            pinball.resize(640, 700);
+            pinball.activate();
+            check(activeTimers(&pinball) > 0,
+                  "pinball: the table runs as soon as it is on screen");
+            pinball.deactivate();
+            check(activeTimers(&pinball) == 0, "pinball: and the ball stops when you leave it");
+            pinball.activate();
+            check(activeTimers(&pinball) > 0, "pinball: and starts again when you return");
+            pinball.deactivate();
+        }
+
+        // Every game the hub can open, held to the structural rule rather than
+        // to whether anything was visibly moving: nothing may still be ticking
+        // once the hub has left. This is the net that would have caught Snake
+        // and Hearts on the day they were written.
+        HubWindow probe;
+        QStringList ticking;
+        for (const QString& name : probe.gameNames()) {
+            HubWindow one;
+            one.openGameNamed(name);
+            one.show();
+            pump(40);
+            GameView* view = one.findChild<GameView*>();
+            if (view == nullptr)
+                continue;
+            view->deactivate();
+            pump(20);
+            if (activeTimers(view) > 0)
+                ticking << name;
+        }
+        if (!ticking.isEmpty())
+            std::printf("      STILL TICKING AFTER deactivate(): %s\n",
+                        qPrintable(ticking.join(QStringLiteral(", "))));
+        check(ticking.isEmpty(), "no game is still running a timer once the hub has left it");
     }
 
     // ---- cardsKeepTheirFaces (GHUB-0017 INV-3, withdrawn and now writable) --

@@ -101,6 +101,12 @@ void SnakeView::placeFood()
     m_food = free[pick(m_rng)];
 }
 
+void SnakeView::deactivate()
+{
+    m_running = false;
+    m_timer->stop();
+}
+
 void SnakeView::step()
 {
     m_direction = m_pending;

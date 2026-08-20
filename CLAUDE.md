@@ -88,6 +88,22 @@ zero steps — hence the `STEPS_RUN` guard. And a newline-separated record
 splits a multi-line `run:` block mid-body, so a step executes only its first
 line, silently.
 
+## Committing
+
+**One commit per roadmap item where the work splits cleanly; group them when
+splitting would produce a commit that does not build.** Owner's call,
+2026-08-20, settling a question that had been decided in practice several
+times and written down nowhere. The grouped case is real rather than
+hypothetical: GHUB-0041 and GHUB-0042 both rebuilt `HubWindow::buildChrome()`,
+so either half alone was a broken tree.
+
+**Either way the BODY names every ID the commit covers, one at a time.** The
+subject may abbreviate a run as `GHUB-0066..0070`, and this history does — but
+that form contains no literal `GHUB-0067`, so a tool grepping for one finds
+nothing. The body is what makes a grouped commit auditable, and every grouped
+commit here already enumerates its IDs there. Check the body, not the subject,
+before believing an ID never shipped.
+
 ## Releasing
 
 Two workflows in `.github/workflows/`, contract in
@@ -165,13 +181,21 @@ self-test as it stands will not link. GHUB-0066 is the open item.
   may overlap the board slightly, and that is the accepted outcome rather than
   a bug. The caption-band trap below owns both reasons. `smallestCardWidth()` is the
   narrowest card the game draws, **at the smallest scale it draws one at**, and
-  a game with no cards returns 0.
+  a game with no cards returns 0. **A card game must override it.** The
+  inherited 0 makes `cardsKeepTheirFaces` skip that game in silence, and its
+  `checked >= 6` floor is already met by the six that do override it — so a
+  fifteenth card game that forgets is caught by nothing, and ships drawing
+  cards too small to show a face.
 
   **`applyLegibility` is never called at construction** — `gameview.h` says so
   — and games are built lazily, so a game opened for the first time while the
   switch is already on gets no callback at all. Every game here is safe from
-  that because each reads `Legibility::instance().enabled()` **live**, at the
-  point it is used: inside `paintEvent`, a font accessor or `minimumSizeHint`.
+  that because the switch is read **live**, at the point it is used — in the
+  game's own `paintEvent`, font accessor or `minimumSizeHint`, or on its behalf
+  by the inherited `paintStatusCaption()` and `captionBand()`, which read it
+  live inside `gameview.cpp`. **Seven games never name `Legibility` at all**
+  and are correct as they stand; inheriting the read is compliance, not a gap
+  to paper over with a redundant call.
   **That is the rule, not an accident.** A game that instead caches anything
   derived from the switch must read it in its own constructor as well, and no
   test catches the omission — `everyGameAnswersTheSwitch` builds every game
@@ -182,9 +206,15 @@ self-test as it stands will not link. GHUB-0066 is the open item.
   once the hub has left it. Pinball had no override at all and its ball kept
   rolling — and draining — on a table nobody was looking at (GHUB-0073).
   **What that assertion can catch is a game that is actually in motion when the
-  hub leaves**, which at the moment is Pinball alone: every other clock here is
-  idle on a freshly opened board, so deleting its `stop()` reddens nothing.
-  Measured by deleting Sudoku's and watching the suite stay green.
+  hub leaves**, and that is a weaker net than it sounds: every clock here except
+  Pinball's is idle on a freshly opened board, so deleting its `stop()` reddens
+  nothing. Measured, by deleting Sudoku's and watching the suite stay green.
+  **That is how Snake and Hearts kept running through every green run** — both
+  owned a timer and neither overrode `deactivate()`, so leaving Snake mid-game
+  drove the snake into a wall and leaving Hearts finished the hand without you.
+  Both were fixed. **The rule to apply is structural, not observed: a game that
+  owns a `QTimer` overrides `deactivate()`**, whether or not a test can see it
+  running.
 
   **`deactivate()` freezes a game; it does not settle it, and the two are
   different.** A board frozen mid-deal is static and will pass any stillness
@@ -202,7 +232,10 @@ self-test as it stands will not link. GHUB-0066 is the open item.
   app-wide too, and `window/geometry/<page>` and `saved/<game>` are written
   per page and per game by `hubwindow.cpp`'s `geometryKey()` and `saveKey()`.
   **Anything sweeping stored state — a settings reset, a migration — has all
-  four families to handle**, and getting it wrong is quiet: clearing the donate
+  four families to handle, PLUS every per-game group**: `scores.cpp` writes
+  `<game>/best_*` keys and Canasta keeps its House set under `canasta/house/`
+  and its target under `canasta/target`, so a reset that clears only the four
+  app-wide families leaves a rule set and a score table standing, and getting it wrong is quiet: clearing the donate
   switch but leaving the counter at 149 fires the prompt on the very next
   start, and leaving `saved/` behind resumes games a "reset" was meant to
   forget.
@@ -212,14 +245,20 @@ self-test as it stands will not link. GHUB-0066 is the open item.
   `docs/specs/GHUB-0017-legibility-switch.md` is the contract. **All fourteen
   per-game passes have shipped** — Canasta (GHUB-0038) and Sudoku (GHUB-0039)
   first, both described under Traps below, and the other twelve as GHUB-0071.
-  **A pass does not have to be a caption, and two of the fourteen are not.**
-  Ten games reserve a band and draw one. **Hearts draws a caption but reserves
-  nothing** — it puts the sentence in the gap that already exists between the
-  trick and your hand, because its hand is anchored to the bottom and a band
-  would take space off the cards instead. **Pinball draws no caption at all**:
-  it is the one game that already spoke on its own surface, so its pass grows
-  the backglass and both labels on it. What is required is that the game answer
-  the switch, not that it answer in one particular shape.
+  **A pass does not have to be a caption, and three of the fourteen are not.**
+  Four shapes, covering all fourteen. **Ten reserve a band and draw a caption.**
+  **Hearts draws a caption but reserves nothing** — it puts the sentence in the
+  gap that already exists between the trick and your hand, because its hand is
+  anchored to the bottom and a band would take space off the cards instead.
+  **Pinball grows what it already says** rather than adding a caption: the
+  backglass and both labels on it, together. And **Canasta and Sudoku predate
+  the caption entirely** — Canasta's pass is a raised minimum size and Sudoku's
+  is bigger pencil marks, both under Traps below. What is required is that the
+  game answer the switch, not that it answer in one particular shape.
+
+  **Canasta and Sudoku reserve no band, and Canasta must never be given one**:
+  its melds clear `kFaceMinWidth` by 0.4 px, and a band comes off the height
+  its table solves card width from.
 
   What holds that true is not the count: `tests/uitest.cpp` walks the games the
   hub can open, renders each at its own smallest size with the switch off and
@@ -419,10 +458,11 @@ so a card in the air would otherwise land where its destination used to be.
 **The other five card games do not need a size pass, and the floors that say
 they do are unreachable.** Measured, not assumed: every card view calls
 `setMinimumSize(minimumSizeHint())`, so the smallest card each can actually
-reach — at its smallest window, **with the legibility switch on, so the caption
-band is already subtracted** — is Klondike 67.9, FreeCell 67.4, Spider 54.2,
-Hearts 52.5, Pyramid 52.1 and Canasta's melds 46.4, all clear of
-`kFaceMinWidth`. **Pyramid is the only one the band costs anything** (68.6
+reach — at its smallest window, **with the legibility switch on** — is Klondike
+67.9, FreeCell 67.4, Spider 54.2, Hearts 52.5, Pyramid 52.1 and Canasta's melds
+46.4, all clear of `kFaceMinWidth`. **The band is subtracted only by the four
+that reserve one**, so Hearts' and Canasta's figures carry no band cost at all
+and would not survive one being added. **Pyramid is the only one the band costs anything** (68.6
 before it) and it still clears by 13%. `cardsKeepTheirFaces` in
 `tests/uitest.cpp` prints all six every run, so these are readings rather than
 history. Their `std::max(30.0, …)` … `std::max(34.0,
