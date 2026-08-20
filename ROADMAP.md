@@ -922,6 +922,126 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-08-20.
 
+### 🧠 Memory
+
+Measured before written, on 2026-08-20: the hub sitting on the tile grid holds
+
+55.6 MB resident, opening Canasta adds about 2 MB, and opening Chess adds
+
+nothing measurable. Baseline is Qt itself. There is no leak that grows while you
+
+play and nothing here is urgent — which is the useful finding, and the reason
+
+this section is three items rather than ten.
+
+Three things a memory audit would normally flag are NOT findings here, recorded
+
+so nobody files them later. Raw `new` with a Qt parent is not a leak, it is how
+
+Qt owns objects, and the single `std::unique_ptr` in the tree
+
+(`MinesweeperView::m_field`) is right where a non-QObject needed one. Every undo
+
+history is already capped at 200 snapshots. Every deserialiser already bounds
+
+its counts before it allocates. What is left is churn, one real leak that is
+
+small in bytes and awkward in timing, and a growth curve that is fine at
+
+fourteen games and worth watching at thirty.
+
+- 📋 [GHUB-0056] **Undo copies the whole table on every move, and copies it again to undo one.**
+  Four solitaires keep undo as a stack of snapshots, and a snapshot is the entire
+  table. FreeCell's is the widest: eight columns, four free cells and four
+  foundations, so sixteen separate `std::vector<Card>` copies -- sixteen heap
+  allocations -- every time `pushUndo()` runs, which is every move. Spider's is
+  eleven vectors over a two-deck game, Klondike's thirteen, Pyramid's three.
+
+  **The cheap fix first, because it is real and it is one line.** `undo()` reads
+  `const Snapshot s = m_history.back();` and then pops -- a full deep copy of all
+  sixteen vectors, taken from a snapshot that is about to be destroyed. A
+  `std::move` out of the back before the pop does the same job with no allocation
+  at all. Four files, same shape in each.
+
+  **The structure is second, and smaller than it looks.** `m_history` is a
+  `std::vector` used as a queue: past 200 entries every push runs
+  `m_history.erase(m_history.begin())`, shifting 199 snapshots down. Worth being
+  precise about the cost rather than alarming about it -- `erase` move-assigns
+  rather than copies, and a moved `std::vector` is a pointer steal, so this is
+  thousands of cheap pointer operations and not thousands of allocations. A
+  `std::deque` with `pop_front()` is the right container and makes it free, but it
+  is tidiness, not a fire.
+
+  **The architectural option, recorded and deliberately not chosen here.** Chess
+  stores the moves that made the game rather than the position it reached, and
+  CLAUDE.md states that as the preference for any game offering the choice. Undo
+  by replaying moves would drop the per-move allocation entirely. It is also a
+  rewrite of four games' undo for a cost nobody has felt, so it belongs in this
+  bullet as context for whoever touches that code next -- not as the work.
+  **Layman:** Each move in the card games saves a full snapshot of every pile; taking a move back copies it all a second time for no reason.
+  Kind: perf.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0057] **A game you have opened is never freed, which is fine at fourteen and worth watching at thirty.**
+  Games are built on first open and live for the session by design -- the lazy
+  construction is deliberate and good, and `hubwindow.cpp` contains no `delete`,
+  no `deleteLater` and no `removeWidget`. Nothing is ever taken back down.
+
+  Measured rather than feared. The tile grid holds 55.6 MB resident; opening
+  Canasta -- the heaviest game here by a distance, 2265 lines of view over a
+  108-card two-pack table -- takes it to 57.6 MB. Chess measured no increase at
+  all. So the worst case today is a couple of megabytes per game against a Qt
+  baseline of fifty-five, and a player who opens all fourteen is still nowhere
+  near a number anyone would notice. **This item is filed as a thing to know, not
+  a thing to fix.**
+
+  Two reasons it is worth a bullet anyway. It is the mechanism behind GHUB-0046:
+  the reason a Pinball table can keep simulating while you play Chess is that the
+  Pinball view is still there, fully alive, holding a running timer. Fixing the
+  timers is the fix; this is why the timers can run at all.
+
+  And the curve is the part to watch rather than the current number. Nine more
+  games are already queued in the sections above, and Bridge has just joined them.
+  Thirty games at Canasta's weight is a different conversation from fourteen. The
+  honest trigger to revisit is a measurement, not a feeling: if the roadmap's game
+  count doubles, take this reading again before deciding whether an idle game
+  should be torn down and rebuilt from its saved state -- which the save/restore
+  machinery already makes possible, since every game that keeps anything worth
+  keeping can already serialise itself and come back.
+  **Layman:** Every game you try stays in memory for the rest of the session, even if you never go back to it.
+  Kind: investigate.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0058] **The sound effects are never deleted, and that will drown out the leak checking GHUB-0052 needs.**
+  `Sound::play()` builds `kVoices` (4) `QSoundEffect` objects the first time an
+  effect is asked for, so a full session can reach 68 of them across the 17 files
+  in `assets/sounds/`. Each is `new QSoundEffect` with **no parent**, held in a
+  static singleton whose destructor deletes none of them.
+
+  In bytes this barely matters, and the lazy construction around it is right --
+  the comment says a game never pays for sounds it does not play, and that is
+  worth keeping. Qt's own sample cache means four voices of one effect share a
+  single decoded buffer rather than four. Nobody's machine has ever noticed this.
+
+  The reason to fix it is the timing rather than the size. GHUB-0052 asks for a
+  fuzz harness under AddressSanitizer, and ASan reports leaks at exit. A run that
+  always ends with 68 known-leaked `QSoundEffect` objects trains whoever reads
+  that output to skim past the leak section -- and the first real leak arrives in
+  exactly that section, indistinguishable from the noise. **A known leak is worse
+  than its size, because it teaches people to ignore the detector.** Clear it
+  before the detector arrives, not after it starts crying wolf.
+
+  A parent `QObject` owned by the singleton is the whole fix, with one Qt-specific
+  care: these are `QObject`s in a function-static, so teardown order against
+  `QApplication` matters, and the safe shape is destruction driven from
+  `QCoreApplication::aboutToQuit` rather than from a static destructor running
+  after Qt has gone. The offscreen guard in the constructor already means the test
+  binaries build none of these at all, which is why the leak has never shown up in
+  a test run.
+  **Layman:** Each sound is created and never cleaned up; harmless in itself, but it will make the new memory-error tests report noise.
+  Kind: fix.
+  Source: in-session-2026-08-20.
+
 ### 🎨 Games agreed and not yet started
 
 Asked for on 2026-08-10, in the order agreed. All are traditional or
@@ -1014,6 +1134,58 @@ public-domain; see the standing rules for why each is safe.
   **Layman:** A poker table against three computer opponents, with chips to bet and a hand that says in words what you are holding.
   Kind: feature.
   Source: user-request-2026-08-19.
+
+- 📋 [GHUB-0059] **Bridge, with a computer partner and two computer opponents.**
+  **Safe, and on the same footing as Canasta.** Rules cannot be copyrighted, which
+  is this project's whole test, and Contract Bridge is a century old with no
+  owner: no trademark is enforced on the name the way it is on Monopoly or
+  Scrabble, and the game is played and published freely everywhere. The one thing
+  that *is* owned is the wording — the WBF's Laws of Duplicate Bridge and the
+  ACBL's publications are copyrighted as text — which is standing rule 2 and
+  nothing new. Write the rules in our own words, as every other game here already
+  does. Bridge is missing from the safe list in § Standing rules only because
+  nobody had asked for it; Whist and Euchre, its immediate relatives, are both
+  already on it.
+
+  Two-thirds of it is already built. Trick-taking, following suit, and a trick
+  resolved to a winner are the Hearts engine's shape; partnership scoring against
+  a target is Canasta's. Neither is reusable as code, but both are proven designs
+  in this codebase, and the AI approach is Canasta's rather than Chess's —
+  judgement, not search, with the four levels played against each other rather
+  than described, the way `canastaLevelsDiffer()` caught Hard being weaker than
+  Medium.
+
+  **The bidding is the game, and it is the risk.** An auction is a language, and a
+  computer partner that bids badly makes the whole thing unplayable in a way a
+  weak Hearts opponent never does — your partner's bid is information you are
+  required to act on. Pick one simple published system, implement its opening
+  bids, responses and basic conventions, and say plainly in the blurb which system
+  it plays. A vague bidder is worse than a limited one.
+
+  **The dummy is a UI shape nothing here has.** After the opening lead, declarer's
+  partner lays their hand face up and declarer plays both. So one player controls
+  two hands, one of them exposed, and when the human is dummy they watch a hand
+  they can see being played by someone else. Every other game in the collection is
+  one hand, one player.
+
+  **Size it before building it, because this is the densest screen in the
+  collection and it is the thing most likely to sink it.** Four hands of thirteen,
+  a bidding history, a contract, a trick in progress and an exposed dummy —
+  against `HubWindow::kFitsBesideYourWork` at 960 wide, and against
+  `CardArt::kFaceMinWidth` (46), below which a card has no face at all. Canasta
+  already sits at 900 wide with 60 pixels of headroom and needed a whole
+  legibility pass of its own (GHUB-0038) to get there. The owner reads cards by
+  their pip pattern rather than the corner index, so thirteen fanned cards at a
+  readable width is a hard constraint, not a layout preference. Work out whether
+  the hand fits at all before any engine is written; if it does not, the answer is
+  a different presentation rather than smaller cards.
+
+  Rubber bridge rather than duplicate: duplicate scoring compares your result
+  against other tables playing the same deal, and there are no other tables in a
+  single-player game.
+  **Layman:** The classic four-player partnership card game — you and a computer partner against two others.
+  Kind: feature.
+  Source: user-request-2026-08-20.
 
 ### 📚 Documentation
 
