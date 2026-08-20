@@ -476,6 +476,15 @@ double-clicking a file.
   mounted image and dies, which reads to a player as "it closed and never came
   back"; and the relaunch has to wait for the old process rather than assume
   it.
+  Note (2026-08-20, found while filing the Security section): shipping this
+  falsifies the first line of SECURITY.md, which currently reads "**No
+  network.** Nothing in the app opens a socket, fetches a URL or phones home.
+  There is no telemetry and no update check." That paragraph is what tells a
+  reporter which findings matter, so it has to be rewritten in the same change
+  rather than swept afterwards — the new text owes the reader what is fetched,
+  from where, on whose consent, and how the download is verified. GHUB-0054
+  extends this item's signing key to the artifacts a person downloads by hand,
+  which is the other half of the same story.
   **Layman:** Games Hub checks GitHub for a newer release, shows the changelog for every version you have missed, and updates itself when you say yes.
   Kind: feature.
   Source: user-request-2026-08-20.
@@ -697,6 +706,220 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   the permanent guard for the first item in this section.
   **Layman:** There is no way to check whether a speed-up actually sped anything up.
   Kind: test.
+  Source: in-session-2026-08-20.
+
+### 🔒 Security
+
+Start with what is already right, because it decides which of these matter.
+
+SECURITY.md is accurate: no network, no accounts, no personal data, and the only
+
+input the app parses that it did not write is a saved game. That parsing is
+
+genuinely careful — every count is capped before it reaches a `reserve`, every
+
+field is range-checked before it becomes a `Card`, and Chess replays its move
+
+list through its own generator rather than trusting the file. Nothing below is a
+
+known hole.
+
+What is missing is not defence. It is PROOF and PROVENANCE. Ten hand-audited
+
+parsers stay correct only until someone edits one; a release built by a workflow
+
+that pulls an unpinned binary is only as trustworthy as that binary was this
+
+morning; and a stranger who downloads an AppImage today has no way to check they
+
+got what the workflow built. Those are the gaps, and they are worth more here
+
+than any amount of hardening applied to an app with no sockets.
+
+- 📋 [GHUB-0050] **Every action is pinned to a commit, and then the release downloads two unpinned binaries and runs them.**
+  `release.yml`'s Fetch linuxdeploy step pulls
+  `linuxdeploy-x86_64.AppImage` and `linuxdeploy-plugin-qt-x86_64.AppImage` from
+  the `continuous` release tag, `chmod +x`es them, and hands them the AppDir.
+  Those two binaries produce the artifact that strangers download. There is no
+  checksum, no signature and no pin — `continuous` is a tag that moves by design,
+  so the workflow does not build the same thing twice and cannot tell if it did.
+
+  This is not a general worry, it is this project's own stated rule going
+  unapplied twenty lines away. CLAUDE.md § Releasing says every action is pinned
+  to a commit SHA with the version in a trailing comment, and gives the reason
+  verbatim: *these workflows publish binaries that strangers download, and a moved
+  tag on a third-party action would run arbitrary code against them.* Both
+  sentences are true of a curled AppImage; only the actions got the treatment.
+
+  linuxdeploy publishes no stable release tags, which is presumably why it was
+  fetched this way, so the fix is a recorded SHA-256 per binary and a
+  `sha256sum -c` before either is made executable. That turns an upstream change
+  into a failed build with an obvious diff, which is exactly what a SHA pin buys
+  for an action. Refreshing the digest becomes a deliberate commit — the moment to
+  look at what changed — rather than something that happens silently on the next
+  release.
+
+  The check belongs in `zizmor`'s territory conceptually but no linter will catch
+  it, because it is a `run:` block rather than a `uses:` line. That is the whole
+  reason it survived: the automated check looks at the field this hole is not in.
+  **Layman:** The tool that packages the Linux download is fetched fresh each time from a link that can change, and whatever arrives builds the file people download.
+  Kind: security.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0051] **The only check on the workflows that publish binaries runs on one machine, by choice.**
+  `actionlint`, `yamllint` and `zizmor` are real and they pass clean. They live in
+  `scripts/local-ci.sh`, which runs from the `pre-push` hook — a hook that does
+  nothing until someone runs `git config core.hooksPath .githooks` in their clone,
+  and that `SKIP_LOCAL_CI=1` is documented to bypass. `ci.yml` runs configure,
+  build and `ctest`, and nothing else; neither workflow lints the other.
+
+  So the workflow-security scanner guarding the pipeline that signs nothing and
+  publishes everything is opt-in, local, and bypassable — three properties none of
+  the project's other gates have. A contributor's pull request is not scanned at
+  all, and neither is a push from any machine but this one.
+
+  The fix is small: a lint job in `ci.yml` running the same three tools, so the
+  check is a property of the repository rather than of a workstation. It does not
+  replace the local run — catching it before the push is still better, and
+  `local-ci.sh` deliberately executes the workflow's own steps rather than
+  mirroring them, so a lint job added to `ci.yml` is picked up by the local runner
+  for free. That is the design working as intended, and it is the argument for
+  putting the tools in the workflow rather than beside it.
+
+  While there: `zizmor` has an audit level worth turning up on a repository that
+  publishes releases, and the two workflows already do the things it most wants to
+  see — `permissions:` scoped per job, `persist-credentials: false` on every
+  checkout, and `contents: write` confined to `publish`.
+  **Layman:** The safety checks on the release process only run on your PC, and only if you set them up and do not skip them.
+  Kind: security.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0052] **Ten hand-audited parsers, and nothing but hands checking them.**
+  `restoreState()` has ten implementations, and they are the app's entire untrusted
+  input surface — SECURITY.md names it as the one thing parsed that the app did
+  not write. The code is good. `cardcodec::readPile` caps its count against
+  `kMaxPileSize` before it reserves; `readCard` range-checks suit, rank and deck
+  before any of them becomes a `Card`; Chess refuses a version mismatch, caps the
+  move list at 1024 plies, and matches every move against `legalMoves()` so the
+  file supplies from/to/promotion and the generator supplies the flags; Draughts
+  bounds a jump chain at twelve because that is how many men there are.
+
+  Every one of those bounds was put there by a person thinking about it, and every
+  one of them is invisible to the test suite. Nothing feeds a malformed blob to
+  any parser. The eleventh game, or an edit to the tenth, has nothing to fail
+  against.
+
+  This project already knows the answer to this shape of problem. A chess move
+  generator is proved by perft rather than by eyeballing, for exactly the reason
+  that bugs of this class do not surface reliably by playing. The equivalent here
+  is a fuzz harness: take each registered game's `saveState()` output as a seed,
+  mutate it — flipped bits, truncations, inflated counts, appended garbage — feed
+  it back through `restoreState()`, and require that it never crashes and never
+  leaves the game half-loaded. A parser that returns `false` has passed.
+
+  **Build it under AddressSanitizer and UndefinedBehaviorSanitizer or it proves
+  almost nothing.** An out-of-bounds read that happens to land in owned memory
+  returns a wrong answer quietly and the harness scores it a pass; under ASan the
+  same run aborts on the spot. Fuzzing without sanitizers is the version of this
+  that looks done. That is the same trap CLAUDE.md already records for the audio
+  resource, where a silently empty `.qrc` compiled, linked, and passed everything.
+
+  The cores make this cheap: they are Qt-free or QtCore-only by the architecture
+  rule, `gameshub_selftest` links only those cores, and the seeds come from code
+  that already exists.
+  **Layman:** The code that loads a saved game is careful, but nothing tests what happens if a save file is damaged or tampered with.
+  Kind: security.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0053] **The build asks the compiler for no help at all — not a warning, not a guard.**
+  `CMakeLists.txt` sets `CMAKE_CXX_STANDARD 20` and stops. There is no `-Wall`, no
+  `-Wextra`, no `/W4`, no `-Werror`, and no hardening flags anywhere in the tree.
+  The CI job configures `-DCMAKE_BUILD_TYPE=Release` and builds; that is the whole
+  of what the toolchain is asked to do.
+
+  Two separate things follow, and the first is worth more.
+
+  **Warnings are the cheapest bug detector there is, and this build has none.**
+  Uninitialised reads, sign-compare mistakes, a switch that quietly stopped
+  covering an enum after a game was added, a shadowed variable — the compiler
+  finds all of them for free, and none of them is being asked about. In a
+  codebase that has already been bitten by a name colliding with the `slots` macro
+  and by `M_PI` not existing on MSVC, the toolchain is demonstrably paying
+  attention; it just has not been asked to speak. `-Wall -Wextra` on GCC and
+  `/W4` on MSVC, with `-Werror` in CI only, so a local build stays workable while
+  the gate stays honest.
+
+  **Hardening flags are the second half and are pure defence in depth.**
+  `-D_FORTIFY_SOURCE=3`, `-fstack-protector-strong`, `-fPIE`,
+  `-Wl,-z,relro,-z,now` on the Linux build; `/GS`, `/DYNAMICBASE`, `/guard:cf` on
+  MSVC. None of them fixes a bug — they decide whether a bug that does exist turns
+  into a crash or into something worse, in a binary being handed to people who
+  cannot inspect it. A distribution package gets most of this automatically from
+  the distro's own build flags, which is one more reason GHUB-0044 is worth doing;
+  the AppImage and the portable zip get whatever this file asks for, and today it
+  asks for nothing.
+
+  Expect the first `-Wall -Wextra` run to be noisy across twenty-odd view files.
+  That is the finding, not an obstacle to it.
+  **Layman:** The compiler can spot whole classes of mistake and add cheap protections to the finished program, and this build turns none of it on.
+  Kind: security.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0054] **A downloaded release cannot be checked against what the workflow actually built.**
+  `release.yml` publishes an AppImage and a zip and nothing else. No checksum
+  file, no signature, no build provenance. Someone who downloads either one has
+  exactly GitHub's word for it, and no way to notice if a re-uploaded asset,
+  a mirror, or a link posted somewhere else hands them something different.
+
+  GHUB-0043 puts an Ed25519 signature on the AppImage, which is the same
+  machinery, but it solves a different person's problem: it lets the *app* refuse
+  a bad update. It does nothing for the person downloading by hand from the
+  releases page, and it does not cover the Windows zip at all. Doing both from one
+  key is the sensible shape, and the two items should land in that order — the key
+  and the signing step arrive with the updater, and this one extends them to every
+  published artifact plus a `SHA256SUMS` file the README can point at.
+
+  The cheaper half is worth taking on its own even if signing slips.
+  `actions/attest-build-provenance` gives a signed, publicly verifiable statement
+  of which workflow run, which commit and which repository produced each file,
+  verifiable with `gh attestation verify`, with no key to generate, guard or lose.
+  It is a few lines in the `publish` job and it needs `id-token: write` and
+  `attestations: write` scoped to that job only — which the workflow's existing
+  per-job permissions block makes natural rather than awkward.
+
+  Both halves want a line in the README saying how to check a download, since a
+  checksum nobody is told about protects nobody.
+  **Layman:** There is no way for someone to confirm the file they downloaded is the one your build produced and not something altered on the way.
+  Kind: security.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0055] **SECURITY.md promises to bump a vulnerable Qt, and nothing anywhere is watching for one.**
+  SECURITY.md is straight about this and makes a commitment: the downloads bundle
+  Qt 6, a Qt vulnerability is inherited here, and *bumping it is this project's
+  job*. The mechanism for noticing is a person reading Qt security announcements.
+
+  Qt is pinned to `6.8.3` in three places — once in `ci.yml`, twice in
+  `release.yml`. Every third-party action is pinned to a commit SHA, correctly and
+  deliberately. Both kinds of pin have the same property: they are exactly as
+  old as the last time somebody looked, and nothing in the repository reports how
+  long ago that was. There is no `.github/dependabot.yml`; `.github/` holds
+  `FUNDING.yml` and `workflows/` and nothing else.
+
+  Dependabot's `github-actions` ecosystem understands SHA pins and raises a pull
+  request that updates the digest and the trailing version comment together, which
+  is the maintenance half of a pinning policy this project has already committed
+  to — it keeps the pins without letting them rot silently. Qt is not one of its
+  ecosystems, so the Qt half needs something else: the honest minimum is a note in
+  the release checklist to check the Qt security page against the pinned version,
+  and to record the date it was checked. A recorded date is what turns *nobody has
+  looked* into a visible fact.
+
+  The three pinned copies of `6.8.3` should also become one value, so a bump
+  cannot land in the CI leg and be missed in the two release legs — which would
+  publish downloads built against an older Qt than the one the tests ran on, and
+  look green throughout.
+  **Layman:** The downloads carry their own copy of Qt, and nothing tells you when that copy needs updating for a security fix.
+  Kind: security.
   Source: in-session-2026-08-20.
 
 ### 🎨 Games agreed and not yet started
