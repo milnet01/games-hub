@@ -1816,6 +1816,38 @@ public-domain; see the standing rules for why each is safe.
   Kind: chore.
   Source: in-session-2026-08-20.
 
+- 📋 [GHUB-0079] **Nothing points a releaser at the versioning standard, so the one document that decides the number is unfindable.**
+  CLAUDE.md's Releasing section is where a releaser looks. It gives
+  four numbered steps starting "Bump project(gameshub VERSION ...)"
+  and says nothing about WHICH number to bump. So the standards
+  written today -- ~/.claude/standards/versioning.md and
+  docs/standards/versioning-overrides.md -- are reachable only by
+  someone who already knows they exist.
+
+  The consequence is concrete and counter-intuitive, which is why a
+  pointer is not enough on its own and the line has to say it:
+  inside 0.x the global standard shifts the levels down one, so a
+  release adding a whole new game bumps the PATCH. This project's
+  history does not follow that -- 0.4.0 added the legibility switch
+  and would have been 0.3.2 -- and nothing in the tree would tell
+  the next releaser.
+
+  NOT done in the session that wrote the standards, deliberately.
+  CLAUDE.md rule 14's test was applied and it comes back YES: a
+  conformer reading the amended Releasing section picks a different
+  number than one reading it today, and the line that changes can
+  be named. So the edit owes a review-contract gate, and that
+  session had already run six loops across two documents. Filing it
+  rather than either skipping the gate or spending a fourth on a
+  two-line pointer.
+
+  Small when picked up: amend the Releasing section to name both
+  standards and state the 0.x consequence in one sentence, then
+  gate as a standard.
+  **Layman:** The rules for choosing a version number exist now, but the page someone actually reads before a release does not mention them.
+  Kind: doc.
+  Source: in-session-2026-08-20.
+
 ## P03 — Considered
 
 Nothing here is agreed. 💭 means the scope, the value or the decision is still
