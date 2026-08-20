@@ -440,6 +440,108 @@ double-clicking a file.
   Kind: feature.
   Source: user-request-2026-08-19.
 
+- 📋 [GHUB-0043] **The app tells you a new version exists, shows what changed, and installs it for you.**
+  A published AppImage today is a file someone downloaded once. There is no
+  route from that copy to the next one except noticing the releases page, so
+  every player is frozen at whichever version they happened to fetch.
+
+  The shape is finbreak's (FIBR-0054 / FIBR-0131), read across on 2026-08-20
+  and adapted: a check against the GitHub releases API, an offer carrying the
+  accumulated release notes for every version between the installed one and
+  the latest, and on Update now a download, an Ed25519 signature check and an
+  in-place swap of $APPIMAGE followed by a detached relaunch. Four decisions
+  were taken with the owner before any of it was written:
+
+    - Linux AppImage installs itself; Windows offers the download page. The
+      Windows artifact is a portable zip rather than one .exe, so installing
+      means replacing a whole directory. That is a separate item, not a wider
+      version of this one.
+    - Releases are signed. A public-domain Ed25519 verifier ships in-tree so
+      this needs no new library, the private key never enters the repo, and a
+      download that does not verify is deleted rather than installed.
+    - The first launch asks whether to check automatically. Nothing reaches
+      the network before that answer, and Help -> Check for updates works
+      whichever way it was answered.
+    - One check a day, not one a launch. A hub opened five times an evening
+      should cost one network call.
+
+  Inert wherever it cannot work -- a cmake --install copy, a distro package, a
+  build directory -- because an updater that overwrites a file it does not own
+  is worse than no updater. That is the same detect_installer() seam finbreak
+  uses, and it is what keeps the OBS and Flathub builds below free of any
+  outbound surface at all.
+
+  The traps finbreak paid for and this must not re-learn: a fresh AppImage
+  started before the old one has finished tearing down collides with the still
+  mounted image and dies, which reads to a player as "it closed and never came
+  back"; and the relaunch has to wait for the old process rather than assume
+  it.
+  **Layman:** Games Hub checks GitHub for a newer release, shows the changelog for every version you have missed, and updates itself when you say yes.
+  Kind: feature.
+  Source: user-request-2026-08-20.
+
+- 📋 [GHUB-0044] **Native packages on the openSUSE Build Service, for as many distributions as it will build for.**
+  An AppImage is a file you have to find, download and mark executable. A
+  package is one line in a terminal or one click in a software centre, and it
+  is how most Linux users expect to get software.
+
+  finbreak already publishes this way from home:milnet on build.opensuse.org
+  (FIBR-0155), so the account, the layout and the submit scripts exist; this
+  is a sibling subproject beside home:milnet:finbreak and
+  home:milnet:ants-terminal. Its recipes are far simpler than finbreak's,
+  and that is the point worth writing down: finbreak vendors a wheel closure
+  and ships a frozen Python runtime, while this is a C++ CMake project that
+  builds from source against the distribution's own Qt 6. No vendoring, no
+  bundling decision, no offline-build service -- an RPM spec, a debian/
+  recipe, an OBS _service that fetches the tagged tarball and sets the
+  version, and the reverse-DNS .desktop and AppStream metainfo files that a
+  software centre reads.
+
+  Targets follow finbreak's repository list as far as their Qt allows:
+  openSUSE Tumbleweed, Fedora, Debian and Ubuntu. Each one is a build that
+  either goes green or does not, so "as many as possible" is answered by
+  trying them rather than by predicting -- but a distribution shipping a Qt
+  older than the 6.5 CMakeLists.txt requires is a deferral with a reason
+  rather than a failure, the way Leap 15.6 was deferred for finbreak.
+
+  The app-ID is fixed at this step and every later packaging step inherits it,
+  Flathub included.
+  **Layman:** Install Games Hub with your distribution's own package manager instead of downloading a file.
+  Kind: package.
+  Source: user-request-2026-08-20.
+
+- 📋 [GHUB-0045] **On Flathub, so the software centre finds it.**
+  The distribution-agnostic half of the item above. OBS reaches users who
+  install by package manager; Flathub reaches everyone else, and it is the
+  one listing that puts the collection in front of somebody who was not
+  looking for it.
+
+  finbreak's manifest (FIBR-0159) is the model, and again this is the easier
+  case. finbreak builds on org.freedesktop.Platform carrying its own pinned
+  PySide6 wheel closure, because a finance app will not take a substituted
+  Qt; a C++ Qt Widgets game hub builds on org.kde.Platform, which ships Qt 6
+  already, so the manifest is a cmake module against a tagged release and
+  little else.
+
+  The sandbox is where the thinking goes, and it points the other way from
+  finbreak's. That app's permission list is deliberately empty of network and
+  filesystem because it holds bank statements; this one needs a display, GPU
+  acceleration and -- unlike finbreak -- sound, and it stores nothing but
+  QSettings. Whether it gets --share=network at all is the real question:
+  without it the auto-update above is unreachable inside Flatpak, which is
+  the correct answer, since Flatpak updates itself and an app that
+  overwrites its own runtime inside a sandbox is fighting the packaging.
+  So the updater must detect a Flatpak the same way it detects a distro
+  package, and stay inert.
+
+  Carries the same app-ID, .desktop and metainfo as the OBS work, which is
+  why that item fixes them and this one reuses them. A screenshot set and a
+  summary that reads well in a software centre are part of the deliverable
+  rather than an afterthought -- this is a shop window.
+  **Layman:** Games Hub appears in GNOME Software, KDE Discover and flathub.org like any other app.
+  Kind: package.
+  Source: user-request-2026-08-20.
+
 ### 🎨 Games agreed and not yet started
 
 Asked for on 2026-08-10, in the order agreed. All are traditional or
