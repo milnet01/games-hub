@@ -1653,25 +1653,40 @@ inventing one.
   Large, and deliberately filed rather than started. What follows is
   what is already known so a later session does not re-derive it.
 
-  **Five games can use it and nine cannot.** Chess, Reversi, Draughts
-  and Hearts have a computer opponent today; Canasta has three. The
-  four solitaires, Sudoku, Minesweeper, Snake, 2048 and Pinball are
-  single-player, and a second player there means inventing a mode
-  (shared board, race, best-of-three on score) rather than swapping a
-  human in for the AI. Do not treat "multiplayer" as one job across
-  fourteen games.
+  **Scope is the five games that already have an opponent, and only
+  those.** Owner's call, 2026-08-20. Chess, Reversi, Draughts and
+  Hearts have one computer player; Canasta has three. In each of them
+  a human simply takes a seat the game already deals with, which is
+  what makes the work tractable.
 
-  **Cross-platform is the requirement with a known trap already in
-  this tree.** A seed does not mean the same deal on two compilers:
-  the standard pins what std::mt19937 emits but not how std::shuffle
-  consumes it, so libstdc++ and MSVC deal different hands from
-  identical state. cards/card.cpp already avoids it with a
-  hand-written Fisher-Yates -- that was found the hard way, by
-  Canasta's AI ladder passing on Linux and failing on the Windows
-  runner with no engine change. **sudokugrid.cpp (two calls) and
-  minefield.cpp (one) still call std::shuffle**, so any mode that
-  deals or generates a shared board from a seed must fix those first.
-  CLAUDE.md's trap entry says the same and is the place to re-read.
+  **The other nine are out of scope and are not a later phase.** The
+  four solitaires, Sudoku, Minesweeper, Snake, 2048 and Pinball are
+  single-player by design: a second player there would mean inventing
+  a mode that does not exist (shared board, race, best-of-three on
+  score), which is a game-design question rather than a networking
+  one. Do not carry them along "for completeness".
+
+  **Cross-platform dealing is already solved for these five, and
+  narrowing the scope is what solved it.** Measured 2026-08-20. A seed
+  does not mean the same deal on two compilers -- the standard pins
+  what std::mt19937 emits but not how std::shuffle consumes it, so
+  libstdc++ and MSVC deal different hands from identical state, which
+  this project found the hard way when Canasta's AI ladder passed on
+  Linux and failed on the Windows runner with no engine change.
+
+  The fix already exists where it is needed. Hearts and Canasta are
+  the only two in-scope games that deal at all, and both go through
+  cards/card.cpp's hand-written Fisher-Yates
+  (heartsengine.cpp:52, canastaengine.cpp:457). The two remaining
+  std::shuffle sites are sudokugrid.cpp and minefield.cpp -- Sudoku
+  and Minesweeper, both out of scope. Chess, Reversi and Draughts hold
+  one mt19937 each and all three are inside the AI, picking among
+  near-equal moves; no AI runs in a human-versus-human game, and
+  nothing about it is shared state.
+
+  So the RNG hazard CLAUDE.md documents does not reach this work. It
+  would return the moment an out-of-scope game was added, which is one
+  more reason the scope line is worth holding.
 
   **Send moves, not positions.** Chess already saves its game as the
   move list and replays it through ChessGame::play(), which rebuilds
