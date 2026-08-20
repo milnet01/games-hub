@@ -2779,6 +2779,43 @@ open.
   Layman: A long list of traditional board games that would be safe to add.
   Kind: research.
   Source: user-request-2026-08-10.
+  Three things this list does not say, added 2026-08-20 after the
+  owner asked whether Backgammon was safe. It is — it is on the
+  Standing rules "Safe, public domain" list by name — but the reason
+  it is safe is not the whole licensing question.
+
+  **The standing rules cover assets and rule TEXT, and not third-party
+  CODE or data.** That is the gap, and it bites hardest on exactly the
+  two games here with the hardest opponents. GNU Backgammon is a GNU
+  project and therefore GPL, and its trained neural-net weights are
+  the reason a strong backgammon bot is hard to write; GNU Go is GPL
+  too. Lifting either the code or the weights into this MIT repository
+  would be a licence violation, and "it is only a data file" is the
+  form the mistake takes. A weak opponent written from scratch is
+  compatible; a strong one borrowed is not. Same test as the assets
+  rule, applied to code.
+
+  **Backgammon would be the first game here with dice, and the dice
+  land on a trap already documented.** cards/card.cpp explains why the
+  shuffle is hand-written: the standard pins what mt19937 emits but
+  not how std::shuffle or std::uniform_int_distribution consume it, so
+  two implementations differ from identical state. A die roll must
+  therefore come from rng() directly (rng() % 6) rather than
+  std::uniform_int_distribution<int>(1, 6). It does not matter for a
+  local game against the computer; it decides whether two machines can
+  ever agree on a roll.
+
+  **Every two-player game on this list grows GHUB-0080.** Backgammon,
+  Nine Men's Morris, Gomoku, Four in a Row, Halma, Hnefatafl, Shogi
+  and Xiangqi are all two-player, so each one added is another game
+  that could take a human opponent — and GHUB-0080's scope is
+  deliberately the games that already have one. Worth deciding
+  together rather than separately.
+
+  Also worth knowing when picking from this list: any new game should
+  arrive with a rules core, because six of the fourteen do not have
+  one and are untestable for it (GHUB-0066). A fresh game is the cheap
+  time to get that right.
 
 ### 🧹 Decided against, with reasons
 
