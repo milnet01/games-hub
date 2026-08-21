@@ -60,6 +60,7 @@ private:
     QRectF pyramidRect(int row, int index) const;
     QRectF stockRect() const;
     QRectF wasteRect() const;
+    double pileTop() const;
 
     static int slotIndex(int row, int index) { return row * (row + 1) / 2 + index; }
     // A pyramid card can only be taken once both cards resting on it are gone.

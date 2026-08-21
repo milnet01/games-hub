@@ -225,13 +225,21 @@ QRectF PyramidView::pyramidRect(int row, int index) const
 QRectF PyramidView::stockRect() const
 {
     const double w = cardWidth();
-    return { width() / 2.0 - w * 1.25, height() - cardHeight() - 16, w, cardHeight() };
+    return { width() / 2.0 - w * 1.25, pileTop(), w, cardHeight() };
 }
 
 QRectF PyramidView::wasteRect() const
 {
     const double w = cardWidth();
-    return { width() / 2.0 + w * 0.25, height() - cardHeight() - 16, w, cardHeight() };
+    return { width() / 2.0 + w * 0.25, pileTop(), w, cardHeight() };
+}
+
+// The caption's plate is opaque and painted last, so a pile anchored to the
+// bottom of the WIDGET is drawn and then covered. cardWidth() already takes
+// the band off the height it sizes against; the anchor has to take it off too.
+double PyramidView::pileTop() const
+{
+    return height() - captionBand(QRectF(rect())) - cardHeight() - 16;
 }
 
 bool PyramidView::isExposed(int row, int index) const

@@ -2585,7 +2585,7 @@ open.
   Kind: accessibility.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0082] **Pyramid and Spider draw their stock pile inside the caption band, and the plate hides it.**
+- ✅ [GHUB-0082] **Pyramid and Spider draw their stock pile inside the caption band, and the plate hides it.**
   Found by looking (GHUB-0081), not by any test. Both games solve card
   width against `height - ... - captionBand()` correctly, so the CARDS
   shrink -- and then anchor the stock to the bottom of the WIDGET, which
@@ -2604,6 +2604,25 @@ open.
     src/spider/spiderview.cpp:254 `stockRect()`
   No other game bottom-anchors anything; the six board games all centre
   within `height - band` and are clear. Checked by grep, not assumed.
+  Resolved (2026-08-21): both anchors now subtract
+  captionBand(QRectF(rect())). Pyramid gained a private pileTop()
+  shared by stockRect() and wasteRect(); Spider's stockRect() takes
+  the band off its bottom edge before the margin. cardWidth() was
+  already correct in both and was not touched.
+
+  The regression check is pilesClearTheCaptionPlate in
+  tests/uitest.cpp. It mirrors the geometry each pile is SUPPOSED to
+  have -- bottom minus band -- clicks it, and asserts the stock count
+  in the game's own status went down: Pyramid 600x544 Stock 24 -> 23,
+  Spider 620x524 Stock 5 -> 4. Proved red by reverting both fixes and
+  re-running: both clicks land on empty table and both checks fail,
+  with the two band assertions still passing, so the failure is the
+  anchor rather than the switch. Confirmed by eye through the harness
+  at 600x544 and 1120x820 with the switch on.
+
+  Not fixed here, and pre-existing with the switch OFF: Pyramid's
+  stock overlaps the bottom row of the pyramid at its minimum size.
+  Same in both states, so it is not a legibility defect.
   **Layman:** At their smallest window these two games hide the pile you draw from behind the caption.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.

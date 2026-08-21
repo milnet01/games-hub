@@ -747,6 +747,60 @@ int main(int argc, char* argv[])
               "caption: both are centred on the same line");
     }
 
+    // ---- pilesClearTheCaptionPlate (GHUB-0082) ----
+    //
+    // A pile anchored to the bottom of the WIDGET is drawn and then covered:
+    // the caption's plate is opaque and painted last. Both games already take
+    // the band off the height they solve card width from, which is what made
+    // the miss invisible — the cards shrink, and the pile slides under the
+    // plate anyway. The mirrors below are the geometry the pile is SUPPOSED
+    // to have; clicking them has to reach the real stock, so a pile that
+    // forgets the band leaves this click on empty table.
+    {
+        struct PyramidProbe : PyramidView {
+            using GameView::captionBand;
+            using GameView::lastStatus;
+        };
+        struct SpiderProbe : SpiderView {
+            using GameView::captionBand;
+            using GameView::lastStatus;
+        };
+
+        Legibility::instance().setEnabled(true);
+
+        {
+            PyramidProbe pyramid;
+            pyramid.resize(600, 544);
+            const double band = pyramid.captionBand(QRectF(pyramid.rect()));
+            check(band > 0, "piles: the switch reserves a caption band for Pyramid");
+            const double card = std::min((600.0 - 40.0) / (7 * 0.62 + 0.4),
+                                         (544.0 - 40.0 - band) / (1.4 + 6 * 0.52 + 1.6));
+            check(pyramid.lastStatus().contains(QStringLiteral("Stock 24")),
+                  "piles: Pyramid deals its stock face down");
+            clickAt(&pyramid, QPointF(600 / 2.0 - card * 0.75, 544 - band - card * 0.7 - 16),
+                    Qt::LeftButton);
+            check(pyramid.lastStatus().contains(QStringLiteral("Stock 23")),
+                  "piles: and its stock sits clear of the plate, where the click lands");
+        }
+
+        {
+            SpiderProbe spider;
+            spider.resize(620, 524);
+            const double band = spider.captionBand(QRectF(spider.rect()));
+            check(band > 0, "piles: the switch reserves a caption band for Spider");
+            const double card = std::min((620.0 - 24.0 - 9 * 6.0) / 10.0,
+                                         (524.0 - 24.0 - band) / (1.4 * 2.2));
+            check(spider.lastStatus().contains(QStringLiteral("Stock 5")),
+                  "piles: Spider holds five rows back");
+            clickAt(&spider, QPointF(620 - 12 - card * 0.5, 524 - band - 12 - card * 0.7),
+                    Qt::LeftButton);
+            check(spider.lastStatus().contains(QStringLiteral("Stock 4")),
+                  "piles: and its stock sits clear of the plate, where the click lands");
+        }
+
+        Legibility::instance().setEnabled(false);
+    }
+
     // ---- Best scores survive a restart ----
     {
         Scores& scores = Scores::instance();

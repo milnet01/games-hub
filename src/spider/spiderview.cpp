@@ -251,7 +251,11 @@ QRectF SpiderView::cardRect(int column, int index) const
 QRectF SpiderView::stockRect() const
 {
     const double w = cardWidth();
-    return { width() - kMargin - w, height() - kMargin - cardHeight(), w, cardHeight() };
+    // The caption's plate is opaque and painted last, so anchoring to the
+    // bottom of the WIDGET puts the stock under it. cardWidth() already takes
+    // the band off the height it sizes against; the anchor has to as well.
+    const double bottom = height() - captionBand(QRectF(rect()));
+    return { width() - kMargin - w, bottom - kMargin - cardHeight(), w, cardHeight() };
 }
 
 int SpiderView::movableRunLength(int column) const
