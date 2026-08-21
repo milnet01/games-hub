@@ -241,8 +241,16 @@ double KlondikeView::cardWidth() const
     // The caption's strip comes off the height before the card is sized: the
     // piles are anchored to the top, so a smaller card is what keeps the tail
     // of a long column clear of the sentence under it.
+    //
+    // What the height must hold, in card heights: the stock/waste/foundation
+    // row, the gap under it, then the longest column the deal makes — six
+    // face-down steps and one whole card. The figure used to be a flat 2.6,
+    // which a fresh deal cleared by about six pixels at the smallest window
+    // and not at all once the window went wide and short.
+    constexpr double kHeightCost = 1.0 + kGapRatio * kHeaderGap / 1.4
+        + (kLongestDealtColumn - 1) * kFaceDownStep + 1.0;
     const double byHeight =
-        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * 2.6);
+        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * kHeightCost);
     return std::max(34.0, std::min(byWidth, byHeight));
 }
 
@@ -260,7 +268,7 @@ QRectF KlondikeView::pileOrigin(PileKind kind, int pile) const
     case PileKind::Foundation:
         return { kMargin + step * (3 + pile), kMargin, w, h };
     case PileKind::Tableau:
-        return { kMargin + step * pile, kMargin + h + gap() * 1.6, w, h };
+        return { kMargin + step * pile, kMargin + h + gap() * kHeaderGap, w, h };
     }
     return {};
 }
@@ -269,7 +277,8 @@ QRectF KlondikeView::pileOrigin(PileKind kind, int pile) const
 // what lets a long column still fit on screen.
 double KlondikeView::fanStep(const std::vector<Card>& pile, int index) const
 {
-    return pile[std::size_t(index)].faceUp ? cardHeight() * 0.28 : cardHeight() * 0.13;
+    return pile[std::size_t(index)].faceUp ? cardHeight() * kFaceUpStep
+                                          : cardHeight() * kFaceDownStep;
 }
 
 QRectF KlondikeView::cardRect(PileKind kind, int pile, int index) const

@@ -2627,7 +2627,7 @@ open.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
 
-- 📋 [GHUB-0083] **FreeCell's caption covers the bottom card of five of its eight columns.**
+- ✅ [GHUB-0083] **FreeCell's caption covers the bottom card of five of its eight columns.**
   At 620x524 -- FreeCell's OWN minimum, on a freshly dealt board with no
   play at all -- the caption plate covers the last card of five of the
   eight columns. In FreeCell the bottom card of a column is the only one
@@ -2643,6 +2643,31 @@ open.
   Klondike has the same shape with a 2.6 divisor (klondikeview.cpp:245)
   and is filed separately -- it clears a fresh deal by about six pixels
   and stops clearing as soon as you play.
+  Resolved (2026-08-21): one fix with GHUB-0086, as filed.
+  FreeCell's height budget was a flat `/(1.4 * 2.5)` and is now solved
+  from the layout it has to hold -- the cell/foundation row, the gap
+  under it, six fan steps and one whole card, which is 3.84 card
+  heights against the 2.5 assumed. Klondike's flat 2.6 became 2.94 the
+  same way. The ratios those sums are built from (0.22 and 0.27 in
+  FreeCell, 0.14 / 1.6 / 0.13 / 0.28 in Klondike) moved into named
+  constants in each header, so the fan and the budget can no longer
+  drift apart -- which is how the deal came to be taller than the space
+  reserved for it.
+
+  FreeCell's smallest card falls from 67.4 to 59.4 px, still clear of
+  `CardArt::kFaceMinWidth`; CLAUDE.md's measured list is updated, and
+  FreeCell now joins Pyramid as a game the band actually costs.
+  Klondike is unchanged at 67.9 -- width-bound at its own minimum.
+
+  `dealtColumnsFitTheTable` in tests/uitest.cpp is the regression
+  check: four window shapes x both switch states x both games, with
+  the deal's height stated independently of the view. Proved red by
+  reverting both fixes -- 7 of the 16 fail, among them the exact two
+  reported symptoms (FreeCell 620x440 switch on, FreeCell 1400x438
+  switch off). Confirmed by eye through the harness.
+
+  What is NOT fixed: a column that grows past the deal. Filed as
+  GHUB-0089 with the measurement and the price of the two ways out.
   **Layman:** With the switch on, FreeCell hides the only cards you are allowed to move.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
@@ -2682,7 +2707,7 @@ open.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
 
-- 📋 [GHUB-0086] **FreeCell and Klondike columns run off the bottom of the window at wide, short shapes.**
+- ✅ [GHUB-0086] **FreeCell and Klondike columns run off the bottom of the window at wide, short shapes.**
   Found while looking at GHUB-0081 and **not caused by the legibility
   pass** -- it reproduces with the switch OFF, which is what separates it
   from the caption items above. At 1400x520 (a legal size: FreeCell's
@@ -2694,6 +2719,15 @@ open.
   probably one fix. Filed separately because the caption is the symptom
   and this is the disease, and because a fix aimed only at the caption
   would leave this standing.
+  Resolved (2026-08-21): fixed with GHUB-0083 -- one fix, as filed.
+  The `/(1.4 * 2.5)` and `/(1.4 * 2.6)` height budgets are now solved
+  from the layout each game lays out, so at 1400x520 every one of
+  FreeCell's seven dealt cards is on screen with the switch off, which
+  is the state this reproduced in.
+
+  The regression check covers the switch OFF as well as on, so the
+  disease is asserted and not only the symptom: `dealtColumnsFitTheTable`
+  fails at 1400x438 with the switch off when the fix is reverted.
   **Layman:** Make the window wide and short and FreeCell's columns fall off the bottom edge -- with or without the legibility switch.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
@@ -2744,6 +2778,43 @@ open.
   **Layman:** At small windows the caption splits mid-phrase -- "You 2 - 2" on one line and "Computer" on the next.
   Kind: accessibility.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
+
+- 💭 [GHUB-0089] **A tableau column that grows past the deal still fans off the bottom.**
+  The residual GHUB-0083 and GHUB-0086 deliberately left standing, and
+  it is filed as considered because the obvious fix has a price the
+  owner should weigh rather than a session.
+
+  Both games now solve card width against the DEALT board -- FreeCell's
+  longest column is seven face-up cards, Klondike's is six face-down and
+  one turned up. Play grows a column past that: in Klondike a turned card
+  changes its fan step from 0.13 of a card height to 0.28, so a column of
+  six down and one up costs 0.78 card heights of fan and the same seven
+  cards all face up cost 1.68. Columns also collect cards -- a king and
+  its run onto an emptied column is routine.
+
+  Measured at Klondike's own minimum window (560x504, card 67.9 wide,
+  width-bound): a fresh deal's deepest column ends about 34 px clear of
+  the caption plate, and turning three of its six face-down cards puts it
+  about 9 px past it.
+
+  Sizing for the worst case is what this stops short of, and the cost is
+  not small: FreeCell's smallest card already fell from 67.4 to 59.4 px
+  sizing for a seven-card deal, and sizing for a column that can reach
+  thirteen or more would take it well toward `CardArt::kFaceMinWidth` --
+  at every window, for every deal, whether or not any column ever grows.
+  The owner reads cards by their pip pattern, so that is his call.
+
+  The alternative worth pricing first is a fan step that compresses when
+  a column is too long for the table, which is what most solitaires do:
+  the cards stay big and only an overlong column tightens. That keeps
+  `cardWidth()` where it is and changes `fanStep()` into a function of
+  the column's length and the room left.
+
+  `dealtColumnsFitTheTable` in tests/uitest.cpp is explicit that it
+  covers the deal and not growth, so this item is not silently covered.
+  **Layman:** Klondike and FreeCell size their cards for the board they deal you; pile enough cards onto one column in play and its tail runs past the bottom edge again.
+  Kind: fix.
+  Source: in-session-2026-08-21 GHUB-0083/GHUB-0086 fix.
 
 ### 🎨 Play
 

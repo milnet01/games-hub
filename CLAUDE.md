@@ -459,11 +459,16 @@ so a card in the air would otherwise land where its destination used to be.
 they do are unreachable.** Measured, not assumed: every card view calls
 `setMinimumSize(minimumSizeHint())`, so the smallest card each can actually
 reach — at its smallest window, **with the legibility switch on** — is Klondike
-67.9, FreeCell 67.4, Spider 54.2, Hearts 52.5, Pyramid 52.1 and Canasta's melds
+67.9, FreeCell 59.4, Spider 54.2, Hearts 52.5, Pyramid 52.1 and Canasta's melds
 46.4, all clear of `kFaceMinWidth`. **The band is subtracted only by the four
 that reserve one**, so Hearts' and Canasta's figures carry no band cost at all
-and would not survive one being added. **Pyramid is the only one the band costs anything** (68.6
-before it) and it still clears by 13%. `cardsKeepTheirFaces` in
+and would not survive one being added. **Pyramid and FreeCell are the two the
+band actually costs** — 68.6 and 67.4 before it — and they clear by 13% and 29%.
+Klondike and Spider reserve a band and are still decided by their width at their
+smallest windows, so it costs them nothing there. FreeCell joined that list on
+2026-08-21 (GHUB-0083): its height budget had been assuming a column of about
+two cards of fan against a deal of seven, so before the fix it was never
+height-bound and the deal ran under the plate instead. `cardsKeepTheirFaces` in
 `tests/uitest.cpp` prints all six every run, so these are readings rather than
 history. Their `std::max(30.0, …)` … `std::max(34.0,
 …)` floors read alarming and no window can drive them there. Canasta was the

@@ -59,11 +59,20 @@ private:
     void undo();
     void pushUndo();
 
+    // Layout, in card heights. cardWidth() solves its height budget from
+    // these, so the three move together and a fan that changes shape cannot
+    // leave the budget behind — which is how the deal ended up taller than
+    // the space reserved for it (GHUB-0083, GHUB-0086).
+    static constexpr double kHeaderGap = 0.22;
+    static constexpr double kFanStep = 0.27;
+    // Four columns of seven, four of six. All face up.
+    static constexpr int kLongestDealtColumn = 7;
+
     double cardWidth() const;
     double cardHeight() const { return cardWidth() * 1.4; }
     QRectF pileOrigin(PileKind kind, int pile) const;
     QRectF cardRect(int column, int index) const;
-    double fanStep() const { return cardHeight() * 0.27; }
+    double fanStep() const { return cardHeight() * kFanStep; }
     Spot hitTest(QPointF pos) const;
 
     std::vector<Card>& pileFor(PileKind kind, int pile);

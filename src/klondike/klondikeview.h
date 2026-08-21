@@ -56,9 +56,20 @@ private:
     void pushUndo();
 
     // Geometry
+    //
+    // Layout ratios. cardWidth() solves its height budget from these, so the
+    // fan and the budget move together and the deal cannot outgrow the space
+    // reserved for it (GHUB-0083, GHUB-0086).
+    static constexpr double kGapRatio = 0.14;      // of card width
+    static constexpr double kHeaderGap = 1.6;      // of gap()
+    static constexpr double kFaceUpStep = 0.28;    // of card height
+    static constexpr double kFaceDownStep = 0.13;  // of card height
+    // The seventh column: six face down and one turned up.
+    static constexpr int kLongestDealtColumn = 7;
+
     double cardWidth() const;
     double cardHeight() const { return cardWidth() * 1.4; }
-    double gap() const { return cardWidth() * 0.14; }
+    double gap() const { return cardWidth() * kGapRatio; }
     QRectF pileOrigin(PileKind kind, int pile) const;
     QRectF cardRect(PileKind kind, int pile, int index) const;
     double fanStep(const std::vector<Card>& pile, int index) const;

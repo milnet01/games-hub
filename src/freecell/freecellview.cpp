@@ -199,8 +199,15 @@ double FreeCellView::cardWidth() const
     // The caption's strip comes off the height before the card is sized: the
     // piles are anchored to the top, so a smaller card is what keeps the tail
     // of a long column clear of the sentence under it.
+    //
+    // What the height must hold, in card heights: the cell/foundation row, the
+    // gap under it, then the longest column the deal makes — six fan steps and
+    // one whole card. The figure used to be a flat 2.5, which is a header plus
+    // about two cards of fan, and the game deals seven.
+    constexpr double kHeightCost =
+        1.0 + kHeaderGap + (kLongestDealtColumn - 1) * kFanStep + 1.0;
     const double byHeight =
-        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * 2.5);
+        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * kHeightCost);
     return std::max(32.0, std::min(byWidth, byHeight));
 }
 
@@ -216,7 +223,7 @@ QRectF FreeCellView::pileOrigin(PileKind kind, int pile) const
     case PileKind::Foundation:
         return { kMargin + step * (4 + pile), kMargin, w, h };
     case PileKind::Column:
-        return { kMargin + step * pile, kMargin + h + h * 0.22, w, h };
+        return { kMargin + step * pile, kMargin + h + h * kHeaderGap, w, h };
     }
     return {};
 }

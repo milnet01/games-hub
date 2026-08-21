@@ -801,6 +801,75 @@ int main(int argc, char* argv[])
         Legibility::instance().setEnabled(false);
     }
 
+    // ---- dealtColumnsFitTheTable (GHUB-0083, GHUB-0086) ----
+    //
+    // Both games solve card width against a height budget, and both budgets
+    // were flat figures that assumed a shorter column than the deal makes --
+    // FreeCell deals seven face-up cards into room for a header and about two
+    // cards of fan. The symptom with the switch ON was the caption plate
+    // covering the bottom card of five of FreeCell's eight columns; with it
+    // OFF, at a wide and short window, the last two cards of every column were
+    // below the widget edge.
+    //
+    // The arithmetic here is the contract stated independently of the view:
+    // the header row, the gap under it, the fan of the longest DEALT column
+    // and one whole card must land inside the table with the bottom margin and
+    // the caption band still to spare. cardWidth() is reachable because both
+    // games publish it as smallestCardWidth().
+    //
+    // Growth past the deal is deliberately NOT covered. A column that collects
+    // cards in play still fans past the budget, and sizing for that would take
+    // width off every card at every window — GHUB-0089 carries the question.
+    {
+        struct FreeCellProbe : FreeCellView { using GameView::captionBand; };
+        struct KlondikeProbe : KlondikeView { using GameView::captionBand; };
+
+        // In card heights, read off each game's own layout.
+        const double freecellDeal = 1.0 + 0.22 + 6 * 0.27 + 1.0;  // 7, all face up
+        const double klondikeDeal = 1.0 + 0.14 * 1.6 / 1.4 + 6 * 0.13 + 1.0;  // 6 down, 1 up
+
+        const QList<QSize> shapes = { QSize(620, 440), QSize(1400, 438),
+                                      QSize(960, 700), QSize(700, 460) };
+
+        for (bool on : { false, true }) {
+            Legibility::instance().setEnabled(on);
+            const char* state = on ? "switch on" : "switch off";
+
+            for (const QSize& shape : shapes) {
+                {
+                    FreeCellProbe view;
+                    view.resize(shape);
+                    const double h = view.smallestCardWidth() * 1.4;
+                    const double bottom = 12.0 + h * freecellDeal;
+                    // The view's own height, not the size asked for: both
+                    // games hold a minimum and clamp a shorter request up.
+                    const double room =
+                        view.height() - 12.0 - view.captionBand(QRectF(view.rect()));
+                    check(bottom <= room + 0.5,
+                          qPrintable(QStringLiteral("freecell: the deal fits %1x%2, %3")
+                                         .arg(shape.width())
+                                         .arg(shape.height())
+                                         .arg(QLatin1String(state))));
+                }
+                {
+                    KlondikeProbe view;
+                    view.resize(shape);
+                    const double h = view.smallestCardWidth() * 1.4;
+                    const double bottom = 14.0 + h * klondikeDeal;
+                    const double room =
+                        view.height() - 14.0 - view.captionBand(QRectF(view.rect()));
+                    check(bottom <= room + 0.5,
+                          qPrintable(QStringLiteral("klondike: the deal fits %1x%2, %3")
+                                         .arg(shape.width())
+                                         .arg(shape.height())
+                                         .arg(QLatin1String(state))));
+                }
+            }
+        }
+
+        Legibility::instance().setEnabled(false);
+    }
+
     // ---- Best scores survive a restart ----
     {
         Scores& scores = Scores::instance();

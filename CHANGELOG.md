@@ -43,6 +43,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **FreeCell and Klondike size their cards for the board they actually deal.** (GHUB-0083)
+  Both solved card width against a height budget that assumed a
+  shorter column than the deal makes, so FreeCell hid the bottom card
+  of five of its eight columns behind the caption, and at wide, short
+  windows both games ran the tail of every column off the bottom edge
+  — with the legibility switch off as well as on. Covers GHUB-0086.
+
 - **Pyramid and Spider draw their stock pile inside the caption band, and the plate hides it.** (GHUB-0082)
   With the legibility switch on, both games drew their stock (and
   Pyramid its waste) underneath the caption's opaque plate, so at
