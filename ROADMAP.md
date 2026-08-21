@@ -2537,7 +2537,7 @@ open.
   Kind: fix.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0081] **Nobody has looked at the twelve new legibility passes, and one of them is the risky one.**
+- ✅ [GHUB-0081] **Nobody has looked at the twelve new legibility passes, and one of them is the risky one.**
   GHUB-0017's spec says every per-game pass is judged BY EYE (§ 3.2,
   § 9). GHUB-0071 shipped twelve of them in one session and none has
   been seen. Everything asserted about them is measured -- card widths
@@ -2565,9 +2565,166 @@ open.
   and off at a small window and at a comfortable one, and say which
   look wrong. It is looking rather than typing, and it is the half of
   GHUB-0017 that a session cannot do for him.
+  Resolved (2026-08-21): looked at. All fourteen were opened through a
+  real HubWindow -- not a bare view, per the GHUB-0072 trap -- with the
+  switch off and on, at each game's own minimum and at 1120x820, plus
+  wide-and-short shapes once Hearts pointed that way.
+
+  Six confirmed defects, filed as GHUB-0082 through GHUB-0085 and
+  GHUB-0088; one pre-existing overflow the switch did not cause as
+  GHUB-0086; the board-shrink trade as GHUB-0087 for the owner to decide.
+
+  Two things this look settled that measurement had not. **The prediction
+  in this bullet was wrong about where Hearts breaks** -- the 620x480
+  minimum is clear by about 39px, and the caption reaches the trick on
+  WIDE, SHORT windows instead (GHUB-0084). And **Canasta, called the
+  second risk here, is clean**: it behaves exactly as CLAUDE.md
+  documents. The risky one turned out to be Pyramid, which this bullet
+  listed among "the rest are low risk".
   **Layman:** The twelve games changed today were checked by measurement, not by eye. Someone has to actually look at them.
   Kind: accessibility.
   Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0082] **Pyramid and Spider draw their stock pile inside the caption band, and the plate hides it.**
+  Found by looking (GHUB-0081), not by any test. Both games solve card
+  width against `height - ... - captionBand()` correctly, so the CARDS
+  shrink -- and then anchor the stock to the bottom of the WIDGET, which
+  is inside the band the card size just reserved. The caption plate is
+  opaque and painted last, so the pile is drawn and then covered.
+
+  Pyramid at 600x544 with the switch on: the stock AND the waste are not
+  on screen at all, while the caption reads "Stock 24". At 1120x820 the
+  plate cuts both piles in half. Spider at 620x524: the stock is gone
+  bar a white sliver of card edge past the plate's corner.
+
+  The fix is arithmetic -- subtract `captionBand(QRectF(rect()))` from
+  the bottom anchor in each:
+    src/pyramid/pyramidview.cpp:228 `stockRect()`
+    src/pyramid/pyramidview.cpp:234 `wasteRect()`
+    src/spider/spiderview.cpp:254 `stockRect()`
+  No other game bottom-anchors anything; the six board games all centre
+  within `height - band` and are clear. Checked by grep, not assumed.
+  **Layman:** At their smallest window these two games hide the pile you draw from behind the caption.
+  Kind: fix.
+  Source: in-session-2026-08-21 GHUB-0081 eyeball check.
+
+- 📋 [GHUB-0083] **FreeCell's caption covers the bottom card of five of its eight columns.**
+  At 620x524 -- FreeCell's OWN minimum, on a freshly dealt board with no
+  play at all -- the caption plate covers the last card of five of the
+  eight columns. In FreeCell the bottom card of a column is the only one
+  that can be moved, so the plate is hiding exactly the cards the game is
+  played with.
+
+  Not the same bug as Pyramid and Spider. Nothing is bottom-anchored
+  here; the card size is solved against a height budget of
+  `(height - 2*kMargin - captionBand()) / (1.4 * 2.5)` at
+  src/freecell/freecellview.cpp:203, and that budget leaves room for a
+  header plus about two cards of fan. FreeCell deals seven, all face up.
+
+  Klondike has the same shape with a 2.6 divisor (klondikeview.cpp:245)
+  and is filed separately -- it clears a fresh deal by about six pixels
+  and stops clearing as soon as you play.
+  **Layman:** With the switch on, FreeCell hides the only cards you are allowed to move.
+  Kind: fix.
+  Source: in-session-2026-08-21 GHUB-0081 eyeball check.
+
+- 📋 [GHUB-0084] **Hearts' caption covers your own played card on wide, short windows.**
+  GHUB-0081 predicted that if Hearts' caption ever reached the trick it
+  would be at the 620x480 minimum, where the trick and the hand are
+  closest. **That prediction is wrong and the minimum is fine** -- it
+  clears with about 39px to spare. It goes wrong on WIDE, SHORT windows.
+  Measured at 900x600 and 1400x620, both with a full trick on the table:
+  the plate covers the seat-0 card, which is the one YOU played, while
+  the other three stay visible. The caption reads "You led spades" while
+  sitting on the spade.
+
+  Why that shape: `cardWidth()` is capped at 92px, so past a certain
+  width the trick stops moving down the window while the caption, which
+  is bottom-aligned in `QRectF(0, 0, width(), height() - cardHeight() -
+  16)` (src/hearts/heartsview.cpp:425), keeps rising to meet it.
+
+  Hearts deliberately reserves no band and must not be given one -- its
+  hand is bottom-anchored, so a band comes off the cards. Clamping the
+  caption's bottom to the top of the trick is the shape that fits.
+  **Layman:** In Hearts the sentence explaining the trick can sit on top of the card you just played.
+  Kind: fix.
+  Source: in-session-2026-08-21 GHUB-0081 eyeball check.
+
+- 📋 [GHUB-0085] **Hearts' lifted pass cards run under the caption plate.**
+  A card chosen for the pass lifts by `h * 0.18` to show it is chosen
+  (src/hearts/heartsview.cpp:317). The caption area is measured from the
+  UNlifted hand top at :425, so all three chosen cards rise into the
+  plate and the top of the gold selection highlight is cut off.
+
+  Cosmetic rather than blinding -- the sides of the outline still read --
+  but it is the one moment in Hearts where the highlight is the whole
+  point. One term to add.
+  **Layman:** The cards you pick to pass rise up behind the caption and lose the top of their gold outline.
+  Kind: fix.
+  Source: in-session-2026-08-21 GHUB-0081 eyeball check.
+
+- 📋 [GHUB-0086] **FreeCell and Klondike columns run off the bottom of the window at wide, short shapes.**
+  Found while looking at GHUB-0081 and **not caused by the legibility
+  pass** -- it reproduces with the switch OFF, which is what separates it
+  from the caption items above. At 1400x520 (a legal size: FreeCell's
+  minimum is 620x524 and the height clamps to 524) only five of each
+  column's seven cards are on screen; the rest are below the widget edge.
+
+  Same root as the FreeCell caption item -- the `/(1.4 * 2.5)` height
+  budget assumes a shorter column than the game deals -- so the two are
+  probably one fix. Filed separately because the caption is the symptom
+  and this is the disease, and because a fix aimed only at the caption
+  would leave this standing.
+  **Layman:** Make the window wide and short and FreeCell's columns fall off the bottom edge -- with or without the legibility switch.
+  Kind: fix.
+  Source: in-session-2026-08-21 GHUB-0081 eyeball check.
+
+- 💭 [GHUB-0087] **The six board games shrink the board by a fifth to print a caption the status bar already carries.**
+  Owner's call, not a defect. Measured at each game's own smallest
+  window, board height lost to the reserved band:
+    Reversi 268 -> 204 px (23.9%)   Minesweeper 268 -> 204 px (23.9%)
+    Draughts 308 -> 244 px (20.8%)  Snake 268 -> 214 px (20.1%)
+    Chess 348 -> 284 px (18.4%)     2048 268 -> 245 px (8.6%)
+
+  What is bought with it is a sentence that is already on screen one line
+  below, in the status bar, word for word. On a board game the pieces ARE
+  the thing being read. Minesweeper is the sharpest case: its entire
+  content is single digits in cells, and the switch shrinks the cells by
+  a quarter to print the mine count the status bar was already printing.
+
+  The counter-example is in the same build. **Pinball takes no band** --
+  it grows the two numbers it was already drawing on the backglass, and
+  the table gives up a sliver rather than a fifth. Nothing moves and
+  nothing is covered. That is the shape worth considering for these six.
+
+  Against it: the caption is far larger than the status bar text, and the
+  status bar is not read during play (which is why the captions exist).
+  So this is a real trade with a case on both sides, and it has never
+  been made deliberately.
+  **Layman:** Turning legibility on makes the pieces smaller -- is that the trade we want?
+  Kind: accessibility.
+  Source: in-session-2026-08-21 GHUB-0081 eyeball check.
+
+- 📋 [GHUB-0088] **The caption wraps on width and breaks its sentences in the wrong place.**
+  At each game's smallest window the caption runs to two lines and breaks
+  wherever the width runs out, with no sense of which words belong
+  together. Seen by eye at the minimum for each:
+    Reversi      "Your turn (Black). You 2 - 2" / "Computer"
+    Minesweeper  "Click anywhere to start. Mines" / "left 40"
+    2048         "Slide with the arrow keys Score 0" / "Highest 2 Best 0"
+    Solitaire    "Klondike Foundations 0/52 Stock 24" / "Score 0"
+  Reversi's is the worst: the score is orphaned from whose score it is.
+
+  Spider is the opposite failure at the same size -- the sentence fits on
+  one line but overruns its plate, so "Moves 0" sits flush against the
+  right border with no padding while the left side has a comfortable
+  margin.
+
+  Breaking between the sentence's own phrases would cost nothing and
+  reads far better slowly, which is the bar this project holds.
+  **Layman:** At small windows the caption splits mid-phrase -- "You 2 - 2" on one line and "Computer" on the next.
+  Kind: accessibility.
+  Source: in-session-2026-08-21 GHUB-0081 eyeball check.
 
 ### 🎨 Play
 
