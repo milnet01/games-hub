@@ -2819,6 +2819,29 @@ open.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0083/GHUB-0086 fix.
 
+- 📋 [GHUB-0092] **Hearts' East pile fans off the right edge of the window.**
+  Found by looking, in the first picture GHUB-0090's `--shot` flag ever
+  took -- which is the argument for that flag in one line, since the
+  GHUB-0081 eyeball check went over this same game and did not catch it.
+
+  `opponentRect(3)` puts the pile's right edge at `width() - 14`, and
+  `paintEvent` then fans up to six backs at `r.translated(i * 3.0, i * 2.0)`.
+  So the sixth back reaches `width() + 1` and the frontmost card of the
+  stack loses its right border. West is drawn from `x = 14` and fans away
+  from its edge, so it is fine; East is the only seat that fans towards one.
+
+  Cosmetic and about one pixel wide. Worth doing because it is the seat
+  whose card count you read to know how the hand is going, and a card with
+  a missing border reads as a rendering fault rather than as a design.
+
+  Reproduce:
+    QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/h.png \
+          --game hearts --size 1400x620 --legible
+    magick /tmp/h.png -crop 200x260+1200+280 +repage -resize 300% /tmp/east.png
+  **Layman:** In Hearts the stack of cards on the right is drawn slightly too far right, so its edge is cut off by the window.
+  Kind: fix.
+  Source: in-session-2026-08-22 first --shot of a game.
+
 ### 🎨 Play
 
 - 💭 [GHUB-0018] **Canasta cannot take a move back.**
@@ -3029,6 +3052,58 @@ open.
   **Layman:** If a change quietly makes old saved games unreadable, the game you left half-finished just disappears and nobody is told.
   Kind: test.
   Source: in-session-2026-08-20 (docs/standards/versioning.md § 3).
+
+- ✅ [GHUB-0090] **Nothing can photograph a game, so every layout question is answered as arithmetic.**
+  GHUB-0081 found seven layout defects and every one of them was found by
+  the owner's eye, because nothing else here can see. GHUB-0084, GHUB-0085
+  and GHUB-0088 were then closed by measuring rectangles and reasoning
+  about them -- correct, and blind. The suite renders every game to a
+  QPixmap already, to force paintEvent through; it just throws the picture
+  away.
+
+  A `--shot <path>` flag that renders the game named by `--game` at a size
+  given by `--size WxH` and exits. Offscreen, so it needs no display, no
+  compositor and no injection tool -- which means it works unchanged on
+  this machine under Wayland, on the wintest box over plain SSH, and on a
+  CI runner. `--legible` forces the switch on for the shot without writing
+  it to settings, because both states are what wants looking at.
+
+  Watch two things this project already knows. `--version` is answered from
+  argv before QApplication exists and must stay that way; a shot needs Qt
+  up, so it belongs after the parser rather than beside that check. And the
+  offscreen platform has no font environment on windows-2022, so a shot
+  taken there is evidence about that runner and not about a Windows
+  player.
+  Resolved (2026-08-22): `--shot <file>` with `--size WxH` and `--legible`, taken before the launch counter is advanced, since photographing is not playing. Two guards found by executing every branch rather than reading them: an unknown `--game` REFUSES rather than falling back to the tile grid the way playing does, and a malformed `--size` refuses rather than silently using another size -- in both cases the picture would still have been written and would still have looked like an answer. Errors go to stderr directly rather than through qWarning, which prints nothing here. Two ctest cases cover it, the second asserting the refusal via WILL_FAIL. Its first picture found GHUB-0092, in a game the GHUB-0081 eyeball check had already been over.
+  **Layman:** The app cannot take a picture of itself, so checking whether something looks right means either doing sums or asking you to look.
+  Kind: implement.
+  Source: user-request-2026-08-22.
+
+- 📋 [GHUB-0091] **The Windows half of every push is unverified until GitHub runs it, and there is a Windows machine sitting right there.**
+  `scripts/local-ci.sh` executes ci.yml's own steps and says on every run
+  that it cannot drive MSVC. So the Windows leg -- the only place MSVC is
+  exercised -- is checked by CI and nowhere else, and this project has
+  already spent three red Windows runs learning that.
+
+  The owner's `ssh wintest` box is a real Windows 10 22H2 machine and the
+  owner has granted admin rights and permission to install on it
+  (2026-08-22). Verified that day: no Qt, no cmake, no compiler on PATH.
+  Installing the MSVC build tools plus a Qt 6 matching ci.yml's would make
+  the Windows half testable before a push.
+
+  **It does not replace the runner, and assuming it does would be the
+  expensive mistake.** wintest is a real desktop with Segoe UI installed,
+  while ci.yml runs under QT_QPA_PLATFORM=offscreen on windows-2022, where
+  QFontDatabase::families() is EMPTY and the default face measures digits
+  at 0.997 of an em. Anything derived from font metrics behaves differently
+  on the two. This buys "what a Windows player sees", which is a real
+  question here; it does not buy "what the runner does".
+
+  Blocked-by: nothing. Sized as its own task rather than folded into game
+  work -- multi-gigabyte unattended installers driven over SSH.
+  **Layman:** Your spare Windows PC could test the Windows build before we push instead of three minutes after, once it has the build tools on it.
+  Kind: test.
+  Source: user-request-2026-08-22.
 
 ### 🎨 More games, if wanted
 

@@ -144,6 +144,20 @@ add_test(NAME selftest COMMAND gameshub_selftest)
 add_test(NAME uitest COMMAND gameshub_uitest)
 set_tests_properties(uitest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# --shot is how a layout question gets answered by looking rather than by
+# arithmetic, so it has to keep working. Run against the real binary because
+# that is the whole point of it: no display, no compositor, no injection tool.
+# A malformed size must be refused rather than quietly photographed at some
+# other size, so the second run asserts a NON-zero status.
+add_test(NAME shot COMMAND gameshub --shot ${CMAKE_CURRENT_BINARY_DIR}/shot-test.png
+                                    --game hearts --size 900x600 --legible)
+add_test(NAME shot_refuses_a_bad_size
+         COMMAND gameshub --shot ${CMAKE_CURRENT_BINARY_DIR}/shot-never.png
+                          --game hearts --size not-a-size)
+set_tests_properties(shot shot_refuses_a_bad_size
+                     PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(shot_refuses_a_bad_size PROPERTIES WILL_FAIL TRUE)
+
 # The pre-push hook decides between the linters and the full pipeline, and a
 # wrong decision is silent — the push succeeds either way. Unix only: the hook
 # is bash, and nothing on Windows installs it.

@@ -10,6 +10,9 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **The app can take a picture of itself** (GHUB-0090)
+  `gameshub --shot picture.png --game hearts --size 1400x620 --legible` writes a picture of a game and exits, without opening a window or needing a screen. Chiefly a development tool: until now the only way to check that a layout looked right was to open it and look.
+
 - **A written answer to "what would make this 1.0?"** (GHUB-0077)
   `docs/standards/versioning-overrides.md` names what a change here can break —
   your saved games, your settings, the command line — and lists the six things

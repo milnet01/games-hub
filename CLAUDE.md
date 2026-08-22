@@ -25,7 +25,21 @@ cmake --build build                     # build everything
 # registered as "Solitaire" (Klondike is its blurb), and an unknown name warns
 # and opens the tile grid rather than failing.
 
-cd build && ctest --output-on-failure   # both test binaries + the hook test
+# Photograph a game instead of playing it. Needs no display, no compositor and
+# no injection tool, so it works here under Wayland, over plain SSH, and on a
+# CI runner. --legible turns large play on for the shot without writing it to
+# settings. Use it before reasoning about a layout: this is the only thing in
+# the project that can SEE one.
+QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/hearts.png \
+      --game hearts --size 1400x620 --legible
+
+# Unlike playing, an unknown --game REFUSES rather than falling back to the
+# grid, and a malformed --size refuses rather than picking another size. A
+# picture of the wrong thing is the one failure a screenshot cannot survive:
+# it still gets written, and it still looks like an answer.
+
+cd build && ctest --output-on-failure   # both test binaries, the two --shot
+                                        # runs and the hook test
 cmake --install build                   # refresh the installed copy
 ```
 
