@@ -21,6 +21,11 @@ const char* kSeatNames[HeartsEngine::kPlayers] = { "You", "West", "North", "East
 constexpr int kAiDelayMs = 600;
 constexpr int kTrickPauseMs = 900;
 
+// How far a card chosen for the pass rises out of the hand, as a fraction of a
+// card's height. Named because two places have to agree on it: the hand draws
+// the lift, and the caption has to keep clear of where it lifted to.
+constexpr double kPassLift = 0.18;
+
 QString directionName(HeartsEngine::PassDirection d)
 {
     switch (d) {
@@ -314,7 +319,7 @@ QRectF HeartsView::handCardRect(int index) const
     // Selected cards lift, which is how the player sees their pass forming.
     const bool lifted = std::find(m_selected.begin(), m_selected.end(), hand[std::size_t(index)])
         != m_selected.end();
-    return { x, height() - h - 16 - (lifted ? h * 0.18 : 0.0), w, h };
+    return { x, height() - h - 16 - (lifted ? h * kPassLift : 0.0), w, h };
 }
 
 QRectF HeartsView::trickCardRect(int seat) const
@@ -331,6 +336,29 @@ QRectF HeartsView::trickCardRect(int seat) const
     case 2: return { c.x() - w / 2, c.y() - dy - h * 0.6, w, h };
     default: return { c.x() + dx - w / 2, c.y() - h / 2, w, h };
     }
+}
+
+QRectF HeartsView::captionArea() const
+{
+    // The hand is anchored to the bottom, so the caption goes in the gap above
+    // it rather than in a reserved band — a band here would come off the cards.
+    // Two things live in that gap and the caption must yield to both.
+    //
+    // Cards chosen for the pass rise out of the hand, and the plate is bottom
+    // aligned, so without this term the three cards you just chose slide under
+    // it and lose the top of their gold outline (GHUB-0085).
+    const double lift = m_selected.empty() ? 0.0 : cardHeight() * kPassLift;
+    const double bottom = height() - cardHeight() - 16 - lift;
+
+    // And the trick sits above. cardWidth() is capped, so past a certain width
+    // the trick stops moving down the window while the plate keeps rising to
+    // meet it: at 900x600 and 1400x620 the plate covered the seat-0 card, which
+    // is the one YOU played, while the other three stayed visible (GHUB-0084).
+    // Seat 0 is the lowest of the four, so its bottom edge is the whole trick's.
+    // Reserved whether or not a card is there, so the plate does not hop up the
+    // window each time a trick is swept.
+    const double top = std::min(trickCardRect(0).bottom(), bottom);
+    return { 0.0, top, double(width()), bottom - top };
 }
 
 QRectF HeartsView::opponentRect(int seat) const
@@ -419,10 +447,7 @@ void HeartsView::paintEvent(QPaintEvent*)
             CardArt::paintHighlight(p, r, QColor(0xff, 0xd5, 0x4f));
     }
 
-    // In the gap between the trick and the hand rather than at the window's
-    // edge: the hand is anchored to the bottom, so a caption there would sit
-    // on the player's own cards.
-    paintStatusCaption(p, QRectF(0, 0, width(), height() - cardHeight() - 16));
+    paintStatusCaption(p, captionArea());
 }
 
 void HeartsView::mousePressEvent(QMouseEvent* event)

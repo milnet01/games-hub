@@ -33,6 +33,14 @@ protected:
     QSize sizeHint() const override { return { 880, 660 }; }
     QSize minimumSizeHint() const override { return { 620, 480 }; }
 
+    // The strip the caption may use: below the trick, above the hand, and clear
+    // of a card lifted for the pass. Reachable from a test with the two rects it
+    // has to stay clear of, because a test that mirrored the trick's geometry
+    // instead would go stale on exactly the change that reintroduces GHUB-0084.
+    QRectF captionArea() const;
+    QRectF handCardRect(int index) const;
+    QRectF trickCardRect(int seat) const;
+
 private:
     void buildActions();
     void newGame();
@@ -46,8 +54,6 @@ private:
 
     double cardWidth() const;
     double cardHeight() const { return cardWidth() * 1.4; }
-    QRectF handCardRect(int index) const;
-    QRectF trickCardRect(int seat) const;
     QRectF opponentRect(int seat) const;
 
     QList<QAction*> m_actions;

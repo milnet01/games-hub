@@ -858,6 +858,101 @@ int main(int argc, char* argv[])
         check(ragged.isEmpty(), "caption: and no line carries a separator's spaces into the margin");
     }
 
+    // ---- heartsCaptionClearsTheTable (GHUB-0084, GHUB-0085) ----
+    //
+    // Hearts reserves no caption band on purpose -- its hand is anchored to the
+    // bottom, so a band would come off the cards rather than off empty table --
+    // and puts the sentence in the gap between the trick and the hand instead.
+    // Two things reach into that gap.
+    //
+    // cardWidth() is capped at 92, so past a certain width the trick stops
+    // moving down the window while the bottom-aligned plate keeps rising to
+    // meet it: at 900x600 the plate covered the seat-0 card by 6 pixels and at
+    // 1400x620 by 8, and seat 0 is the card YOU played. And a card chosen for
+    // the pass lifts out of the hand, which put all three under the plate at
+    // every size tested.
+    //
+    // Asked of the view's own rects rather than of a mirror of its arithmetic:
+    // a mirror would keep passing across exactly the change that puts the
+    // caption back on the cards.
+    {
+        struct HeartsProbe : HeartsView {
+            using HeartsView::captionArea;
+            using HeartsView::handCardRect;
+            using HeartsView::trickCardRect;
+        };
+
+        Legibility::instance().setEnabled(true);
+        const QList<QSize> shapes = { { 620, 480 }, { 880, 660 }, { 900, 600 }, { 1400, 620 } };
+        QStringList covered;
+        for (const QSize& shape : shapes) {
+            HeartsProbe hearts;
+            hearts.resize(shape);
+            hearts.show();
+            pump(20);
+
+            const QRectF area = hearts.captionArea();
+            const QRectF plate = Theme::captionRect(area, hearts.captionText(),
+                                                    hearts.captionFont(area));
+            check(!plate.isNull(), "hearts: the switch puts a sentence on the table");
+
+            // The gap only has to hold the plate where it CAN. A plate taller
+            // than the gap overlaps a little and that is the accepted outcome,
+            // the same trade the capped caption band already makes -- and it is
+            // the only thing this can be on a runner with no font environment,
+            // where the same sentence measures several times taller. The height
+            // is read off the platform and reported; the rule is asserted.
+            const bool fits = area.height() >= plate.height();
+            double worst = 0.0;
+            for (int seat = 0; seat < 4; ++seat) {
+                const QRectF card = hearts.trickCardRect(seat);
+                if (fits && plate.intersects(card)) {
+                    covered << QStringLiteral("%1x%2 seat %3")
+                                   .arg(shape.width()).arg(shape.height()).arg(seat);
+                }
+                worst = std::max(worst, card.bottom());
+            }
+            std::printf("      hearts %4dx%-4d plate %.1f tall in a %.1f gap%s, top %.1f, lowest trick card %.1f\n",
+                        shape.width(), shape.height(), plate.height(), area.height(),
+                        fits ? "" : " (too small to hold it)", plate.top(), worst);
+
+            // Choose cards to pass, which lifts them out of the hand. Clicked
+            // on the left sliver of each card rather than its centre: the hand
+            // is drawn left to right and every card but the last has its middle
+            // covered by its neighbour, so a click there lands on the wrong
+            // card -- which quietly made this half of the check vacuous at
+            // three of the four shapes when it was first written.
+            const double resting = hearts.handCardRect(0).top();
+            for (int i = 0; i < 3; ++i) {
+                const QRectF card = hearts.handCardRect(i);
+                clickAt(&hearts, QPointF(card.left() + card.width() * 0.1, card.center().y()),
+                        Qt::LeftButton);
+            }
+            pump(20);
+
+            const QRectF passArea = hearts.captionArea();
+            const QRectF passPlate = Theme::captionRect(passArea, hearts.captionText(),
+                                                        hearts.captionFont(passArea));
+            int lifted = 0;
+            for (int i = 0; i < 3; ++i) {
+                const QRectF card = hearts.handCardRect(i);
+                if (card.top() >= resting - 1.0)
+                    continue; // not chosen, so it is not what this is about
+                ++lifted;
+                if (passPlate.intersects(card)) {
+                    covered << QStringLiteral("%1x%2 lifted pass card %3")
+                                   .arg(shape.width()).arg(shape.height()).arg(i);
+                }
+            }
+            check(lifted > 0, "hearts: choosing a card to pass lifts it out of the hand");
+        }
+        Legibility::instance().setEnabled(false);
+        if (!covered.isEmpty())
+            std::printf("      CAPTION ON TOP OF A CARD: %s\n",
+                        qPrintable(covered.join(QStringLiteral(", "))));
+        check(covered.isEmpty(), "hearts: the caption never lands on a card, at any window shape");
+    }
+
     // ---- pilesClearTheCaptionPlate (GHUB-0082) ----
     //
     // A pile anchored to the bottom of the WIDGET is drawn and then covered:
