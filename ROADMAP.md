@@ -2756,6 +2756,8 @@ open.
   status bar is not read during play (which is why the captions exist).
   So this is a real trade with a case on both sides, and it has never
   been made deliberately.
+  Deferred by the owner (2026-08-22), staying considered rather than planned: he will judge it by eye when he has a chance. **Do not re-raise it as an open question** -- it is not waiting on analysis, and nothing here can decide it. Whether a caption is worth a fifth of the board is a judgement about reading a board slowly, which is the owner's to make and no test's. The picture to judge it on is Reversi at a small window with large play on, which `--shot` (GHUB-0090) will now produce without opening a window:
+    QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/reversi.png --game reversi --size 300x360 --legible
   **Layman:** Turning legibility on makes the pieces smaller -- is that the trade we want?
   Kind: accessibility.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
