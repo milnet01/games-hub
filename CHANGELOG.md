@@ -43,6 +43,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Hearts keeps the cards you have chosen to pass out from under the caption** (GHUB-0085)
+  A chosen card lifts out of the hand to show it is chosen, and used to lift straight under the caption plate, losing the top of its gold outline.
+
+- **Hearts no longer prints its caption on top of the card you just played** (GHUB-0084)
+  On wide, short windows the sentence explaining the trick sat on the seat-0 card -- yours -- while the other three stayed visible.
+
+- **Captions break between their own phrases instead of mid-sentence** (GHUB-0088)
+  At a small window the sentence on the board used to split wherever the width ran out -- Reversi read "You 2 - 2" on one line and "Computer" on the next. It now breaks between the phrases the sentence is already made of, and no longer leaves a line's trailing spaces pressed against the edge of its plate.
+
 - **FreeCell and Klondike size their cards for the board they actually deal.** (GHUB-0083)
   Both solved card width against a height budget that assumed a
   shorter column than the deal makes, so FreeCell hid the bottom card

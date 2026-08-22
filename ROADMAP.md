@@ -2672,7 +2672,7 @@ open.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
 
-- 📋 [GHUB-0084] **Hearts' caption covers your own played card on wide, short windows.**
+- ✅ [GHUB-0084] **Hearts' caption covers your own played card on wide, short windows.**
   GHUB-0081 predicted that if Hearts' caption ever reached the trick it
   would be at the 620x480 minimum, where the trick and the hand are
   closest. **That prediction is wrong and the minimum is fine** -- it
@@ -2690,11 +2690,12 @@ open.
   Hearts deliberately reserves no band and must not be given one -- its
   hand is bottom-anchored, so a band comes off the cards. Clamping the
   caption's bottom to the top of the trick is the shape that fits.
+  Resolved (2026-08-22): HeartsView::captionArea() takes the seat-0 trick card's bottom as its top edge, reserved whether or not a card is sitting there so the plate does not hop up the window each time a trick is swept. Measured before: plate top 397.6 against a trick bottom of 403.9 at 900x600, and 411.3 against 419.2 at 1400x620. After: 407.1 and 420.9, clear at both. heartsCaptionClearsTheTable in tests/uitest.cpp asks the view's own rects at four window shapes rather than a mirror of its arithmetic, and asserts no overlap only where the gap is tall enough to hold the plate -- where it is not, the caption overlaps a little, which is the same trade the capped band already makes and the only thing it can be on a runner with no font environment.
   **Layman:** In Hearts the sentence explaining the trick can sit on top of the card you just played.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
 
-- 📋 [GHUB-0085] **Hearts' lifted pass cards run under the caption plate.**
+- ✅ [GHUB-0085] **Hearts' lifted pass cards run under the caption plate.**
   A card chosen for the pass lifts by `h * 0.18` to show it is chosen
   (src/hearts/heartsview.cpp:317). The caption area is measured from the
   UNlifted hand top at :425, so all three chosen cards rise into the
@@ -2703,6 +2704,7 @@ open.
   Cosmetic rather than blinding -- the sides of the outline still read --
   but it is the one moment in Hearts where the highlight is the whole
   point. One term to add.
+  Resolved (2026-08-22): captionArea() subtracts the pass lift, now the named constant kPassLift, so the plate clears a card chosen for the pass. Found while proving the check red: clicking a card's centre lands on whichever card is drawn on top of it, so the first version of this check was vacuous at three of the four window shapes. It clicks the left sliver of each card instead, and asserts a card actually lifted before asserting the plate clears it.
   **Layman:** The cards you pick to pass rise up behind the caption and lose the top of their gold outline.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
@@ -2758,7 +2760,7 @@ open.
   Kind: accessibility.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
 
-- 📋 [GHUB-0088] **The caption wraps on width and breaks its sentences in the wrong place.**
+- ✅ [GHUB-0088] **The caption wraps on width and breaks its sentences in the wrong place.**
   At each game's smallest window the caption runs to two lines and breaks
   wherever the width runs out, with no sense of which words belong
   together. Seen by eye at the minimum for each:
@@ -2775,6 +2777,7 @@ open.
 
   Breaking between the sentence's own phrases would cost nothing and
   reads far better slowly, which is the bar this project holds.
+  Resolved (2026-08-22): Theme::wrapCaption breaks the caption at the joints the sentence already has -- the runs of two or more spaces every game separates its status phrases with -- and is what captionRect measures and paintCaption draws, so the plate that is measured is the plate that is drawn. Qt's word wrap stays on underneath, so a phrase wider than the plate still wraps. Spider's dangling separator spaces go with it: a break consumes the run rather than leaving it on the end of a line. The check asserts a property of the function rather than a figure this machine's fonts produce -- no phrase split across two lines, no line with leading or trailing space -- over what the fourteen games actually say at the smallest window each allows. Twelve have a joint to break at; Chess and Hearts caption in a single phrase.
   **Layman:** At small windows the caption splits mid-phrase -- "You 2 - 2" on one line and "Computer" on the next.
   Kind: accessibility.
   Source: in-session-2026-08-21 GHUB-0081 eyeball check.
