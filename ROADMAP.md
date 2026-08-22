@@ -2819,7 +2819,7 @@ open.
   Kind: fix.
   Source: in-session-2026-08-21 GHUB-0083/GHUB-0086 fix.
 
-- 📋 [GHUB-0092] **Hearts' East pile fans off the right edge of the window.**
+- ✅ [GHUB-0092] **Hearts' East pile fans off the right edge of the window.**
   Found by looking, in the first picture GHUB-0090's `--shot` flag ever
   took -- which is the argument for that flag in one line, since the
   GHUB-0081 eyeball check went over this same game and did not catch it.
@@ -2838,6 +2838,7 @@ open.
     QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/h.png \
           --game hearts --size 1400x620 --legible
     magick /tmp/h.png -crop 200x260+1200+280 +repage -resize 300% /tmp/east.png
+  Resolved (2026-08-22): East fans towards the centre of the table instead of towards the wall -- one sign, in a named fanOffset() the painter and the new opponentStackRect() share. Chosen over moving the pile left because it keeps the existing 14px margin exactly, and because West already fans inwards, so the two sides now mirror and each seat's front card faces the table. opponentStacksFitTheTable in tests/uitest.cpp asserts every seat's full-stack extent lies inside the widget, at four window shapes; put back the old direction and it reddens on seat 3 alone, by exactly one pixel at every size (621 of 620, 881 of 880, 1401 of 1400, 1001 of 1000). No pixel-diff evidence is recorded on purpose: the deal is random per launch, so a before-and-after count measured the shuffle rather than the fix -- 10633 changed pixels against a same-binary control of 6416. GHUB-0093 carries the seed that would make such a comparison mean something.
   **Layman:** In Hearts the stack of cards on the right is drawn slightly too far right, so its edge is cut off by the window.
   Kind: fix.
   Source: in-session-2026-08-22 first --shot of a game.
@@ -3104,6 +3105,32 @@ open.
   **Layman:** Your spare Windows PC could test the Windows build before we push instead of three minutes after, once it has the build tools on it.
   Kind: test.
   Source: user-request-2026-08-22.
+
+- 📋 [GHUB-0093] **Two pictures of the same card game are never the same picture, so nothing can be compared.**
+  GHUB-0090's `--shot` lets a layout be LOOKED at, which is most of the
+  value. It does not let one be COMPARED, and the difference was measured
+  while fixing GHUB-0092: a before-and-after pixel count came back at 10633
+  changed pixels, and the control -- two shots taken from the SAME binary
+  -- came back at 6416. The deal is random per launch, so the number was
+  measuring the shuffle.
+
+  That matters because a pixel diff is the standard way to show a visual
+  change did what was intended and nothing else, and here it is unavailable
+  for the six card games, which are exactly the ones whose layouts are
+  hardest to reason about.
+
+  A `--seed <n>` that pins the shuffle for the shot would make two runs
+  comparable. `shuffleCards` already takes its index from `rng()` directly
+  and is a hand-written Fisher-Yates precisely so a seed means the same
+  deal on every compiler, so the machinery is there; what is missing is a
+  way to say which seed from the command line.
+
+  Not needed for looking at a layout, which is what the flag is for today.
+  Needed the moment anyone wants to prove a visual change is confined to
+  the thing it was aimed at.
+  **Layman:** Every launch deals a different hand, so two screenshots of the same game cannot be put side by side to see what a change did.
+  Kind: enhancement.
+  Source: in-session-2026-08-22 GHUB-0092 fix.
 
 ### 🎨 More games, if wanted
 

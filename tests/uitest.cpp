@@ -953,6 +953,48 @@ int main(int argc, char* argv[])
         check(covered.isEmpty(), "hearts: the caption never lands on a card, at any window shape");
     }
 
+    // ---- opponentStacksFitTheTable (GHUB-0092) ----
+    //
+    // Each opponent's hand is a short fanned stack of backs, and the fan runs
+    // right and down from the seat's own rect. East's pile is anchored to the
+    // right edge, so fanning right put the front card a pixel off the window
+    // and cut its border away -- which paints perfectly happily and is visible
+    // to nothing here, because a QPainter is glad to draw outside its widget.
+    //
+    // Found by looking at the first picture --shot ever took, in a game the
+    // GHUB-0081 eyeball check had already been over. This is the check that
+    // means the next one does not need an eye.
+    {
+        struct HeartsProbe : HeartsView {
+            using HeartsView::opponentStackRect;
+        };
+
+        const QList<QSize> shapes = { { 620, 480 }, { 880, 660 }, { 1400, 620 }, { 1000, 900 } };
+        QStringList overhanging;
+        for (const QSize& shape : shapes) {
+            HeartsProbe hearts;
+            hearts.resize(shape);
+            hearts.show();
+            pump(20);
+
+            for (int seat = 1; seat < 4; ++seat) {
+                const QRectF stack = hearts.opponentStackRect(seat);
+                if (!QRectF(hearts.rect()).contains(stack)) {
+                    overhanging << QStringLiteral("%1x%2 seat %3 (%4..%5 of %6)")
+                                       .arg(shape.width()).arg(shape.height()).arg(seat)
+                                       .arg(stack.left(), 0, 'f', 1)
+                                       .arg(stack.right(), 0, 'f', 1)
+                                       .arg(hearts.width());
+                }
+            }
+        }
+        if (!overhanging.isEmpty())
+            std::printf("      STACK OVER THE EDGE: %s\n",
+                        qPrintable(overhanging.join(QStringLiteral(", "))));
+        check(overhanging.isEmpty(),
+              "hearts: every opponent's stack of backs is drawn inside the window");
+    }
+
     // ---- pilesClearTheCaptionPlate (GHUB-0082) ----
     //
     // A pile anchored to the bottom of the WIDGET is drawn and then covered:

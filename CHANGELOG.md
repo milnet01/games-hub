@@ -46,6 +46,9 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Hearts draws East's stack of cards fully inside the window** (GHUB-0092)
+  The pile on the right fanned outwards and lost the edge of its front card off the side of the window. It now fans towards the middle of the table, the way the pile on the left already did, so the two sides match.
+
 - **Hearts keeps the cards you have chosen to pass out from under the caption** (GHUB-0085)
   A chosen card lifts out of the hand to show it is chosen, and used to lift straight under the caption plate, losing the top of its gold outline.
 

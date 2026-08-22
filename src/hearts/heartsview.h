@@ -41,6 +41,11 @@ protected:
     QRectF handCardRect(int index) const;
     QRectF trickCardRect(int seat) const;
 
+    // The room a seat's fanned stack of backs takes, at its fullest. Reachable
+    // from a test because a stack that does not fit is invisible to every other
+    // check here: it paints happily, off the edge of the window.
+    QRectF opponentStackRect(int seat) const;
+
 private:
     void buildActions();
     void newGame();

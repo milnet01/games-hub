@@ -26,6 +26,27 @@ constexpr int kTrickPauseMs = 900;
 // the lift, and the caption has to keep clear of where it lifted to.
 constexpr double kPassLift = 0.18;
 
+// An opponent's hand is drawn as a short fanned stack of backs. Named for the
+// same reason: the painter lays the fan out and opponentStackRect() has to
+// report the room it takes.
+constexpr double kFanStepX = 3.0;
+constexpr double kFanStepY = 2.0;
+constexpr int kFanCards = 6;
+
+// Where the i-th back of a seat's stack sits, relative to the seat's own rect.
+//
+// East fans towards the centre of the table rather than towards the wall. Its
+// pile is anchored to the right edge, so fanning right ran the front card a
+// pixel off the window and cut its border away (GHUB-0092) -- a card with a
+// missing edge reads as a rendering fault rather than as a design. West already
+// fans inwards from the left edge, so mirroring East also makes the two sides
+// match, with each seat's front card facing the table.
+QPointF fanOffset(int seat, int i)
+{
+    const double direction = (seat == 3) ? -1.0 : 1.0;
+    return { direction * i * kFanStepX, i * kFanStepY };
+}
+
 QString directionName(HeartsEngine::PassDirection d)
 {
     switch (d) {
@@ -338,6 +359,15 @@ QRectF HeartsView::trickCardRect(int seat) const
     }
 }
 
+QRectF HeartsView::opponentStackRect(int seat) const
+{
+    // The room a full stack takes, not the room the current one takes: a pile
+    // that crept towards the edge as its owner played cards away would be worse
+    // than one that simply sits where it sits.
+    const QRectF base = opponentRect(seat);
+    return base.united(base.translated(fanOffset(seat, kFanCards - 1)));
+}
+
 QRectF HeartsView::captionArea() const
 {
     // The hand is anchored to the bottom, so the caption goes in the gap above
@@ -387,8 +417,8 @@ void HeartsView::paintEvent(QPaintEvent*)
     for (int seat = 1; seat < HeartsEngine::kPlayers; ++seat) {
         const QRectF r = opponentRect(seat);
         const int n = int(m_engine.hand(seat).size());
-        for (int i = 0; i < std::min(n, 6); ++i)
-            CardArt::paintBack(p, r.translated(i * 3.0, i * 2.0));
+        for (int i = 0; i < std::min(n, kFanCards); ++i)
+            CardArt::paintBack(p, r.translated(fanOffset(seat, i)));
 
         QFont f = font();
         f.setBold(true);
