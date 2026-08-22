@@ -4,6 +4,7 @@
 #include <QLinearGradient>
 #include <QPainterPath>
 #include <QRadialGradient>
+#include <QRegularExpression>
 
 #include <algorithm>
 
@@ -113,7 +114,60 @@ void paintInlay(QPainter& p, const QRectF& r, double radius, const QColor& colou
     p.drawRoundedRect(r, radius, radius);
 }
 
-QRectF captionRect(const QRectF& area, const QString& text, const QFont& f, Qt::Alignment where)
+namespace {
+
+// The joints a status sentence already has: a run of two or more spaces, or
+// the same run either side of Canasta's interpunct. Splitting on the run alone
+// would leave that "·" standing as a phrase of its own.
+QList<QPair<QString, QString>> phrasesOf(const QString& text)
+{
+    static const QRegularExpression sep(QStringLiteral("\\s\\s+(?:·\\s\\s+)?"));
+    QList<QPair<QString, QString>> out; // phrase, and the separator that follows it
+    qsizetype pos = 0;
+    QRegularExpressionMatchIterator it = sep.globalMatch(text);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch m = it.next();
+        out.append({ text.mid(pos, m.capturedStart() - pos), m.captured() });
+        pos = m.capturedEnd();
+    }
+    out.append({ text.mid(pos), QString() });
+    return out;
+}
+
+} // namespace
+
+QString wrapCaption(const QString& text, const QFont& f, double room)
+{
+    const QList<QPair<QString, QString>> phrases = phrasesOf(text);
+    if (phrases.size() < 2)
+        return text;
+
+    const QFontMetricsF fm(f);
+    QString out;
+    QString line;
+    QString pending; // the separator to re-join with, if the next phrase fits
+    for (const auto& [phrase, following] : phrases) {
+        const QString candidate = line.isEmpty() ? phrase : line + pending + phrase;
+        if (line.isEmpty() || fm.horizontalAdvance(candidate) <= room) {
+            line = candidate;
+        } else {
+            out += (out.isEmpty() ? QString() : QStringLiteral("\n")) + line;
+            line = phrase;
+        }
+        pending = following;
+    }
+    return out + (out.isEmpty() ? QString() : QStringLiteral("\n")) + line;
+}
+
+namespace {
+
+struct Caption {
+    QString text; // wrapped at the sentence's own joints
+    QRectF plate;
+};
+
+// One layout, so the plate that gets measured is the plate that gets drawn.
+Caption layoutCaption(const QRectF& area, const QString& text, const QFont& f, Qt::Alignment where)
 {
     if (text.isEmpty() || area.width() <= 0.0)
         return {};
@@ -123,19 +177,28 @@ QRectF captionRect(const QRectF& area, const QString& text, const QFont& f, Qt::
     // Wrapped, never elided. A caption exists to be read slowly; a sentence cut
     // short at the point it was about to say what to do is worse than none.
     const double room = std::max(40.0, area.width() * 0.94 - pad * 2.0);
+    const QString wrapped = wrapCaption(text, f, room);
     const QRectF ink = fm.boundingRect(QRectF(0, 0, room, area.height()),
-                                       Qt::TextWordWrap | Qt::AlignCenter, text);
+                                       Qt::TextWordWrap | Qt::AlignCenter, wrapped);
     const double w = std::min(area.width(), ink.width() + pad * 2.0);
     const double h = ink.height() + pad * 0.9;
     const double margin = std::min(pad * 0.7, area.height() * 0.04);
     const double y = (where & Qt::AlignTop) ? area.top() + margin : area.bottom() - margin - h;
-    return { area.center().x() - w * 0.5, y, w, h };
+    return { wrapped, QRectF(area.center().x() - w * 0.5, y, w, h) };
+}
+
+} // namespace
+
+QRectF captionRect(const QRectF& area, const QString& text, const QFont& f, Qt::Alignment where)
+{
+    return layoutCaption(area, text, f, where).plate;
 }
 
 void paintCaption(QPainter& p, const QRectF& area, const QString& text, const QFont& f,
                   Qt::Alignment where)
 {
-    const QRectF plate = captionRect(area, text, f, where);
+    const Caption caption = layoutCaption(area, text, f, where);
+    const QRectF plate = caption.plate;
     if (plate.isNull())
         return;
 
@@ -155,7 +218,7 @@ void paintCaption(QPainter& p, const QRectF& area, const QString& text, const QF
 
     p.setFont(f);
     p.setPen(kCaptionInk);
-    p.drawText(plate, Qt::TextWordWrap | Qt::AlignCenter, text);
+    p.drawText(plate, Qt::TextWordWrap | Qt::AlignCenter, caption.text);
     p.restore();
 }
 

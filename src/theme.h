@@ -67,4 +67,15 @@ QRectF captionRect(const QRectF& area, const QString& text, const QFont& f,
 void paintCaption(QPainter& p, const QRectF& area, const QString& text, const QFont& f,
                   Qt::Alignment where = Qt::AlignBottom);
 
+// Where a caption too long for one line should break. Every game composes its
+// status sentence out of phrases with a run of two or more spaces between them
+// ("Your turn (Black).   You 2 - 2 Computer"), so those runs are the joints the
+// sentence already has. Plain word wrap ignores them and breaks wherever the
+// width happens to run out, which orphaned "Computer" onto a line of its own
+// from the score it belongs to. Returns the text with a newline at each break;
+// the caller keeps Qt::TextWordWrap on, so a single phrase wider than `room`
+// still wraps rather than running off the plate. Public so a test can ask where
+// a sentence breaks without painting one.
+QString wrapCaption(const QString& text, const QFont& f, double room);
+
 } // namespace Theme

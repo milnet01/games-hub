@@ -747,6 +747,117 @@ int main(int argc, char* argv[])
               "caption: both are centred on the same line");
     }
 
+    // ---- captionBreaksAtItsOwnJoints (GHUB-0088) ----
+    //
+    // Every game composes its status sentence out of phrases with a run of two
+    // or more spaces between them. Plain word wrap does not know that, so at a
+    // small window it broke wherever the width ran out: Reversi read "Your turn
+    // (Black).   You 2 -" / "2 Computer", orphaning the score from whose score
+    // it was, and Spider left the three separator spaces dangling on the end of
+    // a line so its plate had a margin down one side and none down the other.
+    //
+    // The property asserted is a property of the FUNCTION, not of this machine's
+    // fonts: a phrase is never split across two lines, and no line carries
+    // leading or trailing space. `room` is derived at runtime from the widest
+    // phrase, so the wrap is forced to happen whatever the font measures.
+    {
+        // The joints, mirrored independently of theme.cpp so this asserts the
+        // contract rather than the implementation's own idea of it.
+        auto phrasesOf = [](const QString& s) {
+            QStringList out;
+            qsizetype i = 0;
+            while (i < s.size()) {
+                qsizetype j = i;
+                while (j < s.size()
+                       && !(s[j].isSpace() && j + 1 < s.size() && s[j + 1].isSpace()))
+                    ++j;
+                out << s.mid(i, j - i).trimmed();
+                while (j < s.size() && (s[j].isSpace() || s[j] == QChar(0x00B7)))
+                    ++j;
+                i = j;
+            }
+            out.removeAll(QString());
+            return out;
+        };
+
+        QFont f;
+        f.setPointSizeF(14.0);
+        f.setBold(true);
+        const QFontMetricsF fm(f);
+
+        // The reported case, stated exactly: room for the longer phrase and not
+        // for both, so the break is forced and there is only one right place
+        // for it.
+        const QString first = QStringLiteral("Your turn (Black).");
+        const QString second = QStringLiteral("You 2 — 2 Computer");
+        const QString reversi = first + QStringLiteral("   ") + second;
+        const double room = std::max(fm.horizontalAdvance(first), fm.horizontalAdvance(second)) + 1.0;
+        const QStringList lines = Theme::wrapCaption(reversi, f, room).split(QLatin1Char('\n'));
+        check(lines.size() == 2, "caption: a sentence too wide for one line becomes two");
+        check(lines.value(0) == first && lines.value(1) == second,
+              "caption: and it breaks between the phrases, not inside one");
+
+        // A single phrase has no joint to break at, so it comes back whole and
+        // Qt::TextWordWrap is left to do what it can with it.
+        const QString unbroken = QStringLiteral("Click anywhere to start.");
+        check(!Theme::wrapCaption(unbroken, f, 10.0).contains(QLatin1Char('\n')),
+              "caption: a phrase with no joint is never broken up");
+        check(Theme::wrapCaption(QString(), f, room).isEmpty(),
+              "caption: an empty sentence stays empty");
+
+        // Then the real population: what the fourteen games actually say, at
+        // the smallest window each of them allows.
+        Legibility::instance().setEnabled(true);
+        HubWindow probe;
+        QStringList split;
+        QStringList ragged;
+        int wrapped = 0;
+        for (const QString& name : probe.gameNames()) {
+            HubWindow one;
+            one.openGameNamed(name);
+            one.show();
+            one.resize(one.minimumSizeHint());
+            pump(20);
+            GameView* view = one.findChild<GameView*>();
+            if (view == nullptr)
+                continue;
+            const QString text = view->captionText();
+            const QStringList phrases = phrasesOf(text);
+            if (phrases.size() < 2)
+                continue;
+
+            double widest = 0.0;
+            for (const QString& phrase : phrases)
+                widest = std::max(widest, fm.horizontalAdvance(phrase));
+            const QStringList out = Theme::wrapCaption(text, f, widest + 1.0).split(QLatin1Char('\n'));
+            if (out.size() > 1)
+                ++wrapped;
+            std::printf("      %-12s %lld phrases -> %lld lines\n", qPrintable(name),
+                        static_cast<long long>(phrases.size()),
+                        static_cast<long long>(out.size()));
+
+            for (const QString& line : out) {
+                if (line != line.trimmed())
+                    ragged << name;
+            }
+            for (const QString& phrase : phrases) {
+                bool intact = false;
+                for (const QString& line : out)
+                    intact = intact || line.contains(phrase);
+                if (!intact)
+                    split << (name + QStringLiteral(": \"") + phrase + QStringLiteral("\""));
+            }
+        }
+        Legibility::instance().setEnabled(false);
+        check(wrapped >= 6, "caption: the sentences of at least six games were made to wrap");
+        if (!split.isEmpty())
+            std::printf("      PHRASE SPLIT ACROSS LINES: %s\n", qPrintable(split.join(QStringLiteral("; "))));
+        check(split.isEmpty(), "caption: no game has a phrase broken across two lines");
+        if (!ragged.isEmpty())
+            std::printf("      LINE WITH DANGLING SPACE: %s\n", qPrintable(ragged.join(QStringLiteral(", "))));
+        check(ragged.isEmpty(), "caption: and no line carries a separator's spaces into the margin");
+    }
+
     // ---- pilesClearTheCaptionPlate (GHUB-0082) ----
     //
     // A pile anchored to the bottom of the WIDGET is drawn and then covered:
