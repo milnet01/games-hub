@@ -4213,7 +4213,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: implement.
   Source: user-request-2026-08-22.
 
-- 📋 [GHUB-0091] **The Windows half of every push is unverified until GitHub runs it, and there is a Windows machine sitting right there.**
+- ✅ [GHUB-0091] **The Windows half of every push is unverified until GitHub runs it, and there is a Windows machine sitting right there.**
   `scripts/local-ci.sh` executes ci.yml's own steps and says on every run
   that it cannot drive MSVC. So the Windows leg -- the only place MSVC is
   exercised -- is checked by CI and nowhere else, and this project has
@@ -4235,6 +4235,69 @@ the opening minimums, guarded by scripts/scorepad-check.py.
 
   Blocked-by: nothing. Sized as its own task rather than folded into game
   work -- multi-gigabyte unattended installers driven over SSH.
+  Resolved (2026-08-24). `scripts/wintest-ci.sh` now builds and tests the
+  Windows leg on the wintest box in one command: it ships a commit over
+  with `git archive` piped to the box's own tar.exe, then runs
+  `scripts/wintest-build.ps1`, which executes ci.yml's three Windows
+  commands VERBATIM and supplies only the environment the runner gets from
+  actions -- vcvars64 for msvc-dev-cmd, CMAKE_PREFIX_PATH and Qt's bin on
+  PATH for install-qt-action.
+
+  Verified end to end from a wiped directory: configure, build, and
+  4/4 tests passing in 44 s. Four rather than six because `prepush` and
+  `scorepad` are `if(UNIX)`-guarded in CMakeLists, which is what CI does
+  too.
+
+  What is on the box now, all reproducible from the two scripts plus this
+  note. MSVC 19.44.35228.0 (VS 2022 Build Tools, toolset 14.44) at the
+  default location; Qt 6.8.3 msvc2022_64 with qtmultimedia under C:\Qt;
+  CMake 4.4.2 and Ninja 1.13.2 portable under C:\devtools, the same
+  versions the Linux box builds with so tooling is never the difference.
+  12.9 GB free afterwards, of 111 GB.
+
+  THE OWNER'S SECOND DRIVE DOES NOT EXIST. He recalled the box having more
+  than one; Win32_LogicalDisk reports only C:. That is why the MSVC
+  install is two components rather than the VCTools workload with
+  --includeRecommended.
+
+  Four things fought back, all recorded because the next person hits them.
+
+  winget is BROKEN on that box -- "Data required by the source is missing",
+  and `winget source reset` leaves the winget source "Cancelled". Every
+  install here goes to the official URL directly instead, which is more
+  deterministic anyway. aqtinstall's standalone aqt.exe is what installs
+  Qt, so the box needs no Python.
+
+  The VS bootstrapper exited 87 (ERROR_INVALID_PARAMETER) writing no setup
+  log at all, because it self-updates its installer to 4.9.50 -- a VS
+  2026-era build -- before parsing arguments, and rejected the two
+  component ids I had hardcoded. Pinning --channelUri to the VS 2022
+  channel and asking for the VCTools workload worked first time. ci.yml
+  pins windows-2022 for the same underlying reason.
+
+  Three quoting traps, all one family: Windows sshd hands the remote
+  command to cmd.exe. (1) `-Src 'C:\gameshub'` arrives WITH the quotes,
+  because cmd does not strip single quotes and `powershell -File` takes
+  its arguments literally -- every Test-Path then fails on a path that
+  exists. Use double quotes. (2) `cmd /c ver` fails on a box that is up,
+  mangled to `ver"`; the reachability probe uses powershell instead, which
+  is what the build needs anyway. (3) A multi-line PowerShell command is
+  silently not run, so the destination directory was never created and tar
+  failed with "could not chdir". All three carry a comment saying why, so
+  they are not tidied back.
+
+  WHAT THIS DOES NOT BUY, and the bullet said so before the work started:
+  wintest is a real desktop with Segoe UI. ci.yml runs the same binaries
+  under QT_QPA_PLATFORM=offscreen on windows-2022, where
+  QFontDatabase::families() is EMPTY and the default face measures digits
+  at 0.997 of an em. Anything font-derived can pass here and fail there --
+  which is exactly the shape of the three red Windows runs this project
+  has already paid for. A green run here is not a reason to skip watching
+  CI, and both scripts plus local-ci.sh's summary now say so where they
+  are read.
+
+  local-ci.sh no longer claims the Windows leg runs only on GitHub, in its
+  header and in its closing line, since that is no longer the whole truth.
   **Layman:** Your spare Windows PC could test the Windows build before we push instead of three minutes after, once it has the build tools on it.
   Kind: test.
   Source: user-request-2026-08-22.

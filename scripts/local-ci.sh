@@ -13,7 +13,11 @@
 #
 # What it CANNOT do: the Windows leg. Nothing on Linux runs MSVC, and a
 # checker pointed at the wrong toolchain is worse than none. The summary says
-# so every run; that half is verified by CI and nowhere else.
+# so every run. That half is verified by CI, and — since GHUB-0091 — optionally
+# by scripts/wintest-ci.sh, which builds and tests it on a real Windows box
+# over SSH. The two are not interchangeable: that box has fonts installed and
+# the runner does not, so read wintest-ci.sh's header before trusting one for
+# the other.
 #
 # Usage:  scripts/local-ci.sh            # lint + build + test the Linux leg
 #         scripts/local-ci.sh --lint     # workflow linters only (docs pushes)
@@ -183,12 +187,15 @@ echo
 if [ ${#SKIPPED[@]} -gt 0 ]; then
     bold "Not checked locally"
     for s in "${SKIPPED[@]}"; do echo "  - $s"; done
-    echo "  The Windows build and tests run only on GitHub."
+    echo "  Nothing on Linux drives MSVC. Either push and let CI run it, or"
+    echo "  run scripts/wintest-ci.sh to build and test it on the wintest box."
+    echo "  That box is NOT the runner: it has real fonts, CI runs headless"
+    echo "  with an empty font database, so font-derived checks can differ."
 fi
 
 echo
 if [ $FAILED -eq 0 ]; then
-    bold "Local CI passed. The Windows leg is still unverified until CI runs."
+    bold "Local CI passed. The Windows leg is unverified unless you ran wintest-ci.sh."
 else
     bold "Local CI FAILED — do not push."
 fi
