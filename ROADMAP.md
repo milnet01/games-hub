@@ -3269,7 +3269,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0104] **The computer lays melds down while the pack is frozen, spending the pairs that would take it.**
+- ✅ [GHUB-0104] **The computer lays melds down while the pack is frozen, spending the pairs that would take it.**
   Rules-grounded rather than a taste call, which is what makes
   it checkable. Engine::canTakePile demands two matching cards
   from HAND against a frozen pile. A pair melded is a pair no
@@ -3316,8 +3316,12 @@ open.
   68/120 -> 63/120; medium v easy moved too (21 -> 22), which is the
   expected signature since holdsWhileFrozen serves every level above
   Easy. Re-measured at 1200 games to rule out a small sample: 621/1200
-  +36 baseline against 584/1200 -102 with the change, about a 2-sigma
-  shift, so the loss is real rather than noise.
+  +36 baseline against 584/1200 -102 with the change, a difference of 37 games in 1200. That was first written up here as
+  "about a 2-sigma shift, so the loss is real rather than noise", and
+  that is WRONG: the standard error on a difference of two proportions
+  at this size is about 0.020 against a difference of 0.031, so it is
+  1.5 sigma and p is about 0.13. The measurement does not separate the
+  change from neutral in either direction.
 
   Why holding the lone card wins is NOT established -- the effect is
   small and no mechanism was proved. Do not re-attempt this on the
@@ -3325,6 +3329,34 @@ open.
   still loses. The measurement that would settle it needs the instrument
   filed alongside this note, because the ladder cannot separate a small
   gain from noise in either direction.
+  Resolved (2026-08-24). Reinstated and shipped after the note above was
+  corrected: the reading that sent it back the first time was a
+  misapplied statistic, not a measured loss.
+
+  What ships is this bullet's second release trigger only, in its
+  narrowest rules-grounded form. Ai::holdsWhileFrozen now returns false
+  where the seat holds fewer than two naturals of the rank, because
+  Engine::canTakePile wants two matching naturals out of HAND against a
+  frozen pile and one card can therefore never be the key to it. The
+  hold itself, and the frozen-pile opening trim, already shipped.
+
+  The first trigger -- lay down because we are going for the minus -- is
+  NOT in this change. Ai::closingOut already covers most of it and the
+  rest belongs with GHUB-0099, which is where the minus is priced.
+
+  canastaAiKeepsOnlyRealKeysWhileFrozen in tests/selftest.cpp is what
+  holds it, and it proves both halves from one position rather than
+  asserting the release alone: seat 1 opens on five aces with the pile
+  frozen, comes back holding one ace and three sevens, and must lay the
+  lone ace down while keeping the sevens. It fails on the pre-change
+  build. Suite green at 430 checks.
+
+  Judged by position rather than by win count, per GHUB-0110. For the
+  record the ladder still moves against this change -- expert v hard
+  115/240 against a 129/240 baseline -- which is inside the tolerance
+  that check now allows and is not distinguishable from noise at this
+  sample size. If a later reading with real power shows the hold winning
+  after all, this is the line to revisit.
   **Layman:** A frozen pack can only be taken with two matching cards from your hand -- so melding those cards away is giving up on the pack without noticing.
   Kind: feature.
   Source: user-request-2026-08-24.

@@ -2106,6 +2106,61 @@ void canastaAiHoldsWhileFrozen()
     }
 }
 
+// The other half of holding while frozen (GHUB-0104): a rank worth holding is
+// one that could still TAKE the pile, and Engine::canTakePile wants two
+// matching naturals out of hand. So a rank this seat holds only one of is no
+// key at all, and keeping it back buys nothing while leaving its points in the
+// hand. One position proves both halves — the odd ace goes down, the three
+// sevens stay back.
+void canastaAiKeepsOnlyRealKeysWhileFrozen()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Four aces to open on, three sevens that are a real key, and four singles.
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), cd(Suit::Spades, 7),  cd(Suit::Hearts, 7),
+                 cd(Suit::Clubs, 7),      cd(Suit::Clubs, 4),    cd(Suit::Clubs, 5),
+                 cd(Suit::Clubs, 6),      cd(Suit::Clubs, 8) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    ca::Engine e;
+    // Every draw is an ace, so seat 1 comes back to its second turn holding a
+    // single card of the rank it has already melded. A wild up-card freezes the
+    // pile from the start.
+    const std::vector<Card> aces(kBelowCount, cd(Suit::Diamonds, kAce));
+    e.newGameFromStock(canastaStock(hands, 0, aces, cd(Suit::Hearts, 2)), 0);
+    check(e.pileFrozen(), "canasta: the pile starts frozen");
+
+    ca::Ai ai { ca::Level::Medium };
+    check(e.drawFromStock(), "canasta: seat 1 draws");
+    ai.playAndDiscard(e);
+    const ca::Meld* opened = e.team(1).meldOfRank(kAce);
+    check(opened != nullptr && opened->size() == 5, "canasta: and opens on its aces");
+    check(e.team(1).meldOfRank(7) == nullptr,
+          "canasta: laying only what the opening asks for while the pile is frozen");
+
+    check(e.drawFromStock() && e.discard(cd(Suit::Clubs, 10)), "canasta: seat 2 throws a ten");
+    check(e.drawFromStock() && e.discard(cd(Suit::Clubs, kJack)), "canasta: seat 3 throws a jack");
+    check(e.drawFromStock() && e.discard(cd(Suit::Clubs, 9)), "canasta: seat 0 throws a nine");
+
+    check(e.currentSeat() == 1, "canasta: and the turn comes back round");
+    check(e.drawFromStock(), "canasta: seat 1 draws the odd ace");
+    const std::vector<Card>& h = e.hand(1);
+    check(std::count_if(h.begin(), h.end(), [](const Card& c) { return c.rank == kAce; }) == 1,
+          "canasta: so it holds one ace against a meld already down");
+    check(std::count_if(h.begin(), h.end(), [](const Card& c) { return c.rank == 7; }) == 3,
+          "canasta: and three sevens, which are two naturals and a spare");
+    check(e.pileFrozen(), "canasta: with the pile still frozen");
+
+    ai.playAndDiscard(e);
+    const ca::Meld* now = e.team(1).meldOfRank(kAce);
+    check(now != nullptr && now->size() == 6,
+          "canasta: the lone ace goes down, because one card can never take a frozen pile");
+    check(e.team(1).meldOfRank(7) == nullptr,
+          "canasta: while the sevens stay in hand, because two of them can");
+}
+
 // What a side that has not opened may do with the pile, and what changing the
 // rules mid-game does to the game.
 //
@@ -2883,6 +2938,7 @@ int main()
     canastaAiOpens();
     canastaTakeAndOpenTogether();
     canastaAiHoldsWhileFrozen();
+    canastaAiKeepsOnlyRealKeysWhileFrozen();
     canastaUnopenedPileAndLiveRules();
     canastaWildValueGoesWhereItCounts();
     canastaCanastaNeededToScore();

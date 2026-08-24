@@ -47,6 +47,9 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: the computer stops sitting on cards that could never take a frozen pack** (GHUB-0104)
+  While the pack is frozen it holds its pairs back rather than melding them away, because a frozen pack can only be taken with two matching cards from your hand -- that already worked. But it was also keeping single cards of ranks it had already melded, and one card can never take a frozen pack however long it waits. Those now go on the table, where they score instead of waiting to be caught in the hand.
+
 - **Canasta: catching them a minus is now the House default, and the game says so** (GHUB-0098)
   A side that ends the hand with no canasta has its own melds counted against it. On by default in House rules, and named in the words the owner's family uses when it happens.
 
