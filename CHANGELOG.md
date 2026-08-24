@@ -47,6 +47,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta speaks the table's own words: jokers, and the pack** (GHUB-0102)
+  The game called them "wild cards" and called the discard pile a
+  "pile". At a real table both have different names: a joker is a
+  joker whether it is the 50-point one (the big joker) or a two (the
+  small joker), and the discard pile is the pack. Every message,
+  caption and House rule row now says it that way, and the House
+  rules window explains the two sizes once.
+
 - **Canasta: the computer plays for the minus, and milks a pack that keeps feeding it** (GHUB-0099)
   Two judgements that pull opposite ways, added together so neither runs away with the hand (GHUB-0099, GHUB-0100). When the House minus rule is on and the other side has no canasta, every point they have on the table is worth two to us -- so the computer now presses to end the hand rather than pricing that at the flat 100 the going-out bonus is worth. And when the pack keeps coming back to it, it stays in and keeps milking instead of going out at the first legal chance. Both are worked out in points and weighed against each other, so a big minus beats a fat pack and a fat pack beats a small one. With Classic rules and an ordinary pack neither applies and the computer plays exactly as before.
 

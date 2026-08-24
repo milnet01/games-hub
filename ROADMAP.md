@@ -3213,7 +3213,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0102] **Twos are jokers too, and the game does not call them that.**
+- ✅ [GHUB-0102] **Twos are jokers too, and the game does not call them that.**
   The game's own vocabulary is "wild card", which is the
   standard term and not the owner's. His family has one word
   for both -- joker -- and tells them apart by size: a big
@@ -3231,6 +3231,34 @@ open.
   rules dialog rows, the refusal messages, and the game's help
   blurb. The status bar is not among them -- the owner never
   reads it.
+  Resolved (2026-08-24). The game speaks the family's vocabulary now:
+  "joker" for both kinds of wild card, and "pack" for the discard pile --
+  the second carried over from GHUB-0104's body, which asked for it here.
+
+  Changed: the six refusal messages in canastaengine.cpp a player actually
+  reads, the two Draw-phase captions on the play surface, and six House
+  dialog rows. The dialog blurb is where the vocabulary is taught, once --
+  "A joker means either kind: the big joker, or a two -- the small joker."
+  -- rather than glossing every row that mentions one.
+
+  Two surfaces the bullet named are NOT changed, both deliberately. The
+  meld badge's star already answers "is there a joker in there?" and its
+  own comment says so, so the glyph stands and only the words around it
+  moved. And the game has no help blurb to change: in-app rules are
+  GHUB-0016 and unbuilt, and the hub tile reads "Melds and partners",
+  which names no wild card.
+
+  The status bar WAS changed ("pack FROZEN"), against the bullet's note
+  that it is not a surface. The reason that note gives is that the owner
+  never reads it, which is about effort rather than harm -- and leaving
+  one string saying "pile" while every other surface says "pack" is the
+  inconsistency this item exists to remove.
+
+  No settings key was renamed. maxWilds, wildTake and wildsFewer are
+  stored keys, and renaming one silently unticks the rule for anyone who
+  already set it -- the same trap canastaToScore carries a comment about.
+
+  Suite green, 6/6 under ctest.
   **Layman:** The family calls a two a small joker and the 50-point joker a big joker; the game says 'wild card' everywhere.
   Kind: ux.
   Source: user-request-2026-08-24.
@@ -3396,7 +3424,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 💭 [GHUB-0106] **Nothing counts how many of a rank are left, and two packs means eight.**
+- 📋 [GHUB-0106] **Nothing counts how many of a rank are left, and two packs means eight.**
   SUGGESTED, NOT REQUESTED. Offered to the owner on
   2026-08-24 and not yet answered; filed as considered so it
   survives the session rather than as planned work.
@@ -3415,11 +3443,12 @@ open.
   way to make a level weak than making it play badly.
 
   Sits with GHUB-0099 to GHUB-0104 as canastaai.cpp work.
+  Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
   **Layman:** Once all eight cards of a rank have been seen, that rank is safe to throw forever -- a computer can track that perfectly and a person cannot.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
 
-- 💭 [GHUB-0107] **Under the minus rule the FIRST canasta is insurance, and the AI prices it as 300 points.**
+- 📋 [GHUB-0107] **Under the minus rule the FIRST canasta is insurance, and the AI prices it as 300 points.**
   SUGGESTED, NOT REQUESTED. Offered to the owner on
   2026-08-24 and not yet answered; filed as considered so it
   survives the session rather than as planned work.
@@ -3438,11 +3467,12 @@ open.
   buy protection from it.
 
   Both sides of that trade belong in the same pass.
+  Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
   **Layman:** If being caught with no canasta turns your whole table against you, getting any canasta down early is worth far more than its bonus.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
 
-- 💭 [GHUB-0108] **How dangerous a throw is does not scale with how big the pack has grown.**
+- 📋 [GHUB-0108] **How dangerous a throw is does not scale with how big the pack has grown.**
   SUGGESTED, NOT REQUESTED. Offered to the owner on
   2026-08-24 and not yet answered; filed as considered so it
   survives the session rather than as planned work.
@@ -3461,11 +3491,12 @@ open.
   +50 x countRank(pile, rank) term, which is already a
   pack-aware safety term -- this generalises it rather than
   adding a second one beside it.
+  Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
   **Layman:** Handing over three cards is a nuisance; handing over fifteen can lose the hand -- so a throw should have to be safer as the pack grows.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
 
-- 💭 [GHUB-0109] **Black threes are a one-turn block and the AI spends them at random.**
+- 📋 [GHUB-0109] **Black threes are a one-turn block and the AI spends them at random.**
   SUGGESTED, NOT REQUESTED. Offered to the owner on
   2026-08-24 and not yet answered; filed as considered so it
   survives the session rather than as planned work.
@@ -3483,6 +3514,7 @@ open.
   rather than hoarding them, and for spending them WELL.
 
   Smaller than the other AI items and independent of them.
+  Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
   **Layman:** A black three stops the next player taking the pack for one turn -- worth saving for when the pack is fat and they look ready.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.

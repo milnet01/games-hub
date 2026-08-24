@@ -671,7 +671,7 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
             wildRank = naturals.front().first;
         } else if (naturals.empty()) {
             if (!m_rules.wildCardMeldsAllowed) {
-                error = QStringLiteral("Say which meld the wild card is joining.");
+                error = QStringLiteral("Say which meld the joker is joining.");
                 return false;
             }
             out.push_back(Meld { kJoker, wilds });
@@ -689,7 +689,7 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
         return false;
     }
     if (!wilds.empty() && wildRank == 3) {
-        error = QStringLiteral("Black threes never take a wild card.");
+        error = QStringLiteral("Black threes never take a joker.");
         return false;
     }
 
@@ -766,7 +766,7 @@ bool Engine::spreadWilds(std::vector<std::pair<int, std::vector<Card>>>& natural
         }
 
         if (best < 0) {
-            error = QStringLiteral("Nothing in that lay-down can take another wild card.");
+            error = QStringLiteral("Nothing in that lay-down can take another joker.");
             return false;
         }
         naturals[std::size_t(best)].second.push_back(w);
@@ -790,7 +790,7 @@ bool Engine::validateGroups(int team, const std::vector<Meld>& groups, bool goin
                 return false;
             }
             if (merged.wilds() > 0) {
-                error = QStringLiteral("Black threes never take a wild card.");
+                error = QStringLiteral("Black threes never take a joker.");
                 return false;
             }
         }
@@ -803,7 +803,7 @@ bool Engine::validateGroups(int team, const std::vector<Meld>& groups, bool goin
             return false;
         }
         if (merged.wilds() > m_rules.maxWildsPerMeld) {
-            error = QStringLiteral("At most %1 wild cards in one meld.").arg(m_rules.maxWildsPerMeld);
+            error = QStringLiteral("At most %1 jokers in one meld.").arg(m_rules.maxWildsPerMeld);
             return false;
         }
         // A wild-only meld has no naturals by definition, so the floor below
@@ -815,8 +815,8 @@ bool Engine::validateGroups(int team, const std::vector<Meld>& groups, bool goin
         }
         if (m_rules.wildsFewerThanNaturals && g.rank != kJoker
             && merged.wilds() >= merged.naturals()) {
-            error = QStringLiteral("A meld keeps more real cards than wild ones: that would "
-                                   "leave %1 %2s against %3 wild.")
+            error = QStringLiteral("A meld keeps more real cards than jokers: that would "
+                                   "leave %1 %2s against %3 jokers.")
                         .arg(merged.naturals())
                         .arg(rankLabel(g.rank))
                         .arg(merged.wilds());
@@ -878,7 +878,7 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
                           QString& error) const
 {
     if (m_pile.empty()) {
-        error = QStringLiteral("The discard pile is empty.");
+        error = QStringLiteral("The pack is empty.");
         return false;
     }
     // Taking the pile always melds the top card, so a rule that stops anyone
@@ -899,11 +899,11 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
         }
     }
     if (isWild(top)) {
-        error = QStringLiteral("A wild card on top stops the pile being taken.");
+        error = QStringLiteral("A joker on top stops the pack being taken.");
         return false;
     }
     if (m_rules.blackThreeBlocksPile && isBlackThree(top)) {
-        error = QStringLiteral("A black three on top stops the pile being taken.");
+        error = QStringLiteral("A black three on top stops the pack being taken.");
         return false;
     }
 
@@ -933,7 +933,7 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
     if (mustUseTwoNaturals) {
         if (naturalsOfTop < 2) {
             error = m_frozen
-                ? QStringLiteral("The pile is frozen: you need two matching cards from your hand.")
+                ? QStringLiteral("The pack is frozen: you need two matching cards from your hand.")
                 : QStringLiteral("Until your side has opened, you need two matching cards from your hand.");
             return false;
         }

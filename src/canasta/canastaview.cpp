@@ -285,7 +285,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
 
     auto* handSize = spin(QStringLiteral("Cards dealt to each player"), rules.handSize, 7, 15);
     auto* canastaSize = spin(QStringLiteral("Cards in a canasta"), rules.canastaSize, 4, 10);
-    auto* maxWilds = spin(QStringLiteral("Most wild cards in one meld"), rules.maxWildsPerMeld, 0, 5);
+    auto* maxWilds = spin(QStringLiteral("Most jokers in one meld"), rules.maxWildsPerMeld, 0, 5);
 
     auto* openLow = spin(QStringLiteral("Opening minimum, score below zero"),
                          rules.openMinBelowZero, 0, 300);
@@ -307,13 +307,13 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
 
     auto* needCanasta = tick(QStringLiteral("A canasta is needed to go out"),
                              rules.requireCanastaToGoOut);
-    auto* blackBlocks = tick(QStringLiteral("A black three blocks the pile"),
+    auto* blackBlocks = tick(QStringLiteral("A black three blocks the pack"),
                              rules.blackThreeBlocksPile);
-    auto* wildTake = tick(QStringLiteral("An open pile can be taken with a wild card"),
+    auto* wildTake = tick(QStringLiteral("An open pack can be taken with a joker"),
                           rules.unfrozenPileTakeableWithWild);
-    auto* wildsFewer = tick(QStringLiteral("A meld keeps more real cards than wild ones"),
+    auto* wildsFewer = tick(QStringLiteral("A meld keeps more real cards than jokers"),
                             rules.wildsFewerThanNaturals);
-    auto* frozenUntilOpen = tick(QStringLiteral("The pile is frozen until your side has opened"),
+    auto* frozenUntilOpen = tick(QStringLiteral("The pack is frozen until your side has opened"),
                                  rules.pileFrozenUntilOpened);
     auto* needCanastaToScore = tick(QStringLiteral("A side with no canasta is caught a minus: its "
                                                    "own melds count against it"),
@@ -325,7 +325,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                                rules.canastaMakesRankSafe);
     auto* firstRound = tick(QStringLiteral("Nobody lays down in the first round"),
                             rules.noMeldingFirstRound);
-    auto* pileOpens = tick(QStringLiteral("The pile can be part of your opening"),
+    auto* pileOpens = tick(QStringLiteral("The pack can be part of your opening"),
                            rules.pileMeldCountsToOpen);
     auto* deadHand = tick(QStringLiteral("A hand nobody goes out on scores nothing"),
                           rules.deadHandIfNobodyGoesOut);
@@ -339,8 +339,14 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
 
     auto* layout = new QVBoxLayout(&dlg);
     auto* blurb = new QLabel(
+        // The one place the table's vocabulary is spelled out. "Joker" covers
+        // both kinds here and everywhere else the game speaks to you: the
+        // 50-point joker is the big one, a two is the small one. Said once,
+        // where the rules are set, rather than glossed on every row that
+        // mentions them.
         QStringLiteral("These are your own rules. Classic Canasta is always still there\n"
-                       "on the Rules menu, so nothing here can lose it."),
+                       "on the Rules menu, so nothing here can lose it.\n"
+                       "A joker means either kind: the big joker, or a two — the small joker."),
         &dlg);
     blurb->setWordWrap(true);
     layout->addWidget(blurb);
@@ -1640,11 +1646,11 @@ void CanastaView::refresh()
         if (m_engine.currentSeat() != 0)
             what = QStringLiteral("%1 is drawing.").arg(seatName(m_engine.currentSeat()));
         else if (m_selected.empty())
-            what = QStringLiteral("Your turn: take from the stock, or take the pile with the cards you pick.");
+            what = QStringLiteral("Your turn: take from the stock, or take the pack with the cards you pick.");
         else
             // Cards picked up but Meld greyed out is the one place the board
             // looks broken rather than sequenced, so say why.
-            what = QStringLiteral("Your turn: click the pile to take it with those cards, or draw "
+            what = QStringLiteral("Your turn: click the pack to take it with those cards, or draw "
                                   "first — melding comes after the draw.");
         break;
     case ca::Engine::Phase::Play:
@@ -1672,7 +1678,7 @@ void CanastaView::refresh()
                              .arg(m_engine.rules().name)
                              .arg(opening)
                              .arg(m_engine.stockCount())
-                             .arg(m_engine.pileFrozen() ? QStringLiteral("  ·  pile FROZEN")
+                             .arg(m_engine.pileFrozen() ? QStringLiteral("  ·  pack FROZEN")
                                                         : QString()));
 }
 
