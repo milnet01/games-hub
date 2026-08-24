@@ -3656,8 +3656,11 @@ open.
   The instrument failed both identically, which is the definition of not
   measuring.
 
-  Every one of GHUB-0099, GHUB-0100, GHUB-0102, GHUB-0103 and GHUB-0104
-  edits canastaai.cpp, so all of them land in front of this check.
+  GHUB-0099, GHUB-0100, GHUB-0103 and GHUB-0104 all edit canastaai.cpp,
+  so every one of them lands in front of this check. GHUB-0102 does not
+  -- it is vocabulary, and its surfaces are the view and the refusal
+  strings -- so it is the one item of the six that can be built and
+  judged today.
 
   Routes, none picked. Raise the game count -- honest but slow, and 3300
   games is roughly 25 seconds inside a suite that runs in three. Judge
