@@ -3737,12 +3737,27 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   `milnet01.github.io` -- plus the custom domain field in the repo's
   Pages settings.
 
-  Blocked at TrueHost, who registered the domain. There is no hosting
-  package on the account, and the domain's Manage page offers Overview,
-  Auto Renew, Nameservers, Registrar Lock, Contact Information, Private
-  Nameservers, Cloudflare Push and AI Website Builder -- and no DNS
-  record editor at all. Nameservers can be changed; the records inside
-  them cannot.
+  Blocked at TrueHost, who registered the domain: the Manage page offers
+  Overview, Auto Renew, Nameservers, Registrar Lock, Contact Information,
+  Private Nameservers, Cloudflare Push and AI Website Builder, and no DNS
+  record editor.
+
+  That was first written up here as TrueHost not offering record editing
+  without a hosting package, and that is WRONG. Their support chat gave
+  the real cause on 2026-08-24: "the domain's DNS zone is not available
+  in the Client Area, so the support team must restore or create it
+  before this option will work". The zone is missing or broken rather
+  than withheld, the editor is expected back with it, and support have
+  taken the CNAME as a ticket.
+
+  Which introduces the risk this bullet now exists to guard. A zone that
+  is RECREATED rather than restored may come back without the records
+  that are serving the site today, and nothing warns anyone before the
+  site goes dark. Captured 2026-08-24 while still live, and these are the
+  whole exposure: A on the apex to 185.199.108.153, .109.153, .110.153
+  and .111.153, and www as CNAME to milnet01.github.io. There are no MX
+  records at all, so no email rides on this zone -- which is the single
+  biggest thing that could have gone wrong here and does not apply.
 
   Three routes, and the ordering is deliberate. A support ticket asking
   TrueHost to add the one record: no risk, a day or two. Cloudflare Push,
