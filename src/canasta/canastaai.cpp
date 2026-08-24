@@ -98,6 +98,25 @@ int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& 
     return ours * 4 >= int(pile.size()) ? pileValue(pile, r) : 0;
 }
 
+double throwCaution(const Team& theirs, int openRequirement)
+{
+    // A side that has already opened takes the pack on the ordinary terms, so
+    // there is nothing to discount and the throw is judged exactly as it was.
+    if (theirs.opened)
+        return 1.0;
+
+    // A side that has NOT opened has to open OFF the pack to take it: the meld
+    // it takes with must clear its own minimum too. That is a far higher bar
+    // than holding two matching cards, and it rises with the band they are on —
+    // so being careful what you throw at them is caution spent on something
+    // that mostly cannot happen.
+    //
+    // Floored rather than run to nothing. A big lay-down off the pack is hard,
+    // not impossible, and it is precisely how a side stuck all hand comes back
+    // in one move.
+    return std::max(0.30, 1.0 - double(openRequirement) / 170.0);
+}
+
 int Ai::seen(const Engine& e, int rank) const
 {
     int n = countRank(e.hand(e.currentSeat()), rank);
@@ -566,7 +585,10 @@ Card Ai::chooseDiscard(const Engine& e) const
             // less likely the pair that would punish the throw.
             const int unseen = 8 - seen(e, c.rank);
             safety += 9.0 * (4 - std::min(4, unseen));
-            // Weighted by what handing the pile over would actually cost.
+            // Weighted by what handing the pile over would actually cost. This
+            // is the one pack-size weight in the discard, and GHUB-0108's ask to
+            // generalise it over the whole accumulator was tried and measured
+            // WORSE — see that bullet before moving it again.
             safety -= 0.9 * double(unseen) * (1.0 + 0.12 * pileSize);
 
             // Never break a pair while an unpaired card would do, and never
@@ -581,6 +603,13 @@ Card Ai::chooseDiscard(const Engine& e) const
             if (e.stockCount() < 8)
                 score -= 0.5 * double(cardValue(c, r));
         }
+
+        // How much that whole judgement is worth here. Only the two levels that
+        // read the pack this closely get it: Easy and Medium stay naive on
+        // purpose, and a player who is careful when they need not be is a
+        // weaker player rather than a broken one.
+        if (m_level == Level::Hard || m_level == Level::Expert)
+            safety *= throwCaution(theirs, e.openRequirement(teamOf(seat) ^ 1));
 
         // Nothing thrown now can be taken, so every judgement above about
         // handing the pile over is measuring a risk that cannot happen. Dropped

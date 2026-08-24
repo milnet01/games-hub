@@ -56,6 +56,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: the computer stops being careful at a side that cannot open** (GHUB-0121)
+  While the other side still has to open, they can only take the pack
+  by opening off it -- the meld they take with has to be worth their
+  opening minimum as well. That is a high bar, and it gets higher the
+  further behind they are. The computer was throwing safe cards at
+  them anyway. It now grades how careful to be by the bar they face:
+  barely at all at 15 or 50, noticeably at 90, heavily at 120. Only
+  the Hard and Expert players read the table this way.
+
 - **Canasta speaks the table's own words: jokers, and the pack** (GHUB-0102)
   The game called them "wild cards" and called the discard pile a
   "pile". At a real table both have different names: a joker is a

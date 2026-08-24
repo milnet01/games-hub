@@ -2201,6 +2201,40 @@ void canastaAiHoldsWhileFrozen()
     }
 }
 
+// What a discard's safety judgement is worth against this opponent
+// (GHUB-0121). Checked on figures rather than on a position played into
+// existence, the way discardRisk and openRequirementFor already are — the claim
+// is about the shape of a curve, and a hand of cards is a poor way to state one.
+void canastaThrowCaution()
+{
+    ca::Team opened;
+    opened.opened = true;
+    ca::Team shut; // has not opened
+
+    // An opened side has to come back exactly 1.0, or every existing judgement
+    // in chooseDiscard is silently rescaled by this change.
+    check(std::abs(ca::throwCaution(opened, 50) - 1.0) < 1e-9,
+          "canasta: an opened side weighs the throw exactly as it always did");
+    check(std::abs(ca::throwCaution(opened, 120) - 1.0) < 1e-9,
+          "canasta: whatever band they opened on");
+
+    // The owner's reading: while they cannot open they can barely take the pack,
+    // and how badly they are stuck is what grades it.
+    check(ca::throwCaution(shut, 50) < ca::throwCaution(opened, 50),
+          "canasta: an unopened side is less dangerous to throw at");
+    check(ca::throwCaution(shut, 120) < ca::throwCaution(shut, 90)
+              && ca::throwCaution(shut, 90) < ca::throwCaution(shut, 50)
+              && ca::throwCaution(shut, 50) < ca::throwCaution(shut, 15),
+          "canasta: 15 and 50 barely matter, 90 does, 120 most of all");
+
+    // Never to nothing. Opening off the pack is hard rather than impossible,
+    // and it is exactly how a side stuck all hand comes back in one move.
+    check(ca::throwCaution(shut, 120) >= 0.30 * 0.999,
+          "canasta: but caution never falls away altogether");
+    check(ca::throwCaution(shut, 15) > 0.85,
+          "canasta: and at the easiest band it barely moves at all");
+}
+
 // Going out the house way (GHUB-0120): the last action is a thrown card, so a
 // lay-down that empties the hand is refused however legal its melds are. The
 // one exception is the hand that finishes on all four black threes — everything
@@ -3064,6 +3098,7 @@ int main()
     canastaAiOpens();
     canastaTakeAndOpenTogether();
     canastaAiHoldsWhileFrozen();
+    canastaThrowCaution();
     canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();
     canastaWildValueGoesWhereItCounts();

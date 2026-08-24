@@ -3492,6 +3492,40 @@ open.
   pack-aware safety term -- this generalises it rather than
   adding a second one beside it.
   Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
+  Attempted 2026-08-24 and NOT shipped. The bullet's own instruction --
+  "this generalises it rather than adding a second one beside it" -- was
+  implemented literally: the per-term (1 + 0.12 * pileSize) came off the
+  unseen reading in chooseDiscard and became one weight over the whole
+  `safety` accumulator.
+
+  It measured worse, and unlike GHUB-0101 and GHUB-0104 the loss is on the
+  rung that can actually see it. Bisected against a measured baseline of
+  hard v easy 23/24 +3489, hard v medium 70/120, expert v hard 129/240:
+
+    - with GHUB-0121 only:  23/24 +3594, 67/120, 118/240
+    - with this half added: 20/24 +2959, 67/120, 113/240
+
+  hard v easy wins by thousands of points a game, so three games and a
+  sixth of the margin there carries far more information than the same
+  swing on expert v hard, which GHUB-0110 showed cannot separate anything.
+
+  The cause is understood rather than guessed, which is why this is a
+  finding and not just a failed try. discardRisk ALREADY scales with pack
+  size -- `25.0 + 0.4 * pileSize` -- so weighting the accumulator scaled
+  that term a second time and made feeding a near-canasta grow roughly
+  quadratically with the pack, drowning the hand-value terms that decide
+  an ordinary throw.
+
+  So the bullet's premise is right and its prescription is wrong: the
+  accumulator is not one thing that can take one weight, because one of
+  its terms already carries the reading. A future attempt has to either
+  take discardRisk's own pileSize term out first (it is checked directly
+  by canastaDiscardRisk, so that is a visible change, not a quiet one), or
+  weight only the terms that lack one -- Hard's -2.5 * shown and Expert's
+  +50 * countRank -- and leave discardRisk alone.
+
+  The single pack-size weight that DOES ship is the one that was always
+  there, on the unseen term, and it now carries a comment pointing here.
   **Layman:** Handing over three cards is a nuisance; handing over fifteen can lose the hand -- so a throw should have to be safer as the pack grows.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
@@ -3696,7 +3730,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0121] **The computer throws safe cards at a side that cannot take the pack yet.**
+- ✅ [GHUB-0121] **The computer throws safe cards at a side that cannot take the pack yet.**
   The owner: "What the computer currently does is (after the first
   round that is) throw away cards you have already thrown away even
   though my team hasn't opened yet. While a team is struggling to open
@@ -3733,6 +3767,50 @@ open.
   holds, because a throw is spent the turn it is made. Sits with
   GHUB-0108, which scales the same accumulator by pack size; both are
   modifiers on one number and should be written together.
+  Resolved (2026-08-24). throwCaution(theirs, openRequirement) is a new
+  free function beside discardRisk and packWorthStayingFor, and
+  chooseDiscard multiplies the whole `safety` accumulator by it at Hard
+  and Expert. Easy and Medium stay naive on purpose -- being careful when
+  you need not be is a weaker player, not a broken one.
+
+  It returns exactly 1.0 against an opened side, so the common position is
+  untouched to the last decimal. Against an unopened side it is
+  max(0.30, 1 - need/170): 0.91 at 15, 0.71 at 50, 0.47 at 90, floored at
+  0.30 for 120 -- the owner's own grading. Floored rather than run to zero
+  because opening off the pack is hard, not impossible, and it is exactly
+  how a stuck side comes back in one move.
+
+  canastaThrowCaution locks the curve on figures rather than on a position
+  played into existence, which is the idiom handScoreFor and
+  openRequirementFor already use: 1.0 when opened whatever the band,
+  strictly decreasing across 15 > 50 > 90 > 120 while shut, and never
+  below the floor.
+
+  MEASURED, and the reason this shipped in half the form it was written
+  in. The bullet was built together with GHUB-0108, which asked for one
+  pack-size weight over the whole accumulator instead of the single term
+  that carries it. Bisected on the ladder against a measured baseline of
+  hard v easy 23/24 +3489, hard v medium 70/120, expert v hard 129/240
+  +104:
+
+    - both halves: 20/24 +2959, 67/120, 113/240 -133
+    - this half alone: 23/24 +3594, 67/120, 118/240 -130
+
+  So GHUB-0108's half is what costs three games and a sixth of the margin
+  on hard v easy -- the rung with by far the most signal, since it wins by
+  thousands rather than by dozens. Its cause is understood rather than
+  guessed: discardRisk already scales with pack size, so weighting the
+  accumulator scaled it a second time and made feeding a near-canasta
+  roughly quadratic in the pack. That half is NOT shipped; see GHUB-0108.
+
+  What this half does to expert v hard, honestly: 129 -> 118 of 240, about
+  1 sigma on the difference and not separable from noise at that sample,
+  per GHUB-0110. Both levels get the same discount, so it should not
+  favour either systematically. The rung with real power -- hard v easy --
+  is unchanged in count and slightly BETTER in margin (+3594 against
+  +3489), which is the reading I would trust if the two disagreed.
+
+  Suite green: 6/6 under ctest.
   **Layman:** While the other side still has to open, they can barely touch the pack -- so being careful what you throw at them is caution spent on nothing.
   Kind: feature.
   Source: user-request-2026-08-24.

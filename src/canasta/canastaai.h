@@ -48,6 +48,21 @@ int minusOnOffer(const Team& theirs, const Rules& r);
 int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& hand,
                         const Team& mine, bool frozen, const Rules& r);
 
+// What the safety half of a discard is WORTH against this opponent, as a
+// multiplier on it. A free function, like the three above, so it can be checked
+// on figures rather than on a position played into existence.
+//
+// A side that has not opened cannot simply take the pack: the meld it takes
+// with has to clear its own opening minimum too. So the danger is graded by
+// that bar — barely there at 15 or 50, real at 90, heavy at 120 — and caution
+// spent above it is spent on something that mostly cannot happen (GHUB-0121).
+//
+// Returns exactly 1.0 against an opened side, so the common position plays as
+// it always did. Pack size is deliberately NOT a factor here: GHUB-0108 asked
+// for one weight over the whole accumulator and it measured worse, because
+// discardRisk already carries its own. Read that bullet before adding it.
+double throwCaution(const Team& theirs, int openRequirement);
+
 class Ai
 {
 public:
