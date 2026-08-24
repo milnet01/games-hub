@@ -16,6 +16,7 @@
 #include "reversi/board.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <algorithm>
 #include <array>
@@ -1828,22 +1829,51 @@ int canastaMatch(ca::Level strong, ca::Level weak, const char* what, int games)
     return wins;
 }
 
+// Whether the level that is supposed to be stronger has gone BACKWARDS: more
+// than two standard deviations below an even split. Wins over `games` even
+// matches vary by sqrt(games)/2, so two of those is sqrt(games).
+//
+// This is a deliberately weak claim, and it is the strongest one the top of the
+// ladder can support — see canastaLevelsDiffer.
+bool notTheWeakerPlayer(int wins, int games)
+{
+    return double(wins) >= double(games) / 2.0 - std::sqrt(double(games));
+}
+
 void canastaLevelsDiffer()
 {
     // The ladder has to be a ladder. Each rung is checked against the one below
     // it, because a level that is only a label is worse than no level at all —
     // this is how Hard was found to be WEAKER than Medium, which is what a
     // player moving up to it would have run into.
+    //
+    // What it may CLAIM is bounded by what it can measure, and the top of the
+    // ladder is close. Measured 2026-08-24 (GHUB-0110): Expert beats Hard by
+    // about 1.75 points of win rate — 621 of 1200 games — which would need some
+    // 3300 games to stand at two sigma and clears a bare majority at 240 as much
+    // by luck as by strength. Asking for that majority made this check fail a
+    // rules-CORRECT change (GHUB-0104) and a rules-WRONG one (GHUB-0101)
+    // identically, and a check that cannot tell those apart is not measuring the
+    // change, it is measuring the noise.
+    //
+    // So the top two rungs assert only that the stronger level has not fallen
+    // behind. What a single new judgement actually DOES is locked by a
+    // hand-built position instead — canastaAiHoldsWhileFrozen and
+    // canastaFirstRoundSafeThrow are the pattern — which says why the play is
+    // right rather than whether it got lucky. Owner's call, 2026-08-24.
+    //
+    // The two rungs against Easy keep the stricter claim. They win by miles, so
+    // the sample carries it, and a level that has decayed to Easy still reddens.
     check(canastaMatch(ca::Level::Medium, ca::Level::Easy, "medium v easy", 24) * 2 > 24,
           "canasta: medium beats easy");
     check(canastaMatch(ca::Level::Hard, ca::Level::Easy, "hard v easy", 24) * 2 > 24,
           "canasta: hard beats easy");
-    // Two strong sides are close together and Canasta carries a lot of luck, so
-    // the top two rungs are judged over a longer run than the bottom.
-    check(canastaMatch(ca::Level::Hard, ca::Level::Medium, "hard v medium", 120) * 2 > 120,
-          "canasta: hard beats medium");
-    check(canastaMatch(ca::Level::Expert, ca::Level::Hard, "expert v hard", 240) * 2 > 240,
-          "canasta: expert beats hard");
+    check(notTheWeakerPlayer(canastaMatch(ca::Level::Hard, ca::Level::Medium, "hard v medium", 120),
+                             120),
+          "canasta: hard has not fallen behind medium");
+    check(notTheWeakerPlayer(canastaMatch(ca::Level::Expert, ca::Level::Hard, "expert v hard", 240),
+                             240),
+          "canasta: expert has not fallen behind hard");
 }
 
 // Two rule sets, because the owner's family plays its own. A house set has to

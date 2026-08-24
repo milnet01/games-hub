@@ -3633,7 +3633,7 @@ open.
   Kind: investigate.
   Source: in-session-2026-08-24.
 
-- 📋 [GHUB-0110] **The ladder that guards every AI change is too blunt to measure one.**
+- ✅ [GHUB-0110] **The ladder that guards every AI change is too blunt to measure one.**
   canastaLevelsDiffer() is the project's only judge of an AI change --
   CLAUDE.md says outright that any change to one level has to be
   re-measured against its neighbours, and it is what caught Hard playing
@@ -3674,6 +3674,33 @@ open.
 
   The last is probably the real finding: the ladder is not only blunt,
   it is reporting that the top two rungs are nearly the same player.
+  Resolved (2026-08-24), owner picking the third route: the ladder
+  guards against a rung going BACKWARDS and no more, and what a single
+  new judgement does is locked by a hand-built position instead.
+
+  canastaLevelsDiffer()'s top two rungs now call notTheWeakerPlayer(),
+  which asks only that the stronger level sit no more than two standard
+  deviations below an even split -- sqrt(games) either side of games/2,
+  so 105 of 240 for expert v hard and 49 of 120 for hard v medium. The
+  two rungs against Easy keep the bare-majority claim, because they win
+  by miles and the sample carries it.
+
+  Proved it still catches what it is for, rather than catching nothing,
+  by mutation on both call sites. Expert made never to take the pile:
+  expert v hard falls to 10/240 at -3241 a game and the check reddens.
+  Hard made never to take the pile: hard v medium falls to 6/120 at
+  -2841 and reddens, and the untouched strict rung "hard beats easy"
+  reddens at 1/24. Restored, and the suite is green at 416 checks with
+  all five ctest tests passing.
+
+  Left undone deliberately: CLAUDE.md's Canasta paragraph still
+  describes the ladder without this bound. Nothing it says is now false
+  -- each rung is still checked against the one below and it still
+  catches a rung inverting -- but it under-describes, and adding the
+  bound would change what a conformer does and so owes a review-contract
+  gate. Same reason GHUB-0079 is deliberately unfixed. The reasoning
+  lives in the comment above canastaLevelsDiffer, which is what a
+  developer reads when the check stops them.
   **Layman:** The test that decides whether a change to the computer player helped cannot actually tell a small improvement from luck, so it blocks good changes and bad ones alike.
   Kind: investigate.
   Source: in-session-2026-08-24 GHUB-0101 and GHUB-0104 attempts.
