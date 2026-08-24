@@ -3209,6 +3209,28 @@ open.
   pile is already big enough that the pre-emptive lock is likely to pay
   -- and that is a tuned threshold, which is his call and would need
   measuring against the ladder rather than fitted to it.
+  SUPERSEDED IN EFFECT (2026-08-24), and OPEN pending the owner's ruling.
+
+  The instinct this bullet was filed for -- "do not spend care on a side
+  that has not opened" -- shipped as GHUB-0121, aimed at the DISCARD
+  instead of at the freeze. That is where it holds: an unopened side must
+  open OFF the pack, so the meld it takes with has to clear its own
+  minimum, and the throw is graded by that bar. A throw is spent the turn
+  it is made, which is why the reasoning works there and failed here.
+
+  What remains genuinely unanswered is only the FREEZE half: a two or a
+  joker spent freezing is worth 20 or 50 in the hand, and the revert note
+  above proposes a PRICE rather than a veto -- freeze only when the pack
+  is already big enough that the pre-emptive lock is likely to pay. That
+  is a tuned threshold, and GHUB-0110 has since established that the
+  ladder cannot measure one at this effect size.
+
+  ASKED of the owner 2026-08-24 and NOT ANSWERED: close this as superseded
+  by GHUB-0121, or keep it open for the freeze-pricing idea alone. Do not
+  decide it from the code; it is his call. If it stays open, note that
+  GHUB-0113 already tightens wantsToFreeze on two sourced grounds (a
+  per-hand budget, and not freezing a pack that is ours), so any pricing
+  work belongs with that bullet rather than beside it.
   **Layman:** Throwing a joker to freeze the pack is wasted when neither side has opened yet -- the pack is already out of reach for both of them.
   Kind: feature.
   Source: user-request-2026-08-24.
@@ -3444,6 +3466,34 @@ open.
 
   Sits with GHUB-0099 to GHUB-0104 as canastaai.cpp work.
   Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
+  MOSTLY ALREADY BUILT -- read the code before planning this one
+  (established 2026-08-24 while scoping the AI pass; no code written).
+
+  Ai::seen(e, rank) already counts a rank across every visible place the
+  bullet names: this seat's hand, the pack, and both teams' melds. Two
+  callers already use it.
+
+    - chooseDiscard, in the Hard/Expert block, opens with the comment
+      "Count the pack. Eight of every rank exist" and scores a throw by
+      `unseen = 8 - seen(...)`, both as a safety bonus capped at four seen
+      and as a penalty weighted by pack size.
+    - worthHolding bails on `seen(e, rank) >= 8` -- a rank nobody can
+      still throw is no use as bait.
+
+  The difficulty dial the bullet argues for also exists, in two steps
+  rather than four: Easy and Medium never count at all, Hard and Expert
+  count identically.
+
+  So what is actually left is smaller than the bullet implies, and worth
+  deciding on purpose rather than discovering mid-change: (a) whether Hard
+  and Expert should differ here, which is the bullet's "Easy forgets,
+  Expert never does" taken literally; and (b) whether an all-eight-seen
+  rank deserves an explicit cliff, since today it is the top of a smooth
+  term capped at four rather than a stated "this rank is dead safe".
+
+  Neither is obviously worth doing, and both move numbers the ladder
+  cannot measure (GHUB-0110). Treat this as a verify-and-close candidate
+  unless the owner wants (a).
   **Layman:** Once all eight cards of a rank have been seen, that rank is safe to throw forever -- a computer can track that perfectly and a person cannot.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
