@@ -24,6 +24,30 @@ enum class Level { Easy, Medium, Hard, Expert };
 // engine this needs no work budget to keep the window responsive.
 double discardRisk(const Team& theirs, int rank, int pileSize, bool frozen, const Rules& r);
 
+// What ending the hand RIGHT NOW would take off the other side, over and above
+// the going-out bonus, in points. Under canastaNeededToScore a side with no
+// canasta has its own melds and red threes subtracted rather than added — see
+// handScoreFor — so every point they have showing is worth two to us: one they
+// do not get, and the same one taken off them. The owner's family calls it
+// catching them a minus.
+//
+// Zero when the rule is off or they already have their canasta, which is the
+// common case and the whole reason this is computed rather than assumed.
+int minusOnOffer(const Team& theirs, const Rules& r);
+
+// What staying in is worth, in points — the owner's family calls the position
+// being fed. Zero when the pack is not coming back to us, so it can be compared
+// against minusOnOffer directly rather than ordered against it.
+//
+// Three readings, and they are the three the position turns on. How big the
+// pack has grown, since a thin one is not worth staying for. Whether it is
+// frozen against us, which is the pack not coming back at all unless we hold a
+// pair, Engine::canTakePile wanting two naturals out of hand. And how many of
+// its cards are in ranks we already have down, which is what makes the NEXT
+// throw into it one we can take.
+int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& hand,
+                        const Team& mine, bool frozen, const Rules& r);
+
 class Ai
 {
 public:

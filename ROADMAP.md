@@ -3117,7 +3117,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0099] **The computer never plays for a minus, even when one is sitting there.**
+- ✅ [GHUB-0099] **The computer never plays for a minus, even when one is sitting there.**
   Follows GHUB-0098, which makes catching a minus the House
   default. The rule being on changes the value of going out
   enormously and the AI does not know it: the opposing side's
@@ -3133,11 +3133,12 @@ open.
   Paired with the item below, which is the same judgement
   pointing the other way. Neither should be written without the
   other or the AI will simply always rush.
+  Resolved (2026-08-24), with GHUB-0100 in the same change as the bullet requires. minusOnOffer(theirs, rules) computes what ending the hand right now takes off the other side: under canastaNeededToScore a side with no canasta has its melds and red threes SUBTRACTED rather than added (handScoreFor), so every point they show is worth two to us. It returns points, not a flag, so Ai::closingOut widens its reach in proportion to what is actually on offer rather than by a flat step -- capped at 4, because past a point the hand cannot be emptied faster however big the minus. Red threes only count where they have opened, since an unopened side is docked for them either way and there is nothing there to win. Zero when the rule is off or they already have their canasta, so play outside the House set is untouched. canastaMinusAgainstMilking checks it on hand-built positions, the way discardRisk and handScoreFor already are.
   **Layman:** When the other side has no canasta, our side should push to go out and catch them a minus -- right now it plays the same either way.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0100] **The computer plays out even while the pile is feeding it.**
+- ✅ [GHUB-0100] **The computer plays out even while the pile is feeding it.**
   The owner's family calls it being fed: a position where the
   other side keeps handing you the pack, and every turn you
   stay in is worth more than the going-out bonus.
@@ -3154,6 +3155,7 @@ open.
   written together, and the levels checked against each other
   afterwards -- canastaLevelsDiffer() is what caught Hard being
   weaker than Medium last time.
+  Resolved (2026-08-24), paired with GHUB-0099 exactly as the bullet demands -- neither would have been safe alone. packWorthStayingFor(pile, hand, mine, frozen, rules) answers what staying in is worth, in points, and returns the three readings the bullet names: a pack under 8 cards is not worth staying for however takeable; a pack frozen against us -- or unopened, which Engine::canTakePile treats identically -- is not coming back at all unless we hold a pair of naturals, wild cards explicitly not counting; and otherwise it comes back on any throw into a rank we have down, so a quarter of the pack being ours is the bar. Because BOTH sides come back in points, closingOut weighs them against each other rather than ordering them: a minus bigger than the pack presses, a pack bigger than the minus milks by holding the reach at 3. With the House rule off and a thin pack both are zero and the old reach is left exactly as it was, which is what keeps Classic play unchanged.
   **Layman:** When we keep taking the pack hand after hand, we should stay in and keep milking them rather than ending the hand.
   Kind: feature.
   Source: user-request-2026-08-24.

@@ -6,11 +6,11 @@ namespace canasta {
 
 namespace {
 
-int pileValue(const Engine& e)
+int pileValue(const std::vector<Card>& pile, const Rules& r)
 {
     int v = 0;
-    for (const Card& c : e.pile())
-        v += cardValue(c, e.rules());
+    for (const Card& c : pile)
+        v += cardValue(c, r);
     return v;
 }
 
@@ -47,6 +47,55 @@ double discardRisk(const Team& theirs, int rank, int pileSize, bool frozen, cons
     if (away > 0)
         risk += 140.0 / double(away);
     return risk;
+}
+
+int minusOnOffer(const Team& theirs, const Rules& r)
+{
+    if (!caughtAMinus(theirs, r))
+        return 0;
+
+    int showing = 0;
+    for (const Meld& m : theirs.melds)
+        showing += m.value(r);
+    // Red threes only swing where they have opened. handScoreFor docks an
+    // unopened side for them whatever happens, so there is nothing there to win.
+    if (theirs.opened) {
+        const int n = int(theirs.redThrees.size());
+        showing += n == 4 ? r.allRedThreesValue : n * r.redThreeValue;
+    }
+    // Once for the points they do not get, once for the same points taken off.
+    return 2 * showing;
+}
+
+int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& hand,
+                        const Team& mine, bool frozen, const Rules& r)
+{
+    // A thin pack is not worth staying in for however takeable it is.
+    if (int(pile.size()) < 8)
+        return 0;
+
+    // Frozen against us — or unopened, which Engine::canTakePile treats exactly
+    // the same way — wants two naturals out of hand, so the pack is coming back
+    // only if we are already holding a pair. Twos are wild and threes cannot be
+    // melded, so neither is a key to anything.
+    if (frozen || (r.pileFrozenUntilOpened && !mine.opened)) {
+        for (int rank = kAce; rank <= kKing; ++rank) {
+            if (rank == 2 || rank == 3)
+                continue;
+            if (countRank(hand, rank) >= 2)
+                return pileValue(pile, r);
+        }
+        return 0;
+    }
+
+    // Otherwise it comes back on any throw into a rank we have down, so the
+    // more of the pack sits in ranks we have already melded the likelier the
+    // next throw into it is ours. A quarter of the pack is the bar.
+    int ours = 0;
+    for (const Card& c : pile)
+        if (!isWild(c) && mine.meldOfRank(c.rank) != nullptr)
+            ++ours;
+    return ours * 4 >= int(pile.size()) ? pileValue(pile, r) : 0;
 }
 
 int Ai::seen(const Engine& e, int rank) const
@@ -102,10 +151,33 @@ bool Ai::closingOut(const Engine& e, std::size_t inHand) const
     // game — under the house rule where a side with none counts nothing in its
     // favour, it is the difference between their melds paying them and costing
     // them. So the hand is worth ending sooner against a side that has none.
-    const bool theyAreShort = !e.team(teamOf(e.currentSeat()) ^ 1).hasCanasta(r);
+    const Team& theirs = e.team(teamOf(e.currentSeat()) ^ 1);
+    const bool theyAreShort = !theirs.hasCanasta(r);
     // Expert reads the position sooner and starts closing from further out.
-    const std::size_t reach = m_level == Level::Expert ? (theyAreShort ? 12u : 7u)
-                                                       : (theyAreShort ? 8u : 5u);
+    std::size_t reach = m_level == Level::Expert ? (theyAreShort ? 12u : 7u)
+                                                 : (theyAreShort ? 8u : 5u);
+
+    // The two halves of one judgement, and they pull opposite ways on purpose.
+    // A minus sitting on the table argues for going NOW; a pack that keeps
+    // feeding us argues for staying, because every turn we stay in is worth
+    // more than the going-out bonus. Both come back in POINTS, so they are
+    // weighed against each other rather than ordered — and with the house rule
+    // off and a thin pack both are zero, which leaves the reach above exactly
+    // as it was.
+    const int minus = minusOnOffer(theirs, r);
+    const int pack = packWorthStayingFor(e.pile(), e.hand(e.currentSeat()), mine, e.pileFrozen(), r);
+
+    if (minus > pack && minus > r.goingOutBonus) {
+        // Press, in proportion to what is actually on offer rather than by a
+        // flat step. Capped, because past a point the hand cannot be emptied
+        // any faster however much the minus is worth.
+        reach += std::size_t(std::min(4, minus / std::max(1, 2 * r.goingOutBonus)));
+    } else if (pack > minus) {
+        // Milk it. Held above zero rather than switched off, so this slows the
+        // hand down rather than stopping it ending at all.
+        reach = std::min(reach, std::size_t(3));
+    }
+
     return inHand <= reach;
 }
 
@@ -136,7 +208,7 @@ bool Ai::holdsWhileFrozen(const Engine& e, int rank, int naturals) const
 bool Ai::wantsPile(const Engine& e) const
 {
     const int n = int(e.pile().size());
-    const int v = pileValue(e);
+    const int v = pileValue(e.pile(), e.rules());
     const Team& mine = e.team(teamOf(e.currentSeat()));
 
     switch (m_level) {

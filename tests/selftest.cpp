@@ -1520,6 +1520,101 @@ void canastaLeastDamagingDiscard()
           "canasta: without that house rule it still hands them the pile");
 }
 
+// Playing for the minus, against being fed (GHUB-0099 and GHUB-0100). They are
+// one judgement written as two numbers, and both come back in POINTS so that
+// Ai::closingOut can weigh them against each other rather than order them: a
+// minus on the table argues for ending the hand now, a pack that keeps coming
+// back argues for staying in it. Checked here on hand-built positions, the way
+// discardRisk and handScoreFor already are.
+void canastaMinusAgainstMilking()
+{
+    const auto meldOf = [](int rank, int n) {
+        ca::Meld m;
+        m.rank = rank;
+        for (int i = 0; i < n; ++i)
+            m.cards.push_back(cd(i % 2 == 0 ? Suit::Spades : Suit::Hearts, rank));
+        return m;
+    };
+    const ca::Rules classic = ca::Rules::classic();
+    ca::Rules house = classic;
+    house.canastaNeededToScore = true;
+
+    // Five kings and a red three showing, and no canasta to protect them.
+    ca::Team theirs;
+    theirs.opened = true;
+    theirs.melds.push_back(meldOf(kKing, 5));
+    theirs.redThrees.push_back(cd(Suit::Hearts, 3));
+
+    check(ca::minusOnOffer(theirs, classic) == 0,
+          "canasta: with the minus rule off there is nothing on offer, however much they show");
+    check(ca::minusOnOffer(theirs, house) == 2 * (50 + 100),
+          "canasta: with it on, every point they show is worth two to us");
+    check(ca::minusOnOffer(theirs, house) == 3 * house.goingOutBonus,
+          "canasta: which here is three times the bonus going out used to be priced at");
+
+    ca::Team safe = theirs;
+    safe.melds.push_back(meldOf(7, 7));
+    check(safe.hasCanasta(house), "canasta: once they have a canasta down");
+    check(ca::minusOnOffer(safe, house) == 0, "canasta: the minus is off the table");
+
+    // An unopened side is docked its red threes whatever happens, so only the
+    // melds swing — there is nothing to win in the threes.
+    ca::Team unopened = theirs;
+    unopened.opened = false;
+    check(ca::minusOnOffer(unopened, house) == 2 * 50,
+          "canasta: and an unopened side only swings by its melds");
+
+    // Being fed. Our side has nines down, so every nine thrown into the pack is
+    // one we can take it on.
+    ca::Team mine;
+    mine.opened = true;
+    mine.melds.push_back(meldOf(9, 3));
+
+    const auto packOf = [](int nines, int queens) {
+        std::vector<Card> v;
+        for (int i = 0; i < nines; ++i)
+            v.push_back(cd(Suit::Clubs, 9));
+        for (int i = 0; i < queens; ++i)
+            v.push_back(cd(Suit::Clubs, kQueen));
+        return v;
+    };
+    const std::vector<Card> fed = packOf(4, 8);
+    const std::vector<Card> starved = packOf(1, 11);
+    const std::vector<Card> thin = packOf(5, 0);
+    const std::vector<Card> nothing;
+    const std::vector<Card> noPair { cd(Suit::Spades, 4), cd(Suit::Hearts, 5),
+                                     cd(Suit::Clubs, 6) };
+    const std::vector<Card> aPair { cd(Suit::Spades, kQueen), cd(Suit::Hearts, kQueen) };
+    const std::vector<Card> twoWilds { cd(Suit::Spades, 2), cd(Suit::Hearts, 2) };
+
+    check(ca::packWorthStayingFor(thin, noPair, mine, false, classic) == 0,
+          "canasta: a thin pack is not worth staying in for, however takeable");
+    check(ca::packWorthStayingFor(starved, noPair, mine, false, classic) == 0,
+          "canasta: nor one we have almost none of down");
+    check(ca::packWorthStayingFor(fed, noPair, mine, false, classic) > 0,
+          "canasta: a pack we have a quarter of melded keeps feeding us");
+    check(ca::packWorthStayingFor(fed, noPair, mine, false, classic)
+              == 12 * classic.highCardValue,
+          "canasta: and it is worth its points, so it can be weighed against a minus");
+
+    // Frozen wants two naturals out of hand, so it is only coming back if we
+    // are holding the pair that takes it.
+    check(ca::packWorthStayingFor(fed, noPair, mine, true, classic) == 0,
+          "canasta: frozen against us with no pair, the pack is not coming back");
+    check(ca::packWorthStayingFor(fed, aPair, mine, true, classic) > 0,
+          "canasta: unless we are holding a pair, which is what takes a frozen pack");
+    check(ca::packWorthStayingFor(fed, twoWilds, mine, true, classic) == 0,
+          "canasta: and two wild cards are not that pair, since it wants naturals");
+
+    // An unopened side is in the frozen position whether or not anyone froze it.
+    ca::Team unopenedMine = mine;
+    unopenedMine.opened = false;
+    check(ca::packWorthStayingFor(fed, noPair, unopenedMine, false, classic) == 0,
+          "canasta: an unopened side is in the same position as a frozen pack");
+    check(ca::packWorthStayingFor(nothing, aPair, mine, false, classic) == 0,
+          "canasta: and an empty pack is worth nothing at all");
+}
+
 // Frozen and unfrozen, from identical positions. The only difference between
 // the two runs is whether seat 1 threw a wild card or an ordinary one.
 void canastaFrozenPile()
@@ -2934,6 +3029,7 @@ int main()
     canastaCaughtAMinus();
     canastaFirstRoundSafeThrow();
     canastaLeastDamagingDiscard();
+    canastaMinusAgainstMilking();
     canastaMeldOrder();
     canastaAiOpens();
     canastaTakeAndOpenTogether();

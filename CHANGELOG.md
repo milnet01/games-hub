@@ -47,6 +47,9 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: the computer plays for the minus, and milks a pack that keeps feeding it** (GHUB-0099)
+  Two judgements that pull opposite ways, added together so neither runs away with the hand (GHUB-0099, GHUB-0100). When the House minus rule is on and the other side has no canasta, every point they have on the table is worth two to us -- so the computer now presses to end the hand rather than pricing that at the flat 100 the going-out bonus is worth. And when the pack keeps coming back to it, it stays in and keeps milking instead of going out at the first legal chance. Both are worked out in points and weighed against each other, so a big minus beats a fat pack and a fat pack beats a small one. With Classic rules and an ordinary pack neither applies and the computer plays exactly as before.
+
 - **Canasta: the computer stops sitting on cards that could never take a frozen pack** (GHUB-0104)
   While the pack is frozen it holds its pairs back rather than melding them away, because a frozen pack can only be taken with two matching cards from your hand -- that already worked. But it was also keeping single cards of ranks it had already melded, and one card can never take a frozen pack however long it waits. Those now go on the table, where they score instead of waiting to be caught in the hand.
 
