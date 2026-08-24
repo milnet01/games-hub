@@ -169,6 +169,21 @@ if(UNIX)
     endif()
 endif()
 
+# The score book in scorepad/ is a phone replacement for the paper book kept at
+# a real table, so it does NOT reimplement the scoring — the players work each
+# hand out themselves. It does have to SHOW the opening minimum each side
+# needs, and those are the game's own numbers, which puts them in two places.
+# That is the drift this project refuses elsewhere (the donate URLs are
+# generated from FUNDING.yml for the same reason), so a script reads both and
+# fails when they disagree. Not guarded on UNIX: the check is pure Python and
+# the numbers can drift on either platform.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME scorepad
+             COMMAND ${Python3_EXECUTABLE}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/scripts/scorepad-check.py)
+endif()
+
 # ---------------------------------------------------------------------------
 # Desktop integration. `cmake --install build` puts the hub in the application
 # menu; the .desktop file needs the absolute Exec path because ~/.local/bin is

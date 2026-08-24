@@ -1,0 +1,16 @@
+{
+  "name": "Canasta Score Book",
+  "short_name": "Canasta",
+  "description": "Keeps the score book for a four-handed Canasta game: running totals, whose deal it is, opening minimums and the exact-cut bonus.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14532d",
+  "theme_color": "#14532d",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

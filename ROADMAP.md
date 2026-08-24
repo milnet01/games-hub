@@ -3547,6 +3547,77 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
+## The score book on a phone
+
+A replacement for the paper score book the owner's family keeps at the table on
+a Friday. It is NOT a companion to the desktop game and it does not play
+Canasta: four people play with real cards, and the phone keeps the book. It
+therefore does not reimplement the scoring -- they work each hand out
+themselves, as they do now -- and the only numbers it shares with the game are
+the opening minimums, guarded by scripts/scorepad-check.py.
+
+- ✅ [GHUB-0115] **A score book for the phone, keeping one book on one device.**
+  Built to the owner's own list. Per hand it takes each side's score --
+  worked out at the table as now, so no scoring rule is duplicated -- plus
+  who went out and the going-out bonus, and the house exact-cut bonus of
+  50 to the side that cut when the deal used the cut up with no cards
+  left over. It keeps the running totals, shows whose deal it is and who
+  deals next, and shows each side's opening minimum against its current
+  score.
+
+  Four initials are entered in CLOCKWISE seating order; partners sit
+  opposite, so the two sides are seats 1+3 and 2+4 and the setup screen
+  shows the pairing it worked out rather than assuming it was understood.
+  The dealer moves round clockwise from whoever is picked for the first
+  hand. Any hand can be tapped and corrected or deleted, because a score
+  book gets corrections.
+
+  Built for a partially sighted reader at a table: large tabular figures,
+  high contrast, tap targets that need no aiming, and an A-/A+ control
+  that is remembered. It works with no signal once loaded, which is the
+  point rather than a nicety -- a kitchen table on a Friday is where the
+  signal is worst.
+
+  scripts/scorepad-check.py is the drift guard, wired into ctest so it
+  runs locally, on the pre-push hook and on both CI legs. The opening
+  bands and the target and going-out defaults exist in the app AND in
+  canastaengine.{h,cpp}; the script holds no copy of its own, reads both
+  and fails when they disagree. Proved by mutation both ways -- a changed
+  band and a renamed constant each exit 1.
+
+  Superseded in one respect the same day: the owner wants the same book
+  on all four phones, which no single-device store can do. See the bullet
+  below. Everything here except where the score is KEPT survives that.
+  **Layman:** Replaces the paper score book: enter each side's score for the hand and it keeps the totals, whose deal it is and what you need to open.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0116] **All four players should see the same book, and one device cannot do that.**
+  The owner asked for this as "make it an app rather than a webpage",
+  and that is worth recording carefully because it is not what decides
+  it. A native Android app installed on four phones is four separate
+  copies of the score, exactly as four copies of a web page are. Neither
+  syncs on its own. What produces four matching screens is SHARED STATE,
+  and that is an independent decision from how the thing is packaged.
+
+  Three shapes, and the choice turns on the room rather than on taste.
+  A server holding the book, joined by a room code -- works on any phone
+  including an iPhone, needs a signal at the table, and needs somewhere
+  to host it. Peer to peer over the local network or Bluetooth -- works
+  with no internet at all, which suits a kitchen table, but is
+  substantially more work and pins it to one platform. Or one phone keeps
+  the book and the others only watch, which is much less machinery and
+  may be all that is actually wanted.
+
+  Open and blocking: is there wifi or a usable signal where they play, do
+  all four need to ENTER scores or only see them, and are all four phones
+  Android. Do not pick an architecture before those are answered -- the
+  first rules out the server, the second rules out most of the work, and
+  the third rules out a native Android answer.
+  **Layman:** Everyone at the table should see the same running score on their own phone, updating as hands are entered.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
 ### 🧰 Tests
 
 - 💭 [GHUB-0020] **A legality check that does not rely on the author's imagination.**
