@@ -128,7 +128,8 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
 
 <dialog id="sheet"><div class="sheet" id="sheetBody"></div></dialog>
 
-<script>
+<script src="firebase-config.js"></script>
+<script type="module">
 "use strict";
 
 /* ------------------------------------------------------------------ rules
@@ -167,10 +168,45 @@ const blank = () => ({
 let S = blank();
 let scale = 1;
 
+/* --------------------------------------------------------------- sharing
+   One book, four phones. The scorer's phone writes it; the others read it and
+   show it. Everything below degrades to nothing: with no databaseURL, or no
+   signal, or the SDK unreachable, the book still works on this phone alone —
+   sharing is reported as unavailable rather than breaking the evening. */
+const SDK = "https://www.gstatic.com/firebasejs/12.18.0/";
+const CODE_LETTERS = "BCDFGHJKMNPQRSTVWXYZ";  // no vowels, and nothing that reads as 0/1
+let room = null;        // { code, scorer }
+let fb = null, db = null, unlisten = null;
+let sync = "off";       // off | unavailable | connecting | live | error
+let scorerHere = "";    // who the shared book says is keeping score
+
+let deviceId = "";
+function myId() {
+  if (deviceId) return deviceId;
+  try {
+    deviceId = localStorage.getItem(KEY + "-device") || "";
+    if (!deviceId) {
+      deviceId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem(KEY + "-device", deviceId);
+    }
+  } catch (e) { deviceId = "this-device"; }
+  return deviceId;
+}
+const newCode = () => Array.from({ length: 4 },
+  () => CODE_LETTERS[Math.floor(Math.random() * CODE_LETTERS.length)]).join("");
+
+
+function saveLocal() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(S));
+  } catch (e) { /* private mode, blocked storage — the book still works */ }
+}
 function save() {
+  pushBook();
   try {
     localStorage.setItem(KEY, JSON.stringify(S));
     localStorage.setItem(KEY + "-scale", String(scale));
+    localStorage.setItem(KEY + "-room", room ? JSON.stringify(room) : "");
   } catch (e) { /* private mode, blocked storage — the game still works */ }
 }
 function load() {
@@ -179,8 +215,95 @@ function load() {
     if (raw) { const v = JSON.parse(raw); if (v && Array.isArray(v.players)) S = Object.assign(blank(), v); }
     const sc = parseFloat(localStorage.getItem(KEY + "-scale"));
     if (sc >= 0.8 && sc <= 2.2) scale = sc;
+    const r = localStorage.getItem(KEY + "-room");
+    if (r) { const v = JSON.parse(r); if (v && v.code) room = v; }
   } catch (e) { /* fall back to a fresh book */ }
 }
+
+/* Firebase is loaded only if there is a database to talk to, and a failure
+   here is never fatal — it downgrades to one book on one phone. */
+async function connect() {
+  const cfg = window.FIREBASE_CONFIG;
+  if (!cfg || !cfg.databaseURL) { sync = "unavailable"; return false; }
+  if (db) return true;
+  sync = "connecting";
+  try {
+    const [appMod, dbMod] = await Promise.all([
+      import(SDK + "firebase-app.js"),
+      import(SDK + "firebase-database.js")
+    ]);
+    db = dbMod.getDatabase(appMod.initializeApp(cfg));
+    fb = dbMod;
+    return true;
+  } catch (e) { sync = "error"; db = null; fb = null; return false; }
+}
+
+/* Firebase drops nulls and stores an empty list as nothing at all, so what
+   comes back is not shaped quite like what went in. Put it back together
+   rather than letting undefined leak into the arithmetic. */
+function sanitise(book) {
+  const b = Object.assign(blank(), book || {});
+  b.players = [0, 1, 2, 3].map((i) => (b.players && b.players[i]) || "");
+  b.hands = (b.hands || []).filter(Boolean).map((h) => ({
+    a: Number(h.a || 0), b: Number(h.b || 0),
+    outSeat: (h.outSeat === undefined || h.outSeat === null) ? null : Number(h.outSeat),
+    outBonus: Number(h.outBonus || 0),
+    cutTeam: (h.cutTeam === undefined || h.cutTeam === null) ? null : Number(h.cutTeam)
+  }));
+  b.firstDealer = Number(b.firstDealer || 0);
+  b.target = Number(b.target || DEFAULT_TARGET);
+  b.started = !!b.started;
+  return b;
+}
+
+function listen() {
+  if (!db || !room) return;
+  if (unlisten) { unlisten(); unlisten = null; }
+  unlisten = fb.onValue(fb.ref(db, "rooms/" + room.code), (snap) => {
+    const v = snap.val();
+    sync = "live";
+    if (!v) { if (room.scorer) pushBook(); else render(); return; }
+    scorerHere = v.scorerName || "";
+    // The scorer is the source of truth; it must never be overwritten by the
+    // echo of its own write, which would fight whatever is being typed.
+    if (!room.scorer) { S = sanitise(v.book); saveLocal(); }
+    render();
+  }, () => { sync = "error"; render(); });
+}
+
+let pushTimer = 0;
+function pushBook() {
+  if (!db || !room || !room.scorer) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    fb.set(fb.ref(db, "rooms/" + room.code), {
+      book: S, scorerId: myId(),
+      scorerName: nameOf(0) === "?" ? "" : S.players.join(""),
+      updatedAt: Date.now()
+    }).then(() => { sync = "live"; }).catch(() => { sync = "error"; render(); });
+  }, 250);
+}
+
+async function startSharing() {
+  if (!(await connect())) { render(); return; }
+  room = { code: newCode(), scorer: true };
+  save(); listen(); pushBook(); render();
+}
+async function joinRoom(code) {
+  if (!(await connect())) { render(); return; }
+  room = { code: String(code).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4), scorer: false };
+  if (room.code.length < 4) { room = null; return; }
+  save(); listen(); render();
+}
+function stopSharing() {
+  if (unlisten) { unlisten(); unlisten = null; }
+  room = null; sync = db ? "off" : sync; save(); render();
+}
+function takeOverScoring() {
+  if (!room) return;
+  room.scorer = true; save(); pushBook(); render();
+}
+const canEdit = () => !room || room.scorer;
 
 /* Partners sit opposite, so seats 1 and 3 are one side and seats 2 and 4 the
    other. That is why the setup screen asks for the CLOCKWISE order and then
@@ -266,7 +389,7 @@ function gameView() {
     if (h.outSeat !== null && h.outSeat !== undefined) bits.push(nameOf(h.outSeat) + " out");
     if (h.cutTeam !== null && h.cutTeam !== undefined) bits.push("cut " + EXACT_CUT_BONUS);
     return `<tr tabindex="0" data-edit="${i}">
-      <td>${i + 1}<div class="run">${esc(nameOf(dealerOf(i)))} dealt${bits.length ? " &middot; " + esc(bits.join(" &middot; ")) : ""}</div></td>
+      <td>${i + 1}<div class="run">${esc(nameOf(dealerOf(i)))} dealt${bits.length ? " &middot; " + bits.map(esc).join(" &middot; ") : ""}</div></td>
       <td>${handPoints(h, 0)}<div class="run">${run[0]}</div></td>
       <td>${handPoints(h, 1)}<div class="run">${run[1]}</div></td>
     </tr>`;
@@ -289,9 +412,10 @@ function gameView() {
     <div class="lbl">then ${esc(nameOf(dealerOf(nextHand + 1)))}</div>
   </div>
 
-  <div class="actions">
+  ${canEdit() ? `<div class="actions">
     <button class="primary" id="record">Record hand ${nextHand + 1}</button>
-  </div>
+  </div>` : `<div class="panel"><p class="note">${esc(scorerHere ? scorerHere : "Someone else")} is keeping score.
+    This phone follows along and updates on its own.</p></div>`}
 
   <div class="panel">
     <h2>The book</h2>
@@ -302,10 +426,49 @@ function gameView() {
       : `<p class="note">Nothing recorded yet.</p>`}
   </div>
 
+  ${sharePanel()}
+
   <div class="actions">
-    <button class="ghost" id="players">Players &amp; settings</button>
-    <button class="ghost" id="newgame">New game</button>
+    ${canEdit() ? `<button class="ghost" id="players">Players &amp; settings</button>
+    <button class="ghost" id="newgame">New game</button>` : ""}
   </div>`;
+}
+
+function sharePanel() {
+  const state = {
+    off: "", unavailable: "Sharing is not set up on this copy.",
+    connecting: "Connecting&hellip;", live: "In step with the table.",
+    error: "Cannot reach the shared book right now — this phone is keeping its own."
+  }[sync] || "";
+
+  if (sync === "unavailable")
+    return `<div class="panel"><h2>The table</h2>
+      <p class="note">${state} The book is kept on this phone alone, which works
+      perfectly well — it just will not appear on anyone else's.</p></div>`;
+
+  if (!room)
+    return `<div class="panel stack"><h2>The table</h2>
+      <p class="note">Put the same book on everyone's phone. One person keeps score;
+         the rest follow along.</p>
+      <div class="actions">
+        <button class="primary" id="share">Share with the table</button>
+      </div>
+      <label for="joincode">or join a game already going</label>
+      <div class="row">
+        <input type="text" id="joincode" maxlength="4" autocomplete="off"
+               autocapitalize="characters" placeholder="CODE" aria-label="Game code">
+        <button id="join">Join</button>
+      </div></div>`;
+
+  return `<div class="panel stack"><h2>The table</h2>
+    <p style="font-size:2rem;font-weight:700;letter-spacing:.2em;margin:.1rem 0">${esc(room.code)}</p>
+    <p class="note">${room.scorer
+      ? "You are keeping score. The others open the book and join with this code."
+      : "Following " + esc(room.code) + "."} ${state}</p>
+    <div class="actions">
+      ${room.scorer ? "" : `<button id="takeover">Take over scoring</button>`}
+      <button class="ghost" id="unshare">Stop sharing</button>
+    </div></div>`;
 }
 
 /* ------------------------------------------------------------------ wiring */
@@ -333,12 +496,19 @@ function wireSetup() {
 }
 
 function wireGame() {
-  document.getElementById("record").onclick = () => openHand(null);
-  document.getElementById("players").onclick = () => { S.started = false; render(); };
-  document.getElementById("newgame").onclick = () => {
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on("share", startSharing);
+  on("join", () => joinRoom(document.getElementById("joincode").value));
+  on("unshare", stopSharing);
+  on("takeover", takeOverScoring);
+  if (!canEdit()) return;   // a watcher's phone shows the book and changes nothing
+
+  on("record", () => openHand(null));
+  on("players", () => { S.started = false; render(); });
+  on("newgame", () => {
     if (!confirm("Start a new game? The current book is cleared. Players stay as they are.")) return;
     S.hands = []; S.started = true; save(); render();
-  };
+  });
   app.querySelectorAll("tr[data-edit]").forEach((tr) => {
     const go = () => openHand(Number(tr.dataset.edit));
     tr.onclick = go;
@@ -445,6 +615,9 @@ document.getElementById("bigger").onclick = () => { scale = Math.min(2.2, scale 
 document.getElementById("smaller").onclick = () => { scale = Math.max(0.8, scale - 0.15); save(); render(); };
 load();
 render();
+if (room) connect().then((ok) => { if (ok) listen(); render(); });
+else if (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.databaseURL) { /* offered, not yet joined */ }
+else { sync = "unavailable"; render(); }
 if ("serviceWorker" in navigator)
   navigator.serviceWorker.register("sw.js").catch(() => { /* offline is a bonus, not a requirement */ });
 </script>

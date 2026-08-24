@@ -7,11 +7,12 @@
  *
  * Bump CACHE when any file below changes, or the old copy is served forever.
  */
-const CACHE = "canasta-scorebook-v1";
+const CACHE = "canasta-scorebook-v2";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
+  "./firebase-config.js",
   "./icon-192.png",
   "./icon-512.png"
 ];
@@ -34,7 +35,10 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      if (res && res.ok && res.type === "basic")
+      // "cors" as well as "basic": the Firebase SDK comes from gstatic, and
+      // caching it is what lets a phone that has shared once still open the
+      // book with no signal at all.
+      if (res && res.ok && (res.type === "basic" || res.type === "cors"))
         caches.open(CACHE).then((c) => c.put(e.request, res.clone()));
       return res;
     }).catch(() => caches.match("./index.html")))
