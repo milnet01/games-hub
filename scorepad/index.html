@@ -97,6 +97,8 @@ th { font-size: .85rem; color: var(--dim); text-transform: uppercase; letter-spa
 tbody tr { cursor: pointer; }
 tbody tr:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
 td.run { color: var(--dim); font-size: .9rem; }
+td.win { color: var(--ok); font-weight: 700; }
+td.win .run { color: var(--ok); font-weight: 400; }
 .note { color: var(--dim); font-size: .9rem; }
 .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
 .chips button[aria-pressed="true"] { background: var(--felt); color: var(--felt-ink); border-color: var(--felt); font-weight: 600; }
@@ -112,6 +114,21 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
 .sheet { padding: .9rem; }
 .sheet h2 { margin: 0 0 .2rem; font-size: 1.3rem; }
 .err { color: var(--accent); font-weight: 600; }
+
+/* The connecting indicator. A slow, large pulse rather than a small fast
+   spinner: it has to read at a glance to a partially sighted player, and a
+   fast flicker is both harder to see and unpleasant. Motion is dropped
+   entirely for anyone who has asked the system for less of it. */
+.loading { display: flex; gap: .55rem; justify-content: center; padding: .5rem 0 .2rem; }
+.loading i { width: 1.1rem; height: 1.1rem; border-radius: 50%; background: var(--ok);
+             opacity: .25; animation: pulse 1.4s ease-in-out infinite; }
+.loading i:nth-child(2) { animation-delay: .2s; }
+.loading i:nth-child(3) { animation-delay: .4s; }
+@keyframes pulse { 0%, 80%, 100% { opacity: .25; transform: scale(.8); }
+                   40% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .loading i { animation: none; opacity: .7; }
+}
 .seat { display: grid; grid-template-columns: 5.5rem 1fr; gap: .5rem; align-items: center; }
 .seat span { color: var(--dim); font-size: .92rem; }
 </style>
@@ -163,7 +180,8 @@ const blank = () => ({
   firstDealer: 0,
   target: DEFAULT_TARGET,
   hands: [],
-  started: false
+  started: false,
+  history: []      // games already finished, oldest first
 });
 let S = blank();
 let scale = 1;
@@ -178,6 +196,7 @@ const CODE_LETTERS = "BCDFGHJKMNPQRSTVWXYZ";  // no vowels, and nothing that rea
 let room = null;        // { code, scorer }
 let fb = null, db = null, unlisten = null;
 let sync = "off";       // off | unavailable | connecting | live | error
+let gotBook = false;    // has the scorer's book actually arrived yet
 let scorerHere = "";    // who the shared book says is keeping score
 
 let deviceId = "";
@@ -253,6 +272,17 @@ function sanitise(book) {
   b.firstDealer = Number(b.firstDealer || 0);
   b.target = Number(b.target || DEFAULT_TARGET);
   b.started = !!b.started;
+  b.history = (b.history || []).filter(Boolean).map((g) => ({
+    finishedAt: Number(g.finishedAt || 0),
+    players: [0, 1, 2, 3].map((i) => (g.players && g.players[i]) || "?"),
+    target: Number(g.target || DEFAULT_TARGET),
+    hands: (g.hands || []).filter(Boolean).map((h) => ({
+      a: Number(h.a || 0), b: Number(h.b || 0),
+      outSeat: (h.outSeat === undefined || h.outSeat === null) ? null : Number(h.outSeat),
+      outBonus: Number(h.outBonus || 0),
+      cutTeam: (h.cutTeam === undefined || h.cutTeam === null) ? null : Number(h.cutTeam)
+    }))
+  }));
   return b;
 }
 
@@ -266,7 +296,7 @@ function listen() {
     scorerHere = v.scorerName || "";
     // The scorer is the source of truth; it must never be overwritten by the
     // echo of its own write, which would fight whatever is being typed.
-    if (!room.scorer) { S = sanitise(v.book); saveLocal(); }
+    if (!room.scorer) { S = sanitise(v.book); gotBook = true; saveLocal(); }
     render();
   }, () => { sync = "error"; render(); });
 }
@@ -285,14 +315,19 @@ function pushBook() {
 }
 
 async function startSharing() {
+  sync = "connecting"; render();       // paint the indicator before we go away to connect
   if (!(await connect())) { render(); return; }
   room = { code: newCode(), scorer: true };
   save(); listen(); pushBook(); render();
 }
 async function joinRoom(code) {
+  sync = "connecting"; render();
   if (!(await connect())) { render(); return; }
   room = { code: String(code).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4), scorer: false };
   if (room.code.length < 4) { room = null; return; }
+  gotBook = false;
+  S.started = true;   // a watcher never sets players up; the book arrives whole
+  view = "game";
   save(); listen(); render();
 }
 function stopSharing() {
@@ -337,15 +372,101 @@ function winner() {
   return t[0] > t[1] ? 0 : 1;
 }
 
+/* ------------------------------------------------------------- the record
+   Everything below is derived from the hands themselves rather than counted
+   as the game goes, so a corrected hand corrects the record with it. Players
+   are tracked by INITIAL and not by seat, because who partners whom changes
+   week to week and it is the person's record that is interesting. */
+function totalsOfGame(g) {
+  const t = [0, 0];
+  for (const h of g.hands) { t[0] += handPoints(h, 0); t[1] += handPoints(h, 1); }
+  return t;
+}
+const sideOf = (g, t) => [g.players[t] || "?", g.players[t + 2] || "?"];
+const sideName = (g, t) => sideOf(g, t).join(" + ");
+function winnerOfGame(g) {
+  const t = totalsOfGame(g);
+  if (t[0] === t[1]) return null;
+  return t[0] > t[1] ? 0 : 1;
+}
+
+function theRecord() {
+  const who = {};   // initial -> tally
+  const of = (n) => (who[n] = who[n] || { name: n, played: 0, won: 0, hands: 0, out: 0, cuts: 0, best: 0 });
+  const records = { hand: null, margin: null, score: null, longest: null };
+
+  for (const g of S.history) {
+    const t = totalsOfGame(g);
+    const w = winnerOfGame(g);
+    for (let seat = 0; seat < 4; seat++) {
+      const e = of(g.players[seat] || "?");
+      e.played++;
+      e.hands += g.hands.length;
+      if (w !== null && teamOfSeat(seat) === w) e.won++;
+      e.best = Math.max(e.best, t[teamOfSeat(seat)]);
+    }
+    for (const h of g.hands) {
+      if (h.outSeat !== null && h.outSeat !== undefined) of(g.players[h.outSeat] || "?").out++;
+      if (h.cutTeam !== null && h.cutTeam !== undefined)
+        sideOf(g, h.cutTeam).forEach((n) => of(n).cuts++);
+      for (const side of [0, 1]) {
+        const v = handPoints(h, side);
+        if (!records.hand || v > records.hand.value)
+          records.hand = { value: v, who: sideName(g, side), when: g.finishedAt };
+      }
+    }
+    if (w !== null) {
+      const margin = Math.abs(t[0] - t[1]);
+      if (!records.margin || margin > records.margin.value)
+        records.margin = { value: margin, who: sideName(g, w), when: g.finishedAt };
+    }
+    const high = Math.max(t[0], t[1]);
+    if (!records.score || high > records.score.value)
+      records.score = { value: high, who: sideName(g, t[0] >= t[1] ? 0 : 1), when: g.finishedAt };
+    if (!records.longest || g.hands.length > records.longest.value)
+      records.longest = { value: g.hands.length, who: "", when: g.finishedAt };
+  }
+
+  const table = Object.values(who).sort((a, b) =>
+    (b.won - a.won) || (b.played - a.played) || a.name.localeCompare(b.name));
+  return { table, records };
+}
+
+function fileCurrentGame() {
+  if (!S.hands.length) return false;
+  S.history.push({
+    finishedAt: Date.now(),
+    players: S.players.slice(), target: S.target, hands: S.hands.slice()
+  });
+  S.hands = [];
+  return true;
+}
+
+const niceDate = (ms) => {
+  if (!ms) return "";
+  try { return new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short" }); }
+  catch (e) { return ""; }
+};
+
 /* ------------------------------------------------------------------- view */
 const app = document.getElementById("app");
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+let view = "game";   // game | dashboard
+
 function render() {
   document.documentElement.style.setProperty("--scale", String(scale));
-  app.innerHTML = S.started ? gameView() : setupView();
-  S.started ? wireGame() : wireSetup();
+  if (room && !room.scorer && !gotBook && !S.started) {
+    app.innerHTML = waitingView();
+    const u = document.getElementById("unshare");
+    if (u) u.onclick = stopSharing;
+    return;
+  }
+  if (!S.started) { app.innerHTML = setupView(); wireSetup(); return; }
+  if (view === "dashboard") { app.innerHTML = dashboardView(); wireDashboard(); return; }
+  app.innerHTML = gameView();
+  wireGame();
 }
 
 function setupView() {
@@ -376,7 +497,30 @@ function setupView() {
   <div class="actions">
     <button class="primary" id="start">Start the game</button>
   </div>
-  ${S.hands.length ? `<p class="note">This will keep the ${S.hands.length} hand(s) already recorded.</p>` : ""}`;
+  ${S.hands.length ? `<p class="note">This will keep the ${S.hands.length} hand(s) already recorded.</p>` : ""}
+  <div class="panel stack">
+    <h2>Or join the table</h2>
+    <p class="note">If someone else is keeping score, you do not need any of the above &mdash;
+       just type their four-letter code. Their book appears here and keeps itself up to date.</p>
+    <div class="row">
+      <input type="text" id="joincode2" maxlength="4" autocomplete="off"
+             autocapitalize="characters" placeholder="CODE" aria-label="Game code">
+      <button id="join2">Join</button>
+    </div>
+  </div>`;
+}
+
+function waitingView() {
+  return `
+    <div class="panel stack" style="text-align:center">
+      <h2>Joining ${esc(room.code)}</h2>
+      <div class="loading" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p style="font-size:1.3rem" role="status">Waiting for the score book&hellip;</p>
+      <p class="note">This takes a few seconds the first time. It will fill in on its own
+         as soon as the scorer's phone answers &mdash; there is nothing to press.</p>
+      ${sync === "error" ? `<p class="err">Cannot reach the shared book. Check the signal.</p>` : ""}
+    </div>
+    <div class="actions"><button class="ghost" id="unshare">Stop and keep my own book</button></div>`;
 }
 
 function gameView() {
@@ -396,7 +540,8 @@ function gameView() {
   }).reverse().join("");
 
   return `
-  ${w !== null ? `<div class="won">${esc(teamName(w))} win, ${t[w]} to ${t[1 - w]}</div>` : ""}
+  ${w !== null ? `<div class="won">${esc(teamName(w))} win, ${t[w]} to ${t[1 - w]}</div>
+     ${canEdit() ? `<div class="actions"><button class="primary" id="fileit">File this game and start the next</button></div>` : ""}` : ""}
   <div class="board">
     ${[0, 1].map((i) => `
       <div class="team ${t[i] > t[1 - i] ? "lead" : ""}">
@@ -429,8 +574,71 @@ function gameView() {
   ${sharePanel()}
 
   <div class="actions">
+    <button class="ghost" id="past">Past games${S.history.length ? " (" + S.history.length + ")" : ""}</button>
     ${canEdit() ? `<button class="ghost" id="players">Players &amp; settings</button>
     <button class="ghost" id="newgame">New game</button>` : ""}
+  </div>`;
+}
+
+function dashboardView() {
+  const { table, records } = theRecord();
+  const rec = (label, r, suffix) => r
+    ? `<tr><td>${label}</td><td>${r.value}${suffix || ""}</td><td class="run">${esc(r.who)}</td></tr>` : "";
+
+  const games = S.history.slice().reverse().map((g, i) => {
+    const t = totalsOfGame(g);
+    const w = winnerOfGame(g);
+    const n = S.history.length - i;
+    // The SCORE is the prominent figure and the names sit under it, because
+    // the sides change week to week and the number is what is being read.
+    const cell = (side) => `<td class="${w === side ? "win" : ""}">${t[side]}${
+      w === side ? " &check;" : ""}<div class="run">${esc(sideName(g, side))}</div></td>`;
+    return `<tr tabindex="0" data-game="${S.history.length - 1 - i}">
+      <td>${esc(niceDate(g.finishedAt)) || ("#" + n)}
+          <div class="run">${g.hands.length} hands</div></td>
+      ${cell(0)}${cell(1)}
+    </tr>`;
+  }).join("");
+
+  return `
+  <div class="panel">
+    <h2>Players</h2>
+    ${table.length ? `<table>
+      <thead><tr><th>Who</th><th>Played</th><th>Won</th><th>Went out</th><th>Cuts</th></tr></thead>
+      <tbody>${table.map((e) => `<tr>
+        <td><b>${esc(e.name)}</b></td>
+        <td>${e.played}</td>
+        <td>${e.won}<div class="run">${e.played ? Math.round(100 * e.won / e.played) + "%" : ""}</div></td>
+        <td>${e.out}</td>
+        <td>${e.cuts}</td></tr>`).join("")}</tbody></table>
+      <p class="note">Counted by initial rather than by seat, so a record follows the person
+         even when the partnerships change. <b>Went out</b> is how many hands that person ended;
+         <b>cuts</b> is exact cuts their side was on.</p>`
+      : `<p class="note">Nothing here yet. Finish a game and it will be filed.</p>`}
+  </div>
+
+  ${records.hand ? `<div class="panel">
+    <h2>Records</h2>
+    <table><tbody>
+      ${rec("Best hand", records.hand)}
+      ${rec("Best game", records.score)}
+      ${rec("Biggest win by", records.margin)}
+      ${rec("Longest game", records.longest, " hands")}
+    </tbody></table>
+  </div>` : ""}
+
+  <div class="panel">
+    <h2>Games</h2>
+    ${S.history.length ? `<table>
+      <thead><tr><th>When</th><th colspan="2">Final scores</th></tr></thead>
+      <tbody>${games}</tbody></table>
+      <p class="note">Tap a game to put it back as the game in play, if it was filed by mistake.</p>`
+      : `<p class="note">No games filed yet.</p>`}
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="backtogame">Back to the game</button>
+    ${canEdit() ? `<button class="ghost" id="startnew">Start a new game</button>` : ""}
   </div>`;
 }
 
@@ -445,6 +653,11 @@ function sharePanel() {
     return `<div class="panel"><h2>The table</h2>
       <p class="note">${state} The book is kept on this phone alone, which works
       perfectly well — it just will not appear on anyone else's.</p></div>`;
+
+  if (sync === "connecting")
+    return `<div class="panel stack" style="text-align:center"><h2>The table</h2>
+      <div class="loading" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p role="status">Connecting&hellip;</p></div>`;
 
   if (!room)
     return `<div class="panel stack"><h2>The table</h2>
@@ -488,6 +701,8 @@ function wireSetup() {
     document.getElementById("p" + i).addEventListener("input", () => { readNames(); paint(); save(); });
   paint();
 
+  const j = document.getElementById("join2");
+  if (j) j.onclick = () => joinRoom(document.getElementById("joincode2").value);
   document.getElementById("start").onclick = () => {
     readNames();
     S.target = Math.max(100, Number(document.getElementById("target").value) || DEFAULT_TARGET);
@@ -501,16 +716,49 @@ function wireGame() {
   on("join", () => joinRoom(document.getElementById("joincode").value));
   on("unshare", stopSharing);
   on("takeover", takeOverScoring);
+  on("past", () => { view = "dashboard"; render(); });
   if (!canEdit()) return;   // a watcher's phone shows the book and changes nothing
 
   on("record", () => openHand(null));
   on("players", () => { S.started = false; render(); });
-  on("newgame", () => {
-    if (!confirm("Start a new game? The current book is cleared. Players stay as they are.")) return;
-    S.hands = []; S.started = true; save(); render();
-  });
+  on("fileit", startNewGame);
+  on("newgame", startNewGame);
   app.querySelectorAll("tr[data-edit]").forEach((tr) => {
     const go = () => openHand(Number(tr.dataset.edit));
+    tr.onclick = go;
+    tr.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+  });
+}
+
+function startNewGame() {
+  if (S.hands.length && !confirm(
+      "File this game and start a new one? It is kept under Past games, and the "
+      + "players stay as they are.")) return;
+  fileCurrentGame();
+  view = "game";
+  save(); render();
+}
+
+function wireDashboard() {
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on("backtogame", () => { view = "game"; render(); });
+  on("startnew", () => { view = "game"; startNewGame(); });
+  if (!canEdit()) return;
+  app.querySelectorAll("tr[data-game]").forEach((tr) => {
+    const go = () => {
+      const i = Number(tr.dataset.game);
+      const g = S.history[i];
+      if (!g) return;
+      if (S.hands.length && !confirm(
+          "There is a game in play. File that one first and put this one back?")) return;
+      fileCurrentGame();
+      S.hands = g.hands.slice();
+      S.players = g.players.slice();
+      S.target = g.target;
+      S.history = S.history.filter((x) => x !== g);
+      view = "game";
+      save(); render();
+    };
     tr.onclick = go;
     tr.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
   });

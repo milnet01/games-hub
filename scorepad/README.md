@@ -23,11 +23,32 @@ be tapped and corrected or deleted.
 **It deliberately does not reimplement the scoring.** That keeps the one thing
 that would really drift — the whole scoring table — out of a second copy.
 
+## Past games
+
+Finishing a game files it rather than wiping it. **Past games** then shows a
+record kept per PERSON rather than per seat — games played, games won, hands
+they went out on, exact cuts their side was on — because who partners whom
+changes week to week and it is the person's record that is interesting. Plus
+records for the best hand, best game, biggest winning margin and longest game,
+and the list of filed games with the winner marked.
+
+Everything there is derived from the hands themselves rather than tallied as
+the game goes, so correcting a hand corrects the record with it. A game filed
+by mistake can be tapped to put it back in play.
+
 ## Sharing one book across four phones
 
 One person keeps score; the others follow along and update on their own. The
 scorer taps **Share with the table** and reads out the four-letter code; the
-others type it into **Join a game**.
+others type it into **Join a game** — or, on a phone that has never been set
+up, into **Or join the table** on the opening screen. A watcher never enters
+players or settings; the book arrives whole.
+
+Joining shows a loading screen until the book lands. That wait is real: the
+connection takes a few seconds to come up, and a phone shown an empty board
+reading 0/0 in the meantime would look broken. A watcher that already holds
+last week's book is shown that instead and it refreshes in place, because a
+stale board beats a spinner.
 
 Sharing is optional at every level. With no `databaseURL` configured, no
 signal, or the SDK unreachable, the book still works on one phone and says so.

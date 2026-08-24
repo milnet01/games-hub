@@ -21,4 +21,6 @@
  * works perfectly, keeping one book on this phone alone; sharing is simply
  * offered and reported as unavailable rather than failing.
  */
-window.FIREBASE_CONFIG = null;
+window.FIREBASE_CONFIG = {
+  databaseURL: "https://canastascorecard-default-rtdb.europe-west1.firebasedatabase.app"
+};
