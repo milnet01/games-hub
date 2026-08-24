@@ -3579,6 +3579,203 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
+- ✅ [GHUB-0120] **You go out by throwing your last card, and the game lets you go out by emptying your hand.**
+  The owner's rule, in his words: "The last action to play out (end
+  the round) is to throw away your last card. One exception ... is
+  that if you have all four black 3's then you put the black 3's down
+  as a meld to earn an extra 20 points when counting your score."
+
+  What the engine does today, both routes live and neither gated by a
+  rule flag. canastaengine.cpp:856 sets `goingOut` when a lay-down
+  consumes the WHOLE hand, and :1168 then calls goOut(seat) -- so
+  melding out with no discard is legal and the AI uses it
+  (Ai::playAndDiscard returns early on "melding out ends the hand").
+  canastaengine.cpp:1232 sets `goingOut` when a discard leaves the
+  hand empty, which is the owner's route.
+
+  So this is one new field in canasta::Rules and a refusal, not a
+  branch -- the House set turns the meld-out route off, Classic keeps
+  it. Same shape as every other house variation.
+
+  Black threes are HALF there already: group() at :643 and
+  validateGroups() at :787 refuse a black-three meld unless goingOut,
+  so "you may only put them down on the way out" is enforced. What is
+  absent is the four-of-them case earning their 20 as a meld rather
+  than being caught for them in hand.
+
+  OPEN, and it decides the shape: does laying the four black threes
+  REPLACE the final discard -- hand empty, nothing thrown -- or do you
+  lay them AND still throw a last card? Asked 2026-08-24, unanswered
+  at filing. Under the first reading the exception really is an
+  exception to "the last action is a discard"; under the second the
+  discard rule is absolute and the exception is only about WHEN a
+  black three may be melded, which the engine already allows. The two
+  produce different refusals and a different AI end-game.
+
+  Also unresolved: with the meld-out route closed, Ai::closingOut and
+  the closing block in chooseMelds both have to leave a card to throw
+  rather than emptying the hand, or the AI will spend the endgame
+  proposing lay-downs the engine refuses.
+  ANSWERED 2026-08-24, and it is neither reading the question offered.
+  The owner: "You don't throw away anything, everything in your hand must
+  be put down on melds and all that remains must be the four black 3's
+  that you then lay down as a meld."
+
+  So the exception is a full MELD-OUT, not a discard with a meld attached.
+  The rule in two parts:
+
+    - To go out you end by throwing your last card. A lay-down that
+      empties the hand is refused.
+    - UNLESS that lay-down puts every other card onto melds and lays all
+      four black threes as a meld of their own. Then the hand ends empty
+      with nothing thrown, and the threes bank their 20.
+
+  Consequences for the build. The gate is on the LAY-DOWN that empties the
+  hand, so it belongs where keepsADiscard already lives -- it is the same
+  question ("must you keep a card to throw?") with a second answer. The
+  exception has to inspect the GROUPS, not the hand: it fires only when a
+  black-three meld of exactly four is among them.
+
+  Not changed: black threes melding at all. group() and validateGroups()
+  already allow a black-three meld only when going out, and minMeldSize
+  lets three of them stand. The owner named four because four is what
+  earns the 20; nothing he said forbids a three-card black meld alongside
+  a discard, so that stays as it is.
+
+  Not changed: scoring. A melded black three is already worth
+  blackThreeValue on the table via Meld::value, so four of them are 20
+  without a scoring branch.
+  Resolved (2026-08-24), to the owner's clarified rule rather than to
+  either reading the question offered him.
+
+  One new field, canasta::Rules::goingOutNeedsADiscard, off in Classic and
+  on by default in House (key "discardOut"). The gate is four lines in
+  Engine::keepsADiscard, which already owned the question "must you keep a
+  card to throw?" -- a lay-down leaving handAfter == 0 is refused unless
+  laysFourBlackThrees() finds all four in one meld among the groups. Asked
+  of the GROUPS rather than the hand, because it is the shape of the move
+  that earns the exception.
+
+  Placed BEFORE the requireCanastaToGoOut logic and falling through to it,
+  so both rules bind at once: a hand that earns the black-three exception
+  still may not go out without a canasta.
+
+  Save format: tail 4 on the engine stream, view version 4 -> 5. A game
+  saved by an older build still loads and comes back without the rule, per
+  the tail's existing contract.
+
+  Two checks, and the second is the one that matters. canastaHouseGoesOut
+  OnAThrownCard builds one position and plays the identical lay-down under
+  both rule sets -- seven aces open and make a canasta, then the whole
+  remaining hand goes down. Classic allows it either way; House allows it
+  only when the remainder is the four black threes. Proved by mutation:
+  stubbing the gate to `if (false)` reddens "but otherwise refuses a
+  lay-down that empties the hand", and it was restored from a copy rather
+  than by git, since the tree carried other uncommitted work.
+
+  The check first asserted the REFUSAL MESSAGE off canMeldCards, and that
+  was wrong: canMeldCards validates into a local QString and never touches
+  m_error, so lastError() after it is whatever an earlier move left. It
+  now plays the move for real with meldCards, which both sets the error
+  and proves the allowed arms actually end the hand.
+
+  And goingOutNeedsADiscard was added to the four-computer full-game house
+  run. That loop exists to catch a hand that cannot legally continue, and
+  this rule REMOVES a legal move, which is how a seat ends up with nothing
+  it may do. Four seeded games complete, so it does not strand one.
+
+  NOT done, and it is the reason this bullet's own body flagged it: the AI
+  is not taught the rule. Ai::chooseMelds will still propose a lay-down
+  that empties the hand, the engine refuses it, and playAndDiscard falls
+  through to its discard -- correct, but a wasted call each time, and the
+  AI never deliberately goes out by meld. Left for the AI pass, where
+  closingOut is being rewritten anyway.
+
+  Suite green: 451 checks, 6/6 under ctest.
+  **Layman:** At the family table the round ends when you throw your last card away -- melding your whole hand and stopping is not how it is done.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0121] **The computer throws safe cards at a side that cannot take the pack yet.**
+  The owner: "What the computer currently does is (after the first
+  round that is) throw away cards you have already thrown away even
+  though my team hasn't opened yet. While a team is struggling to open
+  there is no need to be careful about what you throw away until they
+  open. Only then can they take the pack. This is less relevant when
+  the opening score is 15 / 50 as it is a lot easier to open at that
+  score. It gets more relevant at 90 and very relevant at 120."
+
+  His premise checks out, and it is sharper than it first looks. An
+  unopened side taking the pack must ALSO open with it -- the meld it
+  makes has to clear their opening minimum. So the bar is not "two
+  matching naturals", it is "two matching naturals that build a
+  lay-down worth 120", which is why he grades it by band.
+
+  Where it lands is NOT discardRisk. That function already returns 0
+  the moment `theirs.meldOfRank(rank)` is null, and an unopened side
+  has no melds at all -- so the feeding-their-meld term is already
+  silent here. What is still firing against an unopened side is the
+  pack-counting half of chooseDiscard: Hard's `safety -= 2.5 * shown`,
+  Expert's `safety += 50 * countRank(pile, rank)`, and the shared
+  `9.0 * (4 - min(4, unseen))` and `-0.9 * unseen * (1 + 0.12 *
+  pileSize)` pair. None of those asks whether the opposition could use
+  the pack if it were handed to them.
+
+  So the shape is a DISCOUNT on the safety accumulator scaled by the
+  opposing side's openRequirement -- near nothing at 15 and 50, real at
+  90, heavy at 120 -- and not a veto. chooseDiscard already gathers
+  every such judgement into `safety` precisely so it can be scaled or
+  dropped in one place, which is what the first-round rule does today.
+
+  This is the live form of the instinct GHUB-0101 was filed for and got
+  wrong. That bullet aimed it at FREEZING, where the premise was false
+  because a freeze outlives the unopened state. Aimed at the DISCARD it
+  holds, because a throw is spent the turn it is made. Sits with
+  GHUB-0108, which scales the same accumulator by pack size; both are
+  modifiers on one number and should be written together.
+  **Layman:** While the other side still has to open, they can barely touch the pack -- so being careful what you throw at them is caution spent on nothing.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0122] **Opening on a joker to keep the pair that takes the pack, then freezing it.**
+  The owner's second way of fishing, in his words: "say the opening
+  score is 50 and you have a big joker (50 points) and four 8's. You
+  open with the joker and two 8's and then freeze the pack. Or if the
+  pack is already frozen then you only put out as little as possible to
+  open the table for your team."
+
+  The play is one move with two halves. Open on the MINIMUM, spending a
+  joker to make the value up rather than spending naturals -- joker +
+  two 8s is 70 against a 50 bar -- so the other two 8s stay in hand.
+  Then freeze the pack yourself. A frozen pack wants two matching
+  naturals out of hand, and you are now the only side at the table
+  holding a pair.
+
+  Half of it already ships and half does not. The frozen-pack case --
+  "if the pack is already frozen then you only put out as little as
+  possible" -- is the opening trim at canastaai.cpp:316-333, which
+  sorts the groups cheapest-first and drops any the minimum does not
+  need. GHUB-0104's note already records that as done. What is missing
+  is that the trim fires only `if (m_level != Level::Easy &&
+  e.pileFrozen())`. This play needs it when the pack is NOT yet frozen,
+  because freezing it is the second half of the same move.
+
+  Also missing: the trim drops whole ranks but never chooses to spend a
+  WILD to keep a natural pair back. The wild-card branch below it only
+  fires when the naturals alone fall short of the bar, so a hand that
+  can open on naturals never reaches for the joker -- which is exactly
+  the hand this play is about.
+
+  Filed apart from GHUB-0103 deliberately, though the owner calls both
+  fishing. That one is discard bait and lives in chooseDiscard; this
+  one is opening shape plus a freeze and lives in chooseMelds' opening
+  path and wantsToFreeze. Same instinct, different functions, and the
+  freeze half has to agree with GHUB-0113's budget rather than fight
+  it.
+  **Layman:** Open with as little as you can, using a joker to make up the points, so the matching pair stays in your hand -- then freeze the pack that only you can now take.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on

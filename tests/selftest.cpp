@@ -2201,6 +2201,85 @@ void canastaAiHoldsWhileFrozen()
     }
 }
 
+// Going out the house way (GHUB-0120): the last action is a thrown card, so a
+// lay-down that empties the hand is refused however legal its melds are. The
+// one exception is the hand that finishes on all four black threes — everything
+// else onto melds, the threes down together, and nothing thrown.
+//
+// Both halves are proved from the same position under both rule sets, because
+// "refused" says nothing on its own: the identical lay-down has to be ALLOWED
+// with the rule off, or the check is only observing a malformed meld. The
+// refusal message is asserted for the same reason.
+void canastaHouseGoesOutOnAThrownCard()
+{
+    // Seven aces open and make a canasta in one move, so going out is legal
+    // from here and this check is about the way out rather than about the
+    // canasta requirement standing in front of it.
+    const std::vector<Card> aces { cd(Suit::Spades, kAce),  cd(Suit::Hearts, kAce),
+                                   cd(Suit::Clubs, kAce),   cd(Suit::Diamonds, kAce),
+                                   cd(Suit::Spades, kAce),  cd(Suit::Hearts, kAce),
+                                   cd(Suit::Clubs, kAce) };
+    const std::vector<Card> threes { cd(Suit::Spades, 3), cd(Suit::Clubs, 3),
+                                     cd(Suit::Spades, 3), cd(Suit::Clubs, 3) };
+    const std::vector<Card> sevens { cd(Suit::Spades, 7), cd(Suit::Hearts, 7),
+                                     cd(Suit::Clubs, 7), cd(Suit::Diamonds, 7) };
+
+    // Cards come off the back, so the last card here is the one drawn first: an
+    // ace, which extends the canasta and makes the remaining hand a lay-down
+    // that empties itself in both arms.
+    std::vector<Card> below(kBelowCount - 1, cd(Suit::Clubs, 9));
+    below.push_back(cd(Suit::Diamonds, kAce));
+
+    for (int house = 0; house < 2; ++house) {
+        for (int blackThrees = 0; blackThrees < 2; ++blackThrees) {
+            const std::vector<Card>& rest = blackThrees != 0 ? threes : sevens;
+
+            std::array<std::vector<Card>, 4> hands;
+            hands[0] = filler(10);
+            hands[1] = aces;
+            hands[1].insert(hands[1].end(), rest.begin(), rest.end());
+            hands[2] = filler(kJack);
+            hands[3] = filler(kKing);
+
+            ca::Rules r = ca::Rules::classic();
+            r.goingOutNeedsADiscard = house != 0;
+            ca::Engine e(r);
+            e.newGameFromStock(canastaStock(hands, 0, below, cd(Suit::Diamonds, 6)), 0);
+            check(e.currentSeat() == 1, "canasta: seat 1 leads on the going-out check");
+            e.drawFromStock();
+            check(e.meldCards(aces), "canasta: seven aces open and make a canasta");
+
+            // Everything still in hand, laid down at once. Under the classic
+            // rule this is a legal way out; under the house rule only the black
+            // threes earn it.
+            std::vector<Card> out { cd(Suit::Diamonds, kAce) };
+            out.insert(out.end(), rest.begin(), rest.end());
+            check(e.hand(1).size() == out.size(),
+                  "canasta: the lay-down being tested is the whole hand");
+
+            // meldCards rather than canMeldCards: the const form validates into
+            // a LOCAL error string and never touches m_error, so lastError()
+            // after it is whatever some earlier move left behind. Playing the
+            // move for real is also the stronger claim — the allowed arms end
+            // the hand rather than merely being judged legal.
+            const bool allowed = e.meldCards(out);
+            const bool expected = house == 0 || blackThrees != 0;
+            check(allowed == expected,
+                  house == 0 ? "canasta: the classic game lets you meld out with anything"
+                             : (blackThrees != 0
+                                    ? "canasta: the house rule lets you finish on four black threes"
+                                    : "canasta: but otherwise refuses a lay-down that empties "
+                                      "the hand"));
+            if (allowed)
+                check(e.phase() != ca::Engine::Phase::Play && e.wentOutSeat() == 1,
+                      "canasta: and the hand ends on it, with seat 1 out");
+            else
+                check(e.lastError().contains(QStringLiteral("throwing your last card")),
+                      "canasta: and refuses it for that reason, not a malformed meld");
+        }
+    }
+}
+
 // What a side that has not opened may do with the pile, and what changing the
 // rules mid-game does to the game.
 //
@@ -2622,8 +2701,10 @@ void canastaFirstRoundAndPileOpening()
                      : "canasta: aces alongside take the pile too");
     }
 
-    // All five house rules at once, played out by four computers, because the
-    // failure that matters here is a hand that cannot legally continue.
+    // Every house rule at once, played out by four computers, because the
+    // failure that matters here is a hand that cannot legally continue. Said
+    // without a count: the list grows, and a stale number reads as a claim that
+    // the set is complete when it is not.
     ca::Rules house = ca::Rules::classic();
     house.name = QStringLiteral("House");
     house.targetScore = 3000;
@@ -2632,6 +2713,10 @@ void canastaFirstRoundAndPileOpening()
     house.canastaMakesRankSafe = true;
     house.wildsFewerThanNaturals = true;
     house.canastaNeededToScore = true;
+    // The house way out (GHUB-0120). It belongs here more than any of the
+    // others: it REMOVES a legal move, and removing one is how a seat ends up
+    // with nothing it may do — which this loop's guard is what catches.
+    house.goingOutNeedsADiscard = true;
 
     std::array<ca::Ai, ca::kSeats> ai { ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Hard },
                                         ca::Ai { ca::Level::Hard }, ca::Ai { ca::Level::Hard } };
@@ -2979,6 +3064,7 @@ int main()
     canastaAiOpens();
     canastaTakeAndOpenTogether();
     canastaAiHoldsWhileFrozen();
+    canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();
     canastaWildValueGoesWhereItCounts();
     canastaCanastaNeededToScore();

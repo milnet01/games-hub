@@ -354,6 +354,7 @@ void Engine::save(QDataStream& out) const
     out << m_rules.pileFrozenUntilOpened << m_pendingRules.pileFrozenUntilOpened; // tail 2
     out << m_rules.deadHandIfNobodyGoesOut
         << m_pendingRules.deadHandIfNobodyGoesOut; // tail 3
+    out << m_rules.goingOutNeedsADiscard << m_pendingRules.goingOutNeedsADiscard; // tail 4
 }
 
 bool Engine::load(QDataStream& in, int tail)
@@ -421,6 +422,8 @@ bool Engine::load(QDataStream& in, int tail)
         readPair(e.m_rules.pileFrozenUntilOpened, e.m_pendingRules.pileFrozenUntilOpened);
     if (tail >= 3)
         readPair(e.m_rules.deadHandIfNobodyGoesOut, e.m_pendingRules.deadHandIfNobodyGoesOut);
+    if (tail >= 4)
+        readPair(e.m_rules.goingOutNeedsADiscard, e.m_pendingRules.goingOutNeedsADiscard);
     if (in.status() != QDataStream::Ok)
         return false;
 
@@ -1010,9 +1013,35 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
 // no canasta, you may not go out, and discarding that card would be going out.
 // Nothing legal remains, and the turn cannot be finished. So the lay-down that
 // would get you there is what has to be refused.
+// The four black threes laid together, which is the one lay-down allowed to
+// empty a hand under goingOutNeedsADiscard. Asked of the GROUPS rather than of
+// the hand, because it is the shape of the move that earns the exception: all
+// four, in one meld, on the way out.
+static bool laysFourBlackThrees(const std::vector<Meld>& groups)
+{
+    for (const Meld& g : groups) {
+        if (g.rank != 3 || g.cards.size() != 4)
+            continue;
+        if (std::all_of(g.cards.begin(), g.cards.end(), isBlackThree))
+            return true;
+    }
+    return false;
+}
+
 bool Engine::keepsADiscard(int team, std::size_t handAfter, const std::vector<Meld>& groups,
                            QString& error) const
 {
+    // The house way out: the last action is a thrown card, so a lay-down that
+    // empties the hand is refused whatever else is true of it. Checked before
+    // the canasta rule below rather than instead of it — a hand that earns the
+    // black-three exception still may not go out without a canasta, and falling
+    // through to that check is what keeps both rules binding at once.
+    if (m_rules.goingOutNeedsADiscard && handAfter == 0 && !laysFourBlackThrees(groups)) {
+        error = QStringLiteral("You go out by throwing your last card — keep one back to "
+                               "throw, or finish on all four black threes.");
+        return false;
+    }
+
     if (!m_rules.requireCanastaToGoOut)
         return true;
     if (handAfter >= 2)

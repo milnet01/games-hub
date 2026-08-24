@@ -207,6 +207,7 @@ void storeHouse(const ca::Rules& r)
     put("noMeldFirstRound", r.noMeldingFirstRound ? 1 : 0);
     put("pileOpens", r.pileMeldCountsToOpen ? 1 : 0);
     put("deadHand", r.deadHandIfNobodyGoesOut ? 1 : 0);
+    put("discardOut", r.goingOutNeedsADiscard ? 1 : 0);
     put("teeFreeze", r.freezeCardMakesATee ? 1 : 0);
     put("stackCanastas", r.canastasStackOnRedThrees ? 1 : 0);
 }
@@ -248,6 +249,9 @@ ca::Rules loadHouse()
     // profile that has never saved house rules — a stored 0 is a choice and
     // stays a 0.
     r.noMeldingFirstRound = get("noMeldFirstRound", 1) != 0;
+    // On by default in the House set, for the same reason as the two above: it
+    // is how the owner's family ends a hand rather than a variation offered.
+    r.goingOutNeedsADiscard = get("discardOut", 1) != 0;
     r.pileMeldCountsToOpen = get("pileOpens", 1) != 0;
     // The one house default that deliberately differs from classic: a hand the
     // stock kills is void here unless it is turned off, because scoring a hand
@@ -329,6 +333,9 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                            rules.pileMeldCountsToOpen);
     auto* deadHand = tick(QStringLiteral("A hand nobody goes out on scores nothing"),
                           rules.deadHandIfNobodyGoesOut);
+    auto* discardOut = tick(QStringLiteral("You go out by throwing your last card, unless you "
+                                           "finish on all four black threes"),
+                            rules.goingOutNeedsADiscard);
 
     // How the table is laid out rather than what is legal on it. Same dialog,
     // because to the people playing they are house rules like any other.
@@ -384,6 +391,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                          firstRound->setChecked(c.noMeldingFirstRound);
                          pileOpens->setChecked(c.pileMeldCountsToOpen);
                          deadHand->setChecked(c.deadHandIfNobodyGoesOut);
+                         discardOut->setChecked(c.goingOutNeedsADiscard);
                          teeFreeze->setChecked(c.freezeCardMakesATee);
                          stackCanastas->setChecked(c.canastasStackOnRedThrees);
                      });
@@ -414,6 +422,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
     rules.noMeldingFirstRound = firstRound->isChecked();
     rules.pileMeldCountsToOpen = pileOpens->isChecked();
     rules.deadHandIfNobodyGoesOut = deadHand->isChecked();
+    rules.goingOutNeedsADiscard = discardOut->isChecked();
     rules.freezeCardMakesATee = teeFreeze->isChecked();
     rules.canastasStackOnRedThrees = stackCanastas->isChecked();
     storeHouse(rules);
@@ -666,7 +675,7 @@ QByteArray CanastaView::saveState() const
     out.setVersion(QDataStream::Qt_6_0);
     // Each version adds another pair to the engine's tail: rules that did not
     // exist when the version before it was written.
-    out << quint32(4);
+    out << quint32(5);
     m_engine.save(out);
     out << qint32(m_level) << m_useHouse << qint32(m_target) << m_sortHand;
     return blob;
@@ -680,7 +689,7 @@ bool CanastaView::restoreState(const QByteArray& blob)
     in >> version;
     // A game saved by an older build still comes back; it simply predates the
     // rules its tail does not carry, and their defaults stand.
-    if (version < 1 || version > 4 || !m_engine.load(in, int(version) - 1))
+    if (version < 1 || version > 5 || !m_engine.load(in, int(version) - 1))
         return false;
 
     qint32 level = 0;

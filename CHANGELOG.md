@@ -10,6 +10,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Canasta: going out the way the family plays it** (GHUB-0120)
+  A new House rule, on by default. The round ends when you throw
+  your last card away -- laying your whole hand down and stopping is
+  no longer a way out. The one exception is finishing on all four
+  black threes: everything else goes onto melds, the four threes go
+  down together, nothing is thrown, and they earn their 20 instead of
+  being caught in your hand. Classic Canasta is unchanged and still
+  lets you meld out with anything.
+
 - **Canasta: a stacked canasta names itself by the colour of its top card** (GHUB-0097)
   Red for a canasta with no wild card in it, black for one built with a joker or a two.
 

@@ -73,6 +73,15 @@ struct Rules {
     int blackThreeValue = 5;
 
     bool requireCanastaToGoOut = true;
+    // How the hand ENDS. At the family table the last action is always a
+    // thrown card, so a lay-down that empties the hand is refused however
+    // legal its melds are. The one exception is the hand that finishes on all
+    // four black threes: everything else goes onto melds, the four threes go
+    // down together, and nothing is thrown — which is also the only way they
+    // are ever worth their 20 rather than being caught in hand. The classic
+    // game lets you meld out with anything, which is why this is off by
+    // default.
+    bool goingOutNeedsADiscard = false;
     // A black three on top stops anyone taking the pile.
     bool blackThreeBlocksPile = true;
     // Melds made purely of wild cards. Not part of the classic game.
