@@ -118,16 +118,21 @@ struct Rules {
 
     // --- Table conventions ---------------------------------------------
     // How the table is laid OUT, rather than what is legal on it. The engine
-    // reads nothing here and not one move changes with it. It lives here
-    // because it is a house rule in every sense that matters to the people
-    // playing -- "we don't do it like that" -- and because Rules is already
-    // the one thing the House dialog edits, stores and restores. A second
-    // struct would need its own dialog rows, its own settings keys and its
-    // own Classic/House switch, all to keep a layering line tidy.
+    // reads neither of these and not one move changes with them. They live
+    // here because they are house rules in every sense that matters to the
+    // people playing -- "we don't do it like that" -- and because Rules is
+    // already the one thing the House dialog edits, stores and restores. A
+    // second struct for two booleans would need its own dialog rows, its own
+    // settings keys and its own Classic/House switch, all to keep a layering
+    // line tidy.
 
     // The wild card that freezes the pile lies with one end against the pile
     // rather than squarely across its middle, making a T instead of a cross.
     bool freezeCardMakesATee = false;
+    // A finished canasta is squared up and laid on the team's red threes, each
+    // one turned ninety degrees from the one below so the stack can be counted
+    // by its edges. Off, canastas stay fanned in the meld row.
+    bool canastasStackOnRedThrees = false;
 
     static Rules classic() { return {}; }
 };

@@ -306,6 +306,89 @@ int main(int argc, char* argv[])
         Legibility::instance().setEnabled(false);
     }
 
+    // ---- canastaStackFitsItsBand (GHUB-0096)
+    //
+    // The house rule takes a finished canasta out of the meld row, squares it up
+    // and lays it on the team's red threes, each one turned ninety degrees from
+    // the one below. Two ways that goes wrong, and neither shows in a game that
+    // has not made four canastas yet.
+    //
+    // A canasta is drawn off the end of the band, onto the centre row or under
+    // the side seats' fans. What has to fit is not the card but its whole
+    // footprint -- the ring is drawn outside the card and the badge is drawn
+    // wider than it -- which is what canastaStackExtent is for, and asserting
+    // the card alone is how the right-hand end came to hang over the edge.
+    //
+    // Or the slide is too small and the badges land on one another, at which
+    // point the stack cannot be read at all. That one was real: measured on
+    // screen at 1.34 cards of slide, a four-canasta stack was unreadable, and
+    // the badge is what NAMES a canasta at this size, because the shared card
+    // art draws the corner index alone below CardArt::kFaceMinWidth.
+    //
+    // Walked rather than played: canastaStackRect takes the count, so a stack of
+    // any depth is checkable without playing one into existence.
+    {
+        for (const bool legible : { false, true }) {
+            Legibility::instance().setEnabled(legible);
+            CanastaView canasta;
+            canasta.resize(canasta.minimumSize());
+            const QString where = legible ? QStringLiteral("large play")
+                                          : QStringLiteral("normal play");
+            // The room one canasta reserves for its badge. The layout's own
+            // figure, so this asserts what the code does rather than what this
+            // machine's fonts happen to measure -- `windows-2022` under the
+            // offscreen platform has no font environment at all.
+            const double clear = canasta.smallestFaceWidth() * 1.70;
+
+            for (int team = 0; team < canasta::kTeams; ++team) {
+                const QRectF band = canasta.bandFor(team);
+                // Eight is past anything a hand produces, and that is the point
+                // of asking: the far end is where a layout stops fitting.
+                int readable = 0;
+                for (int count = 1; count <= 8; ++count) {
+                    bool spaced = true;
+                    QRectF previous;
+                    for (int i = 0; i < count; ++i) {
+                        const QRectF box = canasta.canastaStackRect(team, i, count);
+                        check(band.contains(canasta.canastaStackExtent(team, i, count)),
+                              qPrintable(QStringLiteral("canasta: canasta %1 of %2 keeps its ring "
+                                                        "and badge inside the band (%3)")
+                                             .arg(i + 1).arg(count).arg(where)));
+                        // Across, then upright, then across. The alternation is
+                        // the whole point of the house rule: it lets the stack
+                        // be counted without reading a single index.
+                        const bool across = i % 2 == 0;
+                        check(across == (box.width() > box.height()),
+                              qPrintable(QStringLiteral("canasta: canasta %1 lies %2, alternating "
+                                                        "with the one below it (%3)")
+                                             .arg(i + 1)
+                                             .arg(across ? QStringLiteral("across")
+                                                         : QStringLiteral("upright"))
+                                             .arg(where)));
+                        if (i > 0 && previous.right() - box.right() < clear)
+                            spaced = false;
+                        previous = box;
+                    }
+                    if (spaced)
+                        readable = count;
+                }
+                // How deep a stack keeps every badge clear. It moves with the
+                // window and with the band's share of it, so it is REPORTED --
+                // and what is asserted is the floor the layout promises. Past
+                // it the slide narrows on purpose: crowded badges are a far
+                // cheaper failure than a canasta drawn off the table, and the
+                // containment check above is what holds that line.
+                std::printf("      canasta stack: %d canastas keep their badges clear, %s, %s\n",
+                            readable, team == 0 ? "your side" : "theirs",
+                            qPrintable(where));
+                check(readable >= 4,
+                      qPrintable(QStringLiteral("canasta: at least four canastas stack with every "
+                                                "badge readable (%1)").arg(where)));
+            }
+        }
+        Legibility::instance().setEnabled(false);
+    }
+
     // ---- canastaLegibilityReverses (GHUB-0017 INV-6, in Canasta's own numbers)
     //
     // The second withdrawn invariant. The switch raises the minimum size, so Qt

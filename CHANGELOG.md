@@ -10,6 +10,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Canasta: a stacked canasta names itself by the colour of its top card** (GHUB-0097)
+  Red for a canasta with no wild card in it, black for one built with a joker or a two.
+
+- **Canasta house rule: finished canastas stack on the red threes, turned about** (GHUB-0096)
+  A completed canasta leaves the meld row, squares up and lies on the team's red threes -- across, then upright, then across -- so the stack can be counted by its edges. Each one slides along far enough to keep its own name badge readable. On in House rules, off in Classic.
+
 - **Canasta house rule: the card that freezes the pack lies as a T** (GHUB-0095)
   One end against the pile rather than squarely across its middle. On in House rules, off in Classic.
 

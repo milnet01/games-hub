@@ -64,6 +64,30 @@ public:
     // what the UI test asserts; the panel itself is drawn from it.
     QRectF messageRect() const;
 
+    // Where the `index`th finished canasta of a stack of `count` is laid, when
+    // the house rule stacks them on the red threes. The index is the order they
+    // were COMPLETED in, and the orientation alternates with it -- across,
+    // upright, across -- which is how the stack is counted at a glance.
+    //
+    // Takes the count rather than reading it, so a test can walk a stack of any
+    // depth without playing a position into existence. Public for the same
+    // reason messageRect() is: it is what the UI test asserts.
+    QRectF canastaStackRect(int team, int index, int count) const;
+    // The same canasta's WHOLE footprint: the card, the ring drawn round it and
+    // the badge under it. That is what has to fit the band, and the card alone
+    // does not -- both are drawn wider or taller than the card they belong to.
+    QRectF canastaStackExtent(int team, int index, int count) const;
+    // The strip of table a team's melds and canastas are laid out in. Public
+    // for the same reason messageRect() is: it is what the UI test asserts the
+    // stack against, and a stack that leaves the band lands on the centre row.
+    QRectF bandFor(int team) const;
+    // The ranks of `team`'s finished canastas, oldest first, and empty unless
+    // the house rule is on. The ORDER is the view's own: a meld becomes a
+    // canasta long after it was laid, so the engine's meld order is not it, and
+    // sorting by that would make an earlier canasta stand up when a later one
+    // completed.
+    std::vector<int> canastaOrder(int team) const;
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -111,17 +135,30 @@ private:
     double cardHeight() const;
     QPointF stockCentre() const;
     QPointF pileCentre() const;
-    QRectF bandFor(int team) const;
     QPointF handCentre(int index, int count, bool lifted) const;
     double handAngle(int index, int count) const;
     QPointF opponentCentre(int seat, int index, int count) const;
+    // Where a card laid on rank `rank` belongs, whether that rank is still a
+    // meld in the row or a canasta that has left it for the stack. One answer,
+    // so the animation and the table can never point at different places.
+    QPointF meldCardTarget(int team, int rank, int index) const;
+    // Keeps m_canastaOrder in step with the melds. Called wherever they can
+    // change: refresh, a new game, a restored one.
+    void trackCanastas();
+    // How far the meld row may run before the canasta stack begins. The stack
+    // grows leftward out of the red threes into the room the canastas leaving
+    // the row just freed, so the two share one budget rather than overlapping.
+    double meldRowWidth(int team) const;
     // Where the card that froze the pile sits, given the point in the stack it
     // belongs at. Classic lays it squarely across; the house rule slides it
     // along its own length into a T.
     QPointF freezeCardCentre(const QPointF& seat) const;
+    double stackRingPad() const;
     double opponentAngle(int seat, int index, int count) const;
     // Melds are laid out in fixed slots so a meld does not jump sideways when
-    // another one appears next to it.
+    // another one appears next to it. Under the stacking house rule the row
+    // re-spaces once per canasta, when the finished one leaves it for the
+    // stack -- see meldCardCentre.
     std::vector<int> meldOrder(int team) const;
     QPointF meldCardCentre(int team, int slot, int index) const;
     QPointF seatAnchor(int seat) const;
@@ -170,6 +207,11 @@ private:
     // --- painting ---
     void paintTable(QPainter& p);
     void paintMelds(QPainter& p);
+    void paintCanastaStack(QPainter& p, int team);
+    // The plate that names a meld, shared by the row and the stack. `topCentre`
+    // is where its top edge is centred.
+    void paintMeldBadge(QPainter& p, const canasta::Meld& m, const QPointF& topCentre,
+                        bool canasta);
     void paintOpponents(QPainter& p);
     void paintCentre(QPainter& p);
     void paintCentreStrip(QPainter& p);
@@ -214,6 +256,13 @@ private:
     bool m_sortHand = true;
     // North plays Expert whatever the opponents are set to.
     bool m_sharpPartner = false;
+
+    // Each team's finished canastas in the order they were completed, which is
+    // what decides whether one lies across or upright. Kept here rather than in
+    // the engine because it is a fact about the picture: nothing about play
+    // changes with it. Rebuilt from the melds on restore -- a resumed game
+    // shows the position as it settles, which is where the cards were anyway.
+    std::array<std::vector<int>, canasta::kTeams> m_canastaOrder;
 
     std::vector<Flight> m_flights;
     // Cleared and refilled every paint, so one flight suppresses exactly one

@@ -46,6 +46,16 @@ constexpr double kFlourish = 1.3;
 // slivers — which is why each one carries a "K ×5" badge naming it. The
 // legibility switch buys the face back, by way of kLegibleCardWidth.
 constexpr double kMeldScale = 0.74;
+// What one canasta in the stack reserves for its name badge, in card widths.
+// The slide between canastas and the footprint each one claims are the SAME
+// figure, so a stack that fits the band is a stack whose badges are readable.
+//
+// The plate itself is measured from the font -- max(cw * 1.20, the label plus
+// its padding) -- so a long label on a wide face can spill a few pixels over
+// its neighbour's card. That is cosmetic and deliberately not asserted
+// anywhere: font metrics are a property of the machine, not of this code, and
+// `windows-2022` under the offscreen platform has no font environment at all.
+constexpr double kStackBadgeRoom = 1.75;
 
 // A meld is the smallest card Canasta draws a FACE on. The opponents' hands are
 // drawn at 0.8 but face DOWN, so the threshold never applies to them, and the
@@ -112,6 +122,37 @@ int canastaCount(const ca::Team& t, const ca::Rules& r)
                              [&](const ca::Meld& m) { return m.isCanasta(r); }));
 }
 
+// The card a squared-up canasta is turned face up under. Red says there is no
+// wild card in it, black says there is -- the universal table marker, and the
+// one the code's gold and silver rings were already standing in for.
+//
+// The owner's family calls a two a small joker and the 50-point one a big
+// joker, so a two makes a canasta mixed exactly as a joker does. That is also
+// what isNatural() means and what the 300-point bonus is paid on, so the top
+// card, the ring and the score all say one thing (GHUB-0097).
+//
+// A natural card is preferred over a wild of the right colour, so the corner
+// index names the canasta's own rank wherever it can. Seven cards of one rank
+// always contain a red one, and a mixed canasta almost always contains a black
+// one -- but four naturals CAN all be red across two packs, so the fallback is
+// real rather than defensive.
+Card canastaTopCard(const ca::Meld& m, const ca::Rules& r)
+{
+    const bool wantRed = m.isNatural(r);
+    const Card* wildFallback = nullptr;
+    for (const Card& c : m.cards) {
+        if (isRed(c) != wantRed)
+            continue;
+        if (!ca::isWild(c))
+            return c;
+        if (wildFallback == nullptr)
+            wildFallback = &c;
+    }
+    if (wildFallback != nullptr)
+        return *wildFallback;
+    return m.cards.empty() ? Card {} : m.cards.back();
+}
+
 QString seatName(int seat)
 {
     switch (seat) {
@@ -167,6 +208,7 @@ void storeHouse(const ca::Rules& r)
     put("pileOpens", r.pileMeldCountsToOpen ? 1 : 0);
     put("deadHand", r.deadHandIfNobodyGoesOut ? 1 : 0);
     put("teeFreeze", r.freezeCardMakesATee ? 1 : 0);
+    put("stackCanastas", r.canastasStackOnRedThrees ? 1 : 0);
 }
 
 ca::Rules loadHouse()
@@ -211,10 +253,11 @@ ca::Rules loadHouse()
     // stock kills is void here unless it is turned off, because scoring a hand
     // nobody could finish rewards the side that sat on a frozen pile.
     r.deadHandIfNobodyGoesOut = get("deadHand", 1) != 0;
-    // On by default here for the same reason as the minus: it is how the
-    // owner's family lays the table, and House is the set that exists to
-    // match them. Classic keeps it off.
+    // Both on by default here for the same reason as the minus: they are how
+    // the owner's family lays the table, and House is the set that exists to
+    // match them. Classic keeps both off.
     r.freezeCardMakesATee = get("teeFreeze", 1) != 0;
+    r.canastasStackOnRedThrees = get("stackCanastas", 1) != 0;
     return r;
 }
 
@@ -288,9 +331,11 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                           rules.deadHandIfNobodyGoesOut);
 
     // How the table is laid out rather than what is legal on it. Same dialog,
-    // because to the people playing it is a house rule like any other.
+    // because to the people playing they are house rules like any other.
     auto* teeFreeze = tick(QStringLiteral("The card that freezes the pack lies as a T"),
                            rules.freezeCardMakesATee);
+    auto* stackCanastas = tick(QStringLiteral("Finished canastas stack on the red threes"),
+                               rules.canastasStackOnRedThrees);
 
     auto* layout = new QVBoxLayout(&dlg);
     auto* blurb = new QLabel(
@@ -334,6 +379,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                          pileOpens->setChecked(c.pileMeldCountsToOpen);
                          deadHand->setChecked(c.deadHandIfNobodyGoesOut);
                          teeFreeze->setChecked(c.freezeCardMakesATee);
+                         stackCanastas->setChecked(c.canastasStackOnRedThrees);
                      });
 
     if (dlg.exec() != QDialog::Accepted)
@@ -363,6 +409,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
     rules.pileMeldCountsToOpen = pileOpens->isChecked();
     rules.deadHandIfNobodyGoesOut = deadHand->isChecked();
     rules.freezeCardMakesATee = teeFreeze->isChecked();
+    rules.canastasStackOnRedThrees = stackCanastas->isChecked();
     storeHouse(rules);
     return true;
 }
@@ -653,6 +700,12 @@ bool CanastaView::restoreState(const QByteArray& blob)
     m_lastThrownBy = -1;
     m_message.clear();
     m_canastasShown = canastaCount(m_engine.team(0), m_engine.rules());
+    // Rebuilt from the melds, so a resumed game stacks them in the engine's
+    // order rather than the order they were really completed in. The real
+    // order was never saved and is not worth a stream field: a restored game
+    // shows the position as it settles, which is where the cards were anyway.
+    m_canastaOrder = {};
+    trackCanastas();
     // A hand that had just been scored is waiting on a click, exactly as it was.
     m_awaitingContinue = m_engine.phase() == ca::Engine::Phase::HandOver;
 
@@ -983,9 +1036,15 @@ QPointF CanastaView::freezeCardCentre(const QPointF& seat) const
 
 std::vector<int> CanastaView::meldOrder(int team) const
 {
+    // A finished canasta leaves the row for the stack on the red threes, so
+    // the melds still being built spread out into the room it left.
+    const bool stacked = m_engine.rules().canastasStackOnRedThrees;
     std::vector<int> ranks;
-    for (const ca::Meld& m : m_engine.team(team).melds)
+    for (const ca::Meld& m : m_engine.team(team).melds) {
+        if (stacked && m.isCanasta(m_engine.rules()))
+            continue;
         ranks.push_back(m.rank);
+    }
     // Aces sort last so the row reads low to high, with black threes first.
     std::sort(ranks.begin(), ranks.end(), [](int a, int b) {
         const int ka = a == kAce ? 14 : a;
@@ -995,14 +1054,155 @@ std::vector<int> CanastaView::meldOrder(int team) const
     return ranks;
 }
 
+std::vector<int> CanastaView::canastaOrder(int team) const
+{
+    if (!m_engine.rules().canastasStackOnRedThrees)
+        return {};
+    // Filtered rather than trusted: m_canastaOrder is the order they were
+    // completed in, and a hand can end between one paint and the next.
+    std::vector<int> out;
+    for (int rank : m_canastaOrder[std::size_t(team)]) {
+        const ca::Meld* m = m_engine.team(team).meldOfRank(rank);
+        if (m != nullptr && m->isCanasta(m_engine.rules()))
+            out.push_back(rank);
+    }
+    return out;
+}
+
+double CanastaView::stackRingPad() const
+{
+    // The gap between a stacked canasta and the ring drawn round it. Shared by
+    // the painter and canastaStackExtent, because a ring the extent does not
+    // know about is a ring that hangs over the edge of the table.
+    return cardWidth() * kMeldScale * 0.12;
+}
+
+QRectF CanastaView::canastaStackExtent(int team, int index, int count) const
+{
+    const QRectF box = canastaStackRect(team, index, count);
+    const double pad = stackRingPad();
+    // The badge is centred on the card and is usually WIDER than it, so a
+    // footprint of the card alone understates the stack -- which is exactly how
+    // the right-hand end came to hang over the edge of the band.
+    const double room = cardWidth() * kMeldScale * kStackBadgeRoom;
+    const double overhang = std::max(0.0, (room - box.width()) * 0.5);
+    return box.adjusted(-pad - overhang, -pad, pad + overhang,
+                        pad + 3.0 + cardWidth() * kMeldScale * 0.52);
+}
+
+QRectF CanastaView::canastaStackRect(int team, int index, int count) const
+{
+    const QRectF band = bandFor(team);
+    const double cw = cardWidth() * kMeldScale;
+    const double ch = cardHeight() * kMeldScale;
+    // Across, then upright, then across. The alternation is the whole point of
+    // the house rule: it lets the stack be counted without reading one index.
+    const bool across = index % 2 == 0;
+    const double w = across ? ch : cw;
+    const double h = across ? cw : ch;
+
+    // Slid along rather than squared exactly on top, so a strip of every
+    // canasta under the top one stays out WITH ITS OWN BADGE -- which is what
+    // decides the step, since the badge is what actually names a canasta at
+    // this size. Clamped so a side that makes six of them still fits the band
+    // rather than running off it; badges may then crowd, which is a far
+    // cheaper failure than a canasta drawn outside the table.
+    const double budget = band.width() * 0.52;
+    // kStackBadgeRoom is what one canasta reserves for its badge, and the slide
+    // is that same figure -- measured, not guessed: at 1.34 cards the badges of
+    // a four-canasta stack ran into each other and the stack could not be read
+    // at all, which is the one thing this layout was chosen over a squared pile
+    // to avoid. It narrows only when a stack is too deep for the band, where
+    // crowded badges beat a canasta drawn off the table.
+    const double step = count < 2
+        ? 0.0
+        : std::min(cw * kStackBadgeRoom, std::max(cw * 0.5, (budget - ch) / double(count - 1)));
+
+    // Index 0 lies over the red threes at the right end -- the T the owner's
+    // family makes with them -- and the stack grows left into the room its own
+    // canastas freed by leaving the meld row.
+    // Far enough in that the RING and the BADGE clear the band too, not just
+    // the card: both are drawn wider than the card they belong to, and at
+    // 0.15 they hung over the edge of the table.
+    const double rightEdge = band.right() - cw * 0.45 - step * double(index);
+    // Aligned by their TOPS, not their centres, so the alternation shows as a
+    // stepped lower edge and each badge sits clear of its neighbour's. Down by
+    // the ring's own width, because the ring is drawn OUTSIDE the card and at
+    // band.top() exactly it was hanging over the edge of the band.
+    const double top = band.top() + stackRingPad();
+    return { rightEdge - w, top, w, h };
+}
+
+double CanastaView::meldRowWidth(int team) const
+{
+    const QRectF band = bandFor(team);
+    const double threes = cardWidth() * kMeldScale * 1.5;
+    if (!m_engine.rules().canastasStackOnRedThrees)
+        return band.width() * 0.84;
+    const int n = int(canastaOrder(team).size());
+    // The red threes keep their corner whether anything is stacked on them or
+    // not, so an empty stack still costs the row that much.
+    const double taken = n == 0 ? threes
+                                : band.right() - canastaStackRect(team, n - 1, n).left();
+    // A floor, because the row still has to hold the melds in play: past this
+    // the two are allowed to touch rather than the melds being squeezed away.
+    return std::max(band.width() * 0.34, band.width() - taken - cardWidth() * kMeldScale * 0.5);
+}
+
+QPointF CanastaView::meldCardTarget(int team, int rank, int index) const
+{
+    // One answer for "where does this card belong", so a card laid on a
+    // canasta flies to the stack and a card laid on a meld flies to the row.
+    // Without it a card completing a canasta simply appeared, because the
+    // flight loop looked the rank up in a row it had just left.
+    const std::vector<int> stack = canastaOrder(team);
+    const auto found = std::find(stack.begin(), stack.end(), rank);
+    if (found != stack.end())
+        return canastaStackRect(team, int(found - stack.begin()), int(stack.size())).center();
+
+    const std::vector<int> ranks = meldOrder(team);
+    const auto slot = std::find(ranks.begin(), ranks.end(), rank);
+    if (slot == ranks.end())
+        return bandFor(team).center();
+    return meldCardCentre(team, int(slot - ranks.begin()), index);
+}
+
+void CanastaView::trackCanastas()
+{
+    for (int t = 0; t < ca::kTeams; ++t) {
+        std::vector<int>& seen = m_canastaOrder[std::size_t(t)];
+        const ca::Team& team = m_engine.team(t);
+        // Anything that is no longer a canasta -- a new hand, a restored game
+        // -- drops out, and the rest keep the order they were completed in.
+        seen.erase(std::remove_if(seen.begin(), seen.end(),
+                                  [&](int rank) {
+                                      const ca::Meld* m = team.meldOfRank(rank);
+                                      return m == nullptr || !m->isCanasta(m_engine.rules());
+                                  }),
+                   seen.end());
+        for (const ca::Meld& m : team.melds) {
+            if (!m.isCanasta(m_engine.rules()))
+                continue;
+            if (std::find(seen.begin(), seen.end(), m.rank) == seen.end())
+                seen.push_back(m.rank);
+        }
+    }
+}
+
 QPointF CanastaView::meldCardCentre(int team, int slot, int index) const
 {
     const QRectF band = bandFor(team);
     // Room is always kept for at least six melds plus the red threes, so a new
     // meld appearing never shoves the others sideways. Not named `slots`: Qt
     // defines that as a keyword macro, and it silently expands to nothing.
-    const int slotCount = std::max(6, int(m_engine.team(team).melds.size()));
-    const double usable = band.width() * 0.84;
+    //
+    // Under the stacking house rule the row DOES re-space once, at the moment a
+    // meld becomes a canasta and leaves it -- the row loses a slot and the
+    // stack takes a little more of the band. That is the real table's move
+    // rather than a slip: you lift the finished canasta out and close the gap.
+    // It happens once per canasta and never mid-turn.
+    const int slotCount = std::max(6, int(meldOrder(team).size()));
+    const double usable = meldRowWidth(team);
     const double pitch = usable / slotCount;
     const double x = band.left() + pitch * (slot + 0.5);
     const double step = cardHeight() * kMeldScale * 0.17;
@@ -1037,6 +1237,14 @@ int CanastaView::handIndexAt(const QPointF& pos) const
 
 int CanastaView::meldRankAt(const QPointF& pos) const
 {
+    // The stack first and topmost-down, because it is drawn last and a canasta
+    // that has left the row can still be added to.
+    const std::vector<int> stack = canastaOrder(0);
+    for (int i = int(stack.size()) - 1; i >= 0; --i) {
+        if (canastaStackRect(0, i, int(stack.size())).contains(pos))
+            return stack[std::size_t(i)];
+    }
+
     const std::vector<int> ranks = meldOrder(0);
     for (std::size_t s = 0; s < ranks.size(); ++s) {
         const ca::Meld* m = m_engine.team(0).meldOfRank(ranks[s]);
@@ -1148,7 +1356,12 @@ void CanastaView::flyToPile(const Card& c, const QPointF& from)
 void CanastaView::flyMeldArrivals(int team, std::vector<std::pair<int, Card>> gains,
                                   const QPointF& from, double& delay)
 {
-    const std::vector<int> ranks = meldOrder(team);
+    // Every meld the team owns, canastas included. meldOrder() alone leaves
+    // the stacked ones out, and the card that COMPLETED a canasta is exactly
+    // the one whose flight matters most -- without this it simply appeared.
+    std::vector<int> ranks = meldOrder(team);
+    for (int rank : canastaOrder(team))
+        ranks.push_back(rank);
     for (std::size_t s = 0; s < ranks.size(); ++s) {
         const ca::Meld* m = m_engine.team(team).meldOfRank(ranks[s]);
         if (m == nullptr)
@@ -1165,7 +1378,7 @@ void CanastaView::flyMeldArrivals(int team, std::vector<std::pair<int, Card>> ga
             Flight f;
             f.card = c;
             f.from = from;
-            f.to = meldCardCentre(team, int(s), i);
+            f.to = meldCardTarget(team, ranks[s], i);
             f.faceUp = true;
             f.speed = 4.8;
             f.delay = delay;
@@ -1393,6 +1606,10 @@ void CanastaView::announce(const QString& text)
 
 void CanastaView::refresh()
 {
+    // Before anything reads the layout: a canasta completed since the last
+    // refresh decides where every card in the stack is drawn.
+    trackCanastas();
+
     const ca::Team& us = m_engine.team(0);
     const ca::Team& them = m_engine.team(1);
 
@@ -1669,6 +1886,10 @@ void CanastaView::paintEvent(QPaintEvent* event)
 
     paintTable(p);
     paintMelds(p);
+    // After the melds, so the stack lies OVER the red threes it is laid on --
+    // which is what makes the first canasta read as a T with them.
+    for (int team = 0; team < ca::kTeams; ++team)
+        paintCanastaStack(p, team);
     paintOpponents(p);
     paintCentre(p);
     paintCentreStrip(p);
@@ -1709,6 +1930,41 @@ void CanastaView::paintTable(QPainter& p)
         p.setPen(Qt::NoPen);
         p.drawEllipse(a, cardHeight() * 1.5, cardHeight() * 1.5);
     }
+}
+
+void CanastaView::paintMeldBadge(QPainter& p, const ca::Meld& m, const QPointF& topCentre,
+                                bool canasta)
+{
+    // Shared by the meld row and the canasta stack, because the badge is what
+    // NAMES a meld at this size -- the card art draws the corner index and
+    // nothing else below CardArt::kFaceMinWidth, so a stack of sevens and a
+    // stack of eights are the same picture. Two copies of it would be two
+    // answers to "what is this pile".
+    const double scale = kMeldScale;
+    const double bh = cardWidth() * scale * 0.52;
+    const QString name = m.rank == 3 ? QStringLiteral("3♠") : rankLabel(m.rank);
+    // The wild count rides on the badge because a squared or stacked meld
+    // shows only slivers, and "is there a joker in there?" is the question it
+    // has to answer at a glance.
+    const int wilds = m.wilds();
+    const QString label = wilds > 0
+        ? QStringLiteral("%1 ×%2 ★%3").arg(name).arg(m.size()).arg(wilds)
+        : QStringLiteral("%1 ×%2").arg(name).arg(m.size());
+
+    QFont bf = p.font();
+    bf.setPixelSize(std::max(9, int(bh * 0.72)));
+    bf.setBold(true);
+    const double bw = std::max(cardWidth() * scale * 1.20,
+                               QFontMetricsF(bf).horizontalAdvance(label) + bh * 0.9);
+
+    const QRectF badge(topCentre.x() - bw * 0.5, topCentre.y(), bw, bh);
+    QPainterPath plate;
+    plate.addRoundedRect(badge, bh * 0.4, bh * 0.4);
+    p.fillPath(plate, kPanel);
+
+    p.setFont(bf);
+    p.setPen(canasta ? Theme::kGold : kInkDim);
+    p.drawText(badge, Qt::AlignCenter, label);
 }
 
 void CanastaView::paintMelds(QPainter& p)
@@ -1752,43 +2008,8 @@ void CanastaView::paintMelds(QPainter& p)
             // a stack of sevens and a stack of eights look alike from across
             // the table. The badge is what actually names the meld.
             const QPointF last = meldCardCentre(team, int(s), m->size() - 1);
-            const double bh = cardWidth() * scale * 0.52;
-            double bw = cardWidth() * scale * 1.20;
-            {
-                QFont probe = p.font();
-                probe.setPixelSize(std::max(9, int(bh * 0.72)));
-                probe.setBold(true);
-                const int wildCount = m->wilds();
-                const QString probeText = wildCount > 0
-                    ? QStringLiteral("%1 ×%2 ★%3")
-                          .arg(ranks[s] == 3 ? QStringLiteral("3♠") : rankLabel(ranks[s]))
-                          .arg(m->size())
-                          .arg(wildCount)
-                    : QStringLiteral("%1 ×%2")
-                          .arg(ranks[s] == 3 ? QStringLiteral("3♠") : rankLabel(ranks[s]))
-                          .arg(m->size());
-                bw = std::max(bw, QFontMetricsF(probe).horizontalAdvance(probeText) + bh * 0.9);
-            }
-            const QRectF badge(last.x() - bw * 0.5, last.y() + cardHeight() * scale * 0.5 + 3.0,
-                               bw, bh);
-            QPainterPath plate;
-            plate.addRoundedRect(badge, bh * 0.4, bh * 0.4);
-            p.fillPath(plate, kPanel);
-
-            QFont bf = p.font();
-            bf.setPixelSize(std::max(9, int(bh * 0.72)));
-            bf.setBold(true);
-            p.setFont(bf);
-            p.setPen(canasta ? Theme::kGold : kInkDim);
-            const QString name = ranks[s] == 3 ? QStringLiteral("3♠") : rankLabel(ranks[s]);
-            // The wild count is on the badge because a stacked meld shows only
-            // slivers, and "is there a joker in there?" is the question a meld
-            // has to answer at a glance.
-            const int wilds = m->wilds();
-            const QString label = wilds > 0
-                ? QStringLiteral("%1 ×%2 ★%3").arg(name).arg(m->size()).arg(wilds)
-                : QStringLiteral("%1 ×%2").arg(name).arg(m->size());
-            p.drawText(badge, Qt::AlignCenter, label);
+            paintMeldBadge(p, *m, QPointF(last.x(), last.y() + cardHeight() * scale * 0.5 + 3.0),
+                           canasta);
             if (lit) {
                 const QPointF centre = meldCardCentre(team, int(s), 0);
                 const double w = cardWidth() * scale;
@@ -1806,6 +2027,47 @@ void CanastaView::paintMelds(QPainter& p)
                                      + cardHeight() * scale * 0.26 * double(i));
             paintCard(p, t.redThrees[i], centre, 0.0, true, scale);
         }
+    }
+}
+
+void CanastaView::paintCanastaStack(QPainter& p, int team)
+{
+    const std::vector<int> stack = canastaOrder(team);
+    if (stack.empty())
+        return;
+
+    const ca::Team& t = m_engine.team(team);
+    const int count = int(stack.size());
+    // Oldest first, so each new canasta covers the one it was laid on -- which
+    // is the order they went down in, and the order the eye expects.
+    for (int i = 0; i < count; ++i) {
+        const int rank = stack[std::size_t(i)];
+        const ca::Meld* m = t.meldOfRank(rank);
+        if (m == nullptr)
+            continue;
+
+        const QRectF box = canastaStackRect(team, i, count);
+        const Card top = canastaTopCard(*m, m_engine.rules());
+        // In the air, so not on the table. Brief, and the same convention the
+        // rest of the game holds: a card is never drawn in two places.
+        if (suppressed(Dest::Meld, team, rank, top))
+            continue;
+
+        // Squared up: one card shows, and its colour says natural or mixed.
+        paintCard(p, top, box.center(), (i % 2 == 0) ? 90.0 : 0.0, true, kMeldScale);
+
+        // The ring the meld row gives a canasta, kept: at this size the top
+        // card's colour is a small signal, and the owner reads slowly.
+        const double pad = stackRingPad();
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(m->isNatural(m_engine.rules()) ? Theme::kGold : QColor(0xd0, 0xd6, 0xdd),
+                      2.2));
+        p.drawRoundedRect(box.adjusted(-pad, -pad, pad, pad), 6, 6);
+
+        paintMeldBadge(p, *m, QPointF(box.center().x(), box.bottom() + pad + 3.0), true);
+
+        if (team == 0 && m_hoverMeld == rank)
+            CardArt::paintHighlight(p, box, Theme::kGold);
     }
 }
 

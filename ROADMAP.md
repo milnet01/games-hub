@@ -1536,7 +1536,7 @@ draws, whether or not it has had one.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0096] **House rule: finished canastas stack on the red threes, turned about.**
+- ✅ [GHUB-0096] **House rule: finished canastas stack on the red threes, turned about.**
   The owner's family plays it this way with or without red
   threes under the pile. Each new canasta turns ninety degrees
   from the one below, which is how the stack is counted at a
@@ -1551,11 +1551,38 @@ draws, whether or not it has had one.
 
   Off in Classic, on in House. Off, canastas stay in the meld
   row exactly as now.
+  Resolved (2026-08-24): Rules::canastasStackOnRedThrees, off in Classic
+  and on by default in House. meldOrder() drops a finished canasta from
+  the row and canastaStackRect() lays it on the red threes, index 0
+  across over them and each one after that turned ninety degrees and
+  slid left into the room the row just freed.
+
+  The slide is kStackBadgeRoom = 1.75 card widths, which is what one
+  canasta reserves for its badge -- measured on screen, not guessed: at
+  1.34 the badges of a four-canasta stack ran into one another and the
+  stack could not be read at all, which is the one thing the staircase
+  was chosen over a squared pile to avoid. The reservation and the slide
+  are the same figure, so a stack that fits the band is a stack whose
+  badges are readable.
+
+  The order is the view's, not the engine's: a meld becomes a canasta
+  long after it was laid, and sorting by meld order would make an
+  earlier canasta stand up when a later one completed.
+
+  canastaStackFitsItsBand in the UI test walks stacks one to eight deep
+  in both legibility states, asserting the whole footprint -- card, ring
+  and badge -- stays in the band and that the alternation holds. It
+  asserts a floor of four canastas fully spaced and REPORTS the real
+  capacity, which moves with the window. Both defects were proved to
+  redden it: the narrow slide, and the right-hand end hanging over the
+  edge of the band.
+
+  Seen rather than reasoned about, which is what GHUB-0090 was for.
   **Layman:** A completed canasta is squared up and laid on the team's red threes -- across, then upright, then across again -- so you can count them by their edges.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0097] **A finished canasta names itself by the colour of its top card.**
+- ✅ [GHUB-0097] **A finished canasta names itself by the colour of its top card.**
   The universal table convention, and the one the code's own
   comment already reaches for -- paintMelds rings a canasta
   gold or silver and calls that "the traditional red/black
@@ -1571,6 +1598,21 @@ draws, whether or not it has had one.
   Only applies to a canasta squared up in the stack. An
   unfinished meld keeps its wilds-first fan, which is what
   the owner reads a meld's contents from.
+  Resolved (2026-08-24): canastaTopCard() picks the card a squared
+  canasta is turned up under -- red when the meld holds no wild, black
+  when it does. It prefers a natural of the wanted colour so the corner
+  index names the canasta's own rank, falls back to a wild of that
+  colour, and falls back again to the last card. That last step is real
+  rather than defensive: four naturals CAN all be red across two packs.
+
+  Mixed means any wild, a two exactly as much as a joker. The owner
+  confirmed the vocabulary himself the same day -- his family calls a
+  two a small joker and the 50-point one a big joker -- which is also
+  what isNatural() means and what the 300-point bonus is paid on, so the
+  top card, the ring and the score all say one thing.
+
+  The gold and silver rings stay. The top card's colour is a small
+  signal and the owner reads slowly.
   **Layman:** A canasta with no wild cards in it is squared up with a red card showing; one built with a joker or a two shows a black card.
   Kind: feature.
   Source: user-request-2026-08-24.
@@ -3197,6 +3239,37 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
+- 📋 [GHUB-0104] **The computer lays melds down while the pack is frozen, spending the pairs that would take it.**
+  Rules-grounded rather than a taste call, which is what makes
+  it checkable. Engine::canTakePile demands two matching cards
+  from HAND against a frozen pile. A pair melded is a pair no
+  longer in hand, so every meld laid down while the pack is
+  frozen quietly spends the only key to it.
+
+  So while the pack is frozen the AI should hold, and lay down
+  only on one of two triggers the owner named:
+
+    - it is going for the minus (GHUB-0099), where ending the
+      hand is worth more than the pack; or
+    - it has no realistic chance of taking the pack anyway --
+      no pair that matches it, or the pile is out of reach for
+      another reason.
+
+  Terminology, worth carrying into GHUB-0102: the owner's
+  family calls the pile the PACK. The game says "pile"
+  everywhere, including in the refusal messages a player
+  actually reads.
+
+  Fourth of the AI items with GHUB-0099, GHUB-0100, GHUB-0101
+  and GHUB-0103, and it interacts with all of them: holding
+  cards back is the opposite instinct to going out, so the
+  levels have to be re-measured against each other once they
+  all land -- canastaLevelsDiffer() is what caught Hard playing
+  weaker than Medium.
+  **Layman:** A frozen pack can only be taken with two matching cards from your hand -- so melding those cards away is giving up on the pack without noticing.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
 ### 🧰 Tests
 
 - 💭 [GHUB-0020] **A legality check that does not rely on the author's imagination.**
@@ -3375,6 +3448,40 @@ open.
   **Layman:** Every launch deals a different hand, so two screenshots of the same game cannot be put side by side to see what a change did.
   Kind: enhancement.
   Source: in-session-2026-08-22 GHUB-0092 fix.
+
+- 📋 [GHUB-0105] **The self-test failed once under ctest and has not failed again in forty-five runs.**
+  Observed 2026-08-24 while shipping GHUB-0096. `ctest` reported
+  `selftest ***Failed` once. The same binary had passed
+  immediately before and has passed every time since: 25 direct
+  runs, 6 ctest runs of selftest alone, 3 full ctest runs and a
+  10-run ctest loop. No FAIL line was captured, so the failing
+  check is unknown.
+
+  What was ruled out. canastaMatch, the obvious suspect because
+  its margins are thin (hard v medium won 68 of 120 against a
+  bar of 61), is fully seeded -- Engine::newGame(seed), Ai::seed
+  per seat, and nextHand() deals from the already-seeded m_rng.
+  The reversi two-second search budget was measured at 4 ms, so
+  it is not close. Neither is evidence-free, but neither
+  explains it.
+
+  Worth knowing while chasing it: a single unexplained red run
+  is the same signal as a green run over a stale binary, and
+  this project has a documented trap for exactly that -- chaining
+  a build and a test on one shell line races the linker. That is
+  NOT what happened here (build and run were separate calls),
+  which is what makes it worth an item rather than a shrug.
+
+  Not caused by that session's changes: the engine additions were
+  new functions plus two display-only Rules fields, and the view
+  is not linked into gameshub_selftest at all.
+
+  Next step is to catch it with output rather than to guess:
+  loop ctest with --output-on-failure and keep the log until it
+  reproduces.
+  **Layman:** One test run went red and nothing since has reproduced it, so something in the suite is not as repeatable as it looks.
+  Kind: investigate.
+  Source: in-session-2026-08-24.
 
 ### 🎨 More games, if wanted
 
