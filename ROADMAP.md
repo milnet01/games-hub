@@ -3177,6 +3177,36 @@ open.
   Rules-grounded rather than a taste call: Engine::canTakePile
   treats an unopened side exactly as it treats a frozen pile,
   which is what makes the freeze redundant.
+  Attempted 2026-08-24 and REVERTED: the premise does not hold. The
+  two halves of Engine::canTakePile's `mustUseTwoNaturals` -- `m_frozen
+  || (pileFrozenUntilOpened && !team.opened)` at canastaengine.cpp:931
+  -- are not interchangeable, because they have different LIFETIMES.
+  `!team.opened` ends the moment that side opens, which they control and
+  will do. `m_frozen` is cleared in exactly one place, canastaengine.cpp
+  :1154, inside takePile -- never when a side opens. So a freeze thrown
+  while the opponents are unopened is still in force after they open. It
+  is a pre-emptive lock, not a redundant one, and the bullet above reads
+  its own key sentence backwards: "the freeze outlives the position that
+  made it pointless" is the BENEFIT rather than the cost.
+
+  Measured as well as reasoned. The guard was written (one condition in
+  Ai::wantsToFreeze, skipping the freeze while the opposing team had not
+  opened) with a two-arm self-test check that passed both ways, and the
+  seeded ladder in canastaLevelsDiffer() moved against it on every rung
+  the change could reach: hard v easy 23/24 +3670 -> 22/24 +3376, hard v
+  medium 68/120 +208 -> 65/120 +52, and expert v hard 129/240 +135 ->
+  113/240 -127, which fails "expert beats hard" outright. Medium v easy
+  was unchanged, confirming the guard reached only the two levels
+  wantsToFreeze serves. Both files reverted; the tree is back to 416
+  checks green.
+
+  What the owner actually raised is still real and unanswered: a two or
+  a joker spent freezing is worth 20 or 50 in the hand. But it is not
+  spent for nothing, so the fix is not a skip. If it is worth pursuing
+  the shape would be a PRICE rather than a veto -- freeze only when the
+  pile is already big enough that the pre-emptive lock is likely to pay
+  -- and that is a tuned threshold, which is his call and would need
+  measuring against the ladder rather than fitted to it.
   **Layman:** Throwing a joker to freeze the pack is wasted when neither side has opened yet -- the pack is already out of reach for both of them.
   Kind: feature.
   Source: user-request-2026-08-24.
@@ -3266,6 +3296,35 @@ open.
   levels have to be re-measured against each other once they
   all land -- canastaLevelsDiffer() is what caught Hard playing
   weaker than Medium.
+  Attempted 2026-08-24 and REVERTED. Unlike GHUB-0101 the premise here
+  holds: canastaengine.cpp:933 wants naturalsOfTop >= 2 out of HAND
+  against a frozen pile, so a melded pair really is a spent key.
+
+  Note the hold itself already ships -- Ai::holdsWhileFrozen exists and
+  the opening path already trims a frozen-pile opening down to the
+  minimum the band asks for. What was missing was only this bullet's
+  SECOND release trigger, no realistic chance of taking the pack. The
+  narrowest rules-grounded form of it is that a rank the seat holds just
+  ONE of can never be the two naturals, so holding it back buys nothing:
+  one line, `if (naturals < 2) return false;`. A check proved it both
+  ways from one position -- the lone ace goes down, three sevens stay
+  back -- and passed.
+
+  It still went back, because it makes the AI slightly WORSE. Measured
+  on the seeded ladder at the shipped 240 games: expert v hard 129/240
+  +135 -> 115/240 -121, failing "expert beats hard"; hard v medium
+  68/120 -> 63/120; medium v easy moved too (21 -> 22), which is the
+  expected signature since holdsWhileFrozen serves every level above
+  Easy. Re-measured at 1200 games to rule out a small sample: 621/1200
+  +36 baseline against 584/1200 -102 with the change, about a 2-sigma
+  shift, so the loss is real rather than noise.
+
+  Why holding the lone card wins is NOT established -- the effect is
+  small and no mechanism was proved. Do not re-attempt this on the
+  strength of the rules argument alone; it is correct about the pile and
+  still loses. The measurement that would settle it needs the instrument
+  filed alongside this note, because the ladder cannot separate a small
+  gain from noise in either direction.
   **Layman:** A frozen pack can only be taken with two matching cards from your hand -- so melding those cards away is giving up on the pack without noticing.
   Kind: feature.
   Source: user-request-2026-08-24.
@@ -3573,6 +3632,48 @@ open.
   **Layman:** One test run went red and nothing since has reproduced it, so something in the suite is not as repeatable as it looks.
   Kind: investigate.
   Source: in-session-2026-08-24.
+
+- 📋 [GHUB-0110] **The ladder that guards every AI change is too blunt to measure one.**
+  canastaLevelsDiffer() is the project's only judge of an AI change --
+  CLAUDE.md says outright that any change to one level has to be
+  re-measured against its neighbours, and it is what caught Hard playing
+  weaker than Medium. Measured 2026-08-24, it has almost no headroom on
+  its top rung.
+
+  The numbers. "expert beats hard" plays 240 seeded games and asks only
+  for a bare majority, so it needs 121. Baseline is 129 -- about +1.16
+  sigma on 240 coin flips, eight games clear of failing. Re-run at 1200
+  games the baseline is 621, or 51.75%, so Expert's true edge over Hard
+  is roughly 1.75 points of win rate and the average score margin is +36
+  a game against the +3000 the easy rungs show.
+
+  Two consequences, and the lane runs into both. An edge that small
+  needs roughly 3300 games to stand at 2 sigma, so at 240 the check
+  passes partly on luck. And ANY perturbation of canastaai.cpp moves it
+  by more than its whole margin: GHUB-0101's guard took it to 113/240
+  and GHUB-0104's to 115/240, and those two changes are not the same
+  kind of thing -- one was wrong on the rules and one was right on them.
+  The instrument failed both identically, which is the definition of not
+  measuring.
+
+  Every one of GHUB-0099, GHUB-0100, GHUB-0102, GHUB-0103 and GHUB-0104
+  edits canastaai.cpp, so all of them land in front of this check.
+
+  Routes, none picked. Raise the game count -- honest but slow, and 3300
+  games is roughly 25 seconds inside a suite that runs in three. Judge
+  on average score margin rather than win count, which carries more
+  information per game. Judge these items by targeted position checks
+  instead, the way canastaAiHoldsWhileFrozen and canastaFirstRoundSafeThrow
+  already do, and let the ladder guard only against a rung INVERTING.
+  Or take the reading at face value and treat "Expert is barely stronger
+  than Hard" as the defect to fix, which is what the six AI items are
+  for anyway.
+
+  The last is probably the real finding: the ladder is not only blunt,
+  it is reporting that the top two rungs are nearly the same player.
+  **Layman:** The test that decides whether a change to the computer player helped cannot actually tell a small improvement from luck, so it blocks good changes and bad ones alike.
+  Kind: investigate.
+  Source: in-session-2026-08-24 GHUB-0101 and GHUB-0104 attempts.
 
 ### 🎨 More games, if wanted
 
