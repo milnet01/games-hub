@@ -3592,7 +3592,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0116] **All four players should see the same book, and one device cannot do that.**
+- 🚧 [GHUB-0116] **All four players should see the same book, and one device cannot do that.**
   The owner asked for this as "make it an app rather than a webpage",
   and that is worth recording carefully because it is not what decides
   it. A native Android app installed on four phones is four separate
@@ -3614,6 +3614,32 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Android. Do not pick an architecture before those are answered -- the
   first rules out the server, the second rules out most of the work, and
   the third rules out a native Android answer.
+  Progress (2026-08-24): built and pushed, deliberately NOT marked
+  shipped. The code is complete and every part of it is verified in
+  isolation -- module and worker parse, ctest 6/6, three screens shot
+  headless at phone size, the fallback path exercised by there being no
+  config to find. What has NOT happened is the only test that matters
+  for this bullet: two devices actually in step. That needs a Firebase
+  project, which needs the owner's Google login, so it cannot be done
+  from here.
+
+  Answers that shaped it, all from the owner: wifi at most places and
+  mobile otherwise, so a hosted store is viable; ONE person enters and
+  the rest watch, which removed the entire concurrent-write problem
+  rather than solving it; all four phones Android, though the web page
+  reaches an iPhone anyway and a substitute player is expected.
+
+  Firebase Realtime Database over the owner's first suggestion of
+  GitHub. GitHub is right for hosting -- Pages will serve this free over
+  HTTPS -- and wrong for the live score, for three reasons worth keeping:
+  a write needs a token no public page can hold, unauthenticated reads
+  cap near 60/hour against three phones polling, and raw files are
+  CDN-cached so watchers would lag behind the scorer.
+
+  Remaining, and none of it is code: the owner creates the project and
+  pastes the config block into scorepad/firebase-config.js, pastes the
+  rules from scorepad/README.md, and enables Pages on the repo. Then two
+  phones prove it.
   **Layman:** Everyone at the table should see the same running score on their own phone, updating as hands are entered.
   Kind: feature.
   Source: user-request-2026-08-24.
