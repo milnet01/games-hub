@@ -3270,6 +3270,97 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
+- 💭 [GHUB-0106] **Nothing counts how many of a rank are left, and two packs means eight.**
+  SUGGESTED, NOT REQUESTED. Offered to the owner on
+  2026-08-24 and not yet answered; filed as considered so it
+  survives the session rather than as planned work.
+
+  Two packs means eight of every rank. Once all eight are
+  visible -- melded anywhere, in the pack, or thrown -- that
+  rank is dead safe for the rest of the hand. Short of that,
+  four kings on the opponents' table means only four exist
+  anywhere else, which changes what a fifth one in hand is
+  worth.
+
+  The reason it is interesting here rather than merely
+  correct: it is something a computer does perfectly and a
+  person cannot, so it is a difficulty dial in its own right.
+  Easy forgets, Expert never does -- which is a more honest
+  way to make a level weak than making it play badly.
+
+  Sits with GHUB-0099 to GHUB-0104 as canastaai.cpp work.
+  **Layman:** Once all eight cards of a rank have been seen, that rank is safe to throw forever -- a computer can track that perfectly and a person cannot.
+  Kind: feature.
+  Source: claude-suggestion-2026-08-24.
+
+- 💭 [GHUB-0107] **Under the minus rule the FIRST canasta is insurance, and the AI prices it as 300 points.**
+  SUGGESTED, NOT REQUESTED. Offered to the owner on
+  2026-08-24 and not yet answered; filed as considered so it
+  survives the session rather than as planned work.
+
+  Follows from the owner's own rule rather than from general
+  Canasta. With canastaNeededToScore on -- the House default
+  since GHUB-0098 -- ending a hand with no canasta does not
+  merely forfeit a bonus: handScoreFor inverts that side's
+  melds and its red threes. So the first canasta is insurance
+  against a swing far larger than the 300 it pays.
+
+  Which argues for closing a cheap MIXED canasta early rather
+  than holding out for the 500-point natural -- the opposite
+  instinct to the one a scoring table alone suggests, and the
+  mirror of GHUB-0099: one says press for the minus, this says
+  buy protection from it.
+
+  Both sides of that trade belong in the same pass.
+  **Layman:** If being caught with no canasta turns your whole table against you, getting any canasta down early is worth far more than its bonus.
+  Kind: feature.
+  Source: claude-suggestion-2026-08-24.
+
+- 💭 [GHUB-0108] **How dangerous a throw is does not scale with how big the pack has grown.**
+  SUGGESTED, NOT REQUESTED. Offered to the owner on
+  2026-08-24 and not yet answered; filed as considered so it
+  survives the session rather than as planned work.
+
+  chooseDiscard weighs a card's danger as a fixed judgement.
+  But the stake is the pack, and the pack grows all hand: the
+  same throw that is nearly free on turn two can hand over
+  fifteen cards on turn twenty.
+
+  So the bar a throw has to clear should tighten with the size
+  of the pack rather than being one number. Early in a hand
+  almost anything is safe, which is also why the first-round
+  rule the owner plays (noMeldingFirstRound) costs so little.
+
+  Note the interaction with GHUB-0104 and Expert's existing
+  +50 x countRank(pile, rank) term, which is already a
+  pack-aware safety term -- this generalises it rather than
+  adding a second one beside it.
+  **Layman:** Handing over three cards is a nuisance; handing over fifteen can lose the hand -- so a throw should have to be safer as the pack grows.
+  Kind: feature.
+  Source: claude-suggestion-2026-08-24.
+
+- 💭 [GHUB-0109] **Black threes are a one-turn block and the AI spends them at random.**
+  SUGGESTED, NOT REQUESTED. Offered to the owner on
+  2026-08-24 and not yet answered; filed as considered so it
+  survives the session rather than as planned work.
+
+  blackThreeBlocksPile is on in both rule sets, so a black
+  three on top stops anyone taking the pack -- for exactly one
+  turn, until it is covered. That makes it a timing card: best
+  spent when the pack is fat AND the seat to the left is
+  live, not whenever it turns up.
+
+  The other half is that they are dead weight. A black three
+  only melds on the turn its side goes out and never takes a
+  wild, so a hand holding three of them is holding three cards
+  it mostly cannot use -- which argues for spending them
+  rather than hoarding them, and for spending them WELL.
+
+  Smaller than the other AI items and independent of them.
+  **Layman:** A black three stops the next player taking the pack for one turn -- worth saving for when the pack is fat and they look ready.
+  Kind: feature.
+  Source: claude-suggestion-2026-08-24.
+
 ### 🧰 Tests
 
 - 💭 [GHUB-0020] **A legality check that does not rely on the author's imagination.**

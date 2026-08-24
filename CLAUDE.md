@@ -43,6 +43,36 @@ cd build && ctest --output-on-failure   # both test binaries, the two --shot
 cmake --install build                   # refresh the installed copy
 ```
 
+**`--shot` photographs a game the moment it opens, which for a card game is a
+deal and nothing else.** Any layout that only appears once a hand has been
+played — Canasta's melds, its canasta stack, a frozen pack — is invisible to
+it. Getting one on screen took a **throwaway harness**, and the recipe is
+written down here because rebuilding it is half an hour and every piece of it
+is non-obvious:
+
+1. `kAiPause` to `0.0` in `canastaview.cpp`, or the computers move once a
+   second and nine seconds buys nine moves.
+2. The `else if (m_engine.currentSeat() != 0)` guard in `CanastaView::tick()`
+   to `else if (true)`, so seat 0 plays itself. Without it the game stops dead
+   on your turn and waits, which looks like the fast-forward not working.
+3. A spin in `takeShot()` before `window.grab()` — `QElapsedTimer` plus
+   `processEvents` for ~9 seconds.
+4. `XDG_CONFIG_HOME` pointed at a scratch directory holding a hand-written
+   `GamesHub/Games.conf`, so **the owner's real settings are never touched**.
+   It needs `useHouse=true` as well as the `house\...` keys — the rule set in
+   force is a separate setting, and with it missing the toolbar comes up
+   Classic and a house-rule layout never appears at all.
+5. `house\canastaSize=4` to make canastas form in one hand instead of five.
+
+Then revert all of it. **`git diff` is the check** — the harness must not
+survive into a commit.
+
+**Two things this found that no arithmetic in the project had flagged**: a
+four-canasta stack whose name badges landed on top of one another, and the
+right-hand end of that stack hanging over the edge of the band. GHUB-0093
+(a `--seed` flag) would make the shots comparable; a `--turns` flag would
+retire steps 1 to 3 and has not been asked for.
+
 Run a test binary directly for its per-check output — `ctest` only reports
 pass/fail:
 
