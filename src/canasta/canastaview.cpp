@@ -166,6 +166,7 @@ void storeHouse(const ca::Rules& r)
     put("noMeldFirstRound", r.noMeldingFirstRound ? 1 : 0);
     put("pileOpens", r.pileMeldCountsToOpen ? 1 : 0);
     put("deadHand", r.deadHandIfNobodyGoesOut ? 1 : 0);
+    put("teeFreeze", r.freezeCardMakesATee ? 1 : 0);
 }
 
 ca::Rules loadHouse()
@@ -194,7 +195,11 @@ ca::Rules loadHouse()
     r.unfrozenPileTakeableWithWild = get("wildTake", 1) != 0;
     r.wildsFewerThanNaturals = get("wildsFewer", 0) != 0;
     r.pileFrozenUntilOpened = get("frozenUntilOpen", 1) != 0;
-    r.canastaNeededToScore = get("canastaToScore", 0) != 0;
+    // On by default in the House set: the owner's family plays it, and calls
+    // it catching them a minus (GHUB-0098). The stored key keeps its old
+    // spelling -- renaming it would silently untick the rule for anyone who
+    // has already set it.
+    r.canastaNeededToScore = get("canastaToScore", 1) != 0;
     r.canastaMakesRankSafe = get("closedCanasta", 0) != 0;
     // On by default in the House set, unlike every other house flag: it is the
     // owner's family rule rather than a variation offered. Only reaches a
@@ -206,6 +211,10 @@ ca::Rules loadHouse()
     // stock kills is void here unless it is turned off, because scoring a hand
     // nobody could finish rewards the side that sat on a frozen pile.
     r.deadHandIfNobodyGoesOut = get("deadHand", 1) != 0;
+    // On by default here for the same reason as the minus: it is how the
+    // owner's family lays the table, and House is the set that exists to
+    // match them. Classic keeps it off.
+    r.freezeCardMakesATee = get("teeFreeze", 1) != 0;
     return r;
 }
 
@@ -263,8 +272,8 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                             rules.wildsFewerThanNaturals);
     auto* frozenUntilOpen = tick(QStringLiteral("The pile is frozen until your side has opened"),
                                  rules.pileFrozenUntilOpened);
-    auto* needCanastaToScore = tick(QStringLiteral("A side with no canasta counts nothing in its "
-                                                   "favour"),
+    auto* needCanastaToScore = tick(QStringLiteral("A side with no canasta is caught a minus: its "
+                                                   "own melds count against it"),
                                     rules.canastaNeededToScore);
     // Key still reads "closedCanasta" from when this rule was first written the
     // wrong way round: renaming it would silently untick it for anyone who has
@@ -277,6 +286,11 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                            rules.pileMeldCountsToOpen);
     auto* deadHand = tick(QStringLiteral("A hand nobody goes out on scores nothing"),
                           rules.deadHandIfNobodyGoesOut);
+
+    // How the table is laid out rather than what is legal on it. Same dialog,
+    // because to the people playing it is a house rule like any other.
+    auto* teeFreeze = tick(QStringLiteral("The card that freezes the pack lies as a T"),
+                           rules.freezeCardMakesATee);
 
     auto* layout = new QVBoxLayout(&dlg);
     auto* blurb = new QLabel(
@@ -319,6 +333,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                          firstRound->setChecked(c.noMeldingFirstRound);
                          pileOpens->setChecked(c.pileMeldCountsToOpen);
                          deadHand->setChecked(c.deadHandIfNobodyGoesOut);
+                         teeFreeze->setChecked(c.freezeCardMakesATee);
                      });
 
     if (dlg.exec() != QDialog::Accepted)
@@ -347,6 +362,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
     rules.noMeldingFirstRound = firstRound->isChecked();
     rules.pileMeldCountsToOpen = pileOpens->isChecked();
     rules.deadHandIfNobodyGoesOut = deadHand->isChecked();
+    rules.freezeCardMakesATee = teeFreeze->isChecked();
     storeHouse(rules);
     return true;
 }
@@ -722,6 +738,21 @@ void CanastaView::tick()
                     Scores::instance().recordHigh(Scores::canastaBestScore(),
                                                   m_engine.team(0).score);
                 }
+                // Say what just happened in the words the owner's family uses.
+                // Only when somebody actually went out: a hand the stock
+                // killed catches nobody, and a dead one scores nothing at all.
+                const int out = m_engine.wentOutSeat();
+                for (int t = 0; out >= 0 && t < ca::kTeams; ++t) {
+                    if (t == ca::teamOf(out)
+                        || !ca::caughtAMinus(m_engine.team(t), m_engine.rules()))
+                        continue;
+                    announce(t == 0
+                                 ? QStringLiteral("Caught a minus — you had no canasta, so your "
+                                                  "own melds counted against you.")
+                                 : QStringLiteral("Caught them a minus — West and East had no "
+                                                  "canasta, so their melds counted against "
+                                                  "them."));
+                }
                 m_awaitingContinue = true;
                 redraw = true;
                 refresh();
@@ -936,6 +967,18 @@ double CanastaView::opponentAngle(int seat, int index, int count) const
     if (seat == 2)
         return 180.0 + lean;
     return seat == 1 ? 90.0 + lean : 270.0 + lean;
+}
+
+QPointF CanastaView::freezeCardCentre(const QPointF& seat) const
+{
+    // Squarely across the middle is how the classic table does it, and it
+    // draws as a cross. The owner's family lays the card with one end against
+    // the pile instead, so it reads as a T: same card, same angle, shifted
+    // along its own length until its near edge lines up with the pile's.
+    // Outward, away from the stock, so the T never reaches back over it.
+    if (!m_engine.rules().freezeCardMakesATee)
+        return seat;
+    return { seat.x() + (cardHeight() - cardWidth()) * 0.5, seat.y() };
 }
 
 std::vector<int> CanastaView::meldOrder(int team) const
@@ -1844,24 +1887,36 @@ void CanastaView::paintCentre(QPainter& p)
     if (cards.empty()) {
         CardArt::paintSlot(p, QRectF(pile.x() - cw * 0.5, pile.y() - ch * 0.5, cw, ch));
     } else {
-        const int edges = std::min(5, int(cards.size()) - 1);
-        for (int i = edges; i >= 1; --i) {
-            const QRectF r(pile.x() - cw * 0.5 + i * 1.1, pile.y() - ch * 0.5 + i * 1.1, cw, ch);
-            QPainterPath path;
-            path.addRoundedRect(r, cw * 0.075, cw * 0.075);
-            p.fillPath(path, QColor(0xe8, 0xe3, 0xd8));
-            p.setBrush(Qt::NoBrush);
-            p.setPen(QPen(QColor(0, 0, 0, 50), 1));
-            p.drawPath(path);
+        // Deepest first, so a card thrown later covers the one it landed on.
+        // The card that froze the pile is turned sideways AT ITS OWN DEPTH and
+        // drawn once: found by a reverse search and painted just under the top
+        // card, it appeared twice over whenever the freezing throw was the most
+        // recent one, and climbed back over every discard after that
+        // (GHUB-0094).
+        const int last = int(cards.size()) - 1;
+        const int frozen = m_engine.freezeCardIndex();
+        for (int depth = std::min(5, last); depth >= 0; --depth) {
+            const int index = last - depth;
+            const Card& c = cards[std::size_t(index)];
+            // Only the top card can be in the air, and while it is, the pile
+            // shows what is under it rather than a card in two places.
+            if (depth == 0 && suppressed(Dest::Pile, 0, 0, c))
+                continue;
+            const QPointF at(pile.x() + depth * 1.1, pile.y() + depth * 1.1);
+            if (index == frozen) {
+                paintCard(p, c, freezeCardCentre(at), 90.0, true);
+            } else if (depth == 0) {
+                paintCard(p, c, at, 0.0, true);
+            } else {
+                const QRectF r(at.x() - cw * 0.5, at.y() - ch * 0.5, cw, ch);
+                QPainterPath path;
+                path.addRoundedRect(r, cw * 0.075, cw * 0.075);
+                p.fillPath(path, QColor(0xe8, 0xe3, 0xd8));
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(QColor(0, 0, 0, 50), 1));
+                p.drawPath(path);
+            }
         }
-        if (m_engine.pileFrozen()) {
-            const auto wild = std::find_if(cards.rbegin(), cards.rend(), ca::isWild);
-            if (wild != cards.rend())
-                paintCard(p, *wild, QPointF(pile.x(), pile.y() + ch * 0.06), 90.0, true);
-        }
-        const Card& top = cards.back();
-        if (!suppressed(Dest::Pile, 0, 0, top))
-            paintCard(p, top, pile, 0.0, true);
     }
 
     // Gold ring when the pile is yours for the taking.

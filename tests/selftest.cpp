@@ -1204,6 +1204,90 @@ void canastaPileRules()
     check(!blocked.canTakePileAtAll(), "canasta: but a black three on top blocks it");
 }
 
+// The card that froze the pile, and where it sits in it. The table draws that
+// card sideways, and what it needs is the DEPTH rather than the identity:
+// found by a reverse search for a wild and painted one place under the top
+// card, it was drawn twice over when the freezing throw was the most recent
+// one, and climbed back over every discard thrown after it (GHUB-0094).
+//
+// The double-draw itself is structural now -- one pass down the stack, one
+// branch per card, so no card can take both -- and what is checkable here is
+// the index those branches are chosen by.
+void canastaFrozenPileDepth()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    hands[1] = { cd(Suit::Spades, 7), cd(Suit::Hearts, 7), cd(Suit::Spades, kAce),
+                 cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce), cd(Suit::Clubs, 4),
+                 cd(Suit::Clubs, 5), cd(Suit::Clubs, 6), cd(Suit::Clubs, 8),
+                 cd(Suit::Spades, 10), cd(Suit::Spades, 2) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 7)), 0);
+    check(e.freezeCardIndex() < 0, "canasta: an unfrozen pile names no freezing card");
+
+    const std::vector<Card> opening { cd(Suit::Spades, 7), cd(Suit::Hearts, 7),
+                                      cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                                      cd(Suit::Clubs, kAce) };
+    check(e.takePile(opening), "canasta: the pile is taken to open");
+    check(e.discard(cd(Suit::Spades, 2)), "canasta: and a wild is thrown to freeze it");
+    check(e.pileFrozen(), "canasta: the pile is frozen");
+    check(e.freezeCardIndex() == int(e.pile().size()) - 1,
+          "canasta: the freezing card is the top card while it is the last thing thrown");
+
+    // The next seat throws something ordinary on top of it.
+    check(e.drawFromStock(), "canasta: the next seat draws");
+    const Card thrown = e.hand(e.currentSeat()).front();
+    check(!ca::isWild(thrown), "canasta: with an ordinary card to throw");
+    const int before = e.freezeCardIndex();
+    check(e.discard(thrown), "canasta: which goes on the pile");
+    check(e.freezeCardIndex() == before,
+          "canasta: the freezing card keeps the place it was thrown at");
+    check(e.freezeCardIndex() < int(e.pile().size()) - 1,
+          "canasta: so a card thrown after it covers it rather than sliding underneath");
+}
+
+// Catching them a minus: the owner's family's name for the rule that turns a
+// side's own melds against it for want of a canasta (GHUB-0098). The game says
+// the phrase out loud, so the phrase and the arithmetic have to be one thing.
+void canastaCaughtAMinus()
+{
+    ca::Team bare;
+    bare.opened = true;
+    // Four kings down and no canasta anywhere: 40 in card values.
+    bare.melds = { ca::Meld { kKing,
+                              { cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing),
+                                cd(Suit::Clubs, kKing), cd(Suit::Diamonds, kKing) } } };
+
+    ca::Rules classic = ca::Rules::classic();
+    check(!ca::caughtAMinus(bare, classic),
+          "canasta: nobody is caught a minus while the rule is off");
+
+    ca::Rules minus = classic;
+    minus.canastaNeededToScore = true;
+    check(ca::caughtAMinus(bare, minus), "canasta: a side with no canasta is caught a minus");
+
+    // The phrase and the score are the same claim, so they are checked as one.
+    const int kind = ca::handScoreFor(bare, {}, {}, false, false, classic);
+    const int cruel = ca::handScoreFor(bare, {}, {}, false, false, minus);
+    check(kind == 40, "canasta: those kings are worth 40 to a side that is not caught");
+    check(cruel == -40, "canasta: and the same 40 against one that is");
+    check(cruel < kind, "canasta: so being caught a minus always costs, never pays");
+
+    // Seven of them is a canasta, and a canasta is the whole defence.
+    ca::Team safe = bare;
+    safe.melds[0].cards = { cd(Suit::Spades, kKing),   cd(Suit::Hearts, kKing),
+                            cd(Suit::Clubs, kKing),    cd(Suit::Diamonds, kKing),
+                            cd(Suit::Spades, kKing),   cd(Suit::Hearts, kKing),
+                            cd(Suit::Clubs, kKing) };
+    check(safe.melds[0].isCanasta(minus), "canasta: seven kings is a canasta");
+    check(!ca::caughtAMinus(safe, minus), "canasta: which is what stops the minus");
+    check(ca::handScoreFor(safe, {}, {}, false, false, minus) > 0,
+          "canasta: and the side scores in its own favour again");
+}
+
 // A hand that dies with the stock gone and nobody out. Four hands sharing no
 // rank with the up-card and nothing behind it to draw, so the very first turn
 // finds an empty stock and a pile nobody can take. Classic scores that where it
@@ -2761,6 +2845,8 @@ int main()
     canastaLevelsDiffer();
     canastaHouseRules();
     canastaDeadHand();
+    canastaFrozenPileDepth();
+    canastaCaughtAMinus();
     canastaFirstRoundSafeThrow();
     canastaLeastDamagingDiscard();
     canastaMeldOrder();

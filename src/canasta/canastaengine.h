@@ -116,6 +116,19 @@ struct Rules {
     // pile stayed frozen.
     bool deadHandIfNobodyGoesOut = false;
 
+    // --- Table conventions ---------------------------------------------
+    // How the table is laid OUT, rather than what is legal on it. The engine
+    // reads nothing here and not one move changes with it. It lives here
+    // because it is a house rule in every sense that matters to the people
+    // playing -- "we don't do it like that" -- and because Rules is already
+    // the one thing the House dialog edits, stores and restores. A second
+    // struct would need its own dialog rows, its own settings keys and its
+    // own Classic/House switch, all to keep a layering line tidy.
+
+    // The wild card that freezes the pile lies with one end against the pile
+    // rather than squarely across its middle, making a T instead of a cross.
+    bool freezeCardMakesATee = false;
+
     static Rules classic() { return {}; }
 };
 
@@ -160,6 +173,15 @@ struct Team {
 // has built by hand rather than one it had to play into existence.
 int handScoreFor(const Team& t, const std::vector<Card>& handOne, const std::vector<Card>& handTwo,
                  bool wentOut, bool concealed, const Rules& rules);
+
+// True when a side's own cards are about to be counted AGAINST it for want of
+// a canasta. The owner's family calls it catching them a minus, which is both
+// shorter and clearer than any sentence about melds being subtracted.
+//
+// A free function rather than a method, on the same footing as handScoreFor
+// and openRequirementFor: it can be checked on a hand-built position instead
+// of one played into existence.
+bool caughtAMinus(const Team& t, const Rules& rules);
 
 // The order a hand is fanned in: wild cards first, then aces down to threes,
 // suit breaking ties so pairs sit together. Nothing in Canasta depends on the
@@ -214,6 +236,11 @@ public:
     const Team& team(int t) const { return m_teams[std::size_t(t)]; }
     const std::vector<Card>& pile() const { return m_pile; }
     bool pileFrozen() const { return m_frozen; }
+    // Where in pile() the card that froze it sits, or -1 when the pile is not
+    // frozen. The table draws that card sideways and needs its DEPTH rather
+    // than its identity: drawn one place under the top card instead, it
+    // climbed back over every discard thrown after it (GHUB-0094).
+    int freezeCardIndex() const;
     int stockCount() const { return int(m_stock.size()); }
 
     // The minimum a team must lay down to open, fixed when the hand is dealt.

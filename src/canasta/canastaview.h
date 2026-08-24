@@ -115,6 +115,10 @@ private:
     QPointF handCentre(int index, int count, bool lifted) const;
     double handAngle(int index, int count) const;
     QPointF opponentCentre(int seat, int index, int count) const;
+    // Where the card that froze the pile sits, given the point in the stack it
+    // belongs at. Classic lays it squarely across; the house rule slides it
+    // along its own length into a T.
+    QPointF freezeCardCentre(const QPointF& seat) const;
     double opponentAngle(int seat, int index, int count) const;
     // Melds are laid out in fixed slots so a meld does not jump sideways when
     // another one appears next to it.

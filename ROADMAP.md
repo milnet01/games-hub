@@ -1488,6 +1488,93 @@ draws, whether or not it has had one.
   Kind: ux.
   Source: in-session-2026-08-20.
 
+- ✅ [GHUB-0094] **A frozen pile draws its freezing card twice, and out of order.**
+  Reported with a screenshot: East threw 2 of clubs, the pile
+  is frozen, and the same 2 is drawn once sideways and once
+  upright.
+
+  Two faults in one block of paintTable. The sideways card is
+  found with a reverse search for the last wild in the pile,
+  which IS the top card when the freezing throw was the most
+  recent one -- so it is painted sideways and then painted
+  again upright on top of itself. And it is always drawn one
+  place below the top card rather than at the depth it
+  actually sits at, so every later discard slides UNDER it
+  instead of over it.
+
+  The fix is one idea: the freezing card has an index in the
+  pile like any other card, and the stack is drawn in that
+  order.
+  Resolved (2026-08-24): Engine::freezeCardIndex() names the card
+  that froze the pile -- the last wild or red three still in it,
+  which is exactly what both freeze sites turn onto the pile. The
+  table draws the stack deepest-first in one pass with one branch
+  per card, so the freezing card takes the sideways branch OR the
+  top-card branch and never both. Confirmed on screen with --shot.
+  canastaFrozenPileDepth() in the self-test locks the index in both
+  positions, and was proved red against the old always-just-under-
+  the-top behaviour before the fix went in.
+  **Layman:** When the pack is frozen the wild card that froze it is shown both sideways and upright, and it jumps back on top whenever anyone throws.
+  Kind: fix.
+  Source: user-report-2026-08-24.
+
+- ✅ [GHUB-0095] **House rule: the card that freezes the pack lies as a T, not fully across.**
+  A table convention rather than a rule of play: the engine
+  never reads it, and nothing about which moves are legal
+  changes. It belongs in the House rules dialog beside the
+  rest, because it is one of the things this family does
+  differently.
+
+  Off in Classic, on in House.
+  Resolved (2026-08-24): Rules::freezeCardMakesATee, off in Classic
+  and on by default in House. CanastaView::freezeCardCentre() slides
+  the card along its own length until its near edge lines up with the
+  pile's, outward from the stock so the T never reaches back over it.
+  Confirmed on screen: a 2 of diamonds froze the pack and lies behind
+  an ace of hearts with one end out.
+  **Layman:** The family lays the freezing card so one end sticks out, making a T with the pile, rather than squarely across the middle.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0096] **House rule: finished canastas stack on the red threes, turned about.**
+  The owner's family plays it this way with or without red
+  threes under the pile. Each new canasta turns ninety degrees
+  from the one below, which is how the stack is counted at a
+  glance.
+
+  Visibility was raised with the request and settled by the
+  owner on 2026-08-24: the STAIRCASE. Each canasta is offset
+  along its own long axis so a readable strip of every one
+  below stays out, and each keeps its own badge. A squared
+  stack true to the table hides all but the top canasta, which
+  is the wrong trade for a partially sighted player.
+
+  Off in Classic, on in House. Off, canastas stay in the meld
+  row exactly as now.
+  **Layman:** A completed canasta is squared up and laid on the team's red threes -- across, then upright, then across again -- so you can count them by their edges.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0097] **A finished canasta names itself by the colour of its top card.**
+  The universal table convention, and the one the code's own
+  comment already reaches for -- paintMelds rings a canasta
+  gold or silver and calls that "the traditional red/black
+  pile marker, in the table's own metals". This is the real
+  thing.
+
+  Settled by the owner 2026-08-24: MIXED means any wild card,
+  a two exactly as much as a joker. The alternative -- jokers
+  only, as first described -- would have a canasta built with
+  two deuces show red while scoring the 300-point mixed bonus,
+  so the top card and the score would contradict each other.
+
+  Only applies to a canasta squared up in the stack. An
+  unfinished meld keeps its wilds-first fan, which is what
+  the owner reads a meld's contents from.
+  **Layman:** A canasta with no wild cards in it is squared up with a red card showing; one built with a joker or a two shows a black card.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
 ### 🎨 Games agreed and not yet started
 
 Asked for on 2026-08-10, in the order agreed. All are traditional or
@@ -2954,6 +3041,161 @@ open.
   **Layman:** Under house rules nobody can take the pile in the first round, so the computer stops wasting its black threes there - and each team's "points needed to open" now shows on its own score plate.
   Kind: enhancement.
   Source: user-request-2026-08-19.
+
+- ✅ [GHUB-0098] **Catching them a minus is the family's rule and the family's word for it.**
+  The rule itself already exists as canastaNeededToScore, and
+  its tick reads "A side with no canasta counts nothing in its
+  favour". Two things are wrong with that as it stands.
+
+  It defaults OFF in the House set, and the owner told us on
+  2026-08-24 that it is how his family plays -- so the default
+  is wrong for the one rule set that exists to match them.
+
+  And nothing anywhere uses their word for it. The owner calls
+  it "catching them a minus", which is both shorter and much
+  clearer than the tick's current sentence, and the end-of-hand
+  message should say it when it happens.
+
+  The tick's stored key stays as it is; renaming a key silently
+  unticks the rule for anyone who has already set it.
+  Resolved (2026-08-24): canastaNeededToScore now defaults ON in the
+  House set, and its tick reads "a side with no canasta is caught a
+  minus: its own melds count against it". When a hand ends on somebody
+  playing out, the table says which side was caught, in words rather
+  than in the status bar the owner never reads.
+
+  canasta::caughtAMinus() is a free function on the same footing as
+  handScoreFor, and canastaCaughtAMinus() checks the two against each
+  other -- the phrase and the arithmetic are one claim, so a message
+  that contradicted the score is what the test forbids.
+
+  The stored settings key keeps its old spelling on purpose; renaming
+  it would silently untick the rule for anyone who had already set it.
+  **Layman:** Going out while the other side has no canasta counts their melds against them -- and the game should say so in the words the owner uses.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0099] **The computer never plays for a minus, even when one is sitting there.**
+  Follows GHUB-0098, which makes catching a minus the House
+  default. The rule being on changes the value of going out
+  enormously and the AI does not know it: the opposing side's
+  melds and red threes all swing from plus to minus the moment
+  somebody plays out on them.
+
+  So when canastaNeededToScore is on and the other side has no
+  canasta, going out is worth far more than the 100-point bonus
+  chooseDiscard and the going-out check currently price it at.
+  The AI should press for it -- take the canasta it needs, and
+  go rather than milk.
+
+  Paired with the item below, which is the same judgement
+  pointing the other way. Neither should be written without the
+  other or the AI will simply always rush.
+  **Layman:** When the other side has no canasta, our side should push to go out and catch them a minus -- right now it plays the same either way.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0100] **The computer plays out even while the pile is feeding it.**
+  The owner's family calls it being fed: a position where the
+  other side keeps handing you the pack, and every turn you
+  stay in is worth more than the going-out bonus.
+
+  The AI has no notion of it and will go out on the first legal
+  chance. What it needs is a read on how likely the pile is to
+  come back to it -- how many of the pile's ranks it has melds
+  in, whether the pile is frozen against it, how big the pile
+  has grown -- and to weigh that against going out.
+
+  The deliberate tension with the item above is the whole
+  design. A minus sitting on the table argues for going now; a
+  pile that keeps feeding argues for staying. Both have to be
+  written together, and the levels checked against each other
+  afterwards -- canastaLevelsDiffer() is what caught Hard being
+  weaker than Medium last time.
+  **Layman:** When we keep taking the pack hand after hand, we should stay in and keep milking them rather than ending the hand.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0101] **The computer freezes the pack while nobody has opened, which buys it nothing.**
+  With pileFrozenUntilOpened on -- the House default -- a side
+  that has not opened needs two matching cards from hand to
+  take the pile, which is exactly what a frozen pile demands.
+  So while NEITHER side has opened, freezing changes nothing
+  about who can take the pack.
+
+  It is not free either: the discard spends a two or a joker
+  worth 20 or 50 in the hand, and the freeze outlives the
+  position that made it pointless.
+
+  The owner raises it at the 90 and 120 opening bands
+  specifically, which is where it costs most -- opening is
+  furthest away, so the wasted freeze sits longest. Ai's
+  discard choice should stop paying for it there.
+
+  Rules-grounded rather than a taste call: Engine::canTakePile
+  treats an unopened side exactly as it treats a frozen pile,
+  which is what makes the freeze redundant.
+  **Layman:** Throwing a joker to freeze the pack is wasted when neither side has opened yet -- the pack is already out of reach for both of them.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0102] **Twos are jokers too, and the game does not call them that.**
+  The game's own vocabulary is "wild card", which is the
+  standard term and not the owner's. His family has one word
+  for both -- joker -- and tells them apart by size: a big
+  joker is the 50-point one, a small joker is a two.
+
+  This is worth more than a rename. It settles a question that
+  was open when GHUB-0097 was written: the original request
+  said a canasta "with a joker in it" shows a black card, and
+  under the family's own vocabulary that plainly includes a
+  two. So GHUB-0097's choice of any-wild was the right one and
+  is now confirmed by the owner's own words rather than by
+  inference from the scoring.
+
+  Surfaces to change: the meld badge's star count, the House
+  rules dialog rows, the refusal messages, and the game's help
+  blurb. The status bar is not among them -- the owner never
+  reads it.
+  **Layman:** The family calls a two a small joker and the 50-point joker a big joker; the game says 'wild card' everywhere.
+  Kind: ux.
+  Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0103] **The computer cannot fish, and cannot tell when it is being fished.**
+  The owner's description, kept whole because the shape of it
+  is the specification. Holding three or more of a rank, you
+  throw them out one at a time until two are left -- or one and
+  a joker -- hoping the seat that discards to you is watching
+  what you throw and follows with that rank, which hands you
+  the pack.
+
+  Two things make it a judgement rather than a rule.
+
+  The bait is only worth throwing while the seat ABOVE you is
+  the one likely to copy it. That is the seat that discards
+  immediately before your turn, so it is the only one whose
+  follow-up you get to take.
+
+  And it is paid for downstream: the seat BELOW you sees the
+  same discard, and the rank you are advertising is one they
+  may be able to take the pack with. So fishing is a bet whose
+  cost lands on the opposite side of the table from its prize.
+
+  Three ranks in hand going down to two is also exactly the
+  shape chooseDiscard already reasons about badly -- it prices
+  a discard by what it gives away and never by what it might
+  attract. Both halves belong in the same pass: an AI that
+  fishes but cannot see it being done to it is worse than one
+  that does neither.
+
+  Sits with GHUB-0099, GHUB-0100 and GHUB-0101 as one body of
+  work on canastaai.cpp. Whatever lands, the levels have to be
+  re-measured against each other afterwards --
+  canastaLevelsDiffer() is what caught Hard playing weaker than
+  Medium.
+  **Layman:** Throwing away one of three matching cards to tempt the player above you into throwing the third -- the family calls it fishing, and the computer neither does it nor spots it.
+  Kind: feature.
+  Source: user-request-2026-08-24.
 
 ### 🧰 Tests
 

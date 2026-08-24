@@ -133,6 +133,15 @@ bool Team::hasCanasta(const Rules& r) const
                        [&](const Meld& m) { return m.isCanasta(r); });
 }
 
+bool caughtAMinus(const Team& t, const Rules& rules)
+{
+    // Exactly the condition handScoreFor turns a side's own cards around on,
+    // named. Kept as one expression in one place so the two can never drift:
+    // a message that says "caught a minus" while the score says otherwise is
+    // worse than no message.
+    return rules.canastaNeededToScore && !t.hasCanasta(rules);
+}
+
 // ---------------------------------------------------------------------------
 
 Engine::Engine(Rules rules)
@@ -1307,6 +1316,22 @@ void Engine::scoreHand()
     // joint winner.
     m_phase = (reached && m_teams[0].score != m_teams[1].score) ? Phase::GameOver
                                                                 : Phase::HandOver;
+}
+
+int Engine::freezeCardIndex() const
+{
+    if (!m_frozen)
+        return -1;
+    // Both places that set the flag turn a wild card or a red three onto the
+    // pile -- the opening turn-up, and a wild discard -- and taking the pile
+    // empties it and clears the flag. So the last such card still in the pile
+    // is the one that froze it.
+    for (int i = int(m_pile.size()) - 1; i >= 0; --i) {
+        const Card& c = m_pile[std::size_t(i)];
+        if (isWild(c) || isRedThree(c))
+            return i;
+    }
+    return -1;
 }
 
 int Engine::cardsInPlay() const

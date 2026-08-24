@@ -10,6 +10,9 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Canasta house rule: the card that freezes the pack lies as a T** (GHUB-0095)
+  One end against the pile rather than squarely across its middle. On in House rules, off in Classic.
+
 - **The app can take a picture of itself** (GHUB-0090)
   `gameshub --shot picture.png --game hearts --size 1400x620 --legible` writes a picture of a game and exits, without opening a window or needing a screen. Chiefly a development tool: until now the only way to check that a layout looked right was to open it and look.
 
@@ -38,6 +41,9 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: catching them a minus is now the House default, and the game says so** (GHUB-0098)
+  A side that ends the hand with no canasta has its own melds counted against it. On by default in House rules, and named in the words the owner's family uses when it happens.
+
 - **Canasta explains a refused move on the table instead of in the status bar** (GHUB-0040)
   When the game will not let you do something it now says why on an amber
   panel just above your hand, and the sentence stays there until you make
@@ -45,6 +51,9 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   you make while doing what it told you.
 
 ### Fixed
+
+- **Canasta: a frozen pile no longer shows the freezing card twice, or above cards thrown after it** (GHUB-0094)
+  The wild card that freezes the pack is drawn once, lying sideways at the depth it was actually thrown at, so a later discard covers it instead of sliding underneath.
 
 - **Hearts draws East's stack of cards fully inside the window** (GHUB-0092)
   The pile on the right fanned outwards and lost the edge of its front card off the side of the window. It now fans towards the middle of the table, the way the pile on the left already did, so the two sides match.
