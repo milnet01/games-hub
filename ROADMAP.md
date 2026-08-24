@@ -3592,7 +3592,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 🚧 [GHUB-0116] **All four players should see the same book, and one device cannot do that.**
+- ✅ [GHUB-0116] **All four players should see the same book, and one device cannot do that.**
   The owner asked for this as "make it an app rather than a webpage",
   and that is worth recording carefully because it is not what decides
   it. A native Android app installed on four phones is four separate
@@ -3640,8 +3640,84 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   pastes the config block into scorepad/firebase-config.js, pastes the
   rules from scorepad/README.md, and enables Pages on the repo. Then two
   phones prove it.
+  Resolved (2026-08-24). The test this bullet was held open for has now
+  been run: two live clients against the owner's real database, one
+  sharing and one joining. The watcher's phone reported totals 820/850,
+  sides "A + D v K + V" and D to deal -- matching the scorer's book
+  exactly, and none of it held locally by that device. Test rooms were
+  deleted afterwards and the database left empty.
+
+  Setup is done and needed less than expected. The Firebase project is
+  CanastaScoreCard on the free Spark plan, Realtime Database in Belgium,
+  and the rules from scorepad/README.md are published -- verified from
+  outside rather than taken on trust: reading the whole database is
+  refused, a four-letter room is allowed, a five-letter one is refused,
+  and the same three answers hold for writes. Registering a web app
+  turned out to be unnecessary: the SDK works with databaseURL alone,
+  proved by probe rather than assumed, so firebase-config.js carries one
+  line and no apiKey.
+
+  Three harness mistakes are recorded on GHUB-0118 rather than here, all
+  of the same shape -- a check that returned a confident wrong answer.
+  The one worth carrying: --virtual-time-budget closes the page before
+  real network traffic completes, so a WORKING write reads as broken.
+  Anything testing this app against a live database must wait on real
+  elapsed time.
+
+  Still outstanding and not code: GitHub Pages is not yet enabled, so
+  there is no address for the phones to open. That is the owner's click.
   **Layman:** Everyone at the table should see the same running score on their own phone, updating as hands are entered.
   Kind: feature.
+  Source: user-request-2026-08-24.
+
+- ✅ [GHUB-0117] **Past games are filed rather than wiped, with a record per person.**
+  Finishing a game FILES it instead of clearing the book, and Past games
+  shows the record. Kept per PERSON rather than per seat, because the
+  owner said substitutes turn up and partnerships change -- so a record
+  follows the player, not the chair. Games played and won, hands they
+  went out on, and exact cuts their side was on, all of which the book
+  already captured and none of which it was using. Plus best hand, best
+  game, biggest winning margin and longest game, and the filed list with
+  the winner marked in green.
+
+  Everything is derived from the stored hands rather than tallied as the
+  game goes, so correcting a hand corrects the record with it and there
+  is no second set of numbers to drift. A game filed by mistake can be
+  tapped to put it back in play.
+
+  Checked against seeded data with a substitute in one game: A and D show
+  3 played, V shows 2, J shows 1, and A's five going-out hands and three
+  exact cuts were counted by hand off the fixture and matched.
+  **Layman:** Finishing a game keeps it, and a dashboard shows who has won what across all the Fridays.
+  Kind: feature.
+  Source: user-request-2026-08-24.
+
+- ✅ [GHUB-0118] **A phone joining the table shows a loading screen instead of an empty board.**
+  Found by running two live clients rather than by reading the code. The
+  Realtime Database socket genuinely takes a few seconds to come up --
+  measured, the sequence is attached, connected=false, connected=true,
+  then the first delivery -- and during that window a joining phone was
+  rendering an empty board reading 0/0 against "? + ?". That is
+  indistinguishable from failure at a table.
+
+  It now shows a slow, large pulse and says what is happening, with a way
+  out. Slow and large deliberately: a small fast spinner is harder for
+  the owner to see and unpleasant besides, and the motion is dropped
+  entirely under prefers-reduced-motion.
+
+  A watcher that already holds last week's book is shown THAT rather than
+  the spinner, and it refreshes in place when the live one lands. A stale
+  board beats a spinner.
+
+  Two bugs came out of the same testing, either of which would have
+  stranded three of the four phones. A watcher's phone starts with no
+  book, so it landed on the SETUP screen, which had no way to join at
+  all -- there is now an "Or join the table" panel there. And the waiting
+  screen was inside gameView(), so a phone in a room but holding no book
+  fell through to setup regardless; it is its own view now, checked
+  before the setup branch.
+  **Layman:** While a phone is connecting it says so, rather than showing a blank scoreboard that looks broken.
+  Kind: ux.
   Source: user-request-2026-08-24.
 
 ### 🧰 Tests
