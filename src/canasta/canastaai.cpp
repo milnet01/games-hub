@@ -185,13 +185,6 @@ bool Ai::holdsWhileFrozen(const Engine& e, int rank, int naturals) const
 {
     if (m_level == Level::Easy || !e.pileFrozen())
         return false;
-    // A frozen pile is taken with two matching NATURALS out of hand — see
-    // Engine::canTakePile — so a rank this seat holds only one of can never be
-    // the key to it. Keeping that card back buys no chance at the pile at all
-    // and leaves its points in the hand to be caught with.
-    if (naturals < 2)
-        return false;
-
     const Rules& r = e.rules();
     const Team& mine = e.team(teamOf(e.currentSeat()));
     // Completing a canasta is worth more than any pile.

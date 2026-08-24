@@ -3271,7 +3271,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- ✅ [GHUB-0104] **The computer lays melds down while the pack is frozen, spending the pairs that would take it.**
+- 📋 [GHUB-0104] **The computer lays melds down while the pack is frozen, spending the pairs that would take it.**
   Rules-grounded rather than a taste call, which is what makes
   it checkable. Engine::canTakePile demands two matching cards
   from HAND against a frozen pile. A pair melded is a pair no
@@ -3359,6 +3359,39 @@ open.
   that check now allows and is not distinguishable from noise at this
   sample size. If a later reading with real power shows the hold winning
   after all, this is the line to revisit.
+  REOPENED (2026-08-24). The shipped rule was wrong and is reverted --
+  code and check both out, expert v hard back to its 129/240 baseline,
+  suite green at 431. The changelog entry is withdrawn; it never
+  released.
+
+  What was wrong. The release fired on `naturals < 2`, on the argument
+  that one card can never be the two naturals a frozen pack wants. True
+  about THIS turn and false about the hand: draw another of that rank and
+  the lone card is a pair. The owner's correction is the option value --
+  "if you have 10 cards in your hand you should still play as if you
+  could take the pack, because when you pick up cards you more than
+  likely are going to build up pairs". So the release is keyed on HAND
+  SIZE, not on how many of a rank are held: keep building while the hand
+  is big, stop building and play out when it is small.
+
+  It also explains the measurement that was written off as noise. Holding
+  really did win, by the owner's mechanism, and the 1.5-sigma reading was
+  pointing the right way after all.
+
+  Research agrees, and adds numbers (2026-08-24, sources listed on GHUB-0113):
+  "meld the minimum needed cards, even if your hand can support more";
+  "hold extra pairs after the initial meld" as currency -- from five of a
+  rank, meld three and keep two; "each melded card reduces your
+  flexibility for claiming the discard pile later"; "a meld of three or
+  four cards is a placeholder, the score lives in the canasta". No source
+  found supports laying a spare card down early. The opening trim already
+  implements the first of these; the hand-size release is what is left.
+
+  Two further conditions the owner named, neither implemented, both
+  belonging here rather than in a new bullet because they are the same
+  "when do I stop holding" question: if the pack is frozen and it looks
+  like nobody will ever take it and the stock is running out, play out if
+  the score is decent. And see GHUB-0114 for the opposite case.
   **Layman:** A frozen pack can only be taken with two matching cards from your hand -- so melding those cards away is giving up on the pack without noticing.
   Kind: feature.
   Source: user-request-2026-08-24.
@@ -3453,6 +3486,66 @@ open.
   **Layman:** A black three stops the next player taking the pack for one turn -- worth saving for when the pack is fat and they look ready.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
+
+- 📋 [GHUB-0113] **The computer will freeze the pack twice in a hand and freeze one it could take itself.**
+  From published strategy, read 2026-08-24. Ai::wantsToFreeze already
+  gets two things right: it will not freeze a pack under five cards
+  ("freezing when the pile is small simply throws away a 20- or 50-point
+  wild card"), and it insists on holding a pair of the top rank first
+  ("freeze only if you hold natural pairs so you can break the freeze
+  yourself"). Two it gets wrong.
+
+  It has no per-hand budget. The advice is explicit and numeric: "do not
+  freeze more than twice per hand". Nothing counts freezes, so a hand
+  with spare wilds can spend three or four.
+
+  And it never asks whether the pack was already ours. "Your team is
+  positioned to claim the pile -- freezing costs you access too." A
+  freeze locks everyone out, so freezing a pack we could take on this
+  turn, or could take unfrozen with one card and a wild, throws away the
+  thing we were trying to protect.
+
+  Sources, all read 2026-08-24: rarepike.com/canasta/discard-pile-strategy,
+  card-games.ca/strategies/ultimate-canasta-strategy-guide,
+  suitedgames.com/canasta/strategy, pagat.com/rummy/canasta.html.
+  The same four back the holding advice cited on GHUB-0104. NOTE for
+  anyone reaching for them on the AI items: none of the four describes
+  fishing, so GHUB-0103 has no published source and the owner's own
+  description is its specification.
+  **Layman:** Throwing a joker to freeze the pack costs 20 or 50 points, and the computer does it more often than it is worth -- including when the pack was ours for the taking.
+  Kind: feature.
+  Source: canasta-strategy-research-2026-08-24.
+
+- 📋 [GHUB-0114] **Losing badly, the computer should run the pack dead rather than let the hand score.**
+  The owner's tactic, in his words: if the opponents have a high score
+  and you can run the pack dead -- no cards left in the pick-up pile --
+  and your own score will be low, it is better to run it dead than to
+  play the hand out.
+
+  It depends entirely on a HOUSE rule, and that is the thing to get right
+  before any of it is written. Standard Canasta SCORES a hand the stock
+  kills: pagat.com is explicit that when a player who wishes to draw
+  cannot, "the play ends immediately and the hand is scored". This
+  project's House set turns that round -- deadHandIfNobodyGoesOut is on
+  by default, and canastaview.cpp already carries the reasoning, that
+  scoring a hand nobody could finish rewards the side that sat on a
+  frozen pile. So the tactic is worth points under House and worth
+  nothing under Classic, and the AI must read the flag rather than assume
+  it.
+
+  Also from pagat, and needed for any of this to work: play continues
+  with an empty stock for as long as each seat takes the previous
+  discard and melds it. So running it dead is not simply drawing the last
+  card.
+
+  The pair with GHUB-0104's third condition -- frozen pack, stock running
+  out, decent score, so play out -- is deliberate. Same reading of the
+  same position, opposite answer depending on who is ahead, and like
+  GHUB-0099 against GHUB-0100 neither should be written without the
+  other.
+  **Layman:** When we are well behind and cannot win the hand, emptying the pick-up pile kills the hand so nobody scores it -- better than letting them bank a big one.
+  Kind: feature.
+  Source: user-request-2026-08-24.
 
 ### 🧰 Tests
 
