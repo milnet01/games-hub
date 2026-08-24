@@ -3588,6 +3588,15 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Superseded in one respect the same day: the owner wants the same book
   on all four phones, which no single-device store can do. See the bullet
   below. Everything here except where the score is KEPT survives that.
+  Verified on a real phone by the owner, 2026-08-24: "I have already
+  opened it on the phone and it works perfectly." That closes the gap
+  every other check here left open -- everything before it was headless
+  Chrome at a phone-sized viewport, which proves layout and arithmetic
+  and proves nothing about a real device in a real hand, least of all for
+  the reader this was built for.
+
+  Live at https://milnet01.github.io/games-hub/scorepad/ since GitHub
+  Pages was enabled on the repo (deploy from branch, master, root).
   **Layman:** Replaces the paper score book: enter each side's score for the hand and it keeps the totals, whose deal it is and what you need to open.
   Kind: feature.
   Source: user-request-2026-08-24.
@@ -3718,6 +3727,41 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   before the setup branch.
   **Layman:** While a phone is connecting it says so, rather than showing a blank scoreboard that looks broken.
   Kind: ux.
+  Source: user-request-2026-08-24.
+
+- 💭 [GHUB-0119] **A short address for the score book, blocked at the registrar.**
+  The owner asked for csc.antsprojectshub.co.za instead of
+  milnet01.github.io/games-hub/scorepad/. Everything on our side is
+  ready: the subdomain is unused, the domain already resolves to GitHub
+  Pages by A record, so it is one CNAME -- host `csc`, target
+  `milnet01.github.io` -- plus the custom domain field in the repo's
+  Pages settings.
+
+  Blocked at TrueHost, who registered the domain. There is no hosting
+  package on the account, and the domain's Manage page offers Overview,
+  Auto Renew, Nameservers, Registrar Lock, Contact Information, Private
+  Nameservers, Cloudflare Push and AI Website Builder -- and no DNS
+  record editor at all. Nameservers can be changed; the records inside
+  them cannot.
+
+  Three routes, and the ordering is deliberate. A support ticket asking
+  TrueHost to add the one record: no risk, a day or two. Cloudflare Push,
+  which would give full DNS control free and forever, but moves DNS for
+  the WHOLE domain including the live website and the email -- NOT
+  recommended, and it was declined here rather than deferred, because
+  risking a working site for a shorter address to a Canasta scorepad is
+  not a trade worth offering. Or leave it, which costs nothing: the
+  address is typed once per phone and then lives on a home screen.
+
+  Two things to know if this is picked up. Setting a custom domain on
+  this repo makes the score book answer at csc.../scorepad/ rather than
+  at the root, since Pages serves the whole repository -- landing the
+  root on the score book needs either a redirect at the repo root or a
+  Pages-from-workflow deploy publishing scorepad/ alone. And the working
+  address keeps working either way, so nothing has to be switched over in
+  a hurry.
+  **Layman:** The score book works, but its web address is long; a shorter one needs a change the domain provider will not let us make ourselves.
+  Kind: chore.
   Source: user-request-2026-08-24.
 
 ### 🧰 Tests
