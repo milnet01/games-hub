@@ -63,6 +63,24 @@ int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& 
 // discardRisk already carries its own. Read that bullet before adding it.
 double throwCaution(const Team& theirs, int openRequirement);
 
+// Whether this side is better off running the stock out and killing the hand
+// than letting it be played to a score (GHUB-0114). The owner's tactic: if the
+// opponents have a high score and you can run the pack dead -- no cards left in
+// the pick-up pile -- and your own score will be low, it is better to run it
+// dead than to play the hand out.
+//
+// It depends ENTIRELY on the house rule, which is the thing to get right rather
+// than assume. deadHandIfNobodyGoesOut makes a hand the stock kills VOID, so
+// neither side scores it; classic Canasta scores such a hand where it stands
+// (pagat.com: when a player who wishes to draw cannot, "the play ends
+// immediately and the hand is scored"), which hands the leader their points
+// anyway. So the tactic is worth points under House and worth nothing under
+// Classic, and this returns false there.
+//
+// The two showings are each side's table less the cards the reading seat holds
+// -- never the opponents' hands, which this AI does not see.
+bool runTheHandDead(int ourShowing, int theirShowing, int stockLeft, const Rules& r);
+
 // Which of two unfinished melds to spend wild cards on first, for a side caught
 // a minus (GHUB-0107). True when `a` should be closed before `b`.
 //
@@ -185,6 +203,9 @@ private:
     // both halves of a turn.
     void noteHand(const Engine& e);
     bool wantsPile(const Engine& e) const;
+    // Whether this hand is one to run dead rather than finish (GHUB-0114) --
+    // runTheHandDead asked of the position in front of this seat.
+    bool killingTheHand(const Engine& e) const;
     // How many of a rank are already accounted for — melded by anyone, sitting
     // in the pile, or in this seat's own hand. A rank with all eight visible is
     // a discard nobody can use, which is the safest card in the game.

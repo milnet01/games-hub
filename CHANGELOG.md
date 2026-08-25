@@ -64,6 +64,21 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: with the pick-up pile nearly gone the computer stops waiting for a frozen pack** (GHUB-0104)
+  The other side of the same coin. If the hand is one worth having, it
+  plays its cards out rather than holding them back for a frozen pack that
+  may never come round again -- cards held that late are cards caught in
+  your hand when the scores are counted.
+
+- **Canasta: losing badly, the computer runs the pack dead instead of letting the hand score** (GHUB-0114)
+  With "a hand nobody goes out on scores nothing" turned on -- the House
+  default -- a hand the pick-up pile kills is void and neither side banks
+  it. So when the computer is well behind late in a hand it now stops
+  trying to finish: it will not go out, and it leaves the pack alone and
+  draws instead, because drawing is what empties the pile and taking the
+  pack is not. Under Classic rules, where such a hand is scored where it
+  stands, none of this applies and it plays on as before.
+
 - **Canasta: under the minus rule the computer treats its first canasta as insurance** (GHUB-0107)
   With "a side with no canasta counts nothing in its favour" turned on --
   the House default -- ending a hand without one does not merely lose the

@@ -2639,6 +2639,57 @@ void canastaFirstCanastaIsInsurance()
     }
 }
 
+// Running the pack dead rather than letting the hand score (GHUB-0114). The
+// owner's tactic, and it is worth points under House and nothing at all under
+// Classic — so the check asks the rule both ways round.
+void canastaRunsThePackDead()
+{
+    ca::Rules house = ca::Rules::classic();
+    house.deadHandIfNobodyGoesOut = true;
+
+    check(ca::runTheHandDead(-110, 0, 6, house),
+          "canasta: behind with the stock nearly gone, kill the hand rather than score it");
+    check(!ca::runTheHandDead(-110, 0, 6, ca::Rules::classic()),
+          "canasta: under Classic the hand is scored where it stands, so there is nothing to gain");
+    check(!ca::runTheHandDead(-110, 0, 40, house),
+          "canasta: and not with a stock nobody can empty in the turns left");
+    check(!ca::runTheHandDead(400, 0, 6, house),
+          "canasta: nor when the hand as it stands is ours");
+    check(!ca::runTheHandDead(0, house.goingOutBonus, 6, house),
+          "canasta: nor when it is theirs by less than the going-out bonus is worth");
+    check(ca::runTheHandDead(0, house.goingOutBonus + 1, 6, house),
+          "canasta: but a point past that is enough");
+
+    // And the seat acts on it: a pack it could take, and it draws instead,
+    // because taking the pack does not empty the stock and drawing does.
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(4);
+    hands[1] = filler(kKing); // 110 points in hand, and a king on the pack
+    hands[2] = filler(5);
+    hands[3] = filler(6);
+    const std::vector<Card> below(6, cd(Suit::Clubs, 9));
+
+    for (int dead = 0; dead < 2; ++dead) {
+        ca::Rules rules = ca::Rules::classic();
+        rules.deadHandIfNobodyGoesOut = dead != 0;
+        ca::Engine e;
+        e.setRules(rules);
+        e.newGameFromStock(canastaStock(hands, 0, below, cd(Suit::Diamonds, kKing)), 0);
+
+        check(e.currentSeat() == 1 && e.stockCount() == 6,
+              "canasta: seat 1 to play with six cards left in the stock");
+        std::vector<Card> take;
+        check(e.findPileTake(take),
+              "canasta: and a pack it could take, opening on kings off the top card");
+
+        ca::Ai ai { ca::Level::Hard };
+        const bool took = ai.draw(e);
+        check(took == (dead == 0),
+              dead ? "canasta: running it dead, it leaves the pack and draws instead"
+                   : "canasta: with the hand scored where it stands, it takes the pack");
+    }
+}
+
 // What a discard's safety judgement is worth against this opponent
 // (GHUB-0121). Checked on figures rather than on a position played into
 // existence, the way discardRisk and openRequirementFor already are — the claim
@@ -3544,6 +3595,7 @@ int main()
     canastaCountsThePack();
     canastaBlackThreeTiming();
     canastaFirstCanastaIsInsurance();
+    canastaRunsThePackDead();
     canastaThrowCaution();
     canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();

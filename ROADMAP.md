@@ -3521,6 +3521,17 @@ open.
   decent. That is the same reading of the same position as GHUB-0114 with the
   opposite answer, and this bullet's own note says neither should be written
   without the other. It ships with GHUB-0114.
+  Third condition SHIPPED (2026-08-25), with GHUB-0114 as this bullet
+  required. Ai::holdsWhileFrozen now also releases once the stock is down to
+  two rounds of the table, unless the hand is one GHUB-0114 would rather
+  run dead -- the pack may never come round again that late, so cards held
+  for it are cards about to be caught in hand. The exception matters: in a
+  hand nobody is going to score, holding on costs nothing.
+
+  That closes every condition this bullet named. The first -- lay down
+  because we are going for the minus -- remains covered by Ai::closingOut
+  and by GHUB-0107, which prices the first canasta under the minus rule and
+  releases a melded rank towards it.
   **Layman:** A frozen pack can only be taken with two matching cards from your hand -- so melding those cards away is giving up on the pack without noticing.
   Kind: feature.
   Source: user-request-2026-08-24.
@@ -3847,7 +3858,7 @@ open.
   Kind: feature.
   Source: canasta-strategy-research-2026-08-24.
 
-- 📋 [GHUB-0114] **Losing badly, the computer should run the pack dead rather than let the hand score.**
+- ✅ [GHUB-0114] **Losing badly, the computer should run the pack dead rather than let the hand score.**
   The owner's tactic, in his words: if the opponents have a high score
   and you can run the pack dead -- no cards left in the pick-up pile --
   and your own score will be low, it is better to run it dead than to
@@ -3874,6 +3885,55 @@ open.
   same position, opposite answer depending on who is ahead, and like
   GHUB-0099 against GHUB-0100 neither should be written without the
   other.
+  Resolved (2026-08-25), and shipped WITH GHUB-0104's third condition, which
+  both bullets said must not be written without the other. They are the same
+  position read two ways, and one function answers it for both.
+
+  runTheHandDead(ourShowing, theirShowing, stockLeft, rules) is the
+  judgement, a free function checked on figures. It reads the FLAG rather
+  than assuming it, which the bullet named as the thing to get right:
+  deadHandIfNobodyGoesOut makes a hand the stock kills void, while classic
+  Canasta scores it where it stands (pagat.com), which hands the leader
+  their points anyway -- so it returns false under Classic and the whole
+  tactic costs nothing there.
+
+  Three places act on it, via Ai::killingTheHand.
+
+    - closingOut refuses outright. Going out is the one thing that
+      certainly stops the hand dying.
+    - wantsPile leaves the pack alone. Taking it does not touch the stock
+      and drawing does, so drawing brings the end nearer. Ai::draw still
+      takes it once the stock is gone: refusing THEN does not kill the
+      hand, it stalls the turn, because Engine::startTurn ends a hand only
+      where nobody can take the pack.
+    - holdsWhileFrozen is GHUB-0104's third condition and the mirror --
+      with the stock nearly gone the pack may never come back, so play out
+      while the hand is worth something, UNLESS it is one we would rather
+      kill.
+
+  The showings are each side's table less the cards the reading seat holds,
+  and the partner's hand is deliberately not passed. This AI sees its own
+  cards, the pack and both tables; nothing in canastaai.cpp reads a hand it
+  is not entitled to and this did not start.
+
+  NOT built: the bullet also notes that with an empty stock play continues
+  while each seat takes the previous discard and melds it, so running it
+  dead is not simply drawing the last card. Nothing steers the DISCARD
+  towards a card the next seat cannot take. That is a further step and is
+  not needed for the tactic to work -- refusing to go out and refusing the
+  pack is what empties the stock.
+
+  canastaRunsThePackDead holds both halves: the judgement on figures either
+  side of the rule, the stock window, the ownership of the hand and the
+  going-out-bonus margin; then a seat that could take the pack and draws
+  instead, which fails on a build with the guard mutated off.
+
+  Suite green at 556 checks, ctest 6/6. Ladder against the GHUB-0107 state:
+  medium v easy 23 -> 22 of 24, hard v easy +3861 -> +3844, hard v medium 66
+  of 120 unchanged, expert v hard 115 -> 119 of 240. Mixed and within noise;
+  note that runTheHandDead is inert on the ladder, which builds a default
+  Engine with the rule off, so what moved there is GHUB-0104's stock
+  release alone.
   **Layman:** When we are well behind and cannot win the hand, emptying the pick-up pile kills the hand so nobody scores it -- better than letting them bank a big one.
   Kind: feature.
   Source: user-request-2026-08-24.

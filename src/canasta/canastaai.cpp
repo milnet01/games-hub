@@ -20,7 +20,21 @@ int countRank(const std::vector<Card>& h, int rank)
                              [&](const Card& c) { return c.rank == rank; }));
 }
 
+// What a side's table is worth as things stand, less the cards THIS seat is
+// holding. The partner's hand is deliberately not passed: this AI sees its own
+// cards, the pack and both tables, and nothing else. Nothing in this file reads
+// a hand it is not entitled to, and GHUB-0114 does not start.
+int handShowing(const Team& t, const std::vector<Card>& ourCards, const Rules& r)
+{
+    return handScoreFor(t, ourCards, {}, false, false, r);
+}
+
 } // namespace
+
+// Two rounds of the table. The same figure chooseDiscard already calls late in
+// the hand, and for the same reason: past it there are too few turns left for
+// the pack to come back or for a plan to change.
+constexpr int kEndgameStock = 8;
 
 double discardRisk(const Team& theirs, int rank, int pileSize, bool frozen, const Rules& r)
 {
@@ -115,6 +129,27 @@ double throwCaution(const Team& theirs, int openRequirement)
     // not impossible, and it is precisely how a side stuck all hand comes back
     // in one move.
     return std::max(0.30, 1.0 - double(openRequirement) / 170.0);
+}
+
+bool runTheHandDead(int ourShowing, int theirShowing, int stockLeft, const Rules& r)
+{
+    // It depends ENTIRELY on the house rule. deadHandIfNobodyGoesOut makes a
+    // hand the stock kills void, so neither side scores it; classic Canasta
+    // scores such a hand where it stands — pagat.com is explicit that when a
+    // player who wishes to draw cannot, "the play ends immediately and the hand
+    // is scored" — which hands the leader their points anyway. So the flag is
+    // read rather than assumed.
+    if (!r.deadHandIfNobodyGoesOut)
+        return false;
+    // And only in sight of the end. Steering a whole hand towards a dead stock
+    // is a different and far larger judgement than this; two rounds of the
+    // table is the window where refusing to finish actually kills it.
+    if (stockLeft > kEndgameStock)
+        return false;
+    // Only when the hand as it stands is theirs, and by enough to be worth
+    // throwing away. The two figures move every turn, so a hand ahead by ten
+    // points is not one to burn.
+    return theirShowing > ourShowing + r.goingOutBonus;
 }
 
 bool closeFirstUnderAMinus(const Meld& a, const Meld& b)
@@ -245,6 +280,16 @@ double packCountSafety(int unseen, int pileSize)
     return safety;
 }
 
+bool Ai::killingTheHand(const Engine& e) const
+{
+    const int seat = e.currentSeat();
+    const Rules& r = e.rules();
+    const Team& mine = e.team(teamOf(seat));
+    const Team& theirs = e.team(teamOf(seat) ^ 1);
+    return runTheHandDead(handShowing(mine, e.hand(seat), r), handShowing(theirs, {}, r),
+                          e.stockCount(), r);
+}
+
 int Ai::seen(const Engine& e, int rank) const
 {
     return seenSoFar(e.hand(e.currentSeat()), e.pile(), e.team(0), e.team(1), rank);
@@ -288,6 +333,11 @@ bool Ai::closingOut(const Engine& e, std::size_t inHand) const
     const Team& mine = e.team(teamOf(e.currentSeat()));
     if (!mine.hasCanasta(r))
         return false; // going out is not even legal yet
+    // Losing the hand badly with the stock nearly gone, the owner's tactic is
+    // to run the pack dead rather than let it score (GHUB-0114). Going out is
+    // the one thing that certainly stops that, so it is refused outright.
+    if (killingTheHand(e))
+        return false;
 
     // Catching the other side without a canasta is the biggest swing in the
     // game — under the house rule where a side with none counts nothing in its
@@ -348,6 +398,14 @@ bool Ai::holdsWhileFrozen(const Engine& e, int rank, int naturals) const
     // canasta, and a rank with nothing down yet is a road not started.
     if (caughtAMinus(mine, r) && mine.meldOfRank(rank) != nullptr)
         return false;
+    // GHUB-0104's third condition, and the mirror of GHUB-0114 -- the same
+    // position read the other way. With the stock nearly gone the pack may
+    // never come back at all, so cards held for it are about to be caught in
+    // hand: play out while the hand is still worth something. Unless it is one
+    // we would rather kill, where nothing is going to be scored and holding on
+    // costs nothing.
+    if (e.stockCount() <= kEndgameStock && !killingTheHand(e))
+        return false;
     // The owner's rule, and it is about the HAND rather than the rank: "if you
     // have 10 cards in your hand you should still play as if you could take the
     // pack, because when you pick up cards you more than likely are going to
@@ -367,6 +425,15 @@ bool Ai::holdsWhileFrozen(const Engine& e, int rank, int naturals) const
 
 bool Ai::wantsPile(const Engine& e) const
 {
+    // Running the hand dead means emptying the stock, and taking the pack does
+    // not touch it. So the pack is left alone while there is a choice — draw
+    // instead, and bring the end nearer (GHUB-0114). Ai::draw still takes it
+    // once the stock is gone, because refusing then does not kill the hand, it
+    // stalls the turn: Engine::startTurn ends a hand only where the pack cannot
+    // be taken by anybody.
+    if (killingTheHand(e))
+        return false;
+
     const int n = int(e.pile().size());
     const int v = pileValue(e.pile(), e.rules());
     const Team& mine = e.team(teamOf(e.currentSeat()));
