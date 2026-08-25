@@ -2690,6 +2690,31 @@ void canastaRunsThePackDead()
     }
 }
 
+// Fishing (GHUB-0103): throwing one of three or more of a rank, one at a time,
+// so the seat that discards to you reads it as safe, follows with it, and hands
+// you the pack. Checked on figures — what the bait is worth is the judgement,
+// and the position it pays off in is four turns away by construction.
+void canastaFishing()
+{
+    check(ca::fishingWorth(2, 12, 4) == 0.0,
+          "canasta: two of a rank is the key itself, and breaking it is not fishing");
+    check(ca::fishingWorth(3, 12, 4) > 0.0,
+          "canasta: three is bait, because one can go and a pair still stands");
+    check(ca::fishingWorth(4, 12, 4) > 0.0, "canasta: and so is four");
+
+    check(ca::fishingWorth(3, 3, 4) == 0.0,
+          "canasta: but not at a pack too thin to be worth advertising for");
+    check(ca::fishingWorth(3, 20, 4) > ca::fishingWorth(3, 6, 4),
+          "canasta: and the fatter the pack, the more the bait is worth");
+
+    check(ca::fishingWorth(3, 12, 0) == 0.0,
+          "canasta: nobody holds one to follow with once all eight are accounted for");
+    check(ca::fishingWorth(3, 12, 1) < ca::fishingWorth(3, 12, 3),
+          "canasta: and the fewer left out there, the less likely the bait is taken");
+    check(ca::fishingWorth(3, 12, 3) == ca::fishingWorth(3, 12, 6),
+          "canasta: past three unaccounted for, one more changes nothing");
+}
+
 // What a discard's safety judgement is worth against this opponent
 // (GHUB-0121). Checked on figures rather than on a position played into
 // existence, the way discardRisk and openRequirementFor already are — the claim
@@ -3596,6 +3621,7 @@ int main()
     canastaBlackThreeTiming();
     canastaFirstCanastaIsInsurance();
     canastaRunsThePackDead();
+    canastaFishing();
     canastaThrowCaution();
     canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();

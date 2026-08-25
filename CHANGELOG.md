@@ -64,6 +64,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: the hardest computer now fishes** (GHUB-0103)
+  The family's tactic. Holding three or more of a rank, it throws them out
+  one at a time until a pair is left, hoping the player who discards to it
+  reads that rank as safe and follows with it -- which hands it the pack.
+  It only bothers when the pack is worth taking and when cards of that rank
+  are still unaccounted for, since nobody can follow with a card that no
+  longer exists. Expert only; it inverted the difficulty ladder when the
+  level below was given it too.
+
 - **Canasta: with the pick-up pile nearly gone the computer stops waiting for a frozen pack** (GHUB-0104)
   The other side of the same coin. If the hand is one worth having, it
   plays its cards out rather than holding them back for a frozen pack that

@@ -63,6 +63,22 @@ int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& 
 // discardRisk already carries its own. Read that bullet before adding it.
 double throwCaution(const Team& theirs, int openRequirement);
 
+// What throwing one of three or more of a rank is worth as BAIT (GHUB-0103).
+// The owner's tactic: you throw them out one at a time until two are left,
+// hoping the seat that discards to you is watching, reads the rank as safe and
+// follows with it -- which hands you the pack.
+//
+// Zero below three held, since the pair is the key and breaking it buys
+// nothing; zero on a pack too thin to be worth advertising for; and zero where
+// no card of the rank is unaccounted for, because then no seat is holding one
+// to follow with and the bait is an advertisement nobody can answer.
+//
+// The cost of it lands on the far side of the table -- the seat BELOW sees the
+// same discard and may hold the pair that takes the pack with it. That half is
+// not priced here: discardRisk and the pack count already answer it, and they
+// are subtracted from the same discard's score.
+double fishingWorth(int held, int packSize, int unseen);
+
 // Whether this side is better off running the stock out and killing the hand
 // than letting it be played to a score (GHUB-0114). The owner's tactic: if the
 // opponents have a high score and you can run the pack dead -- no cards left in

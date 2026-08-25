@@ -131,6 +131,27 @@ double throwCaution(const Team& theirs, int openRequirement)
     return std::max(0.30, 1.0 - double(openRequirement) / 170.0);
 }
 
+double fishingWorth(int held, int packSize, int unseen)
+{
+    // Fishing is throwing one of three or more of a rank, one at a time, until
+    // a pair is left -- so the seat that discards to you reads the rank as safe,
+    // follows with it, and hands you the pack (GHUB-0103). Below three there is
+    // no bait to throw: the pair IS the key and breaking it buys nothing.
+    if (held < 3)
+        return 0.0;
+    // Nothing to win. The same five cards a freeze asks for, and for the same
+    // reason -- a thin pack is not worth advertising a rank for.
+    if (packSize < 5)
+        return 0.0;
+    // And nobody left to take the bait. If every card of the rank is already
+    // accounted for -- melded, in the pack, or in this hand -- then no seat is
+    // holding one to follow with, and the throw is an advertisement nobody can
+    // answer.
+    if (unseen <= 0)
+        return 0.0;
+    return (8.0 + 1.2 * double(std::min(packSize, 15))) * std::min(1.0, double(unseen) / 3.0);
+}
+
 bool runTheHandDead(int ourShowing, int theirShowing, int stockLeft, const Rules& r)
 {
     // It depends ENTIRELY on the house rule. deadHandIfNobodyGoesOut makes a
@@ -934,6 +955,15 @@ Card Ai::chooseDiscard(const Engine& e) const
             // unlikely to hold a pair of, so it is SAFER to throw than a rank
             // nobody has let go. Hard reads the pile the other way round, the
             // way most players do.
+            //
+            // This term is exactly what a fishing seat aims at (GHUB-0103), and
+            // capping it at two occurrences was tried as the defence against
+            // that: it cost 7 games of expert v hard, 117 -> 110 of 240. The
+            // reason it cannot work is worth keeping. A fisher throws them ONE
+            // AT A TIME, so the bait shows as one or two of a rank in the pack
+            // -- precisely where the count still means what it says. The tell is
+            // WHO threw them, and Engine::pile() records no such thing. See
+            // GHUB-0124.
             safety += 50.0 * double(countRank(e.pile(), c.rank));
         }
 
@@ -949,6 +979,16 @@ Card Ai::chooseDiscard(const Engine& e) const
             // feed a rank this seat is holding as bait for the pile.
             if (countRank(h, c.rank) >= 3)
                 score -= 30.0;
+            // Unless breaking it IS the play. Three of a rank going down to two
+            // is bait, and the penalty above -- along with the -7 a card apiece
+            // higher up -- is what stopped this seat ever throwing it. Offset
+            // rather than removed: fishing has to win the discard on its
+            // merits, against every other card in the hand.
+            //
+            // Nothing thrown on a free turn can be taken by anybody, so there
+            // is no follow-up to fish for either.
+            if (!freeThrow && m_level == Level::Expert)
+                score += fishingWorth(countRank(h, c.rank), pileSize, 8 - seen(e, c.rank));
             // A wild card thrown away is a canasta thrown away.
             if (isWild(c))
                 score -= 60.0;

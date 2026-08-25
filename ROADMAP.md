@@ -3338,7 +3338,7 @@ open.
   Kind: ux.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0103] **The computer cannot fish, and cannot tell when it is being fished.**
+- ✅ [GHUB-0103] **The computer cannot fish, and cannot tell when it is being fished.**
   The owner's description, kept whole because the shape of it
   is the specification. Holding three or more of a rank, you
   throw them out one at a time until two are left -- or one and
@@ -3370,6 +3370,52 @@ open.
   re-measured against each other afterwards --
   canastaLevelsDiffer() is what caught Hard playing weaker than
   Medium.
+  Resolved (2026-08-25) for the FISHING half. The other half -- seeing it
+  done to you -- is GHUB-0124, filed rather than left as a gap, and this
+  bullet's own warning about shipping one without the other was checked
+  against measurement rather than accepted or ignored. See below.
+
+  fishingWorth(held, packSize, unseen) is the judgement, a free function
+  checked on figures, and it offsets rather than removes the two penalties
+  that stopped this seat ever throwing one of three -- the flat -30 and the
+  -7 a card. Fishing has to win the discard on its merits against every
+  other card in the hand. Zero below three held (the pair IS the key), zero
+  on a pack under five (nothing worth advertising for) and zero where all
+  eight of the rank are accounted for, because then no seat is holding one
+  to follow with and the bait is an advertisement nobody can answer. It is
+  skipped entirely on a free throw, where nothing can be taken and there is
+  no follow-up to fish for.
+
+  EXPERT ONLY, and that was forced by measurement rather than chosen for
+  neatness. Given to Hard as well it inverted the ladder outright: expert v
+  hard 115 -> 103 of 240, failing "expert has not fallen behind hard". The
+  reason is this bullet's own point arriving from the other side. Hard
+  reads the pack the OTHER way round (`safety -= 2.5 * shown`) and is
+  therefore bait-resistant by accident, while Expert's `safety += 50 *
+  countRank(pile, rank)` is precisely what bait aims at. So a fishing Hard
+  beat a baitable Expert. Gated to Expert the rung moves the other way, 115
+  -> 117 of 240.
+
+  Which is also the honest answer to "an AI that fishes but cannot see it
+  being done to it is worse than one that does neither": with the gate at
+  Expert, the only level that fishes is the only level that can be fished,
+  so it is exposed to nobody but itself, and the one rung that can see the
+  change moved in its favour.
+
+  The defence WAS built and reverted, and the diagnosis is on GHUB-0124:
+  capping Expert's pile-follow term at two occurrences cost 7 games (117 ->
+  110) and could never have worked, because a fisher throws them one at a
+  time and the bait shows as one or two -- exactly where that count still
+  means what it says. The tell is who threw them, and Engine::pile()
+  records no such thing.
+
+  The bullet's downstream-cost half needed no code: the seat below seeing
+  the same discard is what discardRisk and the pack count already price,
+  and they are subtracted from the same discard's score.
+
+  canastaFishing holds the judgement on figures -- the three-card floor,
+  the pack floor, the unseen floor and both slopes. Suite green at 564
+  checks, ctest 6/6.
   **Layman:** Throwing away one of three matching cards to tempt the player above you into throwing the third -- the family calls it fishing, and the computer neither does it nor spots it.
   Kind: feature.
   Source: user-request-2026-08-24.
@@ -4266,6 +4312,49 @@ open.
   **Layman:** The game is won by getting to 5000, not by being ahead -- and if both sides get there in the same hand, nobody wins.
   Kind: feature.
   Source: user-request-2026-08-25.
+
+- 📋 [GHUB-0124] **The computer cannot tell WHO threw a card, so it cannot see fishing being done to it.**
+  The half of GHUB-0103 that did not ship, filed rather than left as a
+  gap. That bullet asked for both halves in one pass, on the grounds
+  that "an AI that fishes but cannot see it being done to it is worse
+  than one that does neither". The fishing half shipped on 2026-08-25
+  and this did not.
+
+  What was tried, and why it cannot work. Expert scores a throw with
+  `safety += 50 * countRank(e.pile(), c.rank)` -- a rank the others
+  have parted with is one they are unlikely to hold a pair of. That is
+  precisely the term a fisher aims at. Capping it at two occurrences
+  was built as the defence and measured WORSE: expert v hard 117 ->
+  110 of 240. The diagnosis is the useful part. A fisher throws them
+  ONE AT A TIME, so the bait shows up as one or two of a rank in the
+  pack -- exactly where that count still means what it says. The cap
+  therefore penalised the honest safety read and caught no bait at
+  all.
+
+  The real tell is WHO threw them, and Engine::pile() is a plain
+  vector<Card> that records nothing of the sort. So the defence needs
+  provenance the engine does not keep: which seat discarded each card
+  in the pack. That is an engine change with a save tail and a view
+  version behind it, which is why it is its own bullet rather than a
+  line in GHUB-0103.
+
+  Note that the fishing half was gated to EXPERT for exactly this
+  reason. Given to Hard as well it inverted the ladder outright --
+  expert v hard 115 -> 103 of 240, failing "expert has not fallen
+  behind hard" -- because Hard reads the pack the other way round
+  (`safety -= 2.5 * shown`) and is therefore bait-RESISTANT by
+  accident, while Expert is the one level that can be fished. A fishing
+  Hard beat a baitable Expert. Read that measurement before widening
+  the level gate.
+
+  A cheaper approximation exists if provenance is not wanted: the seat
+  that discards immediately before this one always owns the TOP card
+  of the pack, and an Ai could remember the pack between its own
+  turns and attribute the four cards that appeared. It is per-seat
+  state that a taken pack resets, and it was not attempted.
+  **Layman:** The computer can now fish -- throw one of three matching cards as bait -- but it still cannot spot anyone doing it to it, because it cannot see which player threw which card.
+  Kind: feature.
+  Source: in-session-2026-08-25.
 
 ## The score book on a phone
 
