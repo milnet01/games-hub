@@ -3691,7 +3691,7 @@ open.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
 
-- 📋 [GHUB-0109] **Black threes are a one-turn block and the AI spends them at random.**
+- ✅ [GHUB-0109] **Black threes are a one-turn block and the AI spends them at random.**
   SUGGESTED, NOT REQUESTED. Offered to the owner on
   2026-08-24 and not yet answered; filed as considered so it
   survives the session rather than as planned work.
@@ -3710,6 +3710,47 @@ open.
 
   Smaller than the other AI items and independent of them.
   Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
+  Resolved (2026-08-25). ONE of the bullet's two halves ships, and the other
+  was built, measured worse and reverted -- they pull in opposite
+  directions, which the bullet did not say and the measurement did.
+
+  Shipped: blackThreeWorth(packSize, caution), a free function, and the
+  throw's bonus now runs through it. The pack-size half is the step the
+  judgement already had, kept at its measured figures. The new half is the
+  owner's second reading -- "the seat to the left is live". That seat is
+  always an opponent, partners sitting opposite, so throwCaution grades it
+  exactly as GHUB-0121 grades a dangerous throw: against a side that has
+  not opened and is on the 120 band, a one-turn block buys almost nothing
+  and the card is better kept.
+
+  REVERTED, and this is the useful finding. The bullet's other half says
+  black threes are dead weight -- they never take a wild and cannot be
+  melded until a side goes out -- and argues for spending rather than
+  hoarding them. Acting on it means exempting them from chooseDiscard's two
+  "do not break up your holdings" penalties, which is what makes the AI
+  hold them. Built, and it cost 10 games of expert v hard (115 -> 105 of
+  240, margin -104 -> -364) and 6 of hard v medium (66 -> 60 of 120). Two
+  independent rungs moving the same way, and expert v hard landed half a
+  game above notTheWeakerPlayer's floor.
+
+  Why: those penalties ARE the timing mechanism. They are what stops a
+  black three being thrown the turn it turns up, which is the whole of
+  "spent when the pack is fat, not whenever it turns up". Removing them
+  implements the dead-weight half by destroying the timing half. The
+  comment on the penalty now says so with the figures, so the next reader
+  does not re-derive it.
+
+  Also folded in, and behaviour-neutral: throwCaution is computed once per
+  discard rather than once per card, and is 1.0 for Easy and Medium so
+  those two read exactly as they did.
+
+  canastaBlackThreeTiming holds it on figures -- fatter pack worth more,
+  live seat worth more, and the two composed through throwCaution. Suite
+  green at 514 checks, ctest 6/6.
+
+  Ladder against the GHUB-0101 state: hard v easy +3882 -> +3861, hard v
+  medium 63 -> 66 of 120, expert v hard 121 -> 115 of 240. Mixed and within
+  noise; the position check is the judge (GHUB-0110).
   **Layman:** A black three stops the next player taking the pack for one turn -- worth saving for when the pack is fat and they look ready.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.

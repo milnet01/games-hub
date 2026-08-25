@@ -117,6 +117,21 @@ double throwCaution(const Team& theirs, int openRequirement)
     return std::max(0.30, 1.0 - double(openRequirement) / 170.0);
 }
 
+double blackThreeWorth(int packSize, double caution)
+{
+    // A black three blocks the pack for exactly one turn — until it is covered
+    // — so what it buys is whatever would have been taken in that turn. Two
+    // readings, and they are the two the owner named: how fat the pack is, and
+    // whether the seat to the left is live. That seat is always an opponent,
+    // partners sitting opposite, so throwCaution's grading of how live their
+    // side is answers the second exactly as it answers a dangerous throw.
+    //
+    // The pack-size half is the step this already had — a block is worth much
+    // more once there is a pack behind it — kept at its measured figures rather
+    // than smoothed into a curve, which measured worse.
+    return (12.0 + (packSize >= 4 ? 10.0 : 0.0)) * caution;
+}
+
 double feedPressure(const std::vector<Card>& hand, const Team& theirs, const Rules& r)
 {
     if (hand.empty())
@@ -739,6 +754,13 @@ Card Ai::chooseDiscard(const Engine& e) const
     // the one that is live, because the seat after it is the first seat playing
     // a second time.
     const bool freeThrow = e.discardCannotBeTaken();
+    // How live the other side is. It grades the safety of a throw (GHUB-0121)
+    // and what a black three's one turn of block is worth (GHUB-0109). Easy and
+    // Medium stay naive on purpose, so for them it is simply 1.0 and the two
+    // judgements read as they always did.
+    const double caution = (m_level == Level::Hard || m_level == Level::Expert)
+        ? throwCaution(theirs, e.openRequirement(teamOf(seat) ^ 1))
+        : 1.0;
 
     Card best = h.front();
     double bestScore = -1e9;
@@ -758,7 +780,12 @@ Card Ai::chooseDiscard(const Engine& e) const
         double safety = 0.0;
 
         if (m_level != Level::Easy) {
-            // Do not break up your own holdings.
+            // Do not break up your own holdings. Black threes are NOT exempt,
+            // and that was measured rather than assumed (GHUB-0109): exempting
+            // them on the argument that a run of them is dead weight cost 10
+            // games of expert v hard and 6 of hard v medium. This penalty is
+            // what stops a black three being thrown the turn it turns up, which
+            // is what makes it a timing card at all.
             score -= 7.0 * (countRank(h, c.rank) - 1);
             if (mine.meldOfRank(c.rank) != nullptr)
                 score -= 22.0;
@@ -780,8 +807,10 @@ Card Ai::chooseDiscard(const Engine& e) const
                     score -= 15.0;
                 else
                     // Cannot be melded until someone goes out, so it is nearly
-                    // free to throw, and it shuts the pile down for a round.
-                    score += 12.0 + (pileSize >= 4 ? 10.0 : 0.0);
+                    // free to throw, and it shuts the pack down for a round —
+                    // worth more the fatter the pack and the liver the seat to
+                    // the left, rather than the flat step this used to be.
+                    score += blackThreeWorth(pileSize, caution);
             }
         }
 
@@ -827,8 +856,7 @@ Card Ai::chooseDiscard(const Engine& e) const
         // read the pack this closely get it: Easy and Medium stay naive on
         // purpose, and a player who is careful when they need not be is a
         // weaker player rather than a broken one.
-        if (m_level == Level::Hard || m_level == Level::Expert)
-            safety *= throwCaution(theirs, e.openRequirement(teamOf(seat) ^ 1));
+        safety *= caution;
 
         // Nothing thrown now can be taken, so every judgement above about
         // handing the pile over is measuring a risk that cannot happen. Dropped

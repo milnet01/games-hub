@@ -64,6 +64,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: the computer spends a black three where it blocks something** (GHUB-0109)
+  A black three on top stops the next player taking the pack for one turn.
+  The computer already saved them for a fat pack; it now also weighs whether
+  the player to its left could actually take the pack at all. Thrown at a
+  side that has not opened yet and has a long way to go, the block buys
+  almost nothing, and the card is better kept.
+
 - **Canasta: the computer now freezes the pack for a reason** (GHUB-0101)
   It used to freeze whenever it happened to be able to. Now it wants one of
   three reasons: their side is in and ours is not, so the pack is theirs to

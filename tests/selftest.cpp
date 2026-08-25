@@ -2541,6 +2541,28 @@ void canastaCountsThePack()
           "canasta: and the bigger the pack, the more an unaccounted rank costs");
 }
 
+// What a black three is worth as a block (GHUB-0109). It stops the pack being
+// taken for exactly one turn, so it is worth what would be taken in that turn:
+// a fat pack, and a seat to the left that could actually take it.
+void canastaBlackThreeTiming()
+{
+    check(ca::blackThreeWorth(9, 1.0) > ca::blackThreeWorth(2, 1.0),
+          "canasta: a black three is worth more thrown at a fat pack than a thin one");
+    check(ca::blackThreeWorth(9, 0.3) < ca::blackThreeWorth(9, 1.0),
+          "canasta: and worth less against a side that could not take it anyway");
+
+    // The seat to the left is always an opponent — partners sit opposite — so
+    // how live that side is grades the block exactly as it grades a dangerous
+    // throw. A side already in takes the pack on ordinary terms; one still out
+    // has to open off it, and on the top band that is a long way off.
+    ca::Team in;
+    in.opened = true;
+    const ca::Team out;
+    check(ca::blackThreeWorth(9, ca::throwCaution(in, 50))
+              > ca::blackThreeWorth(9, ca::throwCaution(out, 120)),
+          "canasta: so the block is spent on a live seat, not on one still shut out");
+}
+
 // What a discard's safety judgement is worth against this opponent
 // (GHUB-0121). Checked on figures rather than on a position played into
 // existence, the way discardRisk and openRequirementFor already are — the claim
@@ -3444,6 +3466,7 @@ int main()
     canastaFreezeLimits();
     canastaFreezeReasons();
     canastaCountsThePack();
+    canastaBlackThreeTiming();
     canastaThrowCaution();
     canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();

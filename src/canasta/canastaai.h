@@ -63,6 +63,17 @@ int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& 
 // discardRisk already carries its own. Read that bullet before adding it.
 double throwCaution(const Team& theirs, int openRequirement);
 
+// What throwing a black three is worth as a block (GHUB-0109). It stops anyone
+// taking the pack for exactly one turn, until it is covered — so it is worth
+// what would have been taken in that turn.
+//
+// Two readings, and they are the two the owner named: how fat the pack is, and
+// whether the seat to the left is live. That seat is always an opponent,
+// partners sitting opposite, so throwCaution's grading of how live their side
+// is answers the second exactly as it answers a dangerous throw. The pack-size
+// half is the step this judgement already had, kept at its measured figures.
+double blackThreeWorth(int packSize, double caution);
+
 // How many of a rank are already accounted for — melded by either side, lying
 // in the pack, or in this seat's own hand (GHUB-0106). Two packs, so eight of
 // every rank exist, and a rank with all eight visible is a throw nobody at the
