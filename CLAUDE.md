@@ -79,8 +79,15 @@ pass/fail:
 ```bash
 ./build/gameshub_selftest                             # all game rules
 QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest     # widgets and hub
+QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest --bench   # frame cost alone
 tests/pre-push-test.sh                                # which arm the hook takes
 ```
+
+**`--bench` is the only thing here that can time a frame**, and it is what
+makes a painting change provable. It prints ms/frame for Canasta mid-deal and
+at rest, a full Klondike tableau, a FreeCell board and the tile grid, and
+**reports rather than asserts** — a frame time is a property of the machine.
+Take it before and after, never one reading in isolation.
 
 `CMAKE_INSTALL_PREFIX` must be set at **configure** time, not passed to
 `cmake --install --prefix`. The `.desktop` file bakes in an absolute `Exec`
@@ -417,6 +424,26 @@ environment at all, so an uncapped band would be far wider there than here and
 could drive a card below `CardArt::kFaceMinWidth` on a runner and nowhere else.
 A capped band can be narrower than the sentence needs, and then the caption
 just overlaps a little; a faceless card cannot be recovered from.
+
+**Card art is cached, and the cache key must decide the picture completely.**
+`CardArt::paintFace`/`paintBack` snap a card to whole device pixels, draw it
+once and keep it. Three things that cost real time to learn. **The key is
+computed from the SNAPPED size and the card must be drawn at that same snapped
+size** — key on the rounded size while drawing at the exact one and two rects a
+fraction of a pixel apart share an entry, so whichever drew first decides the
+picture and a frame after an eviction differs from the same frame before one.
+`cardArtKeyDecidesThePicture` is the guard. **The shadow padding must be a whole
+pixel**, or the card sits at a fractional offset inside the pixmap and every line
+antialiases differently. And **a rotated FACE is never cached** — resampling
+softens it, and this game is read by pip pattern. Rotated backs are cached
+because there is nothing on a back to read.
+
+**`--shot` cannot compare two card games.** The deal is random, so two runs of
+one build differ in about 101,000 of 740,000 pixels. That is GHUB-0093, and it
+produced two confident wrong readings before it was spotted. To compare a
+drawing change, build a scratch probe that draws the shape at a fixed rect
+against both trees — or use a deterministic surface like the tile grid, which
+matches itself exactly.
 
 **A widget that resizes its own window after lowering its minimum must let the
 layout catch up first.** `setMinimumSize()` lowers *that widget's* floor, but
