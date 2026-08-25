@@ -2439,6 +2439,64 @@ void canastaFreezeLimits()
           "canasta: a side that has not opened is shut out of the pack already");
 }
 
+// The three reasons to spend a wild card freezing the pack (GHUB-0101), on
+// figures. A price on a wild card is a tuned threshold and GHUB-0110 settled
+// that the ladder cannot measure one; a reason can be stated and checked.
+void canastaFreezeReasons()
+{
+    const ca::Rules r = ca::Rules::classic();
+    const auto meldOf = [](int rank, int n) {
+        ca::Meld m;
+        m.rank = rank;
+        for (int i = 0; i < n; ++i)
+            m.cards.push_back(cd(i % 2 == 0 ? Suit::Spades : Suit::Hearts, rank));
+        return m;
+    };
+
+    // A hand of six that touches nothing either side has down.
+    const std::vector<Card> quiet { cd(Suit::Clubs, 4), cd(Suit::Clubs, 5),
+                                    cd(Suit::Clubs, 6), cd(Suit::Clubs, 9),
+                                    cd(Suit::Spades, 9), cd(Suit::Clubs, 10) };
+
+    ca::Team bare;
+    ca::Team open;
+    open.opened = true;
+    open.melds.push_back(meldOf(kKing, 4));
+
+    check(ca::freezeIsWorthTheWild(quiet, bare, open, r),
+          "canasta: freeze when their side is in and ours is not");
+    check(!ca::freezeIsWorthTheWild(quiet, open, bare, r),
+          "canasta: but not merely because we can, with nothing to gain by it");
+
+    // Fishing: two nines in hand against nines already on our own table.
+    ca::Team fishing;
+    fishing.opened = true;
+    fishing.melds.push_back(meldOf(9, 3));
+    check(ca::freezeIsWorthTheWild(quiet, fishing, bare, r),
+          "canasta: freeze when holding back a pair of a rank we have melded");
+
+    // Feeding: a hand where a third or more of the cards throw into their melds.
+    const std::vector<Card> feeders { cd(Suit::Clubs, kKing), cd(Suit::Spades, kKing),
+                                      cd(Suit::Clubs, 4),     cd(Suit::Clubs, 5),
+                                      cd(Suit::Clubs, 6),     cd(Suit::Clubs, 10) };
+    check(ca::feedPressure(feeders, open, r) >= 1.0 / 3.0,
+          "canasta: two kings in six against their king meld is a third of the hand");
+    check(ca::feedPressure(quiet, open, r) == 0.0,
+          "canasta: and a hand touching nothing of theirs feeds them nothing");
+    check(ca::freezeIsWorthTheWild(feeders, open, open, r),
+          "canasta: freeze when this hand will keep feeding them whatever it throws");
+
+    // A rank they have closed is no longer a feeder under that house rule, so
+    // the same hand stops arguing for a freeze.
+    ca::Rules safe = r;
+    safe.canastaMakesRankSafe = true;
+    ca::Team closed;
+    closed.opened = true;
+    closed.melds.push_back(meldOf(kKing, 7));
+    check(ca::feedPressure(feeders, closed, safe) == 0.0,
+          "canasta: a rank they have closed cannot be fed, so it is no reason to freeze");
+}
+
 // What a discard's safety judgement is worth against this opponent
 // (GHUB-0121). Checked on figures rather than on a position played into
 // existence, the way discardRisk and openRequirementFor already are — the claim
@@ -3340,6 +3398,7 @@ int main()
     canastaAiPlaysOutWhenTheHandGetsSmall();
     canastaAiOpensOnAJokerToKeepThePair();
     canastaFreezeLimits();
+    canastaFreezeReasons();
     canastaThrowCaution();
     canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();

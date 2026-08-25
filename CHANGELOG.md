@@ -64,6 +64,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: the computer now freezes the pack for a reason** (GHUB-0101)
+  It used to freeze whenever it happened to be able to. Now it wants one of
+  three reasons: their side is in and ours is not, so the pack is theirs to
+  lose; we are holding back a pair of a rank we have already put down, and
+  the freeze makes that pair the only key to it; or our hand is so full of
+  cards that would hand them the pack that freezing is what makes it safe
+  to throw at all. It freezes about a quarter less often as a result, and
+  when it does there is something behind it.
+
 - **Canasta: two limits on how freely the computer freezes the pack** (GHUB-0113)
   It will not freeze more than twice in a hand -- each freeze throws away a
   wild card worth 20 or 50 -- and it will not freeze a pack that was

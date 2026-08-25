@@ -63,6 +63,32 @@ int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& 
 // discardRisk already carries its own. Read that bullet before adding it.
 double throwCaution(const Team& theirs, int openRequirement);
 
+// How much of this hand is going to end up feeding the other side, as a share
+// of the cards in it (GHUB-0101). The owner's first reason to freeze: "when
+// your side will feed (continually give the pack away) the opposition".
+//
+// It has a precise meaning here rather than a vague one. discardRisk prices a
+// throw into a rank the other side has melded, and returns zero the moment the
+// pack is frozen — so a hand full of feeders is a hand that freezing makes
+// throwable, quite apart from what it denies them. Asked through discardRisk
+// rather than by counting melds directly, so the two cannot disagree about a
+// rank a house rule has already made safe.
+//
+// Wild cards and threes are not counted: neither is an ordinary throw.
+double feedPressure(const std::vector<Card>& hand, const Team& theirs, const Rules& r);
+
+// Whether there is a REASON to spend a wild card freezing the pack, rather than
+// merely the opportunity to (GHUB-0101). Three of them: the pack is their asset
+// and not ours, we are fishing on a rank we have already melded, or this hand
+// will keep feeding them whatever it throws. The first is published strategy;
+// the other two are the owner's own, given 2026-08-25.
+//
+// This is what GHUB-0101 asked for. That bullet proposed a PRICE on the freeze
+// rather than the veto it was filed as, and a price on a wild card is a tuned
+// threshold the ladder cannot measure. Reasons are checkable instead.
+bool freezeIsWorthTheWild(const std::vector<Card>& hand, const Team& mine, const Team& theirs,
+                          const Rules& r);
+
 // Whether freezing the pack would cost THIS side its own access to it
 // (GHUB-0113). "Your team is positioned to claim the pile — freezing costs you
 // access too": a freeze locks everyone out, so freezing a pack that is already

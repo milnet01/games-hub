@@ -3160,7 +3160,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0101] **The computer freezes the pack while nobody has opened, which buys it nothing.**
+- ✅ [GHUB-0101] **The computer freezes the pack while nobody has opened, which buys it nothing.**
   With pileFrozenUntilOpened on -- the House default -- a side
   that has not opened needs two matching cards from hand to
   take the pile, which is exactly what a frozen pile demands.
@@ -3231,6 +3231,59 @@ open.
   GHUB-0113 already tightens wantsToFreeze on two sourced grounds (a
   per-hand budget, and not freezing a pack that is ours), so any pricing
   work belongs with that bullet rather than beside it.
+  Resolved (2026-08-25). The owner was asked again on 2026-08-25 and
+  DEFERRED the disposition -- but answered the substance, which turned the
+  open question round. He did not want a price; he named when to freeze:
+  "1. When your side will feed (continually give the pack away) the
+  opposition. 2. When you are fishing (holding back cards that your team
+  has already melded) and there is little risk of giving the pack away."
+  And he asked for research, which is where the third came from.
+
+  So what shipped is REASONS rather than the price this bullet proposed --
+  a price on a wild card is a tuned threshold, and GHUB-0110 established
+  that the ladder cannot measure one. freezeIsWorthTheWild is the free
+  function, checked on figures, and Ai::wantsToFreeze now refuses a freeze
+  that has none of its three:
+
+    - their side has opened and ours has not, so the pack is their asset.
+      From suitedgames.com/canasta/strategy, read 2026-08-25: "freeze when
+      opponents have melded but you have not";
+    - we are fishing -- holding two or more naturals of a rank our own side
+      already has down;
+    - feedPressure is a third of the hand or more. That is the owner's
+      first trigger, and it has a precise meaning here rather than a vague
+      one: discardRisk prices a throw into a rank they have melded and
+      returns ZERO once the pack is frozen, so freezing does not merely
+      deny them the pack, it makes this seat's own dangerous cards
+      throwable. Asked through discardRisk rather than by reading melds, so
+      the two cannot disagree about a rank canastaMakesRankSafe has closed.
+
+  The fishing reason is not decoration and the run proved it. Built with
+  only the other two, the GHUB-0122 check went red on its last assertion --
+  the owner's own opening play keeps a pair of the rank it has just melded
+  and then freezes, and with no fishing reason there was nothing to
+  justify the freeze. That is his second trigger, arrived at from the
+  other end.
+
+  Also shipped, from the same research: no freeze while closingOut() is
+  true. "Do not freeze when reaching go-out and freezing slows your tempo
+  disproportionately" -- and the wild is worth more finishing a canasta
+  than locking a pack this side has no turns left to come back for.
+
+  Measured. Freezes across the suite's full games fall from 1061 to 764, a
+  28% cut, with the gate refusing 6741 opportunities. Ladder for the record
+  and not as the judge (GHUB-0110): hard v easy +4335 -> +3882, hard v
+  medium 64 -> 63 of 120, expert v hard 122 -> 121 of 240, all against the
+  GHUB-0122 state earlier the same day.
+
+  canastaFreezeReasons holds all three on figures, plus feedPressure itself
+  and the canastaMakesRankSafe carve-out. Suite green at 504 checks,
+  ctest 6/6.
+
+  The bullet's original claim stays REFUTED, and the 2026-08-24 revert note
+  above is still the reason: a freeze thrown while the opposition is
+  unopened outlives their opening, so it is a pre-emptive lock rather than
+  a redundant one. Nothing here reinstates that veto.
   **Layman:** Throwing a joker to freeze the pack is wasted when neither side has opened yet -- the pack is already out of reach for both of them.
   Kind: feature.
   Source: user-request-2026-08-24.

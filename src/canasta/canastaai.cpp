@@ -117,6 +117,52 @@ double throwCaution(const Team& theirs, int openRequirement)
     return std::max(0.30, 1.0 - double(openRequirement) / 170.0);
 }
 
+double feedPressure(const std::vector<Card>& hand, const Team& theirs, const Rules& r)
+{
+    if (hand.empty())
+        return 0.0;
+    int feeders = 0;
+    for (const Card& c : hand)
+        if (!isWild(c) && c.rank != 3 && discardRisk(theirs, c.rank, 0, false, r) > 0.0)
+            ++feeders;
+    return double(feeders) / double(hand.size());
+}
+
+bool freezeIsWorthTheWild(const std::vector<Card>& hand, const Team& mine, const Team& theirs,
+                          const Rules& r)
+{
+    // Their side is in and ours is not, so the pack is THEIR asset and the
+    // freeze makes them find a natural pair for it. Published strategy leads
+    // with this one: "freeze when opponents have melded but you have not."
+    if (theirs.opened && !mine.opened)
+        return true;
+
+    // We are fishing — holding back naturals of a rank our own side already has
+    // down. The owner's second trigger, and the one his opening play creates on
+    // purpose: GHUB-0122 keeps a pair of the very rank it has just melded, and
+    // the freeze is what makes that pair the only key to the pack.
+    for (int rank = kAce; rank <= kKing; ++rank) {
+        if (rank == 2 || rank == 3)
+            continue;
+        int held = 0;
+        for (const Card& c : hand)
+            if (c.rank == rank && !isWild(c))
+                ++held;
+        if (held >= 2 && mine.meldOfRank(rank) != nullptr)
+            return true;
+    }
+
+    // Or this hand is going to keep feeding them whatever it throws. The
+    // owner's first trigger, and it subsumes the "little risk" qualifier on his
+    // second: where the risk is high this fires anyway, so both readings of a
+    // fishing hand end in the same answer.
+    //
+    // A third of the hand is the bar. It is a judgement rather than a
+    // measurement — GHUB-0110 settled that the ladder cannot separate a
+    // threshold this size from noise, so nothing here is fitted to it.
+    return feedPressure(hand, theirs, r) >= 1.0 / 3.0;
+}
+
 bool freezeCostsUsThePack(const std::vector<Card>& pile, const std::vector<Card>& hand,
                           const Team& mine, const Rules& r)
 {
@@ -589,6 +635,7 @@ bool Ai::wantsToFreeze(const Engine& e, Card& wild) const
     const std::vector<Card>& h = e.hand(seat);
     const Rules& r = e.rules();
     const Team& mine = e.team(teamOf(seat));
+    const Team& theirs = e.team(teamOf(seat) ^ 1);
     // Freezing is only worth 20 points of wild card when the pile is big enough
     // to be worth coming back for, and only if we hold the pair that takes it.
     if (int(e.pile().size()) < 5)
@@ -635,6 +682,14 @@ bool Ai::wantsToFreeze(const Engine& e, Card& wild) const
     // any pack it could take and wanted, and wantsPile wants every pack of
     // three cards or more at these two levels, while a freeze needs five.
     if (freezeCostsUsThePack(e.pile(), h, mine, r))
+        return false;
+    // Not while the hand is being closed out. "Do not freeze when reaching
+    // go-out and freezing slows your tempo disproportionately" — and the wild
+    // card is worth more finishing a canasta than locking a pack this side has
+    // no more turns to come back for.
+    if (closingOut(e, h.size()))
+        return false;
+    if (!freezeIsWorthTheWild(h, mine, theirs, r))
         return false;
 
     int spare = 0;
