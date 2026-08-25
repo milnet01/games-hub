@@ -76,6 +76,7 @@ set(GAME_CORE_SOURCES
     src/twenty48/twenty48board.cpp
     src/pyramid/pyramidtable.cpp
     src/freecell/freecelltable.cpp
+    src/klondike/klondiketable.cpp
 )
 
 set(GAME_VIEW_SOURCES

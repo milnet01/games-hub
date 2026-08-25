@@ -2,12 +2,12 @@
 
 #include "cards/card.h"
 #include "gameview.h"
+#include "klondike/klondiketable.h"
 
 #include <QPointF>
 #include <QRectF>
 
 #include <array>
-#include <random>
 #include <vector>
 
 class KlondikeView : public GameView
@@ -33,7 +33,7 @@ protected:
     QSize minimumSizeHint() const override { return { 560, 420 }; }
 
 private:
-    enum class PileKind { Stock, Waste, Foundation, Tableau };
+    using PileKind = KlondikeTable::PileKind;
 
     struct Spot {
         PileKind kind = PileKind::Stock;
@@ -42,18 +42,9 @@ private:
         bool valid = false;
     };
 
-    struct Snapshot {
-        std::vector<Card> stock;
-        std::vector<Card> waste;
-        std::array<std::vector<Card>, 4> foundations;
-        std::array<std::vector<Card>, 7> tableau;
-        int score = 0;
-    };
-
     void buildActions();
     void newGame();
     void undo();
-    void pushUndo();
 
     // Geometry
     //
@@ -75,16 +66,10 @@ private:
     double fanStep(const std::vector<Card>& pile, int index) const;
     Spot hitTest(QPointF pos) const;
 
-    std::vector<Card>& pileFor(PileKind kind, int pile);
-    const std::vector<Card>& pileFor(PileKind kind, int pile) const;
-
-    // Rules
-    bool canStackOnTableau(const Card& moving, int column) const;
-    bool canPlaceOnFoundation(const Card& moving, int foundation) const;
-    // Sends a card to the first foundation that will take it. Used by
-    // double-click and by the auto-finish sweep.
-    bool sendToFoundation(PileKind from, int pile);
-    bool autoFinishStep();
+    const std::vector<Card>& pileFor(PileKind kind, int pile) const
+    {
+        return m_table.pile(kind, pile);
+    }
 
     void dealFromStock();
     void checkWin();
@@ -93,12 +78,12 @@ private:
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;
 
-    std::vector<Card> m_stock;
-    std::vector<Card> m_waste;
-    std::array<std::vector<Card>, 4> m_foundations;
-    std::array<std::vector<Card>, 7> m_tableau;
+    // The rules. What is left here is the pointer, the drag and the drawing.
+    KlondikeTable m_table;
 
     // Cards currently under the cursor, lifted off their pile while dragging.
+    // The table holds the authoritative copy and knows where they came from;
+    // this is what the view draws.
     std::vector<Card> m_drag;
     Spot m_dragFrom;
     QPointF m_dragPos;
@@ -107,9 +92,5 @@ private:
     bool m_pressValid = false;
     QPointF m_pressPos;
 
-    std::vector<Snapshot> m_history;
-    std::mt19937 m_rng { std::random_device {}() };
-    int m_drawCount = 1;
-    int m_score = 0;
     bool m_won = false;
 };

@@ -1,4 +1,5 @@
 #include "klondikeview.h"
+#include "klondike/klondiketable.h"
 
 #include "legibility.h"
 #include "scores.h"
@@ -57,10 +58,10 @@ void KlondikeView::buildActions()
     for (int n : { 1, 3 }) {
         auto* a = new QAction(QStringLiteral("Draw %1").arg(n), this);
         a->setCheckable(true);
-        a->setChecked(n == m_drawCount);
+        a->setChecked(n == m_table.drawCount());
         group->addAction(a);
         connect(a, &QAction::triggered, this, [this, n] {
-            m_drawCount = n;
+            m_table.setDrawCount(n);
             newGame();
         });
         m_actions.append(a);
@@ -69,35 +70,12 @@ void KlondikeView::buildActions()
 
 void KlondikeView::newGame()
 {
-    std::vector<Card> deck = makeDeck(1, 4);
-    shuffleCards(deck, m_rng);
+    m_table.deal();
     Sound::instance().play(Sound::kShuffle);
-
-    for (auto& f : m_foundations)
-        f.clear();
-    for (auto& t : m_tableau)
-        t.clear();
-    m_waste.clear();
-    m_stock.clear();
     m_drag.clear();
-    m_history.clear();
     m_dragging = false;
     m_won = false;
-    m_score = 0;
     m_undoAction->setEnabled(false);
-
-    // Columns get 1..7 cards, only the last of each face up.
-    std::size_t next = 0;
-    for (int col = 0; col < 7; ++col) {
-        for (int i = 0; i <= col; ++i) {
-            Card c = deck[next++];
-            c.faceUp = (i == col);
-            m_tableau[col].push_back(c);
-        }
-    }
-    m_stock.assign(deck.begin() + next, deck.end());
-    for (Card& c : m_stock)
-        c.faceUp = false;
 
     update();
     refresh();
@@ -108,27 +86,15 @@ void KlondikeView::activate()
     refresh();
 }
 
-void KlondikeView::pushUndo()
-{
-    m_history.push_back({ m_stock, m_waste, m_foundations, m_tableau, m_score });
-    if (m_history.size() > 200)
-        m_history.erase(m_history.begin());
-    m_undoAction->setEnabled(true);
-}
-
 void KlondikeView::undo()
 {
-    if (m_history.empty())
+    if (!m_table.canUndo())
         return;
-    const Snapshot s = m_history.back();
-    m_history.pop_back();
-    m_stock = s.stock;
-    m_waste = s.waste;
-    m_foundations = s.foundations;
-    m_tableau = s.tableau;
-    m_score = s.score;
+    m_table.undo();
+    m_drag.clear();
+    m_dragging = false;
     m_won = false;
-    m_undoAction->setEnabled(!m_history.empty());
+    m_undoAction->setEnabled(m_table.canUndo());
     update();
     refresh();
 }
@@ -148,7 +114,7 @@ QByteArray KlondikeView::saveState() const
 {
     // Nothing worth coming back to: a deal already solved, or one nobody has
     // touched. An empty state also clears whatever was stored before.
-    if (m_won || m_history.empty())
+    if (m_won || !m_table.canUndo())
         return {};
 
     // A run lifted in mid-drag has been erased from its pile and is held until
@@ -164,7 +130,7 @@ QByteArray KlondikeView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_drawCount) << qint32(m_score);
+    out << quint32(1) << qint32(m_table.drawCount()) << qint32(m_table.score());
     cardcodec::writePile(out, pile(PileKind::Stock, 0));
     cardcodec::writePile(out, pile(PileKind::Waste, 0));
     for (int f = 0; f < 4; ++f)
@@ -195,23 +161,12 @@ bool KlondikeView::restoreState(const QByteArray& blob)
         || !cardcodec::readPiles(in, foundations) || !cardcodec::readPiles(in, tableau))
         return false;
 
-    // Klondike never takes a card out of play, so the whole pack must be here —
-    // nothing missing, nothing doubled.
-    std::vector<Card> all;
-    cardcodec::gather(all, stock);
-    cardcodec::gather(all, waste);
-    cardcodec::gather(all, foundations);
-    cardcodec::gather(all, tableau);
-    if (!cardcodec::matchesPack(all, 1, 4))
+    // The table decides whether this is a position the rules could have
+    // produced -- the whole pack back, because Klondike never takes a card out
+    // of play.
+    if (!m_table.restore(stock, waste, foundations, tableau, int(draw), int(score)))
         return false;
 
-    m_stock = stock;
-    m_waste = waste;
-    m_foundations = foundations;
-    m_tableau = tableau;
-    m_drawCount = int(draw);
-    m_score = int(score);
-    m_history.clear();
     m_drag.clear();
     m_dragging = false;
     m_pressValid = false;
@@ -219,7 +174,7 @@ bool KlondikeView::restoreState(const QByteArray& blob)
     m_undoAction->setEnabled(false);
     for (QAction* a : m_actions) {
         if (a->isCheckable())
-            a->setChecked(a->text() == QStringLiteral("Draw %1").arg(m_drawCount));
+            a->setChecked(a->text() == QStringLiteral("Draw %1").arg(m_table.drawCount()));
     }
     update();
     refresh();
@@ -295,28 +250,12 @@ QRectF KlondikeView::cardRect(PileKind kind, int pile, int index) const
     return r;
 }
 
-std::vector<Card>& KlondikeView::pileFor(PileKind kind, int pile)
-{
-    switch (kind) {
-    case PileKind::Stock: return m_stock;
-    case PileKind::Waste: return m_waste;
-    case PileKind::Foundation: return m_foundations[std::size_t(pile)];
-    case PileKind::Tableau: return m_tableau[std::size_t(pile)];
-    }
-    return m_stock;
-}
-
-const std::vector<Card>& KlondikeView::pileFor(PileKind kind, int pile) const
-{
-    return const_cast<KlondikeView*>(this)->pileFor(kind, pile);
-}
-
 KlondikeView::Spot KlondikeView::hitTest(QPointF pos) const
 {
     // Tableau first and from the bottom of each column up, so the card drawn
     // on top is the one that gets picked.
     for (int col = 0; col < 7; ++col) {
-        const std::vector<Card>& column = m_tableau[std::size_t(col)];
+        const std::vector<Card>& column = m_table.tableau()[std::size_t(col)];
         for (int i = int(column.size()) - 1; i >= 0; --i) {
             if (cardRect(PileKind::Tableau, col, i).contains(pos))
                 return { PileKind::Tableau, col, i, true };
@@ -327,14 +266,14 @@ KlondikeView::Spot KlondikeView::hitTest(QPointF pos) const
 
     for (int f = 0; f < 4; ++f) {
         if (pileOrigin(PileKind::Foundation, f).contains(pos))
-            return { PileKind::Foundation, f, int(m_foundations[std::size_t(f)].size()) - 1, true };
+            return { PileKind::Foundation, f, int(m_table.foundations()[std::size_t(f)].size()) - 1, true };
     }
 
     if (pileOrigin(PileKind::Waste, 0).contains(pos))
-        return { PileKind::Waste, 0, int(m_waste.size()) - 1, true };
+        return { PileKind::Waste, 0, int(m_table.waste().size()) - 1, true };
 
     if (pileOrigin(PileKind::Stock, 0).contains(pos))
-        return { PileKind::Stock, 0, int(m_stock.size()) - 1, true };
+        return { PileKind::Stock, 0, int(m_table.stock().size()) - 1, true };
 
     return {};
 }
@@ -343,98 +282,35 @@ KlondikeView::Spot KlondikeView::hitTest(QPointF pos) const
 // Rules
 // ---------------------------------------------------------------------------
 
-bool KlondikeView::canStackOnTableau(const Card& moving, int column) const
-{
-    const std::vector<Card>& target = m_tableau[std::size_t(column)];
-    if (target.empty())
-        return moving.rank == kKing;
-    const Card& top = target.back();
-    if (!top.faceUp)
-        return false;
-    return isRed(top) != isRed(moving) && top.rank == moving.rank + 1;
-}
-
-bool KlondikeView::canPlaceOnFoundation(const Card& moving, int foundation) const
-{
-    const std::vector<Card>& target = m_foundations[std::size_t(foundation)];
-    if (target.empty())
-        return moving.rank == kAce;
-    return target.back().suit == moving.suit && target.back().rank + 1 == moving.rank;
-}
-
 void KlondikeView::dealFromStock()
 {
-    pushUndo();
-    if (m_stock.empty()) {
-        // Recycle: the waste goes back under the stock, face down, in order.
-        std::reverse(m_waste.begin(), m_waste.end());
-        for (Card& c : m_waste)
-            c.faceUp = false;
-        m_stock = m_waste;
-        m_waste.clear();
-    } else {
-        for (int i = 0; i < m_drawCount && !m_stock.empty(); ++i) {
-            Card c = m_stock.back();
-            m_stock.pop_back();
-            c.faceUp = true;
-            m_waste.push_back(c);
-        }
-    }
+    m_table.dealFromStock();
+    m_undoAction->setEnabled(m_table.canUndo());
     Sound::instance().play(Sound::kCardDeal);
     update();
     refresh();
 }
 
-bool KlondikeView::sendToFoundation(PileKind from, int pile)
-{
-    std::vector<Card>& source = pileFor(from, pile);
-    if (source.empty() || !source.back().faceUp)
-        return false;
-
-    for (int f = 0; f < 4; ++f) {
-        if (!canPlaceOnFoundation(source.back(), f))
-            continue;
-        pushUndo();
-        m_foundations[std::size_t(f)].push_back(source.back());
-        source.pop_back();
-        m_score += 10;
-        if (from == PileKind::Tableau && !source.empty() && !source.back().faceUp) {
-            source.back().faceUp = true;
-            m_score += 5;
-        }
-        return true;
-    }
-    return false;
-}
-
-bool KlondikeView::autoFinishStep()
-{
-    for (int col = 0; col < 7; ++col)
-        if (sendToFoundation(PileKind::Tableau, col))
-            return true;
-    return sendToFoundation(PileKind::Waste, 0);
-}
-
 void KlondikeView::checkWin()
 {
     int total = 0;
-    for (const auto& f : m_foundations)
+    for (const auto& f : m_table.foundations())
         total += int(f.size());
     if (total != 52 || m_won)
         return;
 
     m_won = true;
     Sound::instance().play(Sound::kWin);
-    const bool newBest = Scores::instance().recordHigh(Scores::klondikeBestScore(), m_score);
+    const bool newBest = Scores::instance().recordHigh(Scores::klondikeBestScore(), m_table.score());
     refresh();
     QTimer::singleShot(200, this, [this, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("Solved"));
         box.setText(QStringLiteral("You cleared the table!"));
         box.setInformativeText(
-            newBest ? QStringLiteral("Score: %1 — a new best!").arg(m_score)
+            newBest ? QStringLiteral("Score: %1 — a new best!").arg(m_table.score())
                     : QStringLiteral("Score: %1.   Best: %2.")
-                          .arg(m_score)
+                          .arg(m_table.score())
                           .arg(Scores::instance().best(Scores::klondikeBestScore())));
         QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
@@ -447,14 +323,14 @@ void KlondikeView::checkWin()
 void KlondikeView::refresh()
 {
     int done = 0;
-    for (const auto& f : m_foundations)
+    for (const auto& f : m_table.foundations())
         done += int(f.size());
 
     QString line = QStringLiteral("%1   Foundations %2/52   Stock %3   Score %4")
                        .arg(m_won ? QStringLiteral("Solved!") : QStringLiteral("Klondike"))
                        .arg(done)
-                       .arg(m_stock.size())
-                       .arg(m_score);
+                       .arg(m_table.stock().size())
+                       .arg(m_table.score());
     if (Scores::instance().has(Scores::klondikeBestScore()))
         line += QStringLiteral("   Best %1").arg(Scores::instance().best(Scores::klondikeBestScore()));
     Q_EMIT statusChanged(line);
@@ -472,26 +348,26 @@ void KlondikeView::paintEvent(QPaintEvent*)
     Theme::paintFelt(p, rect(), Theme::kFeltGreenTop, Theme::kFeltGreenBottom);
 
     // Stock: a back if there are cards, otherwise a recycle marker.
-    if (m_stock.empty())
+    if (m_table.stock().empty())
         CardArt::paintSlot(p, pileOrigin(PileKind::Stock, 0), QStringLiteral("↻"));
     else
         CardArt::paintBack(p, pileOrigin(PileKind::Stock, 0));
 
-    if (m_waste.empty())
+    if (m_table.waste().empty())
         CardArt::paintSlot(p, pileOrigin(PileKind::Waste, 0));
     else
-        CardArt::paintFace(p, pileOrigin(PileKind::Waste, 0), m_waste.back());
+        CardArt::paintFace(p, pileOrigin(PileKind::Waste, 0), m_table.waste().back());
 
     for (int f = 0; f < 4; ++f) {
         const QRectF r = pileOrigin(PileKind::Foundation, f);
-        if (m_foundations[std::size_t(f)].empty())
+        if (m_table.foundations()[std::size_t(f)].empty())
             CardArt::paintSlot(p, r, QStringLiteral("A"));
         else
-            CardArt::paintFace(p, r, m_foundations[std::size_t(f)].back());
+            CardArt::paintFace(p, r, m_table.foundations()[std::size_t(f)].back());
     }
 
     for (int col = 0; col < 7; ++col) {
-        const std::vector<Card>& column = m_tableau[std::size_t(col)];
+        const std::vector<Card>& column = m_table.tableau()[std::size_t(col)];
         if (column.empty()) {
             CardArt::paintSlot(p, pileOrigin(PileKind::Tableau, col), QStringLiteral("K"));
             continue;
@@ -571,10 +447,13 @@ void KlondikeView::mouseMoveEvent(QMouseEvent* event)
         if (std::hypot(delta.x(), delta.y()) < kDragThreshold)
             return;
 
-        // Lift the run off its pile now that this is definitely a drag.
-        std::vector<Card>& pile = pileFor(m_dragFrom.kind, m_dragFrom.pile);
-        m_drag.assign(pile.begin() + m_dragFrom.index, pile.end());
-        pile.erase(pile.begin() + m_dragFrom.index, pile.end());
+        // The table lifts, and banks the undo snapshot BEFORE the cards leave
+        // their pile. Snapshotting at drop time -- which is what this used to
+        // do -- takes a picture of a table the cards have already left, so
+        // undoing a finished move loses them (GHUB-0126, measured in FreeCell).
+        m_drag = m_table.lift(m_dragFrom.kind, m_dragFrom.pile, m_dragFrom.index);
+        if (m_drag.empty())
+            return;
         m_dragging = true;
     }
 
@@ -594,15 +473,12 @@ void KlondikeView::mouseReleaseEvent(QMouseEvent* event)
     bool placed = false;
 
     // A single card may go to a foundation; any run may go to a tableau.
+    // The view decides WHICH pile the drop landed on; the table decides
+    // whether the cards may go there, and turns over whatever they uncovered.
     if (m_drag.size() == 1) {
         for (int f = 0; f < 4 && !placed; ++f) {
-            if (pileOrigin(PileKind::Foundation, f).contains(drop)
-                && canPlaceOnFoundation(m_drag.front(), f)) {
-                pushUndo();
-                m_foundations[std::size_t(f)].push_back(m_drag.front());
-                m_score += 10;
-                placed = true;
-            }
+            if (pileOrigin(PileKind::Foundation, f).contains(drop))
+                placed = m_table.dropOnFoundation(f);
         }
     }
 
@@ -610,34 +486,23 @@ void KlondikeView::mouseReleaseEvent(QMouseEvent* event)
         // Accept a drop anywhere in the column's vertical run, not just on the
         // top card, which is far more forgiving to aim at.
         QRectF zone = pileOrigin(PileKind::Tableau, col);
-        const std::vector<Card>& column = m_tableau[std::size_t(col)];
+        const std::vector<Card>& column = m_table.tableau()[std::size_t(col)];
         if (!column.empty())
             zone = zone.united(cardRect(PileKind::Tableau, col, int(column.size()) - 1));
         zone.setBottom(zone.bottom() + cardHeight() * 0.5);
 
-        if (zone.contains(drop) && canStackOnTableau(m_drag.front(), col)) {
-            pushUndo();
-            for (const Card& c : m_drag)
-                m_tableau[std::size_t(col)].push_back(c);
-            m_score += 5;
-            placed = true;
-        }
+        if (zone.contains(drop))
+            placed = m_table.dropOnTableau(col);
     }
 
     if (placed) {
         Sound::instance().play(Sound::kCardPlace);
-        // Turn over whatever the run was covering.
-        std::vector<Card>& source = pileFor(m_dragFrom.kind, m_dragFrom.pile);
-        if (m_dragFrom.kind == PileKind::Tableau && !source.empty() && !source.back().faceUp) {
-            source.back().faceUp = true;
-            m_score += 5;
-        }
     } else {
-        // Put it back exactly where it came from.
-        std::vector<Card>& source = pileFor(m_dragFrom.kind, m_dragFrom.pile);
-        for (const Card& c : m_drag)
-            source.push_back(c);
+        // Nothing happened, so the table takes the cards back and drops the
+        // snapshot it banked when they were lifted.
+        m_table.putBack();
     }
+    m_undoAction->setEnabled(m_table.canUndo());
 
     m_drag.clear();
     m_pressValid = false;
@@ -655,7 +520,7 @@ void KlondikeView::mouseDoubleClickEvent(QMouseEvent* event)
     if (!s.valid || s.kind == PileKind::Stock || s.index < 0)
         return;
 
-    if (sendToFoundation(s.kind, s.pile)) {
+    if (m_table.sendToFoundation(s.kind, s.pile)) {
         update();
         refresh();
         checkWin();

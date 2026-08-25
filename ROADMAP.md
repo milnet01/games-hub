@@ -4578,6 +4578,28 @@ open.
   saving mid-drag -- "a run lifted in mid-drag has been erased from its pile
   and lives in m_drag until it is dropped". That trap was written about
   saveState and the undo path had the same hole.
+  Also KLONDIKE (2026-08-25, same day). Extracting its core showed the identical
+  ordering -- `mouseMoveEvent` lifted the run off its pile, `pushUndo()` ran inside
+  `mouseReleaseEvent` -- so the same lost card was there and shipped. Fixed the
+  same way: `KlondikeTable::lift()` banks the snapshot before the cards leave, and
+  `putBack()` drops it when a drag is abandoned.
+
+  Proved rather than assumed: with the original ordering put back into the
+  extracted table, `klondikePlaysOutWithoutLosingACard` goes red on both of its
+  pack checks. That check plays 60 random games and calls `matchesPack` after every
+  move AND after every undo, which is the only place the loss shows.
+
+  Klondike's undo is worth MORE than FreeCell's, because its stock recycles: a
+  player who turns the stock too far routinely undoes to get back. And Klondike's
+  save has the same `matchesPack` gate, so the same "close the app and lose the
+  game" consequence applied.
+
+  Why the UI test could not have found this one the way it found FreeCell's: the
+  FreeCell check works because parking the bottom card of the first column in a
+  free cell is legal in EVERY deal, so a fixed drag always makes a real move.
+  Klondike has no such move -- whether a drag is legal depends on what was dealt --
+  and nothing can seed a deal yet (GHUB-0093). The rules check does not care: it
+  builds the position it needs.
   **Layman:** Undo in FreeCell made the card you had just moved disappear, and the game could then no longer be saved or resumed.
   Kind: fix.
   Source: in-session-2026-08-25 (found by GHUB-0066's FreeCell extraction).

@@ -16,6 +16,7 @@
 #include "reversi/board.h"
 #include "snake/snakeboard.h"
 #include "freecell/freecelltable.h"
+#include "klondike/klondiketable.h"
 #include "pyramid/pyramidtable.h"
 #include "twenty48/twenty48board.h"
 
@@ -1909,6 +1910,221 @@ void freecellPlaysOutWithoutLosingACard()
     check(moves > 0 && foundationCards > 0, "freecell: the random games actually played");
     check(packAlwaysWhole, "freecell: the whole pack is on the table after every single move");
     check(runLimitRespected, "freecell: a run within the limit is never refused for being too long");
+}
+
+
+// ---------------------------------------------------------------------------
+// Klondike
+//
+// The patience everyone means by "Solitaire". Named once in this file before
+// GHUB-0066, and its rules not at all.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+using KT = KlondikeTable;
+
+std::vector<Card> klondikeOnTable(const KT& table)
+{
+    std::vector<Card> all;
+    cardcodec::gather(all, table.stock());
+    cardcodec::gather(all, table.waste());
+    cardcodec::gather(all, table.foundations());
+    cardcodec::gather(all, table.tableau());
+    // A held run has left its pile and is in the player's hand, but it has not
+    // left the GAME -- so it counts towards the pack.
+    cardcodec::gather(all, table.held());
+    return all;
+}
+
+} // namespace
+
+void klondikeDealsAWholePack()
+{
+    section("Klondike");
+
+    KT table;
+    check(cardcodec::matchesPack(klondikeOnTable(table), 1, 4),
+          "klondike: the deal is exactly one pack");
+    check(int(table.stock().size()) == 24, "klondike: twenty-four left in the stock");
+    check(table.waste().empty() && table.score() == 0 && !table.won(),
+          "klondike: with nothing turned and nothing scored");
+
+    bool columnsRight = true;
+    bool onlyTheLastFaceUp = true;
+    for (int col = 0; col < KT::kColumns; ++col) {
+        const std::vector<Card>& column = table.tableau()[std::size_t(col)];
+        if (int(column.size()) != col + 1)
+            columnsRight = false;
+        for (int i = 0; i < int(column.size()); ++i) {
+            if (column[std::size_t(i)].faceUp != (i == int(column.size()) - 1))
+                onlyTheLastFaceUp = false;
+        }
+    }
+    check(columnsRight, "klondike: columns of one to seven");
+    check(onlyTheLastFaceUp, "klondike: with only the last card of each turned up");
+}
+
+void klondikeStackingRules()
+{
+    KT table;
+    const Card redQueen { .suit = Suit::Hearts, .rank = kQueen, .faceUp = true };
+    const Card blackJack { .suit = Suit::Spades, .rank = kJack, .faceUp = true };
+    const Card redJack { .suit = Suit::Diamonds, .rank = kJack, .faceUp = true };
+    const Card king { .suit = Suit::Clubs, .rank = kKing, .faceUp = true };
+    const Card ace { .suit = Suit::Clubs, .rank = kAce, .faceUp = true };
+
+    // An empty column takes a King and nothing else. This is the rule people
+    // most often get wrong, and it decides whether a deal is winnable.
+    std::array<std::vector<Card>, KT::kColumns> tableau;
+    std::array<std::vector<Card>, KT::kFoundations> foundations;
+    std::vector<Card> stock = makeDeck(1, 4);
+    auto lift = [&stock](Suit suit, int rank) {
+        const auto it = std::find_if(stock.begin(), stock.end(), [&](const Card& c) {
+            return c.suit == suit && c.rank == rank;
+        });
+        Card c = *it;
+        stock.erase(it);
+        c.faceUp = true;
+        return c;
+    };
+    tableau[0] = { lift(Suit::Hearts, kQueen) };
+    tableau[1] = { lift(Suit::Clubs, kKing) };
+    // Column 2 stays empty.
+    check(table.restore(stock, {}, foundations, tableau, 1, 0),
+          "klondike: the hand-built position is one the rules could reach");
+
+    check(table.canStackOnTableau(king, 2), "klondike: an empty column takes a King");
+    check(!table.canStackOnTableau(blackJack, 2), "klondike: and nothing else, however useful");
+    check(table.canStackOnTableau(blackJack, 0), "klondike: a black Jack goes on a red Queen");
+    check(!table.canStackOnTableau(redJack, 0), "klondike: a red Jack does not");
+    check(!table.canStackOnTableau(redQueen, 0), "klondike: nor does an equal rank");
+
+    check(table.canPlaceOnFoundation(ace, 0), "klondike: a foundation starts on an Ace");
+    check(!table.canPlaceOnFoundation(king, 0), "klondike: and on nothing else");
+}
+
+void klondikeFaceDownCardsAreOutOfReach()
+{
+    KT table;
+    // The seventh column is six face down and one turned up.
+    const int deep = KT::kColumns - 1;
+    check(table.tableau()[std::size_t(deep)].size() == 7, "klondike: the last column is seven deep");
+    check(!table.canLift(KT::PileKind::Tableau, deep, 0),
+          "klondike: a face-down card cannot be picked up");
+    check(table.canLift(KT::PileKind::Tableau, deep, 6),
+          "klondike: the one turned up can");
+    check(!table.canLift(KT::PileKind::Stock, 0, 0),
+          "klondike: and the stock is turned, never dragged");
+}
+
+void klondikeTurningUncoversTheCardBelow()
+{
+    KT table;
+    // Column 1 is one face down and one up; move the top card away and the one
+    // under it must turn, and score for it.
+    const int col = 1;
+    const int before = table.score();
+    std::vector<Card> run = table.lift(KT::PileKind::Tableau, col, 1);
+    check(run.size() == 1, "klondike: the turned-up card lifts on its own");
+    check(!table.tableau()[std::size_t(col)].back().faceUp,
+          "klondike: leaving a face-down card at the foot of the column");
+
+    // Somewhere legal to put it: an empty column takes a King, so instead put
+    // it back and use the foundation route, which needs no partner card.
+    table.putBack();
+    check(table.score() == before, "klondike: an abandoned lift scores nothing");
+    check(!table.canUndo(), "klondike: and banks no undo");
+}
+
+void klondikeUndoDoesNotLoseACard()
+{
+    // The defect measured in FreeCell as GHUB-0126 had the identical shape
+    // here: the drag lifted the run off its pile and the snapshot was taken at
+    // DROP time, of a table the cards had already left.
+    KT table;
+    const std::vector<Card> before = klondikeOnTable(table);
+
+    table.dealFromStock();
+    check(cardcodec::matchesPack(klondikeOnTable(table), 1, 4),
+          "klondike: turning a card keeps the pack whole");
+    check(table.canUndo(), "klondike: and banks an undo");
+    table.undo();
+    check(klondikeOnTable(table) == before, "klondike: which puts the table back exactly");
+
+    // A lift, then an undo without ever dropping: the cards must still be
+    // accounted for at every point.
+    std::vector<Card> run = table.lift(KT::PileKind::Tableau, 0, 0);
+    check(run.size() == 1, "klondike: the first column's single card lifts");
+    check(cardcodec::matchesPack(klondikeOnTable(table), 1, 4),
+          "klondike: the pack is whole even with a run in the air");
+    table.putBack();
+    check(klondikeOnTable(table) == before, "klondike: and putting it back changes nothing");
+    check(!table.canUndo(), "klondike: with no undo banked for a move nobody made");
+}
+
+void klondikePlaysOutWithoutLosingACard()
+{
+    // Random legal play, holding the pack to account after every move -- and
+    // after an UNDO, which is where the lost card lived.
+    std::mt19937 rng(20260825);
+    bool packAlwaysWhole = true;
+    bool undoAlwaysExact = true;
+    int moves = 0;
+    int undos = 0;
+    int home = 0;
+
+    for (int game = 0; game < 60; ++game) {
+        KT table;
+        for (int move = 0; move < 400; ++move) {
+            const int roll = int(rng() % 10);
+
+            if (roll < 2) {
+                // Undo, and the pack must survive it.
+                if (!table.canUndo())
+                    continue;
+                table.undo();
+                ++undos;
+                if (!cardcodec::matchesPack(klondikeOnTable(table), 1, 4))
+                    undoAlwaysExact = false;
+                continue;
+            }
+            if (roll < 4) {
+                table.dealFromStock();
+                ++moves;
+            } else if (roll < 6) {
+                if (table.autoFinishStep())
+                    ++moves;
+            } else {
+                const int from = int(rng() % KT::kColumns);
+                const std::vector<Card>& column = table.tableau()[std::size_t(from)];
+                if (column.empty())
+                    continue;
+                const int index = int(rng() % column.size());
+                if (!table.canLift(KT::PileKind::Tableau, from, index))
+                    continue;
+                std::vector<Card> run = table.lift(KT::PileKind::Tableau, from, index);
+                if (run.empty())
+                    continue;
+                const int to = int(rng() % KT::kColumns);
+                if (!table.dropOnTableau(to))
+                    table.putBack();
+                else
+                    ++moves;
+            }
+
+            if (!cardcodec::matchesPack(klondikeOnTable(table), 1, 4))
+                packAlwaysWhole = false;
+        }
+        for (const std::vector<Card>& f : table.foundations())
+            home += int(f.size());
+    }
+
+    std::printf("      klondike: 60 games, %d moves, %d undos, %d cards sent home\n", moves,
+                undos, home);
+    check(moves > 0 && undos > 0 && home > 0, "klondike: the random games actually played");
+    check(packAlwaysWhole, "klondike: the whole pack is accounted for after every move");
+    check(undoAlwaysExact, "klondike: and after every undo, which is where a card used to vanish");
 }
 
 // ---------------------------------------------------------------------------
@@ -4592,6 +4808,13 @@ int main()
     freecellFoundationsGoUpInSuit();
     freecellUndoDoesNotLoseACard();
     freecellPlaysOutWithoutLosingACard();
+
+    klondikeDealsAWholePack();
+    klondikeStackingRules();
+    klondikeFaceDownCardsAreOutOfReach();
+    klondikeTurningUncoversTheCardBelow();
+    klondikeUndoDoesNotLoseACard();
+    klondikePlaysOutWithoutLosingACard();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;
