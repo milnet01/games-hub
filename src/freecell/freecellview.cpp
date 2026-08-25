@@ -1,4 +1,5 @@
 #include "freecellview.h"
+#include "freecell/freecelltable.h"
 
 #include "legibility.h"
 #include "cards/cardart.h"
@@ -47,30 +48,13 @@ void FreeCellView::buildActions()
 
 void FreeCellView::newGame()
 {
-    std::vector<Card> deck = makeDeck(1, 4);
-    shuffleCards(deck, m_rng);
+    m_table.deal();
     Sound::instance().play(Sound::kShuffle);
-
-    for (auto& c : m_columns)
-        c.clear();
-    for (auto& c : m_cells)
-        c.clear();
-    for (auto& f : m_foundations)
-        f.clear();
     m_drag.clear();
-    m_history.clear();
     m_dragging = false;
     m_pressValid = false;
-    m_moves = 0;
     m_won = false;
     m_undoAction->setEnabled(false);
-
-    // All 52 face up across eight columns: four of seven, four of six.
-    for (std::size_t i = 0; i < deck.size(); ++i) {
-        Card c = deck[i];
-        c.faceUp = true;
-        m_columns[i % kColumns].push_back(c);
-    }
 
     update();
     refresh();
@@ -81,26 +65,13 @@ void FreeCellView::activate()
     refresh();
 }
 
-void FreeCellView::pushUndo()
-{
-    m_history.push_back({ m_columns, m_cells, m_foundations, m_moves });
-    if (m_history.size() > 300)
-        m_history.erase(m_history.begin());
-    m_undoAction->setEnabled(true);
-}
-
 void FreeCellView::undo()
 {
-    if (m_history.empty())
+    if (!m_table.canUndo())
         return;
-    const Snapshot s = m_history.back();
-    m_history.pop_back();
-    m_columns = s.columns;
-    m_cells = s.cells;
-    m_foundations = s.foundations;
-    m_moves = s.moves;
+    m_table.undo();
     m_won = false;
-    m_undoAction->setEnabled(!m_history.empty());
+    m_undoAction->setEnabled(m_table.canUndo());
     update();
     refresh();
 }
@@ -113,7 +84,7 @@ void FreeCellView::undo()
 // the card games save differently from Chess.
 QByteArray FreeCellView::saveState() const
 {
-    if (m_won || m_history.empty())
+    if (m_won || !m_table.canUndo())
         return {};
 
     // A run lifted in mid-drag belongs to the pile it came from until it is
@@ -128,7 +99,7 @@ QByteArray FreeCellView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_moves);
+    out << quint32(1) << qint32(m_table.moves());
     for (int col = 0; col < kColumns; ++col)
         cardcodec::writePile(out, pile(PileKind::Column, col));
     for (int i = 0; i < kCells; ++i)
@@ -157,27 +128,12 @@ bool FreeCellView::restoreState(const QByteArray& blob)
         || !cardcodec::readPiles(in, foundations))
         return false;
 
-    // A cell holds one card. That is the whole point of the game, so a save
-    // saying otherwise is not a FreeCell position.
-    for (const std::vector<Card>& cell : cells) {
-        if (cell.size() > 1)
-            return false;
-    }
-
-    // FreeCell never takes a card out of play, so the whole pack must be here —
-    // nothing missing, nothing doubled.
-    std::vector<Card> all;
-    cardcodec::gather(all, columns);
-    cardcodec::gather(all, cells);
-    cardcodec::gather(all, foundations);
-    if (!cardcodec::matchesPack(all, 1, 4))
+    // The table decides whether this is a position the rules could have
+    // produced -- a cell holding one card at most, and the whole pack back,
+    // because FreeCell never takes a card out of play.
+    if (!m_table.restore(columns, cells, foundations, int(moves)))
         return false;
 
-    m_columns = columns;
-    m_cells = cells;
-    m_foundations = foundations;
-    m_moves = int(moves);
-    m_history.clear();
     m_drag.clear();
     m_dragging = false;
     m_pressValid = false;
@@ -235,25 +191,10 @@ QRectF FreeCellView::cardRect(int column, int index) const
     return r;
 }
 
-std::vector<Card>& FreeCellView::pileFor(PileKind kind, int pile)
-{
-    switch (kind) {
-    case PileKind::Cell: return m_cells[std::size_t(pile)];
-    case PileKind::Foundation: return m_foundations[std::size_t(pile)];
-    case PileKind::Column: return m_columns[std::size_t(pile)];
-    }
-    return m_columns[0];
-}
-
-const std::vector<Card>& FreeCellView::pileFor(PileKind kind, int pile) const
-{
-    return const_cast<FreeCellView*>(this)->pileFor(kind, pile);
-}
-
 FreeCellView::Spot FreeCellView::hitTest(QPointF pos) const
 {
     for (int col = 0; col < kColumns; ++col) {
-        const std::vector<Card>& column = m_columns[std::size_t(col)];
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
         for (int i = int(column.size()) - 1; i >= 0; --i)
             if (cardRect(col, i).contains(pos))
                 return { PileKind::Column, col, i, true };
@@ -262,10 +203,10 @@ FreeCellView::Spot FreeCellView::hitTest(QPointF pos) const
     }
     for (int i = 0; i < kCells; ++i)
         if (pileOrigin(PileKind::Cell, i).contains(pos))
-            return { PileKind::Cell, i, int(m_cells[std::size_t(i)].size()) - 1, true };
+            return { PileKind::Cell, i, int(m_table.cells()[std::size_t(i)].size()) - 1, true };
     for (int i = 0; i < 4; ++i)
         if (pileOrigin(PileKind::Foundation, i).contains(pos))
-            return { PileKind::Foundation, i, int(m_foundations[std::size_t(i)].size()) - 1, true };
+            return { PileKind::Foundation, i, int(m_table.foundations()[std::size_t(i)].size()) - 1, true };
     return {};
 }
 
@@ -273,88 +214,15 @@ FreeCellView::Spot FreeCellView::hitTest(QPointF pos) const
 // Rules
 // ---------------------------------------------------------------------------
 
-int FreeCellView::maxMoveSize(bool toEmptyColumn) const
-{
-    int freeCells = 0;
-    for (const auto& c : m_cells)
-        if (c.empty())
-            ++freeCells;
-    int emptyColumns = 0;
-    for (const auto& c : m_columns)
-        if (c.empty())
-            ++emptyColumns;
-
-    // Moving *into* an empty column cannot also use that column as a staging
-    // area, so it does not count towards the multiplier.
-    if (toEmptyColumn && emptyColumns > 0)
-        --emptyColumns;
-
-    return (freeCells + 1) * (1 << std::min(emptyColumns, 10));
-}
-
-int FreeCellView::orderedRunLength(int column) const
-{
-    const std::vector<Card>& col = m_columns[std::size_t(column)];
-    if (col.empty())
-        return 0;
-    int run = 1;
-    for (int i = int(col.size()) - 1; i > 0; --i) {
-        const Card& lower = col[std::size_t(i)];
-        const Card& upper = col[std::size_t(i - 1)];
-        if (upper.rank != lower.rank + 1 || isRed(upper) == isRed(lower))
-            break;
-        ++run;
-    }
-    return run;
-}
-
-bool FreeCellView::canStack(const Card& moving, int column) const
-{
-    const std::vector<Card>& target = m_columns[std::size_t(column)];
-    if (target.empty())
-        return true;
-    const Card& top = target.back();
-    return isRed(top) != isRed(moving) && top.rank == moving.rank + 1;
-}
-
-bool FreeCellView::canPlaceOnFoundation(const Card& moving, int foundation) const
-{
-    const std::vector<Card>& target = m_foundations[std::size_t(foundation)];
-    if (target.empty())
-        return moving.rank == kAce;
-    return target.back().suit == moving.suit && target.back().rank + 1 == moving.rank;
-}
-
-bool FreeCellView::sendToFoundation(PileKind from, int pile)
-{
-    std::vector<Card>& source = pileFor(from, pile);
-    if (source.empty())
-        return false;
-    for (int f = 0; f < 4; ++f) {
-        if (!canPlaceOnFoundation(source.back(), f))
-            continue;
-        pushUndo();
-        m_foundations[std::size_t(f)].push_back(source.back());
-        source.pop_back();
-        ++m_moves;
-        Sound::instance().play(Sound::kCardPlace);
-        return true;
-    }
-    return false;
-}
-
 void FreeCellView::checkWin()
 {
-    int total = 0;
-    for (const auto& f : m_foundations)
-        total += int(f.size());
-    if (total != 52 || m_won)
+    if (!m_table.won() || m_won)
         return;
 
     m_won = true;
     Sound::instance().play(Sound::kWin);
     const bool newBest = Scores::instance().recordLow(
-        QStringLiteral("freecell/best_moves"), m_moves);
+        QStringLiteral("freecell/best_moves"), m_table.moves());
     refresh();
 
     QTimer::singleShot(200, this, [this, newBest] {
@@ -362,9 +230,9 @@ void FreeCellView::checkWin()
         box.setWindowTitle(QStringLiteral("Solved"));
         box.setText(QStringLiteral("Every card home!"));
         box.setInformativeText(
-            newBest ? QStringLiteral("Moves: %1 — a new best!").arg(m_moves)
+            newBest ? QStringLiteral("Moves: %1 — a new best!").arg(m_table.moves())
                     : QStringLiteral("Moves: %1.   Best: %2.")
-                          .arg(m_moves)
+                          .arg(m_table.moves())
                           .arg(Scores::instance().best(QStringLiteral("freecell/best_moves"))));
         QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
@@ -377,10 +245,10 @@ void FreeCellView::checkWin()
 void FreeCellView::refresh(const QString& message)
 {
     int done = 0;
-    for (const auto& f : m_foundations)
+    for (const auto& f : m_table.foundations())
         done += int(f.size());
     int freeCells = 0;
-    for (const auto& c : m_cells)
+    for (const auto& c : m_table.cells())
         if (c.empty())
             ++freeCells;
 
@@ -389,7 +257,7 @@ void FreeCellView::refresh(const QString& message)
               .arg(m_won ? QStringLiteral("Solved!") : QStringLiteral("FreeCell"))
               .arg(done)
               .arg(freeCells)
-              .arg(m_moves)
+              .arg(m_table.moves())
         : message;
     if (Scores::instance().has(QStringLiteral("freecell/best_moves")))
         line += QStringLiteral("   Best %1")
@@ -409,33 +277,33 @@ void FreeCellView::paintEvent(QPaintEvent*)
 
     for (int i = 0; i < kCells; ++i) {
         const QRectF r = pileOrigin(PileKind::Cell, i);
-        if (m_cells[std::size_t(i)].empty())
+        if (m_table.cells()[std::size_t(i)].empty())
             CardArt::paintSlot(p, r);
         else
-            CardArt::paintFace(p, r, m_cells[std::size_t(i)].back());
+            CardArt::paintFace(p, r, m_table.cells()[std::size_t(i)].back());
     }
 
     for (int i = 0; i < 4; ++i) {
         const QRectF r = pileOrigin(PileKind::Foundation, i);
-        if (m_foundations[std::size_t(i)].empty())
+        if (m_table.foundations()[std::size_t(i)].empty())
             CardArt::paintSlot(p, r, QStringLiteral("A"));
         else
-            CardArt::paintFace(p, r, m_foundations[std::size_t(i)].back());
+            CardArt::paintFace(p, r, m_table.foundations()[std::size_t(i)].back());
     }
 
     for (int col = 0; col < kColumns; ++col) {
-        const std::vector<Card>& column = m_columns[std::size_t(col)];
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
         if (column.empty()) {
             CardArt::paintSlot(p, pileOrigin(PileKind::Column, col));
             continue;
         }
-        const int run = orderedRunLength(col);
+        const int run = m_table.orderedRunLength(col);
         for (int i = 0; i < int(column.size()); ++i) {
             const QRectF r = cardRect(col, i);
             CardArt::paintFace(p, r, column[std::size_t(i)]);
             // Show where the liftable run begins, and whether it will fit.
             if (run > 1 && i == int(column.size()) - run) {
-                const bool fits = run <= maxMoveSize(false);
+                const bool fits = run <= m_table.maxMoveSize(false);
                 CardArt::paintHighlight(p, r,
                                         fits ? QColor(0xff, 0xd5, 0x4f, 170)
                                              : QColor(0xe8, 0x51, 0x4f, 130));
@@ -476,9 +344,7 @@ void FreeCellView::mousePressEvent(QMouseEvent* event)
         return;
 
     if (s.kind == PileKind::Column) {
-        const int run = orderedRunLength(s.pile);
-        const int from = int(m_columns[std::size_t(s.pile)].size()) - run;
-        if (s.index < from) {
+        if (s.index < m_table.firstMovableIndex(s.pile)) {
             refresh(QStringLiteral("Only a run in alternating colours moves together."));
             return;
         }
@@ -502,9 +368,13 @@ void FreeCellView::mouseMoveEvent(QMouseEvent* event)
         const QPointF delta = event->position() - m_pressPos;
         if (std::hypot(delta.x(), delta.y()) < kDragThreshold)
             return;
-        std::vector<Card>& pile = pileFor(m_dragFrom.kind, m_dragFrom.pile);
-        m_drag.assign(pile.begin() + m_dragFrom.index, pile.end());
-        pile.erase(pile.begin() + m_dragFrom.index, pile.end());
+        // The table lifts, and banks the undo snapshot BEFORE the cards leave
+        // their pile. Doing it at drop time -- which is what this used to do --
+        // snapshots a table the cards had already left, so undoing a finished
+        // move lost them altogether.
+        m_drag = m_table.lift(m_dragFrom.kind, m_dragFrom.pile, m_dragFrom.index);
+        if (m_drag.empty())
+            return;
         m_dragging = true;
     }
 
@@ -524,55 +394,46 @@ void FreeCellView::mouseReleaseEvent(QMouseEvent* event)
     bool placed = false;
     QString refusal;
 
+    // The view decides WHICH pile the drop landed on; the table decides
+    // whether the cards may go there.
     if (m_drag.size() == 1) {
         for (int i = 0; i < kCells && !placed; ++i) {
-            if (pileOrigin(PileKind::Cell, i).contains(drop) && m_cells[std::size_t(i)].empty()) {
-                pushUndo();
-                m_cells[std::size_t(i)].push_back(m_drag.front());
-                ++m_moves;
-                placed = true;
-            }
+            if (pileOrigin(PileKind::Cell, i).contains(drop))
+                placed = m_table.dropOnCell(m_drag, i);
         }
         for (int f = 0; f < 4 && !placed; ++f) {
-            if (pileOrigin(PileKind::Foundation, f).contains(drop)
-                && canPlaceOnFoundation(m_drag.front(), f)) {
-                pushUndo();
-                m_foundations[std::size_t(f)].push_back(m_drag.front());
-                ++m_moves;
-                placed = true;
-            }
+            if (pileOrigin(PileKind::Foundation, f).contains(drop))
+                placed = m_table.dropOnFoundation(m_drag, f);
         }
     }
 
     for (int col = 0; col < kColumns && !placed; ++col) {
         QRectF zone = pileOrigin(PileKind::Column, col);
-        const std::vector<Card>& column = m_columns[std::size_t(col)];
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
         if (!column.empty())
             zone = zone.united(cardRect(col, int(column.size()) - 1));
         zone.setBottom(zone.bottom() + cardHeight() * 0.5);
-        if (!zone.contains(drop) || !canStack(m_drag.front(), col))
+        if (!zone.contains(drop))
             continue;
 
-        const int limit = maxMoveSize(column.empty());
-        if (int(m_drag.size()) > limit) {
+        int limit = 0;
+        placed = m_table.dropOnColumn(m_drag, col, &limit);
+        if (!placed && limit > 0) {
             refusal = QStringLiteral("Only %1 card%2 can move at once — free a cell or a column.")
                           .arg(limit)
                           .arg(limit == 1 ? QString() : QStringLiteral("s"));
             break;
         }
-        pushUndo();
-        for (const Card& c : m_drag)
-            m_columns[std::size_t(col)].push_back(c);
-        ++m_moves;
-        placed = true;
     }
 
     if (placed) {
         Sound::instance().play(Sound::kCardPlace);
+        m_undoAction->setEnabled(m_table.canUndo());
     } else {
-        std::vector<Card>& source = pileFor(m_dragFrom.kind, m_dragFrom.pile);
-        for (const Card& c : m_drag)
-            source.push_back(c);
+        // Nothing happened, so the table takes the cards back and drops the
+        // snapshot it banked when they were lifted.
+        m_table.putBack(m_dragFrom.kind, m_dragFrom.pile, m_drag);
+        m_undoAction->setEnabled(m_table.canUndo());
     }
 
     m_drag.clear();
@@ -589,7 +450,9 @@ void FreeCellView::mouseDoubleClickEvent(QMouseEvent* event)
     const Spot s = hitTest(event->position());
     if (!s.valid || s.index < 0 || s.kind == PileKind::Foundation)
         return;
-    if (sendToFoundation(s.kind, s.pile)) {
+    if (m_table.sendToFoundation(s.kind, s.pile)) {
+        Sound::instance().play(Sound::kCardPlace);
+        m_undoAction->setEnabled(m_table.canUndo());
         update();
         refresh();
         checkWin();

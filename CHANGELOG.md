@@ -198,6 +198,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Undo in FreeCell no longer makes the card disappear.** (GHUB-0126)
+  Moving a card and then pressing Undo removed it from the table
+  altogether. The game could then no longer be saved: FreeCell checks that
+  the whole pack is present, so closing the app after an undo threw the
+  game away and dealt a fresh one next time.
+
 - **Starting Snake with the right arrow no longer kills you instantly.** (GHUB-0125)
   The snake was drawn facing right but built back to front, so its head
   was behind its own body. Pressing the right arrow to start ran it

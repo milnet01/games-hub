@@ -1589,10 +1589,39 @@ int main(int argc, char* argv[])
                                          (640.0 - 24.0) / (1.4 * 2.5));
             const double tall = card * 1.4;
             const double columnTop = 12 + tall + tall * 0.22;
+            const QImage beforeTheMove = renderOf(&freecell);
             dragBetween(&freecell, QPointF(12 + card / 2, columnTop + tall * (6 * 0.27 + 0.15)),
                         QPointF(12 + card / 2, 12 + tall / 2));
 
             const QImage played = renderOf(&freecell);
+            check(played != beforeTheMove, "freecell: the card actually moved into the cell");
+
+            // Undo has to put the card BACK. A drag lifts the cards off their
+            // pile before the drop decides anything, so a snapshot taken at
+            // drop time is a snapshot with the cards already gone -- and
+            // undoing it loses them off the table altogether.
+            {
+                QAction* undoAction = nullptr;
+                for (QAction* a : freecell.gameActions()) {
+                    if (a->text().contains(QStringLiteral("Undo")))
+                        undoAction = a;
+                }
+                check(undoAction != nullptr && undoAction->isEnabled(),
+                      "freecell: the move offers an undo");
+                if (undoAction != nullptr)
+                    undoAction->trigger();
+                check(renderOf(&freecell) == beforeTheMove,
+                      "freecell: and undoing it puts the table back exactly as it was");
+
+                if (undoAction != nullptr)
+                    undoAction->setEnabled(false);
+                // Put the move back, so everything below still sees a table
+                // with a card in a cell.
+                dragBetween(&freecell,
+                            QPointF(12 + card / 2, columnTop + tall * (6 * 0.27 + 0.15)),
+                            QPointF(12 + card / 2, 12 + tall / 2));
+            }
+
             const QByteArray saved = freecell.saveState();
             check(!saved.isEmpty(), "freecell: a card parked in a cell is worth saving");
 

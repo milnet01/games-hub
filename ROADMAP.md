@@ -4549,6 +4549,40 @@ open.
   Source: in-session-2026-08-25 (found by GHUB-0066's Snake extraction).
   Lanes: snake.
 
+- ✅ [GHUB-0126] **Undoing a move in FreeCell lost the card off the table.**
+  A drag lifted its cards off their pile the moment the pointer moved past
+  the threshold (`mouseMoveEvent`), but `pushUndo()` was called at DROP time,
+  inside `mouseReleaseEvent`. So the snapshot was taken of a table the cards
+  had already left. Undoing a completed move restored that snapshot, and the
+  cards were on no pile at all -- simply gone.
+
+  Worse than it looks, because FreeCell's `restoreState` demands the whole
+  pack back: `matchesPack` refuses a save missing a card. So a player who
+  undid a move and later closed the app got the save REFUSED on reload and a
+  fresh deal instead, losing the game outright. Measured rather than reasoned:
+  after one drag and one undo, `saveState()` produced a blob that a fresh view
+  would not restore.
+
+  Fixed by moving the snapshot into `FreeCellTable::lift()`, which banks it
+  BEFORE the cards leave their pile. A drag put back down where it started
+  calls `putBack()`, which drops that snapshot again -- otherwise the undo
+  stack fills with moves nobody made.
+
+  Locked in two places. `tests/uitest.cpp` drives a real drag, triggers the
+  Undo action and requires the table to come back pixel for pixel; that check
+  was written first and was RED before the fix. And `freecellUndoDoesNotLoseACard`
+  in the self-test asks the same question of the rules directly, plus the
+  abandoned-drag case, plus `matchesPack` after every step.
+
+  Note this is the same shape as the trap CLAUDE.md already records about
+  saving mid-drag -- "a run lifted in mid-drag has been erased from its pile
+  and lives in m_drag until it is dropped". That trap was written about
+  saveState and the undo path had the same hole.
+  **Layman:** Undo in FreeCell made the card you had just moved disappear, and the game could then no longer be saved or resumed.
+  Kind: fix.
+  Source: in-session-2026-08-25 (found by GHUB-0066's FreeCell extraction).
+  Lanes: freecell.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on

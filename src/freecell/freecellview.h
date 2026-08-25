@@ -1,13 +1,13 @@
 #pragma once
 
 #include "cards/card.h"
+#include "freecell/freecelltable.h"
 #include "gameview.h"
 
 #include <QPointF>
 #include <QRectF>
 
 #include <array>
-#include <random>
 #include <vector>
 
 // FreeCell: every card face up from the start, four cells to park singles in,
@@ -25,8 +25,10 @@ public:
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
-    static constexpr int kColumns = 8;
-    static constexpr int kCells = 4;
+    // The table's shape belongs to the rules; kept under the names the painter
+    // and its tests already used.
+    static constexpr int kColumns = FreeCellTable::kColumns;
+    static constexpr int kCells = FreeCellTable::kCells;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -38,7 +40,7 @@ protected:
     QSize minimumSizeHint() const override { return { 620, 440 }; }
 
 private:
-    enum class PileKind { Cell, Foundation, Column };
+    using PileKind = FreeCellTable::PileKind;
 
     struct Spot {
         PileKind kind = PileKind::Column;
@@ -47,17 +49,9 @@ private:
         bool valid = false;
     };
 
-    struct Snapshot {
-        std::array<std::vector<Card>, kColumns> columns;
-        std::array<std::vector<Card>, kCells> cells;
-        std::array<std::vector<Card>, 4> foundations;
-        int moves = 0;
-    };
-
     void buildActions();
     void newGame();
     void undo();
-    void pushUndo();
 
     // Layout, in card heights. cardWidth() solves its height budget from
     // these, so the three move together and a fan that changes shape cannot
@@ -75,26 +69,19 @@ private:
     double fanStep() const { return cardHeight() * kFanStep; }
     Spot hitTest(QPointF pos) const;
 
-    std::vector<Card>& pileFor(PileKind kind, int pile);
-    const std::vector<Card>& pileFor(PileKind kind, int pile) const;
+    const std::vector<Card>& pileFor(PileKind kind, int pile) const
+    {
+        return m_table.pile(kind, pile);
+    }
 
-    // How many cards may move as a unit: one, doubled for every empty column,
-    // times one more than the free cells. This is the rule that makes FreeCell
-    // a planning game rather than a shuffling one.
-    int maxMoveSize(bool toEmptyColumn) const;
-    int orderedRunLength(int column) const;
-    bool canStack(const Card& moving, int column) const;
-    bool canPlaceOnFoundation(const Card& moving, int foundation) const;
-    bool sendToFoundation(PileKind from, int pile);
     void checkWin();
     void refresh(const QString& message = {});
 
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;
 
-    std::array<std::vector<Card>, kColumns> m_columns;
-    std::array<std::vector<Card>, kCells> m_cells;
-    std::array<std::vector<Card>, 4> m_foundations;
+    // The rules. What is left here is the pointer, the drag and the drawing.
+    FreeCellTable m_table;
 
     std::vector<Card> m_drag;
     Spot m_dragFrom;
@@ -104,8 +91,5 @@ private:
     bool m_dragging = false;
     bool m_pressValid = false;
 
-    std::vector<Snapshot> m_history;
-    std::mt19937 m_rng { std::random_device {}() };
-    int m_moves = 0;
     bool m_won = false;
 };

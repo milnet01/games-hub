@@ -15,6 +15,7 @@
 #include "reversi/ai.h"
 #include "reversi/board.h"
 #include "snake/snakeboard.h"
+#include "freecell/freecelltable.h"
 #include "pyramid/pyramidtable.h"
 #include "twenty48/twenty48board.h"
 
@@ -1627,6 +1628,287 @@ void pyramidPlaysOutWithoutLosingACard()
     check(packAlwaysWhole,
           "pyramid: the cards on the table plus the cards taken are always exactly one pack");
     check(onlyExposedTaken, "pyramid: and nothing was ever taken that was not available");
+}
+
+
+// ---------------------------------------------------------------------------
+// FreeCell
+//
+// Named nowhere in this file until GHUB-0066.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+using FC = FreeCellTable;
+
+std::vector<Card> freecellOnTable(const FC& table)
+{
+    std::vector<Card> all;
+    cardcodec::gather(all, table.columns());
+    cardcodec::gather(all, table.cells());
+    cardcodec::gather(all, table.foundations());
+    return all;
+}
+
+} // namespace
+
+void freecellDealsAWholePack()
+{
+    section("FreeCell");
+
+    FC table;
+    check(cardcodec::matchesPack(freecellOnTable(table), 1, 4),
+          "freecell: the deal is exactly one pack");
+
+    int sevens = 0;
+    int sixes = 0;
+    bool allFaceUp = true;
+    for (const std::vector<Card>& col : table.columns()) {
+        if (col.size() == 7)
+            ++sevens;
+        else if (col.size() == 6)
+            ++sixes;
+        for (const Card& c : col)
+            allFaceUp = allFaceUp && c.faceUp;
+    }
+    check(sevens == 4 && sixes == 4, "freecell: four columns of seven and four of six");
+    check(allFaceUp, "freecell: every card face up, which is the whole game");
+    check(table.moves() == 0 && !table.canUndo() && !table.won(),
+          "freecell: with nothing moved and nothing to undo");
+}
+
+void freecellMoveSizeIsTheRule()
+{
+    // One card, doubled for every empty column, times one more than the free
+    // cells. Getting this wrong turns FreeCell into a different game.
+    FC table;
+    check(table.maxMoveSize(false) == 5,
+          "freecell: four free cells and no empty column moves five cards");
+
+    // Empty the columns and cells by hand and count again.
+    std::array<std::vector<Card>, FC::kColumns> columns;
+    std::array<std::vector<Card>, FC::kCells> cells;
+    std::array<std::vector<Card>, FC::kFoundations> foundations;
+    std::vector<Card> deck = makeDeck(1, 4);
+    for (Card& c : deck)
+        c.faceUp = true;
+    // Everything into two columns, leaving six empty and every cell free.
+    for (std::size_t i = 0; i < deck.size(); ++i)
+        columns[i % 2].push_back(deck[i]);
+    check(table.restore(columns, cells, foundations, 0),
+          "freecell: the hand-built position is one the rules could reach");
+    check(table.maxMoveSize(false) == 5 * (1 << 6),
+          "freecell: six empty columns double it six times over");
+    check(table.maxMoveSize(true) == 5 * (1 << 5),
+          "freecell: and moving INTO an empty column cannot also stage through it");
+
+    // Fill every cell: the multiplier collapses to the empty columns alone.
+    for (int i = 0; i < FC::kCells; ++i) {
+        cells[std::size_t(i)].push_back(columns[0].back());
+        columns[0].pop_back();
+    }
+    check(table.restore(columns, cells, foundations, 0), "freecell: with the cells full");
+    check(table.maxMoveSize(false) == 1 * (1 << 6),
+          "freecell: no free cell leaves one card times the empty columns");
+}
+
+void freecellStacksAlternateAndDescend()
+{
+    std::array<std::vector<Card>, FC::kColumns> columns;
+    std::array<std::vector<Card>, FC::kCells> cells;
+    std::array<std::vector<Card>, FC::kFoundations> foundations;
+    std::vector<Card> deck = makeDeck(1, 4);
+    auto lift = [&deck](Suit suit, int rank) {
+        const auto it = std::find_if(deck.begin(), deck.end(), [&](const Card& c) {
+            return c.suit == suit && c.rank == rank;
+        });
+        Card c = *it;
+        deck.erase(it);
+        c.faceUp = true;
+        return c;
+    };
+
+    const Card blackEight = lift(Suit::Spades, 8);
+    const Card redSeven = lift(Suit::Hearts, 7);
+    const Card blackSix = lift(Suit::Clubs, 6);
+    const Card otherBlackSeven = lift(Suit::Clubs, 7);
+    const Card redSix = lift(Suit::Diamonds, 6);
+
+    // A card sitting ABOVE the run, so the run is shorter than the column. It
+    // has to be a BLACK nine: a red one would legally continue the black eight
+    // and the run would simply be four cards long.
+    const Card blackNine = lift(Suit::Clubs, 9);
+    columns[0] = { blackNine, blackEight, redSeven, blackSix };
+    columns[1] = { otherBlackSeven };
+    columns[2] = { redSix };
+    for (std::size_t i = 0; i < deck.size(); ++i)
+        columns[3 + (i % 5)].push_back(deck[i]);
+
+    FC table;
+    check(table.restore(columns, cells, foundations, 0),
+          "freecell: the hand-built position is one the rules could reach");
+
+    check(table.orderedRunLength(0) == 3,
+          "freecell: black eight, red seven, black six is a run of three");
+    check(table.orderedRunLength(1) == 1, "freecell: a lone card is a run of one");
+    check(table.firstMovableIndex(0) == 1,
+          "freecell: and the black nine above them is not part of it");
+
+    check(table.canStack(redSix, 1), "freecell: a red six goes on a black seven");
+    check(!table.canStack(redSeven, 1), "freecell: a red seven does not go on a black seven");
+    check(!table.canStack(blackSix, 1), "freecell: nor does a black six -- same colour");
+
+    // Taking hold above the run is refused outright. Checked on a copy,
+    // because a successful lift would take the cards off the table and bank an
+    // undo -- an assertion with a side effect is one that changes what the
+    // checks after it are looking at.
+    {
+        FC probe = table;
+        check(probe.lift(FC::PileKind::Column, 0, 0).empty(),
+              "freecell: a card above the run cannot be picked up");
+        check(!probe.canUndo(), "freecell: and a refused lift banks nothing");
+        check(probe.columns()[0].size() == 4, "freecell: leaving the column as it was");
+
+        FC ok = table;
+        check(ok.lift(FC::PileKind::Column, 0, 1).size() == 3,
+              "freecell: taking hold at the top of the run lifts all three");
+    }
+}
+
+void freecellFoundationsGoUpInSuit()
+{
+    FC table;
+    const Card aceOfSpades { .suit = Suit::Spades, .rank = kAce, .faceUp = true };
+    const Card twoOfSpades { .suit = Suit::Spades, .rank = 2, .faceUp = true };
+    const Card twoOfHearts { .suit = Suit::Hearts, .rank = 2, .faceUp = true };
+
+    check(table.canPlaceOnFoundation(aceOfSpades, 0), "freecell: an empty foundation takes an Ace");
+    check(!table.canPlaceOnFoundation(twoOfSpades, 0),
+          "freecell: and nothing else, however tempting");
+
+    std::array<std::vector<Card>, FC::kColumns> columns;
+    std::array<std::vector<Card>, FC::kCells> cells;
+    std::array<std::vector<Card>, FC::kFoundations> foundations;
+    foundations[0] = { aceOfSpades };
+    std::vector<Card> deck = makeDeck(1, 4);
+    for (Card& c : deck) {
+        if (!(c.suit == Suit::Spades && c.rank == kAce))
+            columns[deck.size() % FC::kColumns].push_back(c);
+    }
+    // Spread the rest so no column is absurd.
+    for (std::vector<Card>& col : columns)
+        col.clear();
+    int at = 0;
+    for (const Card& c : deck) {
+        if (c.suit == Suit::Spades && c.rank == kAce)
+            continue;
+        Card faceUp = c;
+        faceUp.faceUp = true;
+        columns[std::size_t(at++ % FC::kColumns)].push_back(faceUp);
+    }
+    check(table.restore(columns, cells, foundations, 1),
+          "freecell: the hand-built position is one the rules could reach");
+    check(table.canPlaceOnFoundation(twoOfSpades, 0), "freecell: the two of the suit follows");
+    check(!table.canPlaceOnFoundation(twoOfHearts, 0), "freecell: a two of another suit does not");
+}
+
+void freecellUndoDoesNotLoseACard()
+{
+    // The bug this extraction found (GHUB-0126). The view lifted a run off its
+    // pile when the drag began and only snapshotted at DROP time, so undoing a
+    // finished move restored a table the cards had never been on -- and they
+    // were gone. FreeCell's own save then refused to reload, because it
+    // demands the whole pack back.
+    FC table;
+    const std::vector<Card> before = freecellOnTable(table);
+
+    // Park a card in a cell, the one move legal in every deal.
+    std::vector<Card> run = table.lift(FC::PileKind::Column, 0,
+                                       int(table.columns()[0].size()) - 1);
+    check(run.size() == 1, "freecell: the bottom card of a column lifts on its own");
+    check(table.dropOnCell(run, 0), "freecell: and parks in a free cell");
+    check(cardcodec::matchesPack(freecellOnTable(table), 1, 4),
+          "freecell: the pack is still whole with a card in a cell");
+
+    check(table.canUndo(), "freecell: the move banked an undo");
+    table.undo();
+    check(cardcodec::matchesPack(freecellOnTable(table), 1, 4),
+          "freecell: and undoing it does not lose the card off the table");
+    check(freecellOnTable(table) == before, "freecell: it puts every pile back exactly");
+
+    // A drag that is put back down where it came from must leave NOTHING to
+    // undo -- otherwise the undo stack fills up with moves nobody made.
+    std::vector<Card> abandoned = table.lift(FC::PileKind::Column, 1,
+                                             int(table.columns()[1].size()) - 1);
+    check(!abandoned.empty(), "freecell: a card lifts");
+    table.putBack(FC::PileKind::Column, 1, abandoned);
+    check(freecellOnTable(table) == before, "freecell: putting it back changes nothing");
+    check(!table.canUndo(), "freecell: and banks no undo, because nothing happened");
+}
+
+void freecellPlaysOutWithoutLosingACard()
+{
+    // Play legal moves at random and hold the pack to account after every one.
+    std::mt19937 rng(20260825);
+    bool packAlwaysWhole = true;
+    bool runLimitRespected = true;
+    int moves = 0;
+    int foundationCards = 0;
+
+    for (int game = 0; game < 60; ++game) {
+        FC table;
+        for (int move = 0; move < 300; ++move) {
+            // Anything that can go home, goes home a third of the time.
+            if ((rng() % 3) == 0) {
+                bool sent = false;
+                for (int c = 0; c < FC::kCells && !sent; ++c)
+                    sent = table.sendToFoundation(FC::PileKind::Cell, c);
+                for (int c = 0; c < FC::kColumns && !sent; ++c)
+                    sent = table.sendToFoundation(FC::PileKind::Column, c);
+                if (sent) {
+                    ++moves;
+                    if (!cardcodec::matchesPack(freecellOnTable(table), 1, 4))
+                        packAlwaysWhole = false;
+                    continue;
+                }
+            }
+
+            const int from = int(rng() % FC::kColumns);
+            if (table.columns()[std::size_t(from)].empty())
+                continue;
+            const int first = table.firstMovableIndex(from);
+            const int take = first + int(rng() % std::size_t(table.columns()[std::size_t(from)].size() - std::size_t(first)));
+
+            std::vector<Card> run = table.lift(FC::PileKind::Column, from, take);
+            if (run.empty())
+                continue;
+
+            const int to = int(rng() % FC::kColumns);
+            int limit = 0;
+            bool placed = false;
+            if (to != from)
+                placed = table.dropOnColumn(run, to, &limit);
+            if (!placed && limit > 0 && int(run.size()) <= limit)
+                runLimitRespected = false;
+            if (!placed && run.size() == 1)
+                placed = table.dropOnCell(run, int(rng() % FC::kCells));
+            if (!placed)
+                table.putBack(FC::PileKind::Column, from, run);
+            else
+                ++moves;
+
+            if (!cardcodec::matchesPack(freecellOnTable(table), 1, 4))
+                packAlwaysWhole = false;
+        }
+        for (const std::vector<Card>& f : table.foundations())
+            foundationCards += int(f.size());
+    }
+
+    std::printf("      freecell: 60 games, %d moves made, %d cards sent home\n", moves,
+                foundationCards);
+    check(moves > 0 && foundationCards > 0, "freecell: the random games actually played");
+    check(packAlwaysWhole, "freecell: the whole pack is on the table after every single move");
+    check(runLimitRespected, "freecell: a run within the limit is never refused for being too long");
 }
 
 // ---------------------------------------------------------------------------
@@ -4303,6 +4585,13 @@ int main()
     pyramidStockAndRedeals();
     pyramidUndoStepsBack();
     pyramidPlaysOutWithoutLosingACard();
+
+    freecellDealsAWholePack();
+    freecellMoveSizeIsTheRule();
+    freecellStacksAlternateAndDescend();
+    freecellFoundationsGoUpInSuit();
+    freecellUndoDoesNotLoseACard();
+    freecellPlaysOutWithoutLosingACard();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;
