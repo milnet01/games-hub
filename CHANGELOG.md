@@ -84,6 +84,16 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Every game's rules are now checked by the test suite.** (GHUB-0066)
+  Six games — Klondike, Spider, FreeCell, Pyramid, Snake and 2048 — kept
+  their rules mixed into the drawing code, which meant the automated
+  checks could not reach them at all. They have been separated, and each
+  now has its rules checked: cards are counted after every move, so a
+  card can no longer go missing unnoticed, and each game's own rules
+  (what may sit on what, what may be picked up, when a run comes off the
+  table) are tested against positions set up on purpose. Doing this found
+  the two bugs fixed above.
+
 - **The Windows build no longer rides on an unmaintained third-party action.** (GHUB-0031)
   `ilammy/msvc-dev-cmd` still declares Node 20, which GitHub is retiring,
   and has had no release since January 2024 — so there was no version to

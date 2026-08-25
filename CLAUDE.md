@@ -202,13 +202,21 @@ clean and are the check before pushing a workflow edit.
 That split is what makes a game's rules testable without a display, and it is
 the rule to hold when adding one.
 
-**It holds for eight of the fourteen, and the six it does not hold for are
-exactly the six whose rules nothing tests** — Klondike, Spider, FreeCell,
-Pyramid, Snake and 2048 have no core file at all, only a view, so
-`gameshub_selftest` cannot link their rules and does not check them.
-`GAME_CORE_SOURCES` in `CMakeLists.txt` is the list of record. **So a rules
-check for one of those six needs a core extracted first** — writing it into the
-self-test as it stands will not link. GHUB-0066 is the open item.
+**It now holds for all fourteen.** `GAME_CORE_SOURCES` in `CMakeLists.txt` is
+the list of record, and `gameshub_selftest` links it — so a rules check for any
+game can be written straight into the self-test. Six games held their rules
+inside the widget until GHUB-0066 closed on 2026-08-25 (Klondike, Spider,
+FreeCell, Pyramid, Snake and 2048); the split found two shipped bugs that
+nothing could have caught while it did not hold, GHUB-0125 and GHUB-0126.
+
+**Three of those cores hold a lifted run themselves rather than handing it to
+the view**, and that is deliberate. Klondike and Spider turn over whatever a run
+was covering when it lands, so the drop has to know where the cards came from;
+keeping the run in the table means the view cannot tell it wrong. FreeCell hands
+the run back because it uncovers nothing. **In all three the undo snapshot is
+banked when the run is LIFTED, never when it is dropped** — the drop happens
+after the cards have left their pile, so a snapshot taken there is of a table
+they were never on. That is GHUB-0126, and it lost the card in two of the three.
 
 - `src/gameview.h` — `GameView`, the contract between hub and game: a QWidget
   that offers `gameActions()` for the toolbar and emits `statusChanged`. It also

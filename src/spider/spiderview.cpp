@@ -1,4 +1,5 @@
 #include "spiderview.h"
+#include "spider/spidertable.h"
 
 #include "legibility.h"
 #include "scores.h"
@@ -61,12 +62,21 @@ void SpiderView::buildActions()
     for (const auto& mode : kModes) {
         auto* a = new QAction(QString::fromUtf8(mode.name), this);
         a->setCheckable(true);
-        a->setChecked(mode.suits == m_suits);
+        a->setChecked(mode.suits == m_table.suits());
         group->addAction(a);
         const int suits = mode.suits;
         connect(a, &QAction::triggered, this, [this, suits] {
-            m_suits = suits;
-            newGame();
+            // The deal takes the suit count, so changing it and dealing is one
+            // step rather than two.
+            m_table.deal(suits);
+            Sound::instance().play(Sound::kShuffle);
+            m_drag.clear();
+            m_dragging = false;
+            m_pressValid = false;
+            m_won = false;
+            m_undoAction->setEnabled(false);
+            update();
+            refresh();
         });
         m_actions.append(a);
     }
@@ -74,36 +84,13 @@ void SpiderView::buildActions()
 
 void SpiderView::newGame()
 {
-    // Spider uses two full decks; the suit count only limits which suits appear.
-    std::vector<Card> deck = makeDeck(2, m_suits);
-    shuffleCards(deck, m_rng);
+    m_table.deal(m_table.suits());
     Sound::instance().play(Sound::kShuffle);
-
-    for (auto& c : m_columns)
-        c.clear();
-    m_stock.clear();
     m_drag.clear();
-    m_history.clear();
     m_dragging = false;
     m_pressValid = false;
-    m_completed = 0;
-    m_moves = 0;
     m_won = false;
     m_undoAction->setEnabled(false);
-
-    // The classic deal: 54 cards out, the first four columns getting six.
-    std::size_t next = 0;
-    for (int col = 0; col < kColumns; ++col) {
-        const int count = (col < 4) ? 6 : 5;
-        for (int i = 0; i < count; ++i) {
-            Card c = deck[next++];
-            c.faceUp = (i == count - 1);
-            m_columns[std::size_t(col)].push_back(c);
-        }
-    }
-    m_stock.assign(deck.begin() + next, deck.end());
-    for (Card& c : m_stock)
-        c.faceUp = false;
 
     update();
     refresh();
@@ -114,26 +101,15 @@ void SpiderView::activate()
     refresh();
 }
 
-void SpiderView::pushUndo()
-{
-    m_history.push_back({ m_columns, m_stock, m_completed, m_moves });
-    if (m_history.size() > 200)
-        m_history.erase(m_history.begin());
-    m_undoAction->setEnabled(true);
-}
-
 void SpiderView::undo()
 {
-    if (m_history.empty())
+    if (!m_table.canUndo())
         return;
-    const Snapshot s = m_history.back();
-    m_history.pop_back();
-    m_columns = s.columns;
-    m_stock = s.stock;
-    m_completed = s.completed;
-    m_moves = s.moves;
+    m_table.undo();
+    m_drag.clear();
+    m_dragging = false;
     m_won = false;
-    m_undoAction->setEnabled(!m_history.empty());
+    m_undoAction->setEnabled(m_table.canUndo());
     update();
     refresh();
 }
@@ -142,13 +118,13 @@ void SpiderView::undo()
 // the card games save differently from Chess.
 QByteArray SpiderView::saveState() const
 {
-    if (m_won || m_history.empty())
+    if (m_won || !m_table.canUndo())
         return {};
 
     // A run lifted in mid-drag belongs to the column it came from until it is
     // dropped; closing the window while holding it must not lose the cards.
     const auto column = [this](int index) {
-        std::vector<Card> cards = m_columns[std::size_t(index)];
+        std::vector<Card> cards = m_table.columns()[std::size_t(index)];
         if (m_dragging && m_dragFrom == index)
             cards.insert(cards.end(), m_drag.begin(), m_drag.end());
         return cards;
@@ -157,10 +133,11 @@ QByteArray SpiderView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_suits) << qint32(m_completed) << qint32(m_moves);
+    out << quint32(1) << qint32(m_table.suits()) << qint32(m_table.completed())
+        << qint32(m_table.moves());
     for (int col = 0; col < kColumns; ++col)
         cardcodec::writePile(out, column(col));
-    cardcodec::writePile(out, m_stock);
+    cardcodec::writePile(out, m_table.stock());
     return blob;
 }
 
@@ -182,29 +159,20 @@ bool SpiderView::restoreState(const QByteArray& blob)
     if (!cardcodec::readPiles(in, columns) || !cardcodec::readPile(in, stock))
         return false;
 
-    // Spider takes a finished run off the table for good, so it cannot ask for
-    // the whole pack back: what is left is two packs less thirteen cards for
-    // every run already completed, and all of it from the pack it was dealt.
-    std::vector<Card> all;
-    cardcodec::gather(all, columns);
-    cardcodec::gather(all, stock);
-    if (all.size() != std::size_t(104 - 13 * completed) || !cardcodec::fitsPack(all, 2, int(suits)))
+    // The table decides whether this is a position the rules could have
+    // produced -- Spider takes a finished run off for good, so what must come
+    // back is two packs less thirteen for every run completed.
+    if (!m_table.restore(columns, stock, int(suits), int(completed), int(moves)))
         return false;
 
-    m_columns = columns;
-    m_stock = stock;
-    m_suits = int(suits);
-    m_completed = int(completed);
-    m_moves = int(moves);
-    m_history.clear();
     m_drag.clear();
     m_dragging = false;
     m_pressValid = false;
     m_won = false;
     m_undoAction->setEnabled(false);
     const QString mode = QStringLiteral("%1 Suit%2")
-                             .arg(m_suits)
-                             .arg(m_suits == 1 ? QString() : QStringLiteral("s"));
+                             .arg(m_table.suits())
+                             .arg(m_table.suits() == 1 ? QString() : QStringLiteral("s"));
     for (QAction* a : m_actions) {
         if (a->isCheckable())
             a->setChecked(a->text() == mode);
@@ -240,7 +208,7 @@ QRectF SpiderView::columnOrigin(int column) const
 QRectF SpiderView::cardRect(int column, int index) const
 {
     QRectF r = columnOrigin(column);
-    const std::vector<Card>& col = m_columns[std::size_t(column)];
+    const std::vector<Card>& col = m_table.columns()[std::size_t(column)];
     double y = r.top();
     for (int i = 0; i < index && i < int(col.size()); ++i)
         y += fanStep(col, i);
@@ -258,89 +226,30 @@ QRectF SpiderView::stockRect() const
     return { width() - kMargin - w, bottom - kMargin - cardHeight(), w, cardHeight() };
 }
 
-int SpiderView::movableRunLength(int column) const
-{
-    const std::vector<Card>& col = m_columns[std::size_t(column)];
-    if (col.empty())
-        return 0;
-
-    int run = 1;
-    for (int i = int(col.size()) - 1; i > 0; --i) {
-        const Card& lower = col[std::size_t(i)];
-        const Card& upper = col[std::size_t(i - 1)];
-        if (!upper.faceUp || upper.suit != lower.suit || upper.rank != lower.rank + 1)
-            break;
-        ++run;
-    }
-    return run;
-}
-
-bool SpiderView::canDrop(const Card& moving, int column) const
-{
-    const std::vector<Card>& col = m_columns[std::size_t(column)];
-    if (col.empty())
-        return true; // any card may start an empty column
-    const Card& top = col.back();
-    // Spider stacks by rank alone; only *moving* a run needs matching suits.
-    return top.faceUp && top.rank == moving.rank + 1;
-}
-
 void SpiderView::dealRow()
 {
-    if (m_stock.empty())
+    if (m_table.stock().empty())
         return;
-
-    // The rule that stops a deal burying an empty column beyond recovery.
-    for (const auto& col : m_columns) {
-        if (col.empty()) {
-            Q_EMIT statusChanged(QStringLiteral("Fill every empty column before dealing a new row."));
-            return;
-        }
+    if (!m_table.dealRow()) {
+        // The rule that stops a deal burying an empty column beyond recovery.
+        Q_EMIT statusChanged(QStringLiteral("Fill every empty column before dealing a new row."));
+        return;
     }
-
-    pushUndo();
+    m_undoAction->setEnabled(m_table.canUndo());
     Sound::instance().play(Sound::kCardDeal);
-    for (int col = 0; col < kColumns && !m_stock.empty(); ++col) {
-        Card c = m_stock.back();
-        m_stock.pop_back();
-        c.faceUp = true;
-        m_columns[std::size_t(col)].push_back(c);
-    }
-    for (int col = 0; col < kColumns; ++col)
-        harvest(col);
 
     update();
     refresh();
     checkWin();
 }
 
-void SpiderView::harvest(int column)
-{
-    std::vector<Card>& col = m_columns[std::size_t(column)];
-    if (int(col.size()) < 13)
-        return;
-
-    // A complete run is King down to Ace, one suit, all face up.
-    const int start = int(col.size()) - 13;
-    for (int i = 0; i < 13; ++i) {
-        const Card& c = col[std::size_t(start + i)];
-        if (!c.faceUp || c.rank != kKing - i || c.suit != col[std::size_t(start)].suit)
-            return;
-    }
-
-    col.erase(col.begin() + start, col.end());
-    ++m_completed;
-    if (!col.empty() && !col.back().faceUp)
-        col.back().faceUp = true;
-}
-
 void SpiderView::checkWin()
 {
-    if (m_completed < 8 || m_won)
+    if (!m_table.won() || m_won)
         return;
     m_won = true;
     Sound::instance().play(Sound::kWin);
-    const bool newBest = Scores::instance().recordLow(Scores::spiderBestMoves(m_suits), m_moves);
+    const bool newBest = Scores::instance().recordLow(Scores::spiderBestMoves(m_table.suits()), m_table.moves());
     refresh();
 
     QTimer::singleShot(200, this, [this, newBest] {
@@ -348,10 +257,10 @@ void SpiderView::checkWin()
         box.setWindowTitle(QStringLiteral("Solved"));
         box.setText(QStringLiteral("All eight runs complete!"));
         box.setInformativeText(
-            newBest ? QStringLiteral("Moves: %1 — a new best!").arg(m_moves)
+            newBest ? QStringLiteral("Moves: %1 — a new best!").arg(m_table.moves())
                     : QStringLiteral("Moves: %1.   Best: %2.")
-                          .arg(m_moves)
-                          .arg(Scores::instance().best(Scores::spiderBestMoves(m_suits))));
+                          .arg(m_table.moves())
+                          .arg(Scores::instance().best(Scores::spiderBestMoves(m_table.suits()))));
         QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
         box.exec();
@@ -365,11 +274,11 @@ void SpiderView::refresh()
     Q_EMIT statusChanged(QStringLiteral("%1   Runs %2/8   Stock %3   Moves %4")
                              .arg(m_won ? QStringLiteral("Solved!")
                                         : QStringLiteral("Spider (%1 suit%2)")
-                                              .arg(m_suits)
-                                              .arg(m_suits == 1 ? QString() : QStringLiteral("s")))
-                             .arg(m_completed)
-                             .arg(m_stock.size() / kColumns)
-                             .arg(m_moves));
+                                              .arg(m_table.suits())
+                                              .arg(m_table.suits() == 1 ? QString() : QStringLiteral("s")))
+                             .arg(m_table.completed())
+                             .arg(m_table.stock().size() / kColumns)
+                             .arg(m_table.moves()));
 }
 
 void SpiderView::paintEvent(QPaintEvent*)
@@ -380,7 +289,7 @@ void SpiderView::paintEvent(QPaintEvent*)
     Theme::paintFelt(p, rect(), Theme::kFeltTealTop, Theme::kFeltTealBottom);
 
     for (int col = 0; col < kColumns; ++col) {
-        const std::vector<Card>& column = m_columns[std::size_t(col)];
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
         if (column.empty()) {
             CardArt::paintSlot(p, columnOrigin(col));
             continue;
@@ -401,9 +310,9 @@ void SpiderView::paintEvent(QPaintEvent*)
     }
 
     // Stock, drawn as a small stack in the corner.
-    if (!m_stock.empty()) {
+    if (!m_table.stock().empty()) {
         const QRectF s = stockRect();
-        const int stacks = int(m_stock.size() / kColumns);
+        const int stacks = int(m_table.stock().size() / kColumns);
         for (int i = 0; i < std::min(stacks, 5); ++i)
             CardArt::paintBack(p, s.translated(-i * 5.0, -i * 2.0));
     }
@@ -438,7 +347,7 @@ void SpiderView::mousePressEvent(QMouseEvent* event)
     }
 
     for (int col = 0; col < kColumns; ++col) {
-        const std::vector<Card>& column = m_columns[std::size_t(col)];
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
         const int movable = movableRunLength(col);
         const int firstMovable = int(column.size()) - movable;
 
@@ -465,9 +374,12 @@ void SpiderView::mouseMoveEvent(QMouseEvent* event)
         const QPointF delta = event->position() - m_pressPos;
         if (std::hypot(delta.x(), delta.y()) < kDragThreshold)
             return;
-        std::vector<Card>& column = m_columns[std::size_t(m_dragFrom)];
-        m_drag.assign(column.begin() + m_dragIndex, column.end());
-        column.erase(column.begin() + m_dragIndex, column.end());
+        // The table lifts, and banks the undo snapshot BEFORE the cards leave
+        // the column -- which is what makes the old hand-patched snapshot
+        // below unnecessary rather than merely correct.
+        m_drag = m_table.lift(m_dragFrom, m_dragIndex);
+        if (m_drag.empty())
+            return;
         m_dragging = true;
     }
 
@@ -488,43 +400,30 @@ void SpiderView::mouseReleaseEvent(QMouseEvent* event)
 
     for (int col = 0; col < kColumns; ++col) {
         QRectF zone = columnOrigin(col);
-        const std::vector<Card>& column = m_columns[std::size_t(col)];
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
         if (!column.empty())
             zone = zone.united(cardRect(col, int(column.size()) - 1));
         zone.setBottom(zone.bottom() + cardHeight() * 0.5);
 
-        if (zone.contains(drop) && canDrop(m_drag.front(), col)) {
+        if (zone.contains(drop)) {
             target = col;
             break;
         }
     }
 
-    if (target >= 0 && target != m_dragFrom) {
-        pushUndo();
-        // The snapshot must show the run still on its old column, so restore
-        // it before recording and then perform the move properly.
-        Snapshot& snap = m_history.back();
-        for (const Card& c : m_drag)
-            snap.columns[std::size_t(m_dragFrom)].push_back(c);
-
-        for (const Card& c : m_drag)
-            m_columns[std::size_t(target)].push_back(c);
-
-        std::vector<Card>& source = m_columns[std::size_t(m_dragFrom)];
-        if (!source.empty() && !source.back().faceUp)
-            source.back().faceUp = true;
-
-        ++m_moves;
-        Sound::instance().play(Sound::kCardPlace);
-        const int before = m_completed;
-        harvest(target);
-        if (m_completed != before)
-            Sound::instance().play(Sound::kWin);
+    // The view decides WHICH column the drop landed on; the table decides
+    // whether the run may go there, turns over what it uncovered and takes off
+    // a completed run.
+    const SpiderTable::Drop result
+        = target >= 0 ? m_table.dropOn(target) : SpiderTable::Drop::Refused;
+    if (result == SpiderTable::Drop::Refused) {
+        m_table.putBack();
     } else {
-        std::vector<Card>& source = m_columns[std::size_t(m_dragFrom)];
-        for (const Card& c : m_drag)
-            source.push_back(c);
+        Sound::instance().play(Sound::kCardPlace);
+        if (result == SpiderTable::Drop::Completed)
+            Sound::instance().play(Sound::kWin);
     }
+    m_undoAction->setEnabled(m_table.canUndo());
 
     m_drag.clear();
     m_pressValid = false;

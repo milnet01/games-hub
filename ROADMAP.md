@@ -4851,7 +4851,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: test.
   Source: in-session-2026-08-11.
 
-- 📋 [GHUB-0066] **Six games have no rules core, and they are exactly the six whose rules nothing tests.**
+- ✅ [GHUB-0066] **Six games have no rules core, and they are exactly the six whose rules nothing tests.**
   CLAUDE.md opens the architecture section with the rule: every game is a rules
   core plus a view, the core never includes a widget, *that split is the reason the
   whole collection is testable without a display, and it is the rule to preserve
@@ -4928,6 +4928,55 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   that the clock was running -- the snake was dead in that very check.
 
   Five to go: 2048, Pyramid, FreeCell, Klondike, Spider.
+  Resolved (2026-08-25): all six done, one game at a time, cheapest first --
+  Snake, 2048, Pyramid, FreeCell, Klondike, Spider. `GAME_CORE_SOURCES` now lists
+  nineteen files and every one of the fourteen games has a core the self-test can
+  link. CLAUDE.md's architecture section is corrected: the split holds for all
+  fourteen.
+
+  **Two shipped bugs, both of the kind this bullet predicted, and both found the
+  moment the rules could be reached.**
+
+  GHUB-0125: Snake was built with `push_front`, so its head sat at the LEFT end of
+  a snake heading right and its first step drove into its own neck. Pressing Right
+  or D to start was an instant game over. `tests/uitest.cpp` ALREADY pressed Right
+  to start Snake and only ever checked the clock was running -- the snake was dead
+  in that very check.
+
+  GHUB-0126: FreeCell and Klondike lifted a dragged run off its pile and then
+  snapshotted for undo at DROP time, so undoing a finished move restored a table
+  the cards had never been on and they were gone. Both games' saves demand the
+  whole pack back, so an undo followed by closing the app threw the game away.
+  Spider had the identical ordering and a hand-written patch working around it --
+  so somebody hit this once, fixed it in one of three places, and never looked at
+  the other two. In the cores the snapshot is banked at LIFT time and the patch is
+  unnecessary rather than merely correct.
+
+  The property tests are the shape this bullet asked for, and each one is checked
+  against the pack after EVERY move: Klondike and FreeCell must hold the whole
+  pack, Pyramid the cards on the table plus the cards taken, Spider two packs less
+  thirteen for every run completed. Snake and 2048 have no pack, so theirs are the
+  arithmetic ones -- every tile a power of two, death earned exactly by leaving the
+  grid or meeting itself.
+
+  Three things learned about writing these that are worth keeping:
+
+    - A property test is only as good as its policy. Snake's random walk ate 8
+      times in 60 games and never grew, so the tail-square rule was never
+      exercised; steering at the food 75% of the time gets 168 meals and 17
+      self-collisions. Pyramid cleared 0 of 120 games until its draw branch was
+      fixed, then 1.
+    - REPORT what random play cannot reach rather than asserting it. Spider
+      completes 0 runs in 60 random games, and 2048 never reaches 2048. Both have
+      a built position instead; a threshold would have been a check that passed by
+      luck.
+    - An assertion with a side effect changes what the checks after it look at.
+      FreeCell's "a card above the run cannot be picked up" runs on a COPY, because
+      a successful lift would take cards off the table and bank an undo.
+
+  Three of the queued items this bullet named as its reason are now safe to do:
+  GHUB-0056 (undo snapshots), GHUB-0052 (fuzzing restoreState) and GHUB-0065
+  (animating auto-moves) all edit these games, and now a test would notice.
   **Layman:** Six of the fourteen games have their rules mixed into the drawing code, which is why the test suite cannot check them at all.
   Kind: refactor.
   Source: in-session-2026-08-20.

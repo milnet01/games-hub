@@ -2,12 +2,12 @@
 
 #include "cards/card.h"
 #include "gameview.h"
+#include "spider/spidertable.h"
 
 #include <QPointF>
 #include <QRectF>
 
 #include <array>
-#include <random>
 #include <vector>
 
 class SpiderView : public GameView
@@ -23,7 +23,9 @@ public:
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
-    static constexpr int kColumns = 10;
+    // The table's shape belongs to the rules; kept under the name the
+    // painter already used.
+    static constexpr int kColumns = SpiderTable::kColumns;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -34,17 +36,9 @@ protected:
     QSize minimumSizeHint() const override { return { 620, 440 }; }
 
 private:
-    struct Snapshot {
-        std::array<std::vector<Card>, kColumns> columns;
-        std::vector<Card> stock;
-        int completed = 0;
-        int moves = 0;
-    };
-
     void buildActions();
     void newGame();
     void undo();
-    void pushUndo();
 
     double cardWidth() const;
     double cardHeight() const { return cardWidth() * 1.4; }
@@ -53,21 +47,16 @@ private:
     QRectF cardRect(int column, int index) const;
     QRectF stockRect() const;
 
-    // Length of the same-suit descending run ending at the bottom of a column,
-    // which is exactly what the player is allowed to pick up.
-    int movableRunLength(int column) const;
-    bool canDrop(const Card& moving, int column) const;
+    int movableRunLength(int column) const { return m_table.movableRunLength(column); }
     void dealRow();
-    // Removes any complete King-to-Ace same-suit run from a column.
-    void harvest(int column);
     void checkWin();
     void refresh();
 
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;
 
-    std::array<std::vector<Card>, kColumns> m_columns;
-    std::vector<Card> m_stock;
+    // The rules. What is left here is the pointer, the drag and the drawing.
+    SpiderTable m_table;
 
     std::vector<Card> m_drag;
     int m_dragFrom = -1;
@@ -78,10 +67,5 @@ private:
     bool m_dragging = false;
     bool m_pressValid = false;
 
-    std::vector<Snapshot> m_history;
-    std::mt19937 m_rng { std::random_device {}() };
-    int m_suits = 1;
-    int m_completed = 0;
-    int m_moves = 0;
     bool m_won = false;
 };

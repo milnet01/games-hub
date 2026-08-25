@@ -11,6 +11,7 @@
 #include "draughts/draughtsboard.h"
 #include "minesweeper/minefield.h"
 #include "pinball/pinballtable.h"
+#include "spider/spidertable.h"
 #include "sudoku/sudokugrid.h"
 #include "reversi/ai.h"
 #include "reversi/board.h"
@@ -2125,6 +2126,230 @@ void klondikePlaysOutWithoutLosingACard()
     check(moves > 0 && undos > 0 && home > 0, "klondike: the random games actually played");
     check(packAlwaysWhole, "klondike: the whole pack is accounted for after every move");
     check(undoAlwaysExact, "klondike: and after every undo, which is where a card used to vanish");
+}
+
+
+// ---------------------------------------------------------------------------
+// Spider
+//
+// The last of the six games GHUB-0066 named. Six mentions in this file before
+// it, all of them about the widget.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+using ST = SpiderTable;
+
+std::vector<Card> spiderOnTable(const ST& table)
+{
+    std::vector<Card> all;
+    cardcodec::gather(all, table.columns());
+    cardcodec::gather(all, table.stock());
+    cardcodec::gather(all, table.held());
+    return all;
+}
+
+} // namespace
+
+void spiderDealsTwoPacks()
+{
+    section("Spider");
+
+    for (int suits : { 1, 2, 4 }) {
+        ST table;
+        table.deal(suits);
+        check(table.suits() == suits, "spider: the suit count is taken");
+
+        int dealt = 0;
+        bool columnsRight = true;
+        bool onlyTheLastFaceUp = true;
+        for (int col = 0; col < ST::kColumns; ++col) {
+            const std::vector<Card>& column = table.columns()[std::size_t(col)];
+            dealt += int(column.size());
+            if (int(column.size()) != (col < 4 ? 6 : 5))
+                columnsRight = false;
+            for (int i = 0; i < int(column.size()); ++i) {
+                if (column[std::size_t(i)].faceUp != (i == int(column.size()) - 1))
+                    onlyTheLastFaceUp = false;
+            }
+        }
+        check(dealt == 54, "spider: fifty-four cards go out");
+        check(columnsRight, "spider: six to the first four columns and five to the rest");
+        check(onlyTheLastFaceUp, "spider: with only the last of each turned up");
+        check(int(table.stock().size()) == ST::kPackCards - 54,
+              "spider: and fifty in the stock, which is five more rows");
+        check(cardcodec::matchesPack(spiderOnTable(table), 2, suits),
+              "spider: between them exactly two packs");
+    }
+}
+
+void spiderStacksByRankButMovesBySuit()
+{
+    // The rule that IS Spider: any card may land on the rank above it, but only
+    // a same-suit run may be picked up as a unit. Confusing the two makes the
+    // four-suit game trivial.
+    ST table;
+    std::vector<Card> deck = makeDeck(2, 4);
+    auto lift = [&deck](Suit suit, int rank) {
+        const auto it = std::find_if(deck.begin(), deck.end(), [&](const Card& c) {
+            return c.suit == suit && c.rank == rank;
+        });
+        Card c = *it;
+        deck.erase(it);
+        c.faceUp = true;
+        return c;
+    };
+
+    std::array<std::vector<Card>, ST::kColumns> columns;
+    // A same-suit run of three, with a different suit sitting above it.
+    columns[0] = { lift(Suit::Hearts, 10), lift(Suit::Spades, 9), lift(Suit::Spades, 8),
+                   lift(Suit::Spades, 7) };
+    columns[1] = { lift(Suit::Diamonds, 8) };
+    // Column 2 stays empty.
+    int at = 3;
+    for (const Card& c : deck)
+        columns[std::size_t(at++ % (ST::kColumns - 3)) + 3].push_back(c);
+    check(table.restore(columns, {}, 4, 0, 0),
+          "spider: the hand-built position is one the rules could reach");
+
+    check(table.movableRunLength(0) == 3, "spider: three spades in order move together");
+    check(!table.canLift(0, 0), "spider: the heart above them does not come with them");
+    check(table.canLift(0, 1), "spider: but the run itself may be taken hold of");
+
+    const Card spadeSeven { .suit = Suit::Spades, .rank = 7, .faceUp = true };
+    check(table.canDrop(spadeSeven, 1),
+          "spider: a seven lands on ANY eight -- Spider stacks by rank alone");
+    check(table.canDrop(spadeSeven, 2), "spider: and any card may start an empty column");
+    const Card spadeNine { .suit = Suit::Spades, .rank = 9, .faceUp = true };
+    check(!table.canDrop(spadeNine, 1), "spider: but a nine does not go on an eight");
+}
+
+void spiderHarvestsAFullRun()
+{
+    // Thirteen of a suit in order come off the table, and only then.
+    ST table;
+    std::vector<Card> deck = makeDeck(2, 4);
+    auto lift = [&deck](Suit suit, int rank) {
+        const auto it = std::find_if(deck.begin(), deck.end(), [&](const Card& c) {
+            return c.suit == suit && c.rank == rank;
+        });
+        Card c = *it;
+        deck.erase(it);
+        c.faceUp = true;
+        return c;
+    };
+
+    std::array<std::vector<Card>, ST::kColumns> columns;
+    // King down to two in column 0, the Ace waiting on column 1.
+    for (int rank = kKing; rank >= 2; --rank)
+        columns[0].push_back(lift(Suit::Clubs, rank));
+    columns[1].push_back(lift(Suit::Clubs, kAce));
+    int at = 2;
+    for (const Card& c : deck)
+        columns[std::size_t(at++ % (ST::kColumns - 2)) + 2].push_back(c);
+    check(table.restore(columns, {}, 4, 0, 0),
+          "spider: the hand-built position is one the rules could reach");
+    check(table.completed() == 0, "spider: twelve of a suit is not a run");
+    check(table.columns()[0].size() == 12, "spider: and stays on the table");
+
+    std::vector<Card> run = table.lift(1, 0);
+    check(run.size() == 1, "spider: the Ace lifts");
+    check(table.dropOn(0) == ST::Drop::Completed,
+          "spider: and landing it finishes the run, which comes off the table");
+    check(table.completed() == 1, "spider: counted");
+    check(table.columns()[0].empty(), "spider: leaving the column empty");
+    check(int(spiderOnTable(table).size()) == ST::kPackCards - ST::kRunLength,
+          "spider: thirteen cards fewer on the table, and gone for good");
+}
+
+void spiderRowNeedsEveryColumnOccupied()
+{
+    ST table;
+    check(table.canDealRow(), "spider: a fresh deal can take a new row");
+
+    // Empty one column and the deal must refuse: a row dealt over an empty
+    // column buries it beyond recovery.
+    std::array<std::vector<Card>, ST::kColumns> columns = table.columns();
+    std::vector<Card> stock = table.stock();
+    for (const Card& c : columns[0])
+        stock.push_back(c);
+    columns[0].clear();
+    check(table.restore(columns, stock, table.suits(), 0, 0),
+          "spider: a position with an empty column is legal");
+    check(!table.canDealRow(), "spider: but no row may be dealt over it");
+    check(!table.dealRow(), "spider: and asking anyway does nothing");
+    check(!table.canUndo(), "spider: and banks no undo for the row it did not deal");
+}
+
+void spiderPlaysOutWithoutLosingACard()
+{
+    // Random legal play. The pack shrinks by exactly thirteen every time a run
+    // is completed, and by nothing else -- which is the invariant a
+    // finished-run game has instead of "the whole pack comes back".
+    std::mt19937 rng(20260825);
+    bool packAlwaysRight = true;
+    bool undoAlwaysRight = true;
+    int moves = 0;
+    int undos = 0;
+    int runs = 0;
+
+    for (int game = 0; game < 60; ++game) {
+        ST table;
+        table.deal(1);   // one suit, so runs actually complete
+        for (int move = 0; move < 500; ++move) {
+            const int roll = int(rng() % 10);
+            if (roll < 2) {
+                if (!table.canUndo())
+                    continue;
+                table.undo();
+                ++undos;
+                if (int(spiderOnTable(table).size())
+                    != ST::kPackCards - ST::kRunLength * table.completed())
+                    undoAlwaysRight = false;
+                continue;
+            }
+            if (roll < 4) {
+                if (table.dealRow())
+                    ++moves;
+            } else {
+                const int from = int(rng() % ST::kColumns);
+                const std::vector<Card>& column = table.columns()[std::size_t(from)];
+                if (column.empty())
+                    continue;
+                const int index = int(rng() % column.size());
+                if (!table.canLift(from, index))
+                    continue;
+                std::vector<Card> run = table.lift(from, index);
+                if (run.empty())
+                    continue;
+                const ST::Drop result = table.dropOn(int(rng() % ST::kColumns));
+                if (result == ST::Drop::Refused)
+                    table.putBack();
+                else
+                    ++moves;
+                if (result == ST::Drop::Completed)
+                    ++runs;
+            }
+
+            const std::vector<Card> present = spiderOnTable(table);
+            if (int(present.size()) != ST::kPackCards - ST::kRunLength * table.completed())
+                packAlwaysRight = false;
+            if (!cardcodec::fitsPack(present, 2, table.suits()))
+                packAlwaysRight = false;
+        }
+    }
+
+    std::printf("      spider: 60 games, %d moves, %d undos, %d runs completed\n", moves, undos,
+                runs);
+    check(moves > 0 && undos > 0, "spider: the random games actually played");
+    // The run count is REPORTED, not asserted. Spider is hard enough that
+    // random play finishes no runs at all -- measured, 0 in 60 games -- so a
+    // threshold here would be a check that only ever passed by luck. The
+    // harvest is proved against a built position in spiderHarvestsAFullRun
+    // instead, which is where a rule that rare belongs.
+    check(packAlwaysRight,
+          "spider: the table always holds two packs less thirteen for every run completed");
+    check(undoAlwaysRight, "spider: and that survives an undo");
 }
 
 // ---------------------------------------------------------------------------
@@ -4815,6 +5040,12 @@ int main()
     klondikeTurningUncoversTheCardBelow();
     klondikeUndoDoesNotLoseACard();
     klondikePlaysOutWithoutLosingACard();
+
+    spiderDealsTwoPacks();
+    spiderStacksByRankButMovesBySuit();
+    spiderHarvestsAFullRun();
+    spiderRowNeedsEveryColumnOccupied();
+    spiderPlaysOutWithoutLosingACard();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;
