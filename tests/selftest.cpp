@@ -2497,6 +2497,50 @@ void canastaFreezeReasons()
           "canasta: a rank they have closed cannot be fed, so it is no reason to freeze");
 }
 
+// Counting the pack (GHUB-0106). Two packs means eight of every rank, and the
+// ones this seat can see are the ones nobody else can be holding. Nothing
+// checked this before, though both halves of it were already in use.
+void canastaCountsThePack()
+{
+    const auto meldOf = [](int rank, int n) {
+        ca::Meld m;
+        m.rank = rank;
+        for (int i = 0; i < n; ++i)
+            m.cards.push_back(cd(i % 2 == 0 ? Suit::Spades : Suit::Hearts, rank));
+        return m;
+    };
+
+    const std::vector<Card> hand { cd(Suit::Clubs, kKing), cd(Suit::Spades, kKing),
+                                   cd(Suit::Clubs, 9) };
+    const std::vector<Card> pack { cd(Suit::Hearts, kKing), cd(Suit::Diamonds, 4),
+                                   cd(Suit::Clubs, 4) };
+    ca::Team mine;
+    mine.melds.push_back(meldOf(kKing, 3));
+    ca::Team theirs;
+    theirs.melds.push_back(meldOf(kKing, 2));
+
+    check(ca::seenSoFar(hand, pack, mine, theirs, kKing) == 8,
+          "canasta: two in hand, one in the pack, three down and two more theirs is all eight");
+    check(ca::seenSoFar(hand, pack, mine, theirs, 4) == 2,
+          "canasta: a rank counts wherever it shows, melded or not");
+    check(ca::seenSoFar(hand, pack, mine, theirs, 7) == 0,
+          "canasta: and a rank nobody has shown is not accounted for at all");
+
+    // A rank with all eight visible cannot take the pack off anybody, so it is
+    // the safest throw there is — and nothing safer exists, which is what makes
+    // the top of this slope the cliff rather than needing one of its own.
+    const int pileSize = 20;
+    const double dead = ca::packCountSafety(0, pileSize);
+    check(dead > ca::packCountSafety(1, pileSize),
+          "canasta: a rank fully accounted for is safer than one with a card out");
+    check(ca::packCountSafety(1, pileSize) > ca::packCountSafety(4, pileSize),
+          "canasta: and the more are unaccounted for, the more the throw risks");
+    check(ca::packCountSafety(4, pileSize) > ca::packCountSafety(8, pileSize),
+          "canasta: past the cap it still worsens, because the penalty keeps running");
+    check(ca::packCountSafety(4, 40) < ca::packCountSafety(4, 4),
+          "canasta: and the bigger the pack, the more an unaccounted rank costs");
+}
+
 // What a discard's safety judgement is worth against this opponent
 // (GHUB-0121). Checked on figures rather than on a position played into
 // existence, the way discardRisk and openRequirementFor already are — the claim
@@ -3399,6 +3443,7 @@ int main()
     canastaAiOpensOnAJokerToKeepThePair();
     canastaFreezeLimits();
     canastaFreezeReasons();
+    canastaCountsThePack();
     canastaThrowCaution();
     canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();

@@ -3525,7 +3525,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0106] **Nothing counts how many of a rank are left, and two packs means eight.**
+- ✅ [GHUB-0106] **Nothing counts how many of a rank are left, and two packs means eight.**
   SUGGESTED, NOT REQUESTED. Offered to the owner on
   2026-08-24 and not yet answered; filed as considered so it
   survives the session rather than as planned work.
@@ -3573,6 +3573,38 @@ open.
   Neither is obviously worth doing, and both move numbers the ladder
   cannot measure (GHUB-0110). Treat this as a verify-and-close candidate
   unless the owner wants (a).
+  Resolved (2026-08-25) as the verify-and-close the note above called for.
+  Asked of the owner on 2026-08-25; he deferred it.
+
+  Verified: the bullet's subject was already built, exactly as the note
+  said, and NOTHING checked it -- not one assertion in the suite touched
+  the count. That was the gap worth closing rather than the behaviour.
+
+  Two free functions extracted from Ai::seen and from the discard's pack
+  term, on the same footing as discardRisk and throwCaution, so both can be
+  checked on a hand-built table. seenSoFar(hand, pack, one, two, rank)
+  counts a rank wherever it shows; Ai::seen is now a one-line call to it.
+  packCountSafety(unseen, pileSize) is what that count is worth on a throw.
+  No behaviour changed -- the ladder reads identically on both sides of the
+  extraction, to the point.
+
+  canastaCountsThePack holds it: all eight of a rank found across hand,
+  pack and both sides' melds; a rank showing twice; a rank showing nowhere;
+  and the safety term monotone in unseen, past the cap, and rising with
+  pack size.
+
+  Decided rather than discovered, on the two questions the note left open.
+  (a) Hard and Expert do NOT differ here, and should not: they already
+  differ in three other places in chooseDiscard, and a fourth difference
+  would be a change with no evidence behind it, since GHUB-0110 established
+  the ladder cannot measure one this size. Easy and Medium still do not
+  count the pack at all, which is the difficulty dial the bullet wanted.
+  (b) No explicit cliff for an all-eight-seen rank, and the header now says
+  why: unseen 0 is already the maximum of the term -- the bonus in full
+  with no penalty against it -- so the cliff IS the top of the slope. A
+  second statement of it would be two numbers to keep in step.
+
+  Suite green at 511 checks, ctest 6/6.
   **Layman:** Once all eight cards of a rank have been seen, that rank is safe to throw forever -- a computer can track that perfectly and a person cannot.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.

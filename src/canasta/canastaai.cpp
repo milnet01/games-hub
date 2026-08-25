@@ -200,14 +200,32 @@ void Ai::noteHand(const Engine& e)
     m_lastStock = stock;
 }
 
-int Ai::seen(const Engine& e, int rank) const
+int seenSoFar(const std::vector<Card>& hand, const std::vector<Card>& pile, const Team& one,
+              const Team& two, int rank)
 {
-    int n = countRank(e.hand(e.currentSeat()), rank);
-    n += countRank(e.pile(), rank);
-    for (int t = 0; t < kTeams; ++t)
-        if (const Meld* m = e.team(t).meldOfRank(rank))
+    int n = countRank(hand, rank) + countRank(pile, rank);
+    for (const Team* t : { &one, &two })
+        if (const Meld* m = t->meldOfRank(rank))
             n += countRank(m->cards, rank);
     return n;
+}
+
+double packCountSafety(int unseen, int pileSize)
+{
+    // The fewer that are unseen, the less likely the pair that would punish the
+    // throw. Capped at four, because past that the rank is simply live.
+    double safety = 9.0 * (4 - std::min(4, unseen));
+    // Weighted by what handing the pack over would actually cost. This is the
+    // one pack-size weight in the discard, and GHUB-0108's ask to generalise it
+    // over the whole accumulator was tried and measured WORSE — see that bullet
+    // before moving it again.
+    safety -= 0.9 * double(unseen) * (1.0 + 0.12 * double(pileSize));
+    return safety;
+}
+
+int Ai::seen(const Engine& e, int rank) const
+{
+    return seenSoFar(e.hand(e.currentSeat()), e.pile(), e.team(0), e.team(1), rank);
 }
 
 bool Ai::worthHolding(const Engine& e, int rank, int naturals) const
@@ -790,13 +808,7 @@ Card Ai::chooseDiscard(const Engine& e) const
             // eight accounted for cannot take the pile off anybody, which makes
             // it the safest card there is — and the fewer that are unseen, the
             // less likely the pair that would punish the throw.
-            const int unseen = 8 - seen(e, c.rank);
-            safety += 9.0 * (4 - std::min(4, unseen));
-            // Weighted by what handing the pile over would actually cost. This
-            // is the one pack-size weight in the discard, and GHUB-0108's ask to
-            // generalise it over the whole accumulator was tried and measured
-            // WORSE — see that bullet before moving it again.
-            safety -= 0.9 * double(unseen) * (1.0 + 0.12 * pileSize);
+            safety += packCountSafety(8 - seen(e, c.rank), pileSize);
 
             // Never break a pair while an unpaired card would do, and never
             // feed a rank this seat is holding as bait for the pile.

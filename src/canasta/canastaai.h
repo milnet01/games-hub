@@ -63,6 +63,28 @@ int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& 
 // discardRisk already carries its own. Read that bullet before adding it.
 double throwCaution(const Team& theirs, int openRequirement);
 
+// How many of a rank are already accounted for — melded by either side, lying
+// in the pack, or in this seat's own hand (GHUB-0106). Two packs, so eight of
+// every rank exist, and a rank with all eight visible is a throw nobody at the
+// table can use.
+//
+// A free function so the count can be checked on a hand-built table rather than
+// on one played into existence; Ai::seen is a one-line call to it against the
+// seat playing now.
+int seenSoFar(const std::vector<Card>& hand, const std::vector<Card>& pile, const Team& one,
+              const Team& two, int rank);
+
+// What counting the pack is worth on a throw of one rank, as a safety figure —
+// bigger is safer (GHUB-0106). `unseen` is 8 less what seenSoFar found.
+//
+// There is no separate cliff for a rank with all eight seen, and that is
+// deliberate rather than an omission: unseen 0 is already the maximum of this
+// term, carrying the bonus in full with no penalty against it, so the cliff is
+// the top of the slope. Easy and Medium do not count the pack at all; Hard and
+// Expert count it identically, and a fourth difference between those two would
+// be a change the ladder cannot measure (GHUB-0110).
+double packCountSafety(int unseen, int pileSize);
+
 // How much of this hand is going to end up feeding the other side, as a share
 // of the cards in it (GHUB-0101). The owner's first reason to freeze: "when
 // your side will feed (continually give the pack away) the opposition".
