@@ -2,13 +2,12 @@
 
 #include "cards/card.h"
 #include "gameview.h"
+#include "pyramid/pyramidtable.h"
 
 #include <QPointF>
 #include <QRectF>
 
 #include <optional>
-#include <random>
-#include <vector>
 
 // Pyramid: clear a stack of 28 cards by taking pairs that add up to 13.
 // Kings are worth 13 on their own and go alone.
@@ -25,7 +24,9 @@ public:
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
-    static constexpr int kRows = 7;
+    // The pyramid's shape belongs to the rules; kept under the name the
+    // painter already used.
+    static constexpr int kRows = PyramidTable::kRows;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -35,25 +36,12 @@ protected:
 
 private:
     // Where a selectable card lives.
-    enum class Source { Pyramid, Waste, Stock };
-
-    struct Slot {
-        Card card;
-        bool removed = false;
-    };
-
-    struct Snapshot {
-        std::vector<Slot> pyramid;
-        std::vector<Card> stock;
-        std::vector<Card> waste;
-        int pairs = 0;
-        int redeals = 0;
-    };
+    using Source = PyramidTable::Source;
+    using Slot = PyramidTable::Slot;
 
     void buildActions();
     void newGame();
     void undo();
-    void pushUndo();
 
     double cardWidth() const;
     double cardHeight() const { return cardWidth() * 1.4; }
@@ -62,16 +50,16 @@ private:
     QRectF wasteRect() const;
     double pileTop() const;
 
-    static int slotIndex(int row, int index) { return row * (row + 1) / 2 + index; }
+    static int slotIndex(int row, int index) { return PyramidTable::slotIndex(row, index); }
     // A pyramid card can only be taken once both cards resting on it are gone.
-    bool isExposed(int row, int index) const;
+    bool isExposed(int row, int index) const { return m_table.isExposed(row, index); }
     std::optional<int> pyramidAt(QPointF pos) const;
 
     void select(Source source, int index);
     void clearSelection();
-    // Takes the selected card(s) if they add to 13.
+    // Takes the selected card(s) if they add to 13. The SELECTION is the view's;
+    // whether the take is legal is the table's.
     void tryPair(Source source, int index, const Card& card);
-    void removeFrom(Source source, int index);
     void dealFromStock();
     void checkEnd();
     void refresh(const QString& message = {});
@@ -79,18 +67,14 @@ private:
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;
 
-    std::vector<Slot> m_pyramid;
-    std::vector<Card> m_stock;
-    std::vector<Card> m_waste;
+    // The rules. What is left here is the click, the selection and the
+    // drawing.
+    PyramidTable m_table;
 
     bool m_hasSelection = false;
     Source m_selectedSource = Source::Pyramid;
     int m_selectedIndex = -1;
 
-    std::vector<Snapshot> m_history;
-    std::mt19937 m_rng { std::random_device {}() };
-    int m_pairs = 0;
-    int m_redeals = 0;
     bool m_won = false;
     bool m_announced = false;
 };

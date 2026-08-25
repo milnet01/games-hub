@@ -1,4 +1,5 @@
 #include "pyramidview.h"
+#include "pyramid/pyramidtable.h"
 
 #include "legibility.h"
 #include "cards/cardart.h"
@@ -46,27 +47,9 @@ void PyramidView::buildActions()
 
 void PyramidView::newGame()
 {
-    std::vector<Card> deck = makeDeck(1, 4);
-    shuffleCards(deck, m_rng);
+    m_table.deal();
     Sound::instance().play(Sound::kShuffle);
-
-    m_pyramid.clear();
-    constexpr int kPyramidCards = kRows * (kRows + 1) / 2; // 28
-    for (int i = 0; i < kPyramidCards; ++i) {
-        Card c = deck[std::size_t(i)];
-        c.faceUp = true;
-        m_pyramid.push_back({ c, false });
-    }
-
-    m_stock.assign(deck.begin() + kPyramidCards, deck.end());
-    for (Card& c : m_stock)
-        c.faceUp = false;
-
-    m_waste.clear();
-    m_history.clear();
     clearSelection();
-    m_pairs = 0;
-    m_redeals = 0;
     m_won = false;
     m_announced = false;
     m_undoAction->setEnabled(false);
@@ -80,29 +63,15 @@ void PyramidView::activate()
     refresh();
 }
 
-void PyramidView::pushUndo()
-{
-    m_history.push_back({ m_pyramid, m_stock, m_waste, m_pairs, m_redeals });
-    if (m_history.size() > 200)
-        m_history.erase(m_history.begin());
-    m_undoAction->setEnabled(true);
-}
-
 void PyramidView::undo()
 {
-    if (m_history.empty())
+    if (!m_table.canUndo())
         return;
-    const Snapshot s = m_history.back();
-    m_history.pop_back();
-    m_pyramid = s.pyramid;
-    m_stock = s.stock;
-    m_waste = s.waste;
-    m_pairs = s.pairs;
-    m_redeals = s.redeals;
+    m_table.undo();
     m_won = false;
     m_announced = false;
     clearSelection();
-    m_undoAction->setEnabled(!m_history.empty());
+    m_undoAction->setEnabled(m_table.canUndo());
     update();
     refresh();
 }
@@ -116,27 +85,28 @@ void PyramidView::undo()
 // in: cards are taken by clicking, so nothing is ever in mid-air.
 QByteArray PyramidView::saveState() const
 {
-    if (m_won || m_history.empty())
+    if (m_won || !m_table.canUndo())
         return {};
 
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_pairs) << qint32(m_redeals) << qint32(m_pyramid.size());
+    out << quint32(1) << qint32(m_table.pairs()) << qint32(m_table.redeals())
+        << qint32(m_table.pyramid().size());
     // A taken pyramid card keeps its slot and is simply marked gone, because the
     // slot above it still needs to know both its supports have been cleared.
-    for (const Slot& s : m_pyramid) {
+    for (const Slot& s : m_table.pyramid()) {
         cardcodec::writeCard(out, s.card);
         out << qint8(s.removed ? 1 : 0);
     }
-    cardcodec::writePile(out, m_stock);
-    cardcodec::writePile(out, m_waste);
+    cardcodec::writePile(out, m_table.stock());
+    cardcodec::writePile(out, m_table.waste());
     return blob;
 }
 
 bool PyramidView::restoreState(const QByteArray& blob)
 {
-    constexpr int kPyramidCards = kRows * (kRows + 1) / 2; // 28
+    constexpr int kPyramidCards = PyramidTable::kPyramidCards;
 
     QDataStream in(blob);
     in.setVersion(QDataStream::Qt_6_0);
@@ -148,7 +118,7 @@ bool PyramidView::restoreState(const QByteArray& blob)
     qint32 slotCount = 0;
     in >> version >> pairs >> redeals >> slotCount;
     if (version != 1 || in.status() != QDataStream::Ok || pairs < 0 || pairs > 52 || redeals < 0
-        || redeals > kMaxRedeals || slotCount != kPyramidCards)
+        || redeals > PyramidTable::kMaxRedeals || slotCount != kPyramidCards)
         return false;
 
     std::vector<Slot> pyramid;
@@ -169,23 +139,11 @@ bool PyramidView::restoreState(const QByteArray& blob)
     if (!cardcodec::readPile(in, stock) || !cardcodec::readPile(in, waste))
         return false;
 
-    // Pyramid takes matched pairs out of play, so the pack cannot come back
-    // whole. What it can promise is that nothing here was ever outside it, and
-    // that no card has turned up twice.
-    std::vector<Card> all;
-    for (const Slot& s : pyramid)
-        all.push_back(s.card);
-    cardcodec::gather(all, stock);
-    cardcodec::gather(all, waste);
-    if (!cardcodec::fitsPack(all, 1, 4))
+    // The table decides whether this is a position the rules could have
+    // produced -- the pack check lives with the rules, not with the reader.
+    if (!m_table.restore(pyramid, stock, waste, int(pairs), int(redeals)))
         return false;
 
-    m_pyramid = pyramid;
-    m_stock = stock;
-    m_waste = waste;
-    m_pairs = int(pairs);
-    m_redeals = int(redeals);
-    m_history.clear();
     m_won = false;
     m_announced = false;
     clearSelection();
@@ -242,23 +200,13 @@ double PyramidView::pileTop() const
     return height() - captionBand(QRectF(rect())) - cardHeight() - 16;
 }
 
-bool PyramidView::isExposed(int row, int index) const
-{
-    if (m_pyramid[std::size_t(slotIndex(row, index))].removed)
-        return false;
-    if (row == kRows - 1)
-        return true;
-    return m_pyramid[std::size_t(slotIndex(row + 1, index))].removed
-        && m_pyramid[std::size_t(slotIndex(row + 1, index + 1))].removed;
-}
-
 std::optional<int> PyramidView::pyramidAt(QPointF pos) const
 {
     // Bottom row first: lower cards are drawn over the ones above them.
     for (int row = kRows - 1; row >= 0; --row) {
         for (int i = 0; i <= row; ++i) {
             const int slot = slotIndex(row, i);
-            if (m_pyramid[std::size_t(slot)].removed)
+            if (m_table.pyramid()[std::size_t(slot)].removed)
                 continue;
             if (pyramidRect(row, i).contains(pos))
                 return isExposed(row, i) ? std::optional<int>(slot) : std::nullopt;
@@ -277,14 +225,6 @@ void PyramidView::clearSelection()
     m_selectedIndex = -1;
 }
 
-void PyramidView::removeFrom(Source source, int index)
-{
-    if (source == Source::Pyramid)
-        m_pyramid[std::size_t(index)].removed = true;
-    else if (source == Source::Waste && !m_waste.empty())
-        m_waste.pop_back();
-}
-
 void PyramidView::select(Source source, int index)
 {
     m_hasSelection = true;
@@ -296,9 +236,9 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
 {
     // A King is 13 on its own.
     if (card.rank == kKing) {
-        pushUndo();
-        removeFrom(source, index);
-        ++m_pairs;
+        if (!m_table.takeKing(source, index))
+            return;
+        m_undoAction->setEnabled(m_table.canUndo());
         clearSelection();
         Sound::instance().play(Sound::kCardPlace);
         update();
@@ -322,11 +262,9 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
         return;
     }
 
-    const Card& first = (m_selectedSource == Source::Pyramid)
-        ? m_pyramid[std::size_t(m_selectedIndex)].card
-        : m_waste.back();
+    const Card first = m_table.cardAt(m_selectedSource, m_selectedIndex);
 
-    if (first.rank + card.rank != 13) {
+    if (!m_table.takePair(source, index, m_selectedSource, m_selectedIndex)) {
         refresh(QStringLiteral("%1 and %2 make %3, not 13.")
                     .arg(rankLabel(first.rank))
                     .arg(rankLabel(card.rank))
@@ -336,11 +274,7 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
         return;
     }
 
-    pushUndo();
-    // Remove the later index first so a pyramid index cannot shift underneath.
-    removeFrom(source, index);
-    removeFrom(m_selectedSource, m_selectedIndex);
-    ++m_pairs;
+    m_undoAction->setEnabled(m_table.canUndo());
     clearSelection();
     Sound::instance().play(Sound::kCardPlace);
     update();
@@ -350,25 +284,11 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
 
 void PyramidView::dealFromStock()
 {
-    if (m_stock.empty()) {
-        if (m_redeals >= kMaxRedeals) {
-            refresh(QStringLiteral("No redeals left."));
-            return;
-        }
-        pushUndo();
-        ++m_redeals;
-        std::reverse(m_waste.begin(), m_waste.end());
-        for (Card& c : m_waste)
-            c.faceUp = false;
-        m_stock = m_waste;
-        m_waste.clear();
-    } else {
-        pushUndo();
-        Card c = m_stock.back();
-        m_stock.pop_back();
-        c.faceUp = true;
-        m_waste.push_back(c);
+    if (!m_table.drawFromStock()) {
+        refresh(QStringLiteral("No redeals left."));
+        return;
     }
+    m_undoAction->setEnabled(m_table.canUndo());
     clearSelection();
     Sound::instance().play(Sound::kCardDeal);
     update();
@@ -378,14 +298,12 @@ void PyramidView::dealFromStock()
 
 void PyramidView::checkEnd()
 {
-    const bool cleared = std::all_of(m_pyramid.begin(), m_pyramid.end(),
-                                     [](const Slot& s) { return s.removed; });
-    if (!cleared || m_won)
+    if (!m_table.cleared() || m_won)
         return;
 
     m_won = true;
     Sound::instance().play(Sound::kWin);
-    const bool newBest = Scores::instance().recordHigh(kBestKey, m_pairs);
+    const bool newBest = Scores::instance().recordHigh(kBestKey, m_table.pairs());
     refresh();
 
     if (m_announced)
@@ -396,7 +314,7 @@ void PyramidView::checkEnd()
         box.setWindowTitle(QStringLiteral("Cleared"));
         box.setText(QStringLiteral("The pyramid is gone!"));
         box.setInformativeText(newBest ? QStringLiteral("A new best.")
-                                       : QStringLiteral("Pairs taken: %1.").arg(m_pairs));
+                                       : QStringLiteral("Pairs taken: %1.").arg(m_table.pairs()));
         QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
         box.exec();
@@ -408,7 +326,7 @@ void PyramidView::checkEnd()
 void PyramidView::refresh(const QString& message)
 {
     int left = 0;
-    for (const Slot& s : m_pyramid)
+    for (const Slot& s : m_table.pyramid())
         if (!s.removed)
             ++left;
 
@@ -416,8 +334,8 @@ void PyramidView::refresh(const QString& message)
         ? QStringLiteral("%1   Pyramid %2 left   Stock %3   Redeals %4")
               .arg(m_won ? QStringLiteral("Cleared!") : QStringLiteral("Match pairs adding to 13"))
               .arg(left)
-              .arg(m_stock.size())
-              .arg(kMaxRedeals - m_redeals)
+              .arg(m_table.stock().size())
+              .arg(PyramidTable::kMaxRedeals - m_table.redeals())
         : message;
     Q_EMIT statusChanged(line);
 }
@@ -436,11 +354,11 @@ void PyramidView::paintEvent(QPaintEvent*)
     for (int row = 0; row < kRows; ++row) {
         for (int i = 0; i <= row; ++i) {
             const int slot = slotIndex(row, i);
-            if (m_pyramid[std::size_t(slot)].removed)
+            if (m_table.pyramid()[std::size_t(slot)].removed)
                 continue;
 
             const QRectF r = pyramidRect(row, i);
-            CardArt::paintFace(p, r, m_pyramid[std::size_t(slot)].card);
+            CardArt::paintFace(p, r, m_table.pyramid()[std::size_t(slot)].card);
 
             // Covered cards are dimmed: it is the quickest way to show what
             // can actually be taken.
@@ -454,16 +372,16 @@ void PyramidView::paintEvent(QPaintEvent*)
         }
     }
 
-    if (m_stock.empty())
+    if (m_table.stock().empty())
         CardArt::paintSlot(p, stockRect(),
-                           m_redeals < kMaxRedeals ? QStringLiteral("↻") : QString());
+                           m_table.redealsLeft() ? QStringLiteral("↻") : QString());
     else
         CardArt::paintBack(p, stockRect());
 
-    if (m_waste.empty()) {
+    if (m_table.waste().empty()) {
         CardArt::paintSlot(p, wasteRect());
     } else {
-        CardArt::paintFace(p, wasteRect(), m_waste.back());
+        CardArt::paintFace(p, wasteRect(), m_table.waste().back());
         if (m_hasSelection && m_selectedSource == Source::Waste)
             CardArt::paintHighlight(p, wasteRect(), QColor(0xff, 0xd5, 0x4f));
     }
@@ -481,13 +399,13 @@ void PyramidView::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    if (!m_waste.empty() && wasteRect().contains(event->position())) {
-        tryPair(Source::Waste, int(m_waste.size()) - 1, m_waste.back());
+    if (!m_table.waste().empty() && wasteRect().contains(event->position())) {
+        tryPair(Source::Waste, int(m_table.waste().size()) - 1, m_table.waste().back());
         return;
     }
 
     if (const std::optional<int> slot = pyramidAt(event->position())) {
-        tryPair(Source::Pyramid, *slot, m_pyramid[std::size_t(*slot)].card);
+        tryPair(Source::Pyramid, *slot, m_table.pyramid()[std::size_t(*slot)].card);
         return;
     }
 

@@ -74,6 +74,7 @@ set(GAME_CORE_SOURCES
     src/pinball/pinballtable.cpp
     src/snake/snakeboard.cpp
     src/twenty48/twenty48board.cpp
+    src/pyramid/pyramidtable.cpp
 )
 
 set(GAME_VIEW_SOURCES

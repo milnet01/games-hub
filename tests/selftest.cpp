@@ -15,6 +15,7 @@
 #include "reversi/ai.h"
 #include "reversi/board.h"
 #include "snake/snakeboard.h"
+#include "pyramid/pyramidtable.h"
 #include "twenty48/twenty48board.h"
 
 #include <chrono>
@@ -1324,6 +1325,308 @@ void twenty48PlaysByItsOwnRules()
     check(scoreNeverFalls, "2048: the score never goes down");
     check(deadPushCostsNothing, "2048: a push that moves nothing changes nothing");
     check(endsOnlyWhenStuck, "2048: the game ends only on a board with no empty square left");
+}
+
+
+// ---------------------------------------------------------------------------
+// Pyramid
+//
+// Named nowhere in this file until GHUB-0066: the rules lived inside the
+// widget and the self-test could not link them.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+using PT = PyramidTable;
+
+// Everything on the table right now, taken cards excluded. What the test adds
+// to this is the cards it has watched leave, and the two together must be the
+// pack.
+std::vector<Card> pyramidOnTable(const PT& table)
+{
+    std::vector<Card> present;
+    for (const PT::Slot& slot : table.pyramid()) {
+        if (!slot.removed)
+            present.push_back(slot.card);
+    }
+    cardcodec::gather(present, table.stock());
+    cardcodec::gather(present, table.waste());
+    return present;
+}
+
+} // namespace
+
+void pyramidDealsAWholePack()
+{
+    section("Pyramid");
+
+    PT table;
+    check(int(table.pyramid().size()) == PT::kPyramidCards,
+          "pyramid: the deal lays twenty-eight cards");
+    check(int(table.stock().size()) == 52 - PT::kPyramidCards,
+          "pyramid: and the rest go to the stock");
+    check(table.waste().empty() && table.pairs() == 0 && table.redeals() == 0,
+          "pyramid: with nothing taken and no redeal spent");
+    check(cardcodec::matchesPack(pyramidOnTable(table), 1, 4),
+          "pyramid: and between them they are exactly one pack");
+
+    // Only the bottom row can be reached at the start; everything above it is
+    // holding up two cards.
+    int exposed = 0;
+    for (int slot = 0; slot < PT::kPyramidCards; ++slot) {
+        if (table.isExposed(slot))
+            ++exposed;
+    }
+    check(exposed == PT::kRows, "pyramid: only the bottom row starts exposed");
+}
+
+void pyramidRefusesACoveredCard()
+{
+    PT table;
+    // The apex is covered by the whole pyramid, so it can never be taken first
+    // however well it would pair.
+    check(!table.isExposed(0), "pyramid: the apex starts covered");
+    check(!table.available(PT::Source::Pyramid, 0), "pyramid: and so cannot be picked up");
+    check(!table.takeKing(PT::Source::Pyramid, 0),
+          "pyramid: a covered card is refused even if it is a King");
+
+    // Its two supports are the bottom of the second row.
+    const int left = PT::slotIndex(1, 0);
+    const int right = PT::slotIndex(1, 1);
+    check(!table.isExposed(left) && !table.isExposed(right),
+          "pyramid: the row below it is covered too");
+}
+
+void pyramidPairsMustMakeThirteen()
+{
+    // Built by hand rather than hunted for in a deal, so the arithmetic can be
+    // checked exactly -- and built out of REAL pack cards, because restore()
+    // refuses a pyramid holding the same card twice and would otherwise leave
+    // the dealt table in place with every check below quietly testing that.
+    std::vector<Card> deck = makeDeck(1, 4);
+    auto lift = [&deck](Suit suit, int rank) {
+        const auto it = std::find_if(deck.begin(), deck.end(), [&](const Card& c) {
+            return c.suit == suit && c.rank == rank;
+        });
+        Card c = *it;
+        deck.erase(it);
+        c.faceUp = true;
+        return c;
+    };
+    // The bottom row is slots 21..27.
+    const Card five = lift(Suit::Clubs, 5);
+    const Card eight = lift(Suit::Hearts, 8);
+    const Card otherFive = lift(Suit::Spades, 5);
+    const Card thirdFive = lift(Suit::Diamonds, 5);
+    const Card king = lift(Suit::Clubs, kKing);
+
+    std::vector<PT::Slot> pyramid;
+    pyramid.reserve(PT::kPyramidCards);
+    auto fill = [&pyramid, &deck](int from, int count) {
+        for (int i = 0; i < count; ++i) {
+            Card c = deck[std::size_t(from + i)];
+            c.faceUp = true;
+            pyramid.push_back({ c, false });
+        }
+    };
+    fill(0, 21);
+    pyramid.push_back({ five, false });        // 21
+    pyramid.push_back({ eight, false });       // 22
+    pyramid.push_back({ otherFive, false });   // 23
+    pyramid.push_back({ thirdFive, false });   // 24
+    pyramid.push_back({ king, false });        // 25
+    fill(21, 2);                               // 26, 27
+
+    PT table;
+    check(table.restore(pyramid, {}, {}, 0, 0), "pyramid: the hand-built position is accepted");
+
+    check(!table.takePair(PT::Source::Pyramid, 23, PT::Source::Pyramid, 24),
+          "pyramid: five and five make ten, so they are refused");
+    check(!table.takePair(PT::Source::Pyramid, 21, PT::Source::Pyramid, 21),
+          "pyramid: and a card cannot be paired with itself");
+
+    const int above = PT::slotIndex(PT::kRows - 2, 0);
+    check(!table.isExposed(above), "pyramid: the card those two hold up starts covered");
+
+    check(table.takePair(PT::Source::Pyramid, 21, PT::Source::Pyramid, 22),
+          "pyramid: five and eight make thirteen, so they go");
+    check(table.pyramid()[21].removed && table.pyramid()[22].removed,
+          "pyramid: and both of them leave the table");
+    check(table.pairs() == 1, "pyramid: counted as one pair");
+    check(table.isExposed(above), "pyramid: which exposes the card they were holding up");
+
+    check(!table.takeKing(PT::Source::Pyramid, 23), "pyramid: a five is not a King");
+    check(table.takeKing(PT::Source::Pyramid, 25), "pyramid: a King is thirteen on its own");
+    check(table.pyramid()[25].removed, "pyramid: and goes alone");
+    check(table.pairs() == 2, "pyramid: counted like a pair, because it clears the same thirteen");
+}
+
+void pyramidExposesOnBothSupports()
+{
+    PT table;
+    // Clear the two left-hand cards of the bottom row and the card they hold up
+    // must become reachable -- and only then.
+    const int leftSlot = PT::slotIndex(PT::kRows - 1, 0);
+    const int rightSlot = PT::slotIndex(PT::kRows - 1, 1);
+    const int above = PT::slotIndex(PT::kRows - 2, 0);
+
+    std::vector<PT::Slot> pyramid = table.pyramid();
+    pyramid[std::size_t(leftSlot)].removed = true;
+    check(table.restore(pyramid, table.stock(), table.waste(), 1, 0),
+          "pyramid: a position with one support gone is legal");
+    check(!table.isExposed(above), "pyramid: one support gone leaves the card above covered");
+
+    pyramid[std::size_t(rightSlot)].removed = true;
+    check(table.restore(pyramid, table.stock(), table.waste(), 2, 0),
+          "pyramid: and so is one with both gone");
+    check(table.isExposed(above), "pyramid: both supports gone exposes it");
+}
+
+void pyramidStockAndRedeals()
+{
+    PT table;
+    const int stockAtDeal = int(table.stock().size());
+
+    check(table.drawFromStock(), "pyramid: a card turns from the stock");
+    check(int(table.stock().size()) == stockAtDeal - 1 && table.waste().size() == 1,
+          "pyramid: and lands face up on the waste");
+    check(table.waste().back().faceUp, "pyramid: face up, because it is now playable");
+
+    // Only the top of the waste is reachable.
+    table.drawFromStock();
+    check(table.available(PT::Source::Waste, int(table.waste().size()) - 1),
+          "pyramid: the top of the waste is available");
+    check(!table.available(PT::Source::Waste, 0),
+          "pyramid: the card buried under it is not");
+
+    // Empty the stock, then redeal twice, then no more.
+    while (!table.stock().empty())
+        table.drawFromStock();
+    check(table.waste().size() == std::size_t(stockAtDeal),
+          "pyramid: turning the whole stock puts every card on the waste");
+
+    check(table.drawFromStock() && table.redeals() == 1,
+          "pyramid: an empty stock turns the waste back over");
+    check(table.waste().empty() && int(table.stock().size()) == stockAtDeal,
+          "pyramid: and the waste is empty again");
+    bool allDown = true;
+    for (const Card& c : table.stock())
+        allDown = allDown && !c.faceUp;
+    check(allDown, "pyramid: face down, as a stock is");
+
+    while (!table.stock().empty())
+        table.drawFromStock();
+    check(table.drawFromStock() && table.redeals() == PT::kMaxRedeals,
+          "pyramid: a second redeal is allowed");
+    while (!table.stock().empty())
+        table.drawFromStock();
+    check(!table.drawFromStock(), "pyramid: a third is refused");
+    check(table.redeals() == PT::kMaxRedeals, "pyramid: and spends nothing");
+}
+
+void pyramidUndoStepsBack()
+{
+    PT table;
+    check(!table.canUndo(), "pyramid: a fresh deal has nothing to undo");
+    const std::vector<Card> before = pyramidOnTable(table);
+    table.drawFromStock();
+    check(table.canUndo(), "pyramid: turning a card banks an undo");
+    table.undo();
+    check(pyramidOnTable(table) == before, "pyramid: and undo puts the table back exactly");
+    check(!table.canUndo(), "pyramid: with nothing left to undo");
+}
+
+void pyramidPlaysOutWithoutLosingACard()
+{
+    // The property the bullet asked for: play legal moves at random until the
+    // game is stuck or cleared, and after EVERY move the cards still on the
+    // table plus the cards taken off it must be exactly one pack.
+    std::mt19937 rng(20260825);
+    bool packAlwaysWhole = true;
+    bool onlyExposedTaken = true;
+    int games = 0;
+    int cleared = 0;
+    int totalTaken = 0;
+
+    for (int game = 0; game < 120; ++game) {
+        ++games;
+        PT table;
+        std::vector<Card> taken;
+
+        for (int move = 0; move < 400; ++move) {
+            // Every take available right now.
+            struct Move { PT::Source a; int ai; PT::Source b; int bi; bool king; };
+            std::vector<Move> moves;
+            std::vector<std::pair<PT::Source, int>> open;
+            for (int slot = 0; slot < PT::kPyramidCards; ++slot) {
+                if (table.isExposed(slot))
+                    open.emplace_back(PT::Source::Pyramid, slot);
+            }
+            if (!table.waste().empty())
+                open.emplace_back(PT::Source::Waste, int(table.waste().size()) - 1);
+
+            for (std::size_t i = 0; i < open.size(); ++i) {
+                if (table.cardAt(open[i].first, open[i].second).rank == kKing) {
+                    moves.push_back({ open[i].first, open[i].second, open[i].first, open[i].second,
+                                      true });
+                    continue;
+                }
+                for (std::size_t j = i + 1; j < open.size(); ++j) {
+                    if (table.cardAt(open[i].first, open[i].second).rank
+                            + table.cardAt(open[j].first, open[j].second).rank
+                        == PT::kPairTotal) {
+                        moves.push_back({ open[i].first, open[i].second, open[j].first,
+                                          open[j].second, false });
+                    }
+                }
+            }
+
+            // Half the time turn a card instead, so the stock and the redeals
+            // are exercised rather than left standing. With nothing to take,
+            // turning is the only thing left; when that fails too the game is
+            // stuck and this deal is over.
+            if (moves.empty() || (rng() % 2) == 0) {
+                if (table.drawFromStock())
+                    continue;
+                if (moves.empty())
+                    break;
+                // Nothing left to turn, but there is still a take: fall through.
+            }
+
+            const Move& m = moves[rng() % moves.size()];
+            if (!table.available(m.a, m.ai) || (!m.king && !table.available(m.b, m.bi)))
+                onlyExposedTaken = false;
+
+            const Card first = table.cardAt(m.a, m.ai);
+            const Card second = table.cardAt(m.b, m.bi);
+            const bool ok = m.king ? table.takeKing(m.a, m.ai)
+                                   : table.takePair(m.a, m.ai, m.b, m.bi);
+            if (!ok) {
+                onlyExposedTaken = false;
+                break;
+            }
+            taken.push_back(first);
+            if (!m.king)
+                taken.push_back(second);
+            ++totalTaken;
+
+            std::vector<Card> all = pyramidOnTable(table);
+            cardcodec::gather(all, taken);
+            if (!cardcodec::matchesPack(all, 1, 4))
+                packAlwaysWhole = false;
+
+            if (table.cleared())
+                break;
+        }
+        if (table.cleared())
+            ++cleared;
+    }
+
+    std::printf("      pyramid: %d games, %d cleared, %d takes\n", games, cleared, totalTaken);
+    check(totalTaken > 0, "pyramid: the random games actually took cards off the table");
+    check(packAlwaysWhole,
+          "pyramid: the cards on the table plus the cards taken are always exactly one pack");
+    check(onlyExposedTaken, "pyramid: and nothing was ever taken that was not available");
 }
 
 // ---------------------------------------------------------------------------
@@ -3992,6 +4295,14 @@ int main()
     twenty48UndoStepsBack();
     twenty48RefusesABoardItCouldNotReach();
     twenty48PlaysByItsOwnRules();
+
+    pyramidDealsAWholePack();
+    pyramidRefusesACoveredCard();
+    pyramidPairsMustMakeThirteen();
+    pyramidExposesOnBothSupports();
+    pyramidStockAndRedeals();
+    pyramidUndoStepsBack();
+    pyramidPlaysOutWithoutLosingACard();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;
