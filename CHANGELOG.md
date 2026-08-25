@@ -10,6 +10,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Canasta house rule: you win by reaching the target, and both sides reaching it is a draw** (GHUB-0123)
+  On by default in House rules, off in Classic. The game is won by
+  getting to the target score rather than by being ahead when somebody
+  does -- so a hand that carries both sides past 5000 is a draw, however
+  far apart the two totals are, and the table says so instead of naming a
+  winner. An exact tie at the target is the same thing and is now a draw
+  too, where before it dealt another hand.
+
 - **Canasta: going out the way the family plays it** (GHUB-0120)
   A new House rule, on by default. The round ends when you throw
   your last card away -- laying your whole hand down and stopping is

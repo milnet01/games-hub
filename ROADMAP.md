@@ -3930,6 +3930,59 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
+- ✅ [GHUB-0123] **You win by REACHING the target, and both sides reaching it is a draw.**
+  The owner's rule, in his words: "A winner isn't determined by who
+  has the most score. It is determined by who gets to the total score
+  (by default usually 5000). So, if both teams reach the total score,
+  it is a draw."
+
+  What the engine does today, at canastaengine.cpp:1341-1347 and
+  Engine::winner(). The game ends when EITHER side is at or over the
+  target and the two scores differ, and the winner is then simply the
+  higher score. So a hand that carries both sides past 5000 declares
+  the higher one the winner, where the house rule calls it a draw.
+  An exact tie at or over the target already plays another hand, which
+  this rule replaces: both sides reached it, so it is a draw either
+  way.
+
+  A house variation like every other, so a new Rules field rather than
+  a branch -- off in Rules::classic(), on in the House set. It needs
+  the House dialog row, the settings key, the Rules save tail and the
+  game-over strings that today read "You win!" or "They win" and have
+  no third thing to say.
+
+  Engine::winner() has no way to say "nobody" -- it returns -1 for a
+  game that is not over yet, and three view call sites plus two checks
+  treat anything that is not 0 as team 1 winning. So a draw needs its
+  own value rather than reusing -1, or a draw reads as a loss.
+  Resolved (2026-08-25). Rules::bothReachingTargetIsADraw, off in
+  Rules::classic() and on in the House set, with the dialog row, the
+  `canasta/house/drawOnBoth` key, engine save tail 5 and view version 6.
+  Engine::kDraw is what winner() answers when nobody won -- its own value
+  rather than -1, which already means "still running", so the three view
+  call sites that read `winner() == 0` cannot report a draw as a defeat.
+  Recomputed from the scores rather than remembered, so a loaded game
+  answers as a played one does.
+
+  canastaWinningIsReachingTheTarget in tests/selftest.cpp holds it, built
+  on the dead-hand position so the totals are exactly the cards the four
+  seats were caught with and the target can be put where the check needs
+  it. Four positions: both sides over on different totals (classic gives
+  it to the higher score, House calls it a draw), one side over alone
+  (unchanged either way), and the exact tie (classic deals another hand,
+  House draws). Both draw assertions fail on a build with the rule
+  mutated off. Suite green at 480 checks, ctest 6/6.
+
+  Found on the way and fixed in the same change: Engine::kTail still read
+  3 while save() wrote 4 pairs, from GHUB-0120. The default-argument path
+  -- which the self-test's save round trip uses -- therefore stopped one
+  pair short and silently dropped goingOutNeedsADiscard on the way back
+  in. The view always passes an explicit tail, so no saved game was ever
+  harmed. It is 5 now.
+  **Layman:** The game is won by getting to 5000, not by being ahead -- and if both sides get there in the same hand, nobody wins.
+  Kind: feature.
+  Source: user-request-2026-08-25.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on

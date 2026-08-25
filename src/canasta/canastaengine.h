@@ -124,6 +124,15 @@ struct Rules {
     // large total to a side that did nothing but sit on its cards while the
     // pile stayed frozen.
     bool deadHandIfNobodyGoesOut = false;
+    // The game is won by REACHING the target rather than by being ahead when
+    // somebody does. So a hand that carries both sides past it is a draw,
+    // however far apart the two totals are, and nobody wins. The classic game
+    // hands it to the higher score, which is why this is off by default.
+    //
+    // It also settles the exact tie, which without it plays another hand: both
+    // sides reached the target, so under this rule that is a draw like any
+    // other.
+    bool bothReachingTargetIsADraw = false;
 
     // --- Table conventions ---------------------------------------------
     // How the table is laid OUT, rather than what is legal on it. The engine
@@ -262,7 +271,14 @@ public:
 
     int wentOutSeat() const { return m_outSeat; }
     bool wasConcealed() const { return m_outConcealed; }
-    // Team that has won, or -1 while the game is still running.
+    // What winner() answers when the game is over and NOBODY won it: both
+    // sides reached the target in the same hand under bothReachingTargetIsADraw.
+    // Its own value rather than -1, which already means "still running" — a
+    // caller that tested `winner() == 0` and called everything else a loss
+    // would otherwise report a draw as a defeat.
+    static constexpr int kDraw = -2;
+    // Team that has won, kDraw when the game is over and nobody did, or -1
+    // while the game is still running.
     int winner() const;
 
     // --- Actions. Each validates first and changes nothing when it refuses,
@@ -334,7 +350,12 @@ public:
     void save(QDataStream& out) const;
     // The number of appended-rule pairs the current save() writes. A caller
     // reading an older stream passes how many that stream has.
-    static constexpr int kTail = 3;
+    //
+    // This said 3 while save() wrote 4, from GHUB-0120: the default-argument
+    // path — which is what the self-test's round trip uses — then stopped one
+    // pair short and silently dropped goingOutNeedsADiscard on the way back
+    // in. A stale figure here does not fail, it loses a rule.
+    static constexpr int kTail = 5;
     // Leaves the engine untouched and returns false if the stream is from a
     // different version or runs out part way. `tail` says how many of the
     // fields added after the format was first written the stream carries: only

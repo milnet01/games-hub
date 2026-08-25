@@ -355,6 +355,8 @@ void Engine::save(QDataStream& out) const
     out << m_rules.deadHandIfNobodyGoesOut
         << m_pendingRules.deadHandIfNobodyGoesOut; // tail 3
     out << m_rules.goingOutNeedsADiscard << m_pendingRules.goingOutNeedsADiscard; // tail 4
+    out << m_rules.bothReachingTargetIsADraw
+        << m_pendingRules.bothReachingTargetIsADraw; // tail 5
 }
 
 bool Engine::load(QDataStream& in, int tail)
@@ -424,6 +426,9 @@ bool Engine::load(QDataStream& in, int tail)
         readPair(e.m_rules.deadHandIfNobodyGoesOut, e.m_pendingRules.deadHandIfNobodyGoesOut);
     if (tail >= 4)
         readPair(e.m_rules.goingOutNeedsADiscard, e.m_pendingRules.goingOutNeedsADiscard);
+    if (tail >= 5)
+        readPair(e.m_rules.bothReachingTargetIsADraw,
+                 e.m_pendingRules.bothReachingTargetIsADraw);
     if (in.status() != QDataStream::Ok)
         return false;
 
@@ -450,6 +455,13 @@ int Engine::winner() const
 {
     if (m_phase != Phase::GameOver)
         return -1;
+    // Under the house rule the game is won by REACHING the target, so a hand
+    // that carried both sides past it was won by neither. Recomputed from the
+    // scores rather than remembered, so a loaded game answers the same way a
+    // played one does.
+    if (m_rules.bothReachingTargetIsADraw && m_teams[0].score >= m_rules.targetScore
+        && m_teams[1].score >= m_rules.targetScore)
+        return kDraw;
     return m_teams[0].score >= m_teams[1].score ? 0 : 1;
 }
 
@@ -1339,12 +1351,15 @@ void Engine::scoreHand()
         team.score += team.handScore;
     }
 
-    const bool reached = m_teams[0].score >= m_rules.targetScore
-        || m_teams[1].score >= m_rules.targetScore;
-    // A tie on or over the target plays another hand rather than declaring a
-    // joint winner.
-    m_phase = (reached && m_teams[0].score != m_teams[1].score) ? Phase::GameOver
-                                                                : Phase::HandOver;
+    const bool weReached = m_teams[0].score >= m_rules.targetScore;
+    const bool theyReached = m_teams[1].score >= m_rules.targetScore;
+    // Both sides over the target is a draw under the house rule, and the game
+    // ends there — including on an exact tie, which is the same position read
+    // the same way. Without the rule a tie on or over the target plays another
+    // hand rather than declaring a joint winner, and the higher score wins.
+    const bool drawn = m_rules.bothReachingTargetIsADraw && weReached && theyReached;
+    const bool decided = (weReached || theyReached) && m_teams[0].score != m_teams[1].score;
+    m_phase = (drawn || decided) ? Phase::GameOver : Phase::HandOver;
 }
 
 int Engine::freezeCardIndex() const

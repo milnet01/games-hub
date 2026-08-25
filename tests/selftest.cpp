@@ -1324,6 +1324,84 @@ void canastaDeadHand()
           "canasta: so neither total moves and the next hand is dealt level");
 }
 
+// Winning by REACHING the target rather than by being ahead when somebody does
+// (GHUB-0123). A hand that carries both sides past it is a draw under the house
+// rule, however far apart the two totals are.
+//
+// Built on the dead-hand position, which scores a hand instantly with nobody
+// out, so the totals are exactly the cards the four seats were caught holding
+// and the target can be put wherever the check needs it.
+void canastaWinningIsReachingTheTarget()
+{
+    // Team 0 is caught with 22 low cards, team 1 with 22 kings, so both totals
+    // are negative and one side is plainly ahead of the other.
+    std::array<std::vector<Card>, 4> apart;
+    apart[0] = filler(4);
+    apart[1] = filler(kKing);
+    apart[2] = filler(6);
+    apart[3] = filler(kKing);
+    const Card up = cd(Suit::Spades, 9);
+
+    ca::Rules classic = ca::Rules::classic();
+    classic.targetScore = -300; // both sides clear it in one hand
+    ca::Engine ahead;
+    ahead.setRules(classic);
+    ahead.newGameFromStock(canastaStock(apart, 0, {}, up), 0);
+    check(ahead.team(0).score == -110 && ahead.team(1).score == -220,
+          "canasta: one hand puts both sides over the target, on different totals");
+    check(ahead.phase() == ca::Engine::Phase::GameOver,
+          "canasta: which ends the game");
+    check(ahead.winner() == 0, "canasta: classic hands it to the higher score");
+
+    ca::Rules house = classic;
+    house.bothReachingTargetIsADraw = true;
+    ca::Engine drawn;
+    drawn.setRules(house);
+    drawn.newGameFromStock(canastaStock(apart, 0, {}, up), 0);
+    check(drawn.phase() == ca::Engine::Phase::GameOver,
+          "canasta: the house rule ends the same game");
+    check(drawn.winner() == ca::Engine::kDraw,
+          "canasta: but calls it a draw, because both sides reached the target");
+    check(ca::Engine::kDraw != 0 && ca::Engine::kDraw != 1 && ca::Engine::kDraw != -1,
+          "canasta: and a draw is neither team, nor a game still running");
+
+    // One side over it and the other not: nothing about this rule applies.
+    house.targetScore = -200;
+    ca::Engine won;
+    won.setRules(house);
+    won.newGameFromStock(canastaStock(apart, 0, {}, up), 0);
+    check(won.phase() == ca::Engine::Phase::GameOver && won.winner() == 0,
+          "canasta: one side over the target on its own still wins outright");
+
+    // The exact tie, which is the same position read the same way: both sides
+    // reached it. Classic plays another hand rather than declare a joint
+    // winner, and that is what the house rule replaces.
+    std::array<std::vector<Card>, 4> level;
+    level[0] = filler(4);
+    level[1] = filler(5);
+    level[2] = filler(6);
+    level[3] = filler(7);
+
+    ca::Rules tieClassic = ca::Rules::classic();
+    tieClassic.targetScore = -300;
+    ca::Engine again;
+    again.setRules(tieClassic);
+    again.newGameFromStock(canastaStock(level, 0, {}, up), 0);
+    check(again.team(0).score == again.team(1).score,
+          "canasta: a hand that leaves the two sides level");
+    check(again.phase() == ca::Engine::Phase::HandOver,
+          "canasta: classic deals another rather than declare a joint winner");
+
+    ca::Rules tieHouse = tieClassic;
+    tieHouse.bothReachingTargetIsADraw = true;
+    ca::Engine tied;
+    tied.setRules(tieHouse);
+    tied.newGameFromStock(canastaStock(level, 0, {}, up), 0);
+    check(tied.phase() == ca::Engine::Phase::GameOver
+              && tied.winner() == ca::Engine::kDraw,
+          "canasta: the house rule calls the same tie a draw and stops there");
+}
+
 // Nothing safe left to throw: the computer has to feed one of the melds facing
 // it, and the least damaging is the one with furthest to go. Checked on a
 // hand-built table rather than a position played into existence.
@@ -3139,6 +3217,7 @@ int main()
     canastaLevelsDiffer();
     canastaHouseRules();
     canastaDeadHand();
+    canastaWinningIsReachingTheTarget();
     canastaFrozenPileDepth();
     canastaCaughtAMinus();
     canastaFirstRoundSafeThrow();

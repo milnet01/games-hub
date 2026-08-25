@@ -208,6 +208,7 @@ void storeHouse(const ca::Rules& r)
     put("pileOpens", r.pileMeldCountsToOpen ? 1 : 0);
     put("deadHand", r.deadHandIfNobodyGoesOut ? 1 : 0);
     put("discardOut", r.goingOutNeedsADiscard ? 1 : 0);
+    put("drawOnBoth", r.bothReachingTargetIsADraw ? 1 : 0);
     put("teeFreeze", r.freezeCardMakesATee ? 1 : 0);
     put("stackCanastas", r.canastasStackOnRedThrees ? 1 : 0);
 }
@@ -252,6 +253,10 @@ ca::Rules loadHouse()
     // On by default in the House set, for the same reason as the two above: it
     // is how the owner's family ends a hand rather than a variation offered.
     r.goingOutNeedsADiscard = get("discardOut", 1) != 0;
+    // On here too: the owner's family wins by REACHING the target rather than
+    // by being ahead when somebody does, so a hand carrying both sides past it
+    // is a draw. Classic hands it to the higher score.
+    r.bothReachingTargetIsADraw = get("drawOnBoth", 1) != 0;
     r.pileMeldCountsToOpen = get("pileOpens", 1) != 0;
     // The one house default that deliberately differs from classic: a hand the
     // stock kills is void here unless it is turned off, because scoring a hand
@@ -336,6 +341,8 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
     auto* discardOut = tick(QStringLiteral("You go out by throwing your last card, unless you "
                                            "finish on all four black threes"),
                             rules.goingOutNeedsADiscard);
+    auto* drawOnBoth = tick(QStringLiteral("Both sides reaching the target is a draw"),
+                            rules.bothReachingTargetIsADraw);
 
     // How the table is laid out rather than what is legal on it. Same dialog,
     // because to the people playing they are house rules like any other.
@@ -392,6 +399,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
                          pileOpens->setChecked(c.pileMeldCountsToOpen);
                          deadHand->setChecked(c.deadHandIfNobodyGoesOut);
                          discardOut->setChecked(c.goingOutNeedsADiscard);
+                         drawOnBoth->setChecked(c.bothReachingTargetIsADraw);
                          teeFreeze->setChecked(c.freezeCardMakesATee);
                          stackCanastas->setChecked(c.canastasStackOnRedThrees);
                      });
@@ -423,6 +431,7 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
     rules.pileMeldCountsToOpen = pileOpens->isChecked();
     rules.deadHandIfNobodyGoesOut = deadHand->isChecked();
     rules.goingOutNeedsADiscard = discardOut->isChecked();
+    rules.bothReachingTargetIsADraw = drawOnBoth->isChecked();
     rules.freezeCardMakesATee = teeFreeze->isChecked();
     rules.canastasStackOnRedThrees = stackCanastas->isChecked();
     storeHouse(rules);
@@ -675,7 +684,7 @@ QByteArray CanastaView::saveState() const
     out.setVersion(QDataStream::Qt_6_0);
     // Each version adds another pair to the engine's tail: rules that did not
     // exist when the version before it was written.
-    out << quint32(5);
+    out << quint32(6);
     m_engine.save(out);
     out << qint32(m_level) << m_useHouse << qint32(m_target) << m_sortHand;
     return blob;
@@ -689,7 +698,7 @@ bool CanastaView::restoreState(const QByteArray& blob)
     in >> version;
     // A game saved by an older build still comes back; it simply predates the
     // rules its tail does not carry, and their defaults stand.
-    if (version < 1 || version > 5 || !m_engine.load(in, int(version) - 1))
+    if (version < 1 || version > 6 || !m_engine.load(in, int(version) - 1))
         return false;
 
     qint32 level = 0;
@@ -802,6 +811,9 @@ void CanastaView::tick()
                 const bool over = ph == ca::Engine::Phase::GameOver;
                 if (over) {
                     const int w = m_engine.winner();
+                    // A draw is nobody's win, so it does not get the winning
+                    // sound; it is still not the sound of losing either, and
+                    // there is no third effect to reach for.
                     Sound::instance().play(w == 0 ? Sound::kWin : Sound::kLose);
                     Scores::instance().recordHigh(Scores::canastaBestScore(),
                                                   m_engine.team(0).score);
@@ -1645,8 +1657,18 @@ void CanastaView::refresh()
     QString what;
     switch (m_engine.phase()) {
     case ca::Engine::Phase::GameOver:
-        what = m_engine.winner() == 0 ? QStringLiteral("You and North win the game.")
-                                      : QStringLiteral("West and East win the game.");
+        switch (m_engine.winner()) {
+        case 0:
+            what = QStringLiteral("You and North win the game.");
+            break;
+        case ca::Engine::kDraw:
+            what = QStringLiteral("Both sides reached %1 — the game is a draw.")
+                       .arg(m_engine.rules().targetScore);
+            break;
+        default:
+            what = QStringLiteral("West and East win the game.");
+            break;
+        }
         break;
     case ca::Engine::Phase::HandOver:
         what = QStringLiteral("Hand over — click to deal the next one.");
@@ -2556,7 +2578,9 @@ void CanastaView::paintSummary(QPainter& p)
 
     QString title;
     if (over)
-        title = m_engine.winner() == 0 ? QStringLiteral("You win!") : QStringLiteral("They win");
+        title = m_engine.winner() == ca::Engine::kDraw ? QStringLiteral("A draw")
+            : m_engine.winner() == 0                    ? QStringLiteral("You win!")
+                                                        : QStringLiteral("They win");
     else
         title = QStringLiteral("Hand %1").arg(m_engine.handNumber());
 
