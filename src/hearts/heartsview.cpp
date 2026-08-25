@@ -3,8 +3,10 @@
 #include "scores.h"
 #include "sound.h"
 #include "cards/cardart.h"
+#include "cards/cardcodec.h"
 #include "theme.h"
 
+#include <QDataStream>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QMouseEvent>
@@ -521,4 +523,78 @@ void HeartsView::mousePressEvent(QMouseEvent* event)
         }
         return;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+QByteArray HeartsView::saveState() const
+{
+    // A finished game is not worth coming back to; New Game is the answer to
+    // that, and keeping it would resume onto the final scores every time.
+    // An empty state also clears whatever was stored before.
+    if (m_engine.phase() == HeartsEngine::Phase::GameOver)
+        return {};
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1);
+    m_engine.save(out);
+    cardcodec::writePile(out, m_selected);
+    out << qint8(m_awaitingCollect ? 1 : 0) << qint8(m_announced ? 1 : 0);
+    return blob;
+}
+
+bool HeartsView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    in >> version;
+    if (version != 1 || in.status() != QDataStream::Ok)
+        return false;
+
+    HeartsEngine engine;
+    if (!engine.load(in))
+        return false;
+
+    std::vector<Card> selected;
+    qint8 awaitingCollect = 0;
+    qint8 announced = 0;
+    if (!cardcodec::readPile(in, selected))
+        return false;
+    in >> awaitingCollect >> announced;
+    if (in.status() != QDataStream::Ok)
+        return false;
+    if (awaitingCollect != 0 && awaitingCollect != 1)
+        return false;
+    if (announced != 0 && announced != 1)
+        return false;
+
+    // A lift is at most three cards and only ever cards you are holding --
+    // the same rule confirmPass() plays by, checked here because the blob has
+    // not been through it.
+    if (selected.size() > 3)
+        return false;
+    for (const Card& c : selected) {
+        const std::vector<Card>& held = engine.hand(0);
+        if (std::find(held.begin(), held.end(), c) == held.end())
+            return false;
+    }
+    // A trick can only be waiting to be collected if there is a full one there.
+    if (awaitingCollect == 1 && !engine.trickComplete())
+        return false;
+
+    m_engine = engine;
+    m_selected = selected;
+    m_awaitingCollect = awaitingCollect == 1;
+    m_announced = announced == 1;
+    // The clock is deliberately NOT started here. The hub calls activate()
+    // straight after this, and that already works out whether the computers
+    // owe a move -- starting it in both places runs the timer twice.
+    update();
+    refresh();
+    return true;
 }

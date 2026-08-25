@@ -10,6 +10,7 @@
 #include <QKeyEvent>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QDataStream>
 #include <QPainter>
 #include <QPushButton>
 #include <QTimer>
@@ -505,4 +506,95 @@ void SudokuView::keyPressEvent(QKeyEvent* event)
     }
     update();
     refresh();
+}
+
+// ---------------------------------------------------------------------------
+// Saving
+// ---------------------------------------------------------------------------
+
+QByteArray SudokuView::saveState() const
+{
+    // A solved puzzle is not worth coming back to; New Game is the answer to
+    // that. An empty state also clears whatever was stored before.
+    if (m_solved)
+        return {};
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1);
+    m_grid.save(out);
+    out << qint8(m_level) << qint8(m_row) << qint8(m_col) << qint8(m_pencil ? 1 : 0)
+        << qint8(m_highlightErrors ? 1 : 0) << qint8(m_announced ? 1 : 0)
+        << qint8(m_paused ? 1 : 0);
+    // elapsedMs() rather than m_elapsedMs: the banked figure is missing
+    // whatever the clock has run since it was banked, so saving it would give
+    // the player back time they had already spent.
+    out << qint64(elapsedMs());
+    return blob;
+}
+
+bool SudokuView::restoreState(const QByteArray& blob)
+{
+    QDataStream in(blob);
+    in.setVersion(QDataStream::Qt_6_0);
+    quint32 version = 0;
+    in >> version;
+    if (version != 1 || in.status() != QDataStream::Ok)
+        return false;
+
+    SudokuGrid grid;
+    if (!grid.load(in))
+        return false;
+
+    qint8 level = 0;
+    qint8 row = 0;
+    qint8 col = 0;
+    qint8 pencil = 0;
+    qint8 highlight = 0;
+    qint8 announced = 0;
+    qint8 paused = 0;
+    qint64 elapsed = 0;
+    in >> level >> row >> col >> pencil >> highlight >> announced >> paused >> elapsed;
+    if (in.status() != QDataStream::Ok)
+        return false;
+
+    if (level < qint8(SudokuGrid::Level::Easy) || level > qint8(SudokuGrid::Level::Hard))
+        return false;
+    if (row < 0 || row >= SudokuGrid::kSize || col < 0 || col >= SudokuGrid::kSize)
+        return false;
+    for (qint8 flag : { pencil, highlight, announced, paused }) {
+        if (flag != 0 && flag != 1)
+            return false;
+    }
+    // A negative time is not a time, and a puzzle nobody has spent a century on
+    // is not one this game produced.
+    if (elapsed < 0 || elapsed > qint64(100) * 365 * 24 * 60 * 60 * 1000)
+        return false;
+    // A solved grid would have been saved as "nothing worth keeping", so a blob
+    // holding one did not come from saveState().
+    if (grid.solved())
+        return false;
+
+    m_grid = grid;
+    m_level = SudokuGrid::Level(level);
+    m_row = row;
+    m_col = col;
+    m_pencil = pencil == 1;
+    m_highlightErrors = highlight == 1;
+    m_announced = announced == 1;
+    m_paused = paused == 1;
+    m_solved = false;
+    m_elapsedMs = elapsed;
+
+    // Suspended, with the clock banked: the hub calls activate() straight
+    // after this and that is what picks it up. Starting it here as well would
+    // charge the player for the moment in between.
+    m_suspended = true;
+    m_tick->stop();
+    if (m_pauseAction != nullptr)
+        m_pauseAction->setChecked(m_paused);
+    update();
+    refresh();
+    return true;
 }

@@ -2,6 +2,8 @@
 
 #include "cards/card.h"
 
+#include <QDataStream>
+
 #include <array>
 #include <random>
 #include <utility>
@@ -14,6 +16,8 @@ class HeartsEngine
 public:
     static constexpr int kPlayers = 4;
     static constexpr int kTargetScore = 100;
+    // Thirteen each from a single pack. save()/load() check the count back.
+    static constexpr int kCardsPerHand = 13;
 
     enum class Phase { Passing, Playing, HandOver, GameOver };
     // Passing rotates left, right, across, then a hand with no pass at all.
@@ -64,6 +68,22 @@ public:
 
     // Winner once the game is over: the lowest total.
     int winner() const;
+
+    // The whole position: hands, the cards chosen for the pass, the trick on
+    // the table, both score columns and every flag that decides what is legal
+    // next. Hearts keeps no move log, so -- like Canasta and unlike Chess --
+    // its save is the position itself and the pack is what re-checks it
+    // (CLAUDE.md § "A game with no move log saves the table").
+    //
+    // Written through QDataStream, so the format IS the member order below.
+    // Adding a member means adding it at the END and bumping the view's
+    // version, never reordering.
+    void save(QDataStream& out) const;
+    // False on anything the rules could not have produced, and then nothing is
+    // written to this engine: load() builds the position separately and only
+    // adopts it once every check has passed, so a corrupt blob leaves the game
+    // already on screen alone.
+    bool load(QDataStream& in);
 
 private:
     void deal();

@@ -1734,6 +1734,101 @@ int main(int argc, char* argv[])
             check(renderOf(&resumed) == played, "2048: and refusing that changes nothing either");
         }
 
+        // ---- And the two that used to lose everything (GHUB-0007, GHUB-0009) ----
+        //
+        // Hearts and Sudoku were the last two long games with no save at all:
+        // closing the app lost a hand of Hearts and a part-solved puzzle
+        // outright. Neither keeps a move log, so both write the position and
+        // the render is the proof it came back whole.
+        {
+            HeartsView table;
+            table.resize(880, 660);
+            const QImage dealt = renderOf(&table);
+            const QByteArray saved = table.saveState();
+            check(!saved.isEmpty(), "hearts: a hand in progress is worth saving");
+
+            HeartsView resumed;
+            resumed.resize(table.size());
+            const QImage brandNew = renderOf(&resumed);
+            check(resumed.restoreState(saved), "hearts: and it reads back");
+            check(renderOf(&resumed) == dealt, "hearts: onto the very same hand");
+            // The deal is random, so a fresh table is a different thirteen
+            // cards -- which is what makes the line above mean something.
+            check(brandNew != dealt, "hearts: which is not just a new deal by another name");
+
+            check(!resumed.restoreState(QByteArray("thirteen tricks of nothing")),
+                  "hearts: a corrupt save is refused");
+            check(renderOf(&resumed) == dealt, "hearts: and refusing one changes nothing");
+
+            // The count is what stands in for a pack check here: Hearts takes
+            // four cards out of play with every trick collected, so it cannot
+            // ask for the whole pack back. A well-formed blob claiming nine
+            // tricks played while holding fifty-two cards is the only way to
+            // reach that path, and without the count it would restore a full
+            // hand into the endgame.
+            QByteArray forged(saved);
+            {
+                QDataStream in(saved);
+                in.setVersion(QDataStream::Qt_6_0);
+                quint32 version = 0;
+                in >> version;
+                check(version == 1, "hearts: the save carries the version this check forges against");
+            }
+            // The trick count is one byte, six from the end of the engine's
+            // block: phase, hand, current, leader, lastWinner, tricksPlayed,
+            // heartsBroken, then the view's own tail.
+            const int tail = 1 /*heartsBroken*/ + 4 + 1 + 1 /*pile length + collect + announced*/;
+            forged[forged.size() - tail - 1] = char(9);
+            check(!resumed.restoreState(forged),
+                  "hearts: a save whose cards do not match its trick count is refused");
+            check(renderOf(&resumed) == dealt, "hearts: and refusing that changes nothing either");
+        }
+
+        {
+            SudokuView puzzle;
+            puzzle.resize(560, 600);
+            // Something to come back TO: an answer, a pencil mark and the
+            // cursor moved off centre. All three are what the save is for.
+            pressKey(&puzzle, Qt::Key_Right);
+            pressKey(&puzzle, Qt::Key_Down);
+            for (int i = 0; i < SudokuGrid::kCells; ++i)
+                pressKey(&puzzle, Qt::Key_5);
+            const QImage worked = renderOf(&puzzle);
+            const QByteArray saved = puzzle.saveState();
+            check(!saved.isEmpty(), "sudoku: a puzzle in progress is worth saving");
+
+            SudokuView resumed;
+            resumed.resize(puzzle.size());
+            const QImage brandNew = renderOf(&resumed);
+            check(resumed.restoreState(saved), "sudoku: and it reads back");
+            check(renderOf(&resumed) == worked, "sudoku: onto the very same grid");
+            check(brandNew != worked, "sudoku: which is not just a new puzzle by another name");
+
+            check(!resumed.restoreState(QByteArray("nine by nine of nothing")),
+                  "sudoku: a corrupt save is refused");
+            check(renderOf(&resumed) == worked, "sudoku: and refusing one changes nothing");
+
+            // Sudoku has no pack, so what refuses a board the game could not
+            // have reached is the solution itself: it must be a completed grid,
+            // and every clue must agree with it. A well-formed blob whose
+            // solution repeats a digit in a row is the only way to reach that.
+            QByteArray forged;
+            QDataStream out(&forged, QIODevice::WriteOnly);
+            out.setVersion(QDataStream::Qt_6_0);
+            out << quint32(1);
+            for (int pass = 0; pass < 3; ++pass) {
+                for (int i = 0; i < SudokuGrid::kCells; ++i)
+                    out << qint8(pass == 0 ? 1 : 0);   // a solution of all ones
+            }
+            for (int i = 0; i < SudokuGrid::kCells; ++i)
+                out << quint16(0);
+            out << qint8(0) << qint8(0) << qint8(0) << qint8(0) << qint8(1) << qint8(0)
+                << qint8(0) << qint64(0);
+            check(!resumed.restoreState(forged),
+                  "sudoku: a save whose solution is not a solution is refused");
+            check(renderOf(&resumed) == worked, "sudoku: and refusing that changes nothing either");
+        }
+
         HeartsView hearts;
         check(paints(&hearts), "hearts view paints");
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QDataStream>
+
 #include <array>
 #include <cstdint>
 #include <random>
@@ -43,6 +45,17 @@ public:
 
     // Counts solutions up to `limit`, which is how uniqueness is checked.
     static int countSolutions(std::array<int, kCells> grid, int limit);
+
+    // The puzzle, its solution, what has been written into it and the pencil
+    // marks. Written through QDataStream, so the format IS the member order
+    // below; a new member goes at the END and bumps the view's version.
+    void save(QDataStream& out) const;
+    // False on a grid the game could not have produced -- a solution that is
+    // not a completed Sudoku, a clue that disagrees with it, an entry sitting
+    // on top of a clue. Nothing is written to this object unless every check
+    // passes, so a corrupt blob leaves the puzzle on screen alone. This is
+    // what a game with no move log has instead of replaying the moves.
+    bool load(QDataStream& in);
 
 private:
     bool fill(std::array<int, kCells>& grid, int pos, std::mt19937& rng);

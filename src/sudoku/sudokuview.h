@@ -19,6 +19,13 @@ public:
     void activate() override;
     void deactivate() override;
 
+    // Come back to a puzzle part way through (GHUB-0009). Pause already covers
+    // walking away for a minute; this covers closing the app. The grid writes
+    // itself; this adds the level, the cursor, the two toggles and the clock,
+    // because a time that restarted at zero would be a score you never earned.
+    QByteArray saveState() const override;
+    bool restoreState(const QByteArray& blob) override;
+
     // Named for the contract rather than exposing the font: GHUB-0017 §9 makes
     // whichever per-game pass lands responsible for its own layout being
     // checkable, and what a pencil mark owes is to be as large as it can be

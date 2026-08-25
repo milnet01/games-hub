@@ -10,6 +10,19 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Sudoku comes back where you left it, clock included.** (GHUB-0009)
+  A part-solved puzzle reopens with your answers, your pencil marks, the
+  square you were on and the time you had spent on it. Pause already
+  covered walking away for a minute; this covers closing the app. The
+  clock does not quietly reset, which matters because the game records
+  your best time.
+
+- **Hearts comes back where you left it.** (GHUB-0007)
+  Close the app mid-hand and Hearts reopens with the same cards, the same
+  trick on the table, the same running scores and any cards you had
+  already lifted for the pass still lifted. There is no save button — it
+  just happens, like the other games that do this.
+
 - **The test suite can now measure how long a frame takes to draw.** (GHUB-0049)
   `gameshub_uitest --bench` prints what four surfaces cost to draw, so a
   change meant to speed something up can be shown to have done it. It

@@ -170,3 +170,104 @@ int SudokuGrid::emptyCount() const
 {
     return int(std::count(m_working.begin(), m_working.end(), 0));
 }
+
+// ---------------------------------------------------------------------------
+// Saving the puzzle
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// True when `grid` is a completed Sudoku: every row, column and box holds each
+// digit 1-9 exactly once. This is the check that makes a restored puzzle a
+// puzzle rather than an arbitrary blob of digits -- everything else about the
+// save is measured against the solution, so if the solution is real the rest
+// cannot be nonsense.
+bool isCompleteSolution(const std::array<int, SudokuGrid::kCells>& grid)
+{
+    constexpr int kSize = SudokuGrid::kSize;
+    for (int i = 0; i < kSize; ++i) {
+        std::uint16_t row = 0;
+        std::uint16_t col = 0;
+        std::uint16_t box = 0;
+        for (int j = 0; j < kSize; ++j) {
+            const int r = grid[SudokuGrid::index(i, j)];
+            const int c = grid[SudokuGrid::index(j, i)];
+            const int b = grid[SudokuGrid::index((i / 3) * 3 + j / 3, (i % 3) * 3 + j % 3)];
+            if (r < 1 || r > 9 || c < 1 || c > 9 || b < 1 || b > 9)
+                return false;
+            row |= std::uint16_t(1u << r);
+            col |= std::uint16_t(1u << c);
+            box |= std::uint16_t(1u << b);
+        }
+        constexpr std::uint16_t kAllNine = 0x03fe;   // bits 1..9
+        if (row != kAllNine || col != kAllNine || box != kAllNine)
+            return false;
+    }
+    return true;
+}
+
+} // namespace
+
+void SudokuGrid::save(QDataStream& out) const
+{
+    for (int v : m_solution)
+        out << qint8(v);
+    for (int v : m_puzzle)
+        out << qint8(v);
+    for (int v : m_working)
+        out << qint8(v);
+    for (std::uint16_t m : m_marks)
+        out << quint16(m);
+}
+
+bool SudokuGrid::load(QDataStream& in)
+{
+    std::array<int, kCells> solution {};
+    std::array<int, kCells> puzzle {};
+    std::array<int, kCells> working {};
+    std::array<std::uint16_t, kCells> marks {};
+
+    auto readDigits = [&in](std::array<int, kCells>& into, int low) {
+        for (int& v : into) {
+            qint8 value = 0;
+            in >> value;
+            if (value < low || value > 9)
+                return false;
+            v = value;
+        }
+        return in.status() == QDataStream::Ok;
+    };
+
+    if (!readDigits(solution, 1) || !readDigits(puzzle, 0) || !readDigits(working, 0))
+        return false;
+    for (std::uint16_t& m : marks) {
+        quint16 value = 0;
+        in >> value;
+        // One bit per digit 1-9; bit 0 and anything above bit 9 is not a mark
+        // this game can make.
+        if ((value & ~0x03feu) != 0)
+            return false;
+        m = value;
+    }
+    if (in.status() != QDataStream::Ok)
+        return false;
+
+    if (!isCompleteSolution(solution))
+        return false;
+
+    for (int i = 0; i < kCells; ++i) {
+        // A clue is a cell of the solution shown from the start, so it must
+        // agree with it -- and the working grid must still show it, because
+        // set() refuses to write over a clue.
+        if (puzzle[i] != 0) {
+            if (puzzle[i] != solution[i] || working[i] != puzzle[i] || marks[i] != 0)
+                return false;
+        }
+    }
+
+    m_solution = solution;
+    m_puzzle = puzzle;
+    m_working = working;
+    m_marks = marks;
+    return true;
+}

@@ -23,6 +23,13 @@ public:
     // which suit it is decides every legal play you have.
     QString captionText() const override;
     void activate() override;
+
+    // The longest game in the hub after Canasta, so it is worth coming back to
+    // (GHUB-0007). The engine writes the position; this adds what the VIEW
+    // holds that the rules do not -- the cards lifted for a pass that has not
+    // been confirmed, and whether a finished trick is still on the table.
+    QByteArray saveState() const override;
+    bool restoreState(const QByteArray& blob) override;
     // The computers stop playing when nobody is watching. Without it a hand
     // finishes while you are in another game and you come back to a score.
     void deactivate() override;

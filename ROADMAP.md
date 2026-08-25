@@ -128,12 +128,35 @@ Worked top to bottom. Nothing here is started.
 The shape is GHUB-0006's: save what the game was *told*, replay it, and match
 each step against the rules on the way back in.
 
-- 📋 [GHUB-0007] **Hearts saves and resumes.**
+- ✅ [GHUB-0007] **Hearts saves and resumes.**
   Hands, tricks taken, passing
   direction and the running scores. The longest game in the hub after Canasta.
   Layman: Close Hearts mid-game and come back to it.
   Kind: implement.
   Lanes: hearts.
+  Resolved (2026-08-25): `HeartsEngine::save`/`load` write the position -- both
+  hands and passes, both score columns, the trick on the table, phase, hand number,
+  whose turn it is, the leader, the last winner, the trick count and whether hearts
+  are broken -- and `HeartsView` adds what the view holds that the rules do not:
+  the cards lifted for a pass nobody has confirmed, and whether a finished trick is
+  still sitting there.
+
+  No move log, so the save is the position and the PACK re-checks it, the way
+  Spider and Pyramid do rather than the way Chess does. Hearts takes four cards out
+  of play with every collected trick, so it gets `fitsPack` plus a count of its
+  own: hands plus the cards on the table must equal fifty-two less four per trick.
+  Without that a blob restores a full hand of thirteen into trick nine, which is a
+  position the game cannot reach and a hand that cannot be played out.
+
+  The clock is deliberately NOT restarted in restoreState. The hub calls activate()
+  immediately afterwards and that already works out whether the computers owe a
+  move; starting it in both places runs the timer twice.
+
+  Checked in uitest the way the other eleven are -- save, restore into a fresh
+  view, and the two renders must be the same picture, against a fresh deal that is
+  different. The count check is exercised by a forged blob, and the forgery was
+  verified to hit the check it names: with the count test removed the blob loads
+  and the check goes red, so it is not passing for some other reason.
 
 - ✅ [GHUB-0008] **The four solitaires save and resume.**
   Klondike, Spider,
@@ -154,12 +177,36 @@ each step against the rules on the way back in.
   after a round trip, a corrupt save is refused without disturbing the
   table. GHUB-0010's four small games can now reuse the codec.
 
-- 📋 [GHUB-0009] **Sudoku saves and resumes.**
+- ✅ [GHUB-0009] **Sudoku saves and resumes.**
   Grid, pencil marks and elapsed
   time. Pause already covers the walk-away case, so this is the smaller half.
   Layman: Close a puzzle part way and come back to it.
   Kind: implement.
   Lanes: sudoku.
+  Resolved (2026-08-25): `SudokuGrid::save`/`load` write the solution, the clues,
+  what has been entered and the pencil marks; `SudokuView` adds the level, the
+  cursor, pencil mode, the error highlight, the pause state and the elapsed time.
+
+  The time is taken from `elapsedMs()` rather than the banked `m_elapsedMs`, which
+  is missing whatever the clock has run since it was last banked -- saving the
+  banked figure would quietly give the player back time they had already spent, and
+  this game records a best time.
+
+  No pack to check against, so what refuses a board the game could not have reached
+  is the puzzle itself: the stored solution has to be a COMPLETED grid -- every row,
+  column and box holding each digit once -- every clue has to agree with it, and a
+  clue cannot have been written over or carry a mark. Everything else in the save
+  is measured against the solution, so if the solution is real the rest cannot be
+  nonsense.
+
+  The view restores as suspended with the clock banked, for the same reason Hearts
+  does not start its timer: the hub calls activate() straight after, and that is
+  what picks the clock up. Starting it here as well charges the player for the
+  moment in between.
+
+  Checked in uitest like the others, and the forged-blob check was verified to hit
+  the solution test rather than passing by accident -- with that test removed the
+  all-ones solution loads and the check goes red.
 
 - ✅ [GHUB-0010] **Minesweeper, Reversi, Draughts and 2048 save and resume.**
   Small states, quick wins, worth doing in one pass once the codec above

@@ -1,5 +1,7 @@
 #include "heartsengine.h"
 
+#include "cards/cardcodec.h"
+
 #include <algorithm>
 
 namespace {
@@ -395,4 +397,138 @@ Card HeartsEngine::chooseAiCard(int player) const
         };
         return value(a) < value(b);
     });
+}
+
+// ---------------------------------------------------------------------------
+// Saving the position
+// ---------------------------------------------------------------------------
+
+void HeartsEngine::save(QDataStream& out) const
+{
+    for (const std::vector<Card>& h : m_hands)
+        cardcodec::writePile(out, h);
+    for (const std::vector<Card>& p : m_passes)
+        cardcodec::writePile(out, p);
+    for (int t : m_totals)
+        out << qint32(t);
+    for (int p : m_handPoints)
+        out << qint32(p);
+
+    out << qint32(m_trick.size());
+    for (const std::pair<int, Card>& played : m_trick) {
+        out << qint8(played.first);
+        cardcodec::writeCard(out, played.second);
+    }
+
+    out << qint8(m_phase) << qint32(m_hand) << qint8(m_current) << qint8(m_leader)
+        << qint8(m_lastWinner) << qint8(m_tricksPlayed) << qint8(m_heartsBroken ? 1 : 0);
+}
+
+bool HeartsEngine::load(QDataStream& in)
+{
+    // Everything is read into locals first. The engine is only written once
+    // every check below has passed, so a blob that turns out to be nonsense
+    // leaves the game already on screen untouched.
+    std::array<std::vector<Card>, kPlayers> hands;
+    std::array<std::vector<Card>, kPlayers> passes;
+    std::array<int, kPlayers> totals {};
+    std::array<int, kPlayers> handPoints {};
+
+    if (!cardcodec::readPiles(in, hands) || !cardcodec::readPiles(in, passes))
+        return false;
+    for (int& t : totals) {
+        qint32 value = 0;
+        in >> value;
+        t = value;
+    }
+    for (int& p : handPoints) {
+        qint32 value = 0;
+        in >> value;
+        p = value;
+    }
+
+    qint32 trickSize = 0;
+    in >> trickSize;
+    if (in.status() != QDataStream::Ok || trickSize < 0 || trickSize > kPlayers)
+        return false;
+    std::vector<std::pair<int, Card>> trick;
+    trick.reserve(std::size_t(trickSize));
+    for (qint32 i = 0; i < trickSize; ++i) {
+        qint8 seat = 0;
+        Card c;
+        in >> seat;
+        if (!cardcodec::readCard(in, c) || seat < 0 || seat >= kPlayers)
+            return false;
+        trick.emplace_back(int(seat), c);
+    }
+
+    qint8 phase = 0;
+    qint32 hand = 0;
+    qint8 current = 0;
+    qint8 leader = 0;
+    qint8 lastWinner = 0;
+    qint8 tricksPlayed = 0;
+    qint8 heartsBroken = 0;
+    in >> phase >> hand >> current >> leader >> lastWinner >> tricksPlayed >> heartsBroken;
+    if (in.status() != QDataStream::Ok)
+        return false;
+
+    if (phase < qint8(Phase::Passing) || phase > qint8(Phase::GameOver))
+        return false;
+    if (hand < 0 || hand > 10000)
+        return false;
+    if (current < 0 || current >= kPlayers || leader < 0 || leader >= kPlayers)
+        return false;
+    if (lastWinner < -1 || lastWinner >= kPlayers)
+        return false;
+    if (tricksPlayed < 0 || tricksPlayed > kCardsPerHand)
+        return false;
+    if (heartsBroken != 0 && heartsBroken != 1)
+        return false;
+
+    // The pack is what stands in for replaying the moves. Hearts takes cards
+    // out of play as tricks are collected, so it cannot ask for the whole pack
+    // back -- it gets fitsPack plus a count of its own, the way Spider and
+    // Pyramid do (CLAUDE.md § "A game with no move log saves the table").
+    std::vector<Card> present;
+    cardcodec::gather(present, hands);
+    for (const std::pair<int, Card>& played : trick)
+        present.push_back(played.second);
+    if (!cardcodec::fitsPack(present, 1, 4))
+        return false;
+
+    // Every collected trick is four cards gone, and the cards on the table have
+    // left their hands but not the game. Nothing else is a reachable position,
+    // and without this a blob could restore a hand of thirteen into trick nine.
+    if (int(present.size()) != kPlayers * kCardsPerHand - kPlayers * int(tricksPlayed))
+        return false;
+
+    // A pass is three cards or none, and while they are still being chosen they
+    // are cards the player actually holds.
+    for (int p = 0; p < kPlayers; ++p) {
+        const std::vector<Card>& chosen = passes[std::size_t(p)];
+        if (!chosen.empty() && chosen.size() != 3)
+            return false;
+        if (phase != qint8(Phase::Passing) && !chosen.empty())
+            return false;
+        for (const Card& c : chosen) {
+            const std::vector<Card>& held = hands[std::size_t(p)];
+            if (std::find(held.begin(), held.end(), c) == held.end())
+                return false;
+        }
+    }
+
+    m_hands = hands;
+    m_passes = passes;
+    m_totals = totals;
+    m_handPoints = handPoints;
+    m_trick = trick;
+    m_phase = Phase(phase);
+    m_hand = hand;
+    m_current = current;
+    m_leader = leader;
+    m_lastWinner = lastWinner;
+    m_tricksPlayed = tricksPlayed;
+    m_heartsBroken = heartsBroken == 1;
+    return true;
 }
