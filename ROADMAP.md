@@ -4519,6 +4519,36 @@ open.
   Kind: feature.
   Source: in-session-2026-08-25.
 
+- ✅ [GHUB-0125] **Starting Snake with the Right arrow was an instant game over.**
+  A new snake was laid out with `push_front`, which puts the LAST square
+  written at the front of the deque -- so the head ended up at the LEFT end
+  of a snake whose direction is right, with its own body occupying the two
+  squares ahead of it. The first step drove the head into its own neck and
+  the game ended before it began.
+
+  Reachable only by pressing Right or D as the first key, which is why it
+  shipped. Any other arrow turned the snake off its own body and played
+  normally, and Left was refused as a reversal before the game even started.
+
+  Found the moment Snake's rules could be reached from a test at all
+  (GHUB-0066), and it is the exact defect that bullet predicted: `tests/uitest.cpp`
+  ALREADY pressed Right to start Snake, and only ever asserted that the clock
+  was running. The snake was dead in that very check and nothing looked.
+
+  Fixed by building the body with `push_back`. Locked in two places, both
+  verified to go red against the original layout: `snakeDiesAtTheWall` in the
+  self-test, which now measures the run from the head's real starting column,
+  and a view-level check that pressing Right to start does not report a game
+  over.
+
+  That view-level check deliberately pumps for less than 200 ms. `gameOver()`
+  opens a modal QMessageBox 200 ms after a death, and a modal dialog in an
+  offscreen test does not fail, it hangs.
+  **Layman:** Pressing the right arrow to start Snake killed you immediately; every other arrow was fine.
+  Kind: fix.
+  Source: in-session-2026-08-25 (found by GHUB-0066's Snake extraction).
+  Lanes: snake.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on
@@ -4820,6 +4850,28 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   still open: six games still have no core, and their rules are still
   reachable only from a UI test. What changed is that the gap is
   written down where someone would hit it.
+  Progress (2026-08-25): SNAKE done, one of six. `src/snake/snakeboard.cpp` is in
+  GAME_CORE_SOURCES, the view is a clock and a painter over it, and the self-test
+  has a Snake section for the first time -- it had zero mentions there AND zero in
+  the UI test, so it was the one game in the collection nothing anywhere touched.
+
+  The property check is the shape this bullet asked for: play sixty games, and
+  before every single step work out from the current position what that step must
+  do, then hold the core to it. It measures 168 meals and 17 deaths by
+  self-collision, which is what makes the tail-square rule -- running into the
+  square your tail is about to vacate is legal, unless you just ate -- actually
+  exercised rather than merely present. A pure random walk managed 8 meals in 60
+  games and reached none of it; the policy steers at the food 75% of the time and
+  still never avoids death.
+
+  **It found a shipped bug on its first run**, filed as GHUB-0125: the snake was
+  built with `push_front`, so its head sat at the LEFT end of a snake heading
+  right and the first step drove it into its own neck. Pressing Right to start was
+  an instant game over. This bullet predicted exactly that, and the proof is that
+  `tests/uitest.cpp` already pressed Right to start Snake and only ever checked
+  that the clock was running -- the snake was dead in that very check.
+
+  Five to go: 2048, Pyramid, FreeCell, Klondike, Spider.
   **Layman:** Six of the fourteen games have their rules mixed into the drawing code, which is why the test suite cannot check them at all.
   Kind: refactor.
   Source: in-session-2026-08-20.

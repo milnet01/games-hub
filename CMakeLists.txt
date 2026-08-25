@@ -72,6 +72,7 @@ set(GAME_CORE_SOURCES
     src/canasta/canastaengine.cpp
     src/canasta/canastaai.cpp
     src/pinball/pinballtable.cpp
+    src/snake/snakeboard.cpp
 )
 
 set(GAME_VIEW_SOURCES

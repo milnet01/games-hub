@@ -860,6 +860,30 @@ int main(int argc, char* argv[])
         // and repaints on every pump, which turned a 34-second suite into one
         // that had not finished in two minutes.
         {
+            // Pressing Right to start used to be an instant game over: the
+            // snake was laid out head-LEFT while heading right, so its first
+            // step drove into its own neck. Found by GHUB-0066, and this very
+            // block is why it survived -- it already pressed Right, and only
+            // ever looked at the clock.
+            //
+            // The pump is deliberately under 200ms. gameOver() opens a modal
+            // QMessageBox 200ms after a death, and a modal dialog in an
+            // offscreen test does not fail, it HANGS. One step at 130ms is all
+            // this needs, and it stops well short of the dialog.
+            {
+                SnakeView first;
+                first.resize(640, 480);
+                QString said;
+                QObject::connect(&first, &GameView::statusChanged,
+                                 [&said](const QString& text) { said = text; });
+                first.activate();
+                pressKey(&first, Qt::Key_Right);
+                pump(190);
+                check(!said.contains(QStringLiteral("Game over")),
+                      "snake: pressing Right to start does not run the snake into itself");
+                first.deactivate();
+            }
+
             SnakeView snake;
             snake.resize(640, 480);
             snake.activate();

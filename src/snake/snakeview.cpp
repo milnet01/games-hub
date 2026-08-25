@@ -43,7 +43,7 @@ void SnakeView::buildActions()
     pause->setCheckable(true);
     pause->setShortcut(QKeySequence(Qt::Key_Space));
     connect(pause, &QAction::toggled, this, [this](bool on) {
-        m_running = !on && m_started && !m_dead;
+        m_running = !on && m_started && !m_board.dead();
         if (m_running)
             m_timer->start(m_speedMs);
         else
@@ -55,21 +55,11 @@ void SnakeView::buildActions()
 
 void SnakeView::newGame()
 {
-    m_snake.clear();
-    // Three segments in the middle, heading right.
-    const int midRow = kGridHeight / 2;
-    for (int i = 0; i < 3; ++i)
-        m_snake.push_front(QPoint(kGridWidth / 2 - i, midRow));
-
-    m_direction = { 1, 0 };
-    m_pending = { 1, 0 };
-    m_score = 0;
+    m_board.newGame();
     m_speedMs = 130;
-    m_dead = false;
     m_started = false;
     m_running = false;
     m_timer->stop();
-    placeFood();
     setFocus();
     update();
     refresh();
@@ -78,27 +68,11 @@ void SnakeView::newGame()
 void SnakeView::activate()
 {
     setFocus();
-    if (m_started && !m_dead) {
+    if (m_started && !m_board.dead()) {
         m_running = true;
         m_timer->start(m_speedMs);
     }
     refresh();
-}
-
-void SnakeView::placeFood()
-{
-    // Pick from the free squares only, so the food never lands under the snake.
-    std::vector<QPoint> free;
-    free.reserve(kGridWidth * kGridHeight);
-    for (int x = 0; x < kGridWidth; ++x)
-        for (int y = 0; y < kGridHeight; ++y)
-            if (std::find(m_snake.begin(), m_snake.end(), QPoint(x, y)) == m_snake.end())
-                free.emplace_back(x, y);
-
-    if (free.empty())
-        return; // board full: the win condition, handled on the next step
-    std::uniform_int_distribution<std::size_t> pick(0, free.size() - 1);
-    m_food = free[pick(m_rng)];
 }
 
 void SnakeView::deactivate()
@@ -109,32 +83,19 @@ void SnakeView::deactivate()
 
 void SnakeView::step()
 {
-    m_direction = m_pending;
-    const QPoint head = m_snake.front() + m_direction;
-
-    const bool hitWall = head.x() < 0 || head.y() < 0 || head.x() >= kGridWidth
-        || head.y() >= kGridHeight;
-    // The tail square is about to be vacated, so running into it is legal —
-    // except when the snake just ate and the tail stays put.
-    const bool eating = head == m_food;
-    const auto tailEnd = eating ? m_snake.end() : std::prev(m_snake.end());
-    const bool hitSelf = std::find(m_snake.begin(), tailEnd, head) != tailEnd;
-
-    if (hitWall || hitSelf) {
+    switch (m_board.step()) {
+    case SnakeBoard::Step::Died:
         gameOver();
         return;
-    }
-
-    m_snake.push_front(head);
-    if (eating) {
-        m_score += 10;
+    case SnakeBoard::Step::Ate:
         Sound::instance().play(Sound::kDig);
-        // Speed up gently, with a floor so it stays playable.
+        // Speed up gently, with a floor so it stays playable. How fast the
+        // snake moves is the view's business; the core only says it ate.
         m_speedMs = std::max(60, m_speedMs - 3);
         m_timer->setInterval(m_speedMs);
-        placeFood();
-    } else {
-        m_snake.pop_back();
+        break;
+    case SnakeBoard::Step::Moved:
+        break;
     }
 
     update();
@@ -143,11 +104,10 @@ void SnakeView::step()
 
 void SnakeView::gameOver()
 {
-    m_dead = true;
     m_running = false;
     m_timer->stop();
     Sound::instance().play(Sound::kLose);
-    const bool newBest = Scores::instance().recordHigh(kBestKey, m_score);
+    const bool newBest = Scores::instance().recordHigh(kBestKey, m_board.score());
     update();
     refresh();
 
@@ -156,9 +116,9 @@ void SnakeView::gameOver()
         box.setWindowTitle(QStringLiteral("Game over"));
         box.setText(QStringLiteral("The snake stopped."));
         box.setInformativeText(newBest
-                                   ? QStringLiteral("Score: %1 — a new best!").arg(m_score)
+                                   ? QStringLiteral("Score: %1 — a new best!").arg(m_board.score())
                                    : QStringLiteral("Score: %1.   Best: %2.")
-                                         .arg(m_score)
+                                         .arg(m_board.score())
                                          .arg(Scores::instance().best(kBestKey)));
         QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
@@ -171,7 +131,7 @@ void SnakeView::gameOver()
 void SnakeView::refresh()
 {
     QString state;
-    if (m_dead)
+    if (m_board.dead())
         state = QStringLiteral("Game over");
     else if (!m_started)
         state = QStringLiteral("Press an arrow key to start");
@@ -182,9 +142,9 @@ void SnakeView::refresh()
 
     Q_EMIT statusChanged(QStringLiteral("%1   Score %2   Length %3   Best %4")
                              .arg(state)
-                             .arg(m_score)
-                             .arg(m_snake.size())
-                             .arg(std::max(Scores::instance().best(kBestKey), m_score)));
+                             .arg(m_board.score())
+                             .arg(m_board.snake().size())
+                             .arg(std::max(Scores::instance().best(kBestKey), m_board.score())));
 }
 
 double SnakeView::cellSize() const
@@ -220,7 +180,8 @@ void SnakeView::paintEvent(QPaintEvent*)
                        ((x + y) % 2) ? kBoardLight : kBoardDark);
 
     // Food.
-    const QPointF foodCentre(r.x() + (m_food.x() + 0.5) * cell, r.y() + (m_food.y() + 0.5) * cell);
+    const QPoint food = m_board.food();
+    const QPointF foodCentre(r.x() + (food.x() + 0.5) * cell, r.y() + (food.y() + 0.5) * cell);
     Theme::paintContactShadow(p, foodCentre, cell * 0.30);
     p.setPen(Qt::NoPen);
     p.setBrush(QColor(0xe8, 0x51, 0x4f));
@@ -229,28 +190,30 @@ void SnakeView::paintEvent(QPaintEvent*)
     p.drawEllipse(foodCentre - QPointF(cell * 0.09, cell * 0.10), cell * 0.09, cell * 0.07);
 
     // Body, tail to head, so the head lands on top.
-    for (int i = int(m_snake.size()) - 1; i >= 0; --i) {
-        const QPoint s = m_snake[std::size_t(i)];
+    const std::deque<QPoint>& body = m_board.snake();
+    for (int i = int(body.size()) - 1; i >= 0; --i) {
+        const QPoint s = body[std::size_t(i)];
         const QRectF box(r.x() + s.x() * cell + cell * 0.06, r.y() + s.y() * cell + cell * 0.06,
                          cell * 0.88, cell * 0.88);
         const bool head = i == 0;
-        const double t = m_snake.empty() ? 0.0 : double(i) / double(m_snake.size());
+        const double t = body.empty() ? 0.0 : double(i) / double(body.size());
 
-        QColor body = QColor::fromHsvF(0.33, 0.55, 0.85 - t * 0.35);
-        if (m_dead)
-            body = QColor::fromHsvF(0.0, 0.35, 0.72 - t * 0.30);
+        QColor tint = QColor::fromHsvF(0.33, 0.55, 0.85 - t * 0.35);
+        if (m_board.dead())
+            tint = QColor::fromHsvF(0.0, 0.35, 0.72 - t * 0.30);
 
         QPainterPath path;
         path.addRoundedRect(box, cell * 0.28, cell * 0.28);
-        p.setBrush(head ? body.lighter(125) : body);
+        p.setBrush(head ? tint.lighter(125) : tint);
         p.setPen(QPen(QColor(0, 0, 0, 60), 1));
         p.drawPath(path);
 
         if (head) {
             // Two eyes, looking the way it is travelling.
             const QPointF centre = box.center();
-            const QPointF along(m_direction.x() * cell * 0.16, m_direction.y() * cell * 0.16);
-            const QPointF side(-m_direction.y() * cell * 0.14, m_direction.x() * cell * 0.14);
+            const QPoint facing = m_board.direction();
+            const QPointF along(facing.x() * cell * 0.16, facing.y() * cell * 0.16);
+            const QPointF side(-facing.y() * cell * 0.14, facing.x() * cell * 0.14);
             p.setPen(Qt::NoPen);
             p.setBrush(Qt::white);
             p.drawEllipse(centre + along + side, cell * 0.09, cell * 0.09);
@@ -268,7 +231,7 @@ void SnakeView::paintEvent(QPaintEvent*)
 
 void SnakeView::keyPressEvent(QKeyEvent* event)
 {
-    QPoint wanted = m_pending;
+    QPoint wanted;
     switch (event->key()) {
     case Qt::Key_Left:  case Qt::Key_A: wanted = { -1, 0 }; break;
     case Qt::Key_Right: case Qt::Key_D: wanted = { 1, 0 }; break;
@@ -279,12 +242,12 @@ void SnakeView::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    // Reversing straight into your own neck is never what the player meant.
-    if (wanted + m_direction == QPoint(0, 0) && m_snake.size() > 1)
+    // The core decides whether the turn is legal; a reversal into your own
+    // neck is refused there rather than here.
+    if (!m_board.turn(wanted))
         return;
-    m_pending = wanted;
 
-    if (!m_started && !m_dead) {
+    if (!m_started && !m_board.dead()) {
         m_started = true;
         m_running = true;
         m_timer->start(m_speedMs);

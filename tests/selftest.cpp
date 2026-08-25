@@ -14,6 +14,7 @@
 #include "sudoku/sudokugrid.h"
 #include "reversi/ai.h"
 #include "reversi/board.h"
+#include "snake/snakeboard.h"
 
 #include <chrono>
 #include <cmath>
@@ -25,7 +26,10 @@
 #include <QByteArray>
 #include <QDataStream>
 #include <QIODevice>
+#include <deque>
 #include <random>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -977,6 +981,161 @@ void pinballScoring()
     }
     std::printf("      %d of 12 launches hit something worth points\n", scored);
     check(scored >= 8, "pinball: a launched ball reliably reaches the scoring area");
+}
+
+
+// ---------------------------------------------------------------------------
+// Snake
+//
+// Until GHUB-0066 these rules lived inside the widget, so nothing anywhere
+// could reach them -- Snake was the one game in the collection with no
+// coverage at all, in this file OR the UI test.
+// ---------------------------------------------------------------------------
+
+void snakeStartsLegal()
+{
+    section("Snake");
+
+    SnakeBoard board;
+    check(int(board.snake().size()) == SnakeBoard::kStartLength,
+          "snake: a new game is three segments long");
+    check(board.score() == 0 && !board.dead(), "snake: with nothing scored and nothing hit");
+
+    bool allInside = true;
+    for (QPoint p : board.snake())
+        allInside = allInside && SnakeBoard::inBounds(p);
+    check(allInside, "snake: every segment starts inside the walls");
+    check(!board.occupies(board.food()), "snake: and the food is never under the snake");
+}
+
+void snakeRefusesAReversal()
+{
+    SnakeBoard board;   // heading right
+    check(!board.turn({ -1, 0 }), "snake: turning back into your own neck is refused");
+    check(board.pending() == QPoint(1, 0), "snake: and the buffered turn is left alone");
+    check(board.turn({ 0, -1 }), "snake: turning across is allowed");
+    check(board.pending() == QPoint(0, -1), "snake: and is what the next step takes");
+    // Two squares at once would step the head straight over a body segment
+    // without the collision test ever seeing it.
+    check(!board.turn({ 2, 0 }) && !board.turn({ 1, 1 }) && !board.turn({ 0, 0 }),
+          "snake: a direction that is not one square along an axis is refused");
+}
+
+void snakeDiesAtTheWall()
+{
+    // Straight at the right-hand wall from the middle. Whatever it eats on the
+    // way, it dies on the step that would take the head out of the grid, and
+    // not one step earlier.
+    SnakeBoard board;
+    const int startX = board.head().x();
+    int steps = 0;
+    while (!board.dead() && steps < SnakeBoard::kWidth * 2) {
+        ++steps;
+        board.step();
+    }
+    check(board.dead(), "snake: driving at the wall ends the game");
+    check(steps == SnakeBoard::kWidth - startX,
+          "snake: on the step that leaves the grid, and not before");
+}
+
+void snakePlaysByItsOwnRules()
+{
+    // The property check the rules were extracted for. Play a lot of random
+    // legal games and, before every single step, work out from the CURRENT
+    // position what that step must do. Then take it and hold the core to it.
+    std::mt19937 rng(20260825);
+    const QPoint kDirs[4] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+
+    bool deathAlwaysEarned = true;
+    bool lengthAlwaysRight = true;
+    bool scoreAlwaysRight = true;
+    bool neverOverlaps = true;
+    bool alwaysInside = true;
+    bool foodAlwaysFree = true;
+    int deaths = 0;
+    int meals = 0;
+    int selfDeaths = 0;
+    int longest = 0;
+
+    for (int game = 0; game < 60; ++game) {
+        SnakeBoard board;
+        for (int move = 0; move < 400 && !board.dead(); ++move) {
+            // Mostly steer TOWARDS the food, sometimes at random. A pure
+            // random walk almost never eats -- measured, 8 meals in 60 games --
+            // so it never grows, never gets long enough to run into itself, and
+            // leaves the paths this check exists for untouched. Death is still
+            // never avoided: nothing here looks at where the body is.
+            QPoint want = kDirs[rng() % 4];
+            if (rng() % 100 < 75) {
+                const QPoint gap = board.food() - board.head();
+                if (gap.x() != 0 && (gap.y() == 0 || (rng() % 2) == 0))
+                    want = { gap.x() > 0 ? 1 : -1, 0 };
+                else if (gap.y() != 0)
+                    want = { 0, gap.y() > 0 ? 1 : -1 };
+            }
+            board.turn(want);
+
+            const std::deque<QPoint> before = board.snake();
+            const QPoint food = board.food();
+            const int scoreBefore = board.score();
+            const QPoint next = before.front() + board.pending();
+
+            const bool eating = next == food;
+            const auto tailEnd = eating ? before.end() : std::prev(before.end());
+            const bool shouldDie
+                = !SnakeBoard::inBounds(next) || std::find(before.begin(), tailEnd, next) != tailEnd;
+
+            const SnakeBoard::Step result = board.step();
+
+            if ((result == SnakeBoard::Step::Died) != shouldDie)
+                deathAlwaysEarned = false;
+            if (result == SnakeBoard::Step::Died) {
+                ++deaths;
+                if (SnakeBoard::inBounds(next))
+                    ++selfDeaths;
+                continue;
+            }
+            longest = std::max(longest, int(board.snake().size()));
+
+            if (result == SnakeBoard::Step::Ate) {
+                ++meals;
+                if (board.snake().size() != before.size() + 1)
+                    lengthAlwaysRight = false;
+                if (board.score() != scoreBefore + SnakeBoard::kFoodScore)
+                    scoreAlwaysRight = false;
+            } else {
+                if (board.snake().size() != before.size())
+                    lengthAlwaysRight = false;
+                if (board.score() != scoreBefore)
+                    scoreAlwaysRight = false;
+            }
+
+            std::vector<QPoint> seen(board.snake().begin(), board.snake().end());
+            std::sort(seen.begin(), seen.end(),
+                      [](QPoint a, QPoint b) { return std::pair(a.x(), a.y()) < std::pair(b.x(), b.y()); });
+            if (std::adjacent_find(seen.begin(), seen.end()) != seen.end())
+                neverOverlaps = false;
+            for (QPoint p : board.snake())
+                alwaysInside = alwaysInside && SnakeBoard::inBounds(p);
+            if (!board.boardFull() && board.occupies(board.food()))
+                foodAlwaysFree = false;
+        }
+    }
+
+    std::printf("      snake: 60 games, %d deaths, %d meals, %d of them by running into "
+                "itself, longest snake %d\n",
+                deaths, meals, selfDeaths, longest);
+    check(deaths > 0 && meals > 0, "snake: the random games actually ate and died");
+    // Without this the run could be all wall deaths, and the tail-square rule
+    // -- the subtlest thing in this file -- would never once be exercised.
+    check(selfDeaths > 0, "snake: and some of them died by running into themselves");
+    check(deathAlwaysEarned,
+          "snake: it dies exactly when it leaves the grid or meets itself, never otherwise");
+    check(lengthAlwaysRight, "snake: and grows by one square only when it eats");
+    check(scoreAlwaysRight, "snake: scoring ten only when it eats");
+    check(neverOverlaps, "snake: no square is ever occupied twice");
+    check(alwaysInside, "snake: and no segment is ever outside the walls");
+    check(foodAlwaysFree, "snake: food is never left under the snake");
 }
 
 // ---------------------------------------------------------------------------
@@ -3633,6 +3792,11 @@ int main()
     canastaFirstRoundAndPileOpening();
     canastaHandSort();
     canastaSaveAndResume();
+
+    snakeStartsLegal();
+    snakeRefusesAReversal();
+    snakeDiesAtTheWall();
+    snakePlaysByItsOwnRules();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;

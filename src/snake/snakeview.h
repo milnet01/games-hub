@@ -1,11 +1,9 @@
 #pragma once
 
 #include "gameview.h"
+#include "snake/snakeboard.h"
 
 #include <QPoint>
-
-#include <deque>
-#include <random>
 
 class QTimer;
 
@@ -24,8 +22,10 @@ public:
     // while you are in another game.
     void deactivate() override;
 
-    static constexpr int kGridWidth = 24;
-    static constexpr int kGridHeight = 18;
+    // The grid's size belongs to the rules, not to the drawing. Kept here as
+    // the names the view already used so the painter reads the same.
+    static constexpr int kGridWidth = SnakeBoard::kWidth;
+    static constexpr int kGridHeight = SnakeBoard::kHeight;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -37,7 +37,6 @@ private:
     void buildActions();
     void newGame();
     void step();
-    void placeFood();
     void gameOver();
     void refresh();
 
@@ -47,17 +46,11 @@ private:
     QList<QAction*> m_actions;
     QTimer* m_timer = nullptr;
 
-    std::deque<QPoint> m_snake;
-    QPoint m_direction { 1, 0 };
-    // Buffered so a quick double-tap round a corner is not swallowed by the
-    // one-turn-per-step rule.
-    QPoint m_pending { 1, 0 };
-    QPoint m_food;
-
-    std::mt19937 m_rng { std::random_device {}() };
-    int m_score = 0;
+    // The rules. Everything below is the clock and the presentation: how fast
+    // the snake moves, whether it has been set going, and whether the hub has
+    // paused it.
+    SnakeBoard m_board;
     int m_speedMs = 130;
     bool m_running = false;
-    bool m_dead = false;
     bool m_started = false;
 };

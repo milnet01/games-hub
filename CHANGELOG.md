@@ -198,6 +198,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Starting Snake with the right arrow no longer kills you instantly.** (GHUB-0125)
+  The snake was drawn facing right but built back to front, so its head
+  was behind its own body. Pressing the right arrow to start ran it
+  straight into itself and the game ended before it began. Any other
+  arrow was fine, which is why nobody had caught it.
+
 - **The card games draw far faster, and Canasta stops slowing down as the
   hand fills up.** (GHUB-0048)
   A resting Canasta table was costing 24 milliseconds to draw against its
