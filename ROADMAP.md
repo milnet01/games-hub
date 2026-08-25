@@ -797,6 +797,51 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   games. Two runs of the same build differ in 101,741 of 740,000 pixels because the
   deal is random. That is GHUB-0093, and it cost two wrong readings here before it was
   spotted.
+  Correction (2026-08-25, same day): the note above says faces are deliberately not
+  cached. That was true when it was written and is no longer. Read the note below
+  instead; the reasoning behind it stands, and only its conclusion changed.
+
+  The measurement that changed it: a sweep of all fourteen games -- which the note
+  above had not taken -- put FreeCell at 18.81 ms, the SLOWEST board in the
+  collection and worse than Canasta ever was, with Pyramid at 10.50. Both deal
+  their whole layout face UP, so no back cache reaches them.
+
+  What the sweep also showed is that the quality argument and the speed argument
+  were never actually in conflict. Resampling only happens under a ROTATION. Every
+  solitaire lays its cards out square, so a face cache reaches FreeCell, Pyramid,
+  Klondike and Spider through the pixel-exact path and is not resampled at all. So
+  faces are now cached when the card is unrotated, and still drawn live when it is
+  fanned -- Canasta's and Hearts' hands.
+
+  Measured with the scratch probe, against the build without the face cache: six
+  unrotated faces came back with a max channel difference of 2 out of 255 and not
+  one pixel over 8, and the fanned face was byte-identical, which is what "drawn
+  live" has to mean.
+
+  Fourteen games, before -> after in ms/frame: FreeCell 18.81 -> 3.15, Pyramid
+  10.50 -> 2.66, Canasta 9.64 -> 7.00 (at rest 24.10 -> 7.70), Hearts 5.80 -> 1.87,
+  Solitaire 5.70 -> 2.78, Spider 5.24 -> 2.01, Draughts 4.94 -> 3.95, Chess 4.46 ->
+  3.39, Pinball 3.94 -> 3.47, Reversi 3.03 -> 2.48, Minesweeper 2.90 -> 2.42,
+  Sudoku 2.16 -> 1.83, Snake 1.86 -> 1.57, 2048 1.30 -> 1.02. The non-card games
+  draw no cards and their movement is run-to-run noise -- do not read it as a win.
+
+  One defect found and fixed on the way, and it is the reason for the new
+  cardArtKeyDecidesThePicture check: the cache key rounded a card's size to whole
+  device pixels while the DRAWING used the exact size, so two rects a fraction of a
+  pixel apart shared one entry and whichever drew first decided the picture. A
+  frame drawn after an eviction then differed from the same frame before one. It
+  surfaced as FreeCell failing the existing legibility reversibility check, and
+  only because enough games had run first to fill the cache -- luck rather than a
+  guard. Both key and content now derive from the snapped size.
+
+  That new check was itself wrong twice before it was kept, both times passing
+  against the defect it was written for, and both times caught by reintroducing the
+  defect and watching it stay green. First it drew the subject at an integer width,
+  where the rounding it was testing does nothing. Then its cache-emptying loop tied
+  `deck` to `i % 2` while the width was `30 + (i % 60)` -- 60 is even, so every
+  width got exactly one deck, 60 distinct back keys against a 64-entry bound, and
+  the back cache never emptied at all. A test that has never been seen to fail is
+  not evidence.
   **Layman:** The card games redraw all fifty-odd cards sixty times a second, even the ones sitting still.
   Kind: perf.
   Source: in-session-2026-08-20.

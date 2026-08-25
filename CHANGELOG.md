@@ -185,15 +185,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
-- **Canasta no longer slows down as the hand fills up.** (GHUB-0048)
+- **The card games draw far faster, and Canasta stops slowing down as the
+  hand fills up.** (GHUB-0048)
   A resting Canasta table was costing 24 milliseconds to draw against its
   own 16-millisecond clock — so the game could never keep up, and it got
-  worse the more cards were on the table. It now costs 9. Card backs are
-  drawn once and kept rather than redrawn from scratch sixty times a
-  second; the back is the most expensive thing on the table and Canasta
-  shows three hands of them plus the stock at all times. Klondike, Spider,
-  Pyramid and Hearts get the same speed-up. Card faces are deliberately
-  still drawn fresh every frame, so nothing you read by its pip pattern is
+  worse the more cards were on the table. It now costs 8. FreeCell was the
+  slowest board in the collection at 19 milliseconds and is now 3; Pyramid
+  11 to 3, Hearts 6 to 2, Spider 5 to 2, Klondike 6 to 3. Cards are drawn
+  once and kept rather than redrawn from scratch sixty times a second.
+  A card is only ever reused at the size and angle it was drawn for, so
+  nothing goes soft: a card in a fanned hand, which sits at an angle, is
+  still drawn fresh every time, and nothing you read by its pip pattern is
   ever resampled.
 
 - **Canasta: a frozen pile no longer shows the freezing card twice, or above cards thrown after it** (GHUB-0094)

@@ -164,7 +164,9 @@ void drawJesterCap(QPainter& p, const QRectF& r, const QColor& ink)
 
 namespace CardArt {
 
-void paintFace(QPainter& p, const QRectF& r, const Card& c)
+// The picture on a face, drawn from scratch. Everything below paintBack is
+// about not having to call this on every frame.
+static void drawFace(QPainter& p, const QRectF& r, const Card& c)
 {
     Theme::paintDropShadow(p, r, corner(r), std::max(1.5, r.width() * 0.035));
 
@@ -313,12 +315,6 @@ static void drawBack(QPainter& p, const QRectF& r, int deck)
 // can -- this game is read by pip pattern -- so faces stay drawn live. Do not
 // "finish the job" by caching them without measuring what it does to a face at
 // the smallest scale the game draws one.
-static uint64_t backKey(int wPx, int hPx, int deck, int scaleQ)
-{
-    return uint64_t(wPx & 0xffff) | (uint64_t(hPx & 0xffff) << 16)
-        | (uint64_t(deck & 0xff) << 32) | (uint64_t(scaleQ & 0xffff) << 40);
-}
-
 // How far Theme::paintDropShadow reaches outside the card. Its widest stacked
 // rect spreads by depth * 3 * 0.6; the pixmap has to hold that or the cache
 // clips the shadow off and cards stop sitting on the table.
@@ -327,58 +323,85 @@ static double shadowPad(double width)
     return std::max(1.5, width * 0.035) * 1.8 + 1.0;
 }
 
-void paintBack(QPainter& p, const QRectF& r, int deck)
+// Draw one card through a pixmap cache. `identity` is what distinguishes this
+// picture from every other at the same size -- a deck colour for a back, a rank
+// and suit for a face.
+//
+// `cacheRotated` is the whole difference between the two callers. A cached
+// pixmap under a rotation has to be resampled, and comes back very slightly
+// soft. On a BACK that costs nothing: there is nothing on it to read. On a FACE
+// it would trade a cost the player cannot see for a blur he can, and this game
+// is read by pip pattern rather than by the corner index -- so faces pass false
+// and a fanned hand keeps drawing them live. Every unrotated card, which is
+// every solitaire tableau and every stock pile, takes the exact path either way.
+//
+// Returns false when the caller should just draw the card itself.
+template <typename Draw>
+static bool blitCached(QPainter& p, const QRectF& r, std::unordered_map<uint64_t, QPixmap>& cache,
+                       size_t bound, int identity, bool cacheRotated, Draw&& draw)
 {
     if (r.width() <= 0.0 || r.height() <= 0.0)
-        return;
+        return true;   // nothing to draw, and nothing for the caller to do either
 
-    // The scale the card will actually land on screen at, so the cache holds
-    // device pixels rather than logical ones. Without this every back goes
-    // soft on a HiDPI display, which for a partially sighted player is a
-    // straight loss however fast it runs.
     const QTransform t = p.transform();
     const double devScale = (p.device() != nullptr ? p.device()->devicePixelRatioF() : 1.0);
 
-    // A card that is only translated -- every stock pile, and every face-down
-    // card in a solitaire tableau -- can be blitted onto whole device pixels
-    // and comes back byte-identical to the drawn one. Only a card under a
-    // rotation, which here means a fanned hand, is resampled at all.
+    // A card that is only translated can be blitted onto whole device pixels
+    // and lands exactly where the drawn one would.
     const bool plain = t.type() <= QTransform::TxTranslate;
+    if (!plain && !cacheRotated)
+        return false;
+
+    // The scale the card actually lands on screen at, so the cache holds device
+    // pixels rather than logical ones. Without this every card goes soft on a
+    // HiDPI display, which for a partially sighted player is a straight loss
+    // however fast it runs.
     const double zoom
         = plain ? 1.0 : std::max(std::hypot(t.m11(), t.m12()), std::hypot(t.m21(), t.m22()));
     const double dpr = devScale * zoom;
     if (!(dpr > 0.0) || !std::isfinite(dpr))
-        return drawBack(p, r, deck);
+        return false;
 
-    // A WHOLE pixel, and that is load bearing rather than tidy. The card is
-    // drawn `pad` in from the pixmap's edge, so a fractional pad puts it at a
-    // fractional offset inside the cache and every lattice line antialiases
-    // differently from the card the game used to draw. Measured: with a
-    // fractional pad, 542 pixels of one back moved by more than 8 levels, all
-    // of them on the lattice.
-    const double pad = std::ceil(shadowPad(r.width()));
-    const QRectF padded = r.adjusted(-pad, -pad, pad, pad);
+    // The card is SNAPPED to whole device pixels before anything else, and the
+    // key is then computed from the snapped size. This is not tidiness: the key
+    // has to determine the picture completely. Quantising the key while drawing
+    // at the exact size means two cards a fraction of a pixel apart share one
+    // entry, and which of them filled it depends on what else was in the cache
+    // -- so a frame drawn after an eviction differs from the same frame drawn
+    // before one. That is exactly how FreeCell stopped going back pixel for
+    // pixel across the legibility switch, and it is a bug that only appears
+    // once the cache is full enough to evict.
+    const double wq = std::round(r.width() * dpr) / dpr;
+    const double hq = std::round(r.height() * dpr) / dpr;
+    if (!(wq > 0.0) || !(hq > 0.0))
+        return false;
 
-    // Quantised, so a card drifting by a fraction of a pixel reuses its entry
-    // instead of filling the cache with near-duplicates.
-    // Rounded UP: a pixmap a rounding short of the padded rect clips the
-    // shadow it was padded for.
+    // A WHOLE pixel, and that is load bearing too. The card is drawn `pad` in
+    // from the pixmap's edge, so a fractional pad puts it at a fractional
+    // offset inside the cache and every line antialiases differently from the
+    // card the game used to draw. Measured on a back: with a fractional pad,
+    // 542 pixels moved by more than 8 levels, all on the lattice.
+    const double pad = std::ceil(shadowPad(wq));
+    const QRectF padded(r.left() - pad, r.top() - pad, wq + 2 * pad, hq + 2 * pad);
+
+    // Rounded UP: a pixmap a rounding short of the padded rect clips the shadow
+    // it was padded for.
     const int wPx = int(std::ceil(padded.width() * dpr));
     const int hPx = int(std::ceil(padded.height() * dpr));
     const int scaleQ = int(std::lround(dpr * 100.0));
     if (wPx <= 0 || hPx <= 0 || wPx > 4096 || hPx > 4096)
-        return drawBack(p, r, deck);
+        return false;
 
-    static std::unordered_map<uint64_t, QPixmap> cache;
-    const uint64_t key = backKey(wPx, hPx, deck, scaleQ);
+    const uint64_t key = uint64_t(wPx & 0xffff) | (uint64_t(hPx & 0xffff) << 16)
+        | (uint64_t(identity & 0xff) << 32) | (uint64_t(scaleQ & 0xffff) << 40);
 
     auto it = cache.find(key);
     if (it == cache.end()) {
         // A resize walks through sizes on its way to the one it stops at, so
         // the map is bounded rather than left to grow with every intermediate
         // width. Dropping the lot is fine: the next frame refills what it
-        // needs, and what it needs is a handful of entries.
-        if (cache.size() > 64)
+        // needs, which is one entry per distinct picture on the table.
+        if (cache.size() > bound)
             cache.clear();
 
         QPixmap pix(wPx, hPx);
@@ -388,9 +411,9 @@ void paintBack(QPainter& p, const QRectF& r, int deck)
         QPainter into(&pix);
         into.setRenderHint(QPainter::Antialiasing, true);
         into.setRenderHint(QPainter::TextAntialiasing, true);
-        // Drawn at the origin of the pixmap's own logical space: the card sits
-        // `pad` in from each edge, which is the room the shadow needs.
-        drawBack(into, QRectF(pad, pad, r.width(), r.height()), deck);
+        // At the origin of the pixmap's own logical space: the card sits `pad`
+        // in from each edge, which is the room the shadow needs.
+        draw(into, QRectF(pad, pad, wq, hq));
         into.end();
 
         it = cache.emplace(key, std::move(pix)).first;
@@ -400,7 +423,7 @@ void paintBack(QPainter& p, const QRectF& r, int deck)
         // Drawn at the pixmap's own size, at a whole device pixel, with the
         // transform out of the way -- so nothing is rescaled and nothing is
         // shifted by a fraction of a pixel. Drawing into `padded` instead
-        // would resample every card by the rounding in wPx, and a card back
+        // resamples every card by the rounding in wPx, and a card back
         // measurably softens: 20% of the pixels in a stock pile moved by more
         // than 8 levels when this path did not exist.
         const QPointF where = padded.topLeft() + QPointF(t.dx(), t.dy());
@@ -410,13 +433,36 @@ void paintBack(QPainter& p, const QRectF& r, int deck)
                              std::round(where.y() * devScale) / devScale),
                      it->second);
         p.restore();
-        return;
+        return true;
     }
 
     const bool wasSmooth = p.testRenderHint(QPainter::SmoothPixmapTransform);
     p.setRenderHint(QPainter::SmoothPixmapTransform, true);
     p.drawPixmap(padded, it->second, QRectF(it->second.rect()));
     p.setRenderHint(QPainter::SmoothPixmapTransform, wasSmooth);
+    return true;
+}
+
+void paintBack(QPainter& p, const QRectF& r, int deck)
+{
+    // Two colourways and a handful of sizes, so the bound is generous.
+    static std::unordered_map<uint64_t, QPixmap> cache;
+    if (!blitCached(p, r, cache, 64, deck, true,
+                    [deck](QPainter& into, const QRectF& at) { drawBack(into, at, deck); }))
+        drawBack(p, r, deck);
+}
+
+void paintFace(QPainter& p, const QRectF& r, const Card& c)
+{
+    // FreeCell puts all fifty-two on the table at once and Pyramid twenty-eight,
+    // so this one holds a whole pack at two sizes rather than a handful.
+    static std::unordered_map<uint64_t, QPixmap> cache;
+    // Rank is 0..13 and suit 0..3, so one byte names the picture. A joker's
+    // suit is not drawn, but keeping it in the key only costs an entry.
+    const int identity = (c.rank << 2) | (int(c.suit) & 0x3);
+    if (!blitCached(p, r, cache, 160, identity, false,
+                    [&c](QPainter& into, const QRectF& at) { drawFace(into, at, c); }))
+        drawFace(p, r, c);
 }
 
 void paintSlot(QPainter& p, const QRectF& r, const QString& glyph)

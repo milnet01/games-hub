@@ -39,6 +39,7 @@
 #include <QMenuBar>
 #include <QFontDatabase>
 #include <QFontMetricsF>
+#include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QElapsedTimer>
@@ -264,6 +265,16 @@ void frameCost()
     pump(30);
     std::printf("        klondike, full tableau        %6.2f\n",
                 msPerFrame(&klondike, frames));
+
+    // The most expensive board in the collection: FreeCell is the only game
+    // that puts the whole pack on the table FACE UP, so no card back cache
+    // reaches it and it is the honest worst case for drawing faces.
+    FreeCellView freecell;
+    freecell.resize(1000, 740);
+    freecell.show();
+    pump(30);
+    std::printf("        freecell, all 52 face up      %6.2f\n",
+                msPerFrame(&freecell, frames));
 
     HubWindow hub;
     hub.resize(1000, 740);
@@ -2341,6 +2352,79 @@ int main(int argc, char* argv[])
                     fresh.size().height());
         check(fresh.size().width() <= bar.width() && fresh.size().height() <= bar.height(),
               "a first run opens at a size that already fits beside your work");
+    }
+
+    // ---- cardArtKeyDecidesThePicture (GHUB-0048) ----
+    //
+    // The card art cache rounds a card's size to whole device pixels to build
+    // its key. So two rects a fraction of a pixel apart share one entry, and
+    // the entry must hold the SAME picture whichever of them is drawn first.
+    //
+    // The first cut keyed on the rounded size and drew at the exact one, so the
+    // picture depended on which rect got there first -- which meant a frame
+    // drawn after the cache had been emptied differed from the same frame drawn
+    // before. It surfaced as FreeCell failing to go back pixel for pixel across
+    // the legibility switch, and only because enough games had run first to
+    // fill the cache. That is luck, not a guard. This asks directly, and it was
+    // confirmed to go red against that defect before being kept.
+    {
+        auto draw = [](const Card& c, double w, double h, bool faceUp) {
+            QImage img(int(w) + 40, int(h) + 40, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::darkGray);
+            QPainter p(&img);
+            p.setRenderHint(QPainter::Antialiasing, true);
+            p.setRenderHint(QPainter::TextAntialiasing, true);
+            p.translate(20.0, 20.0);
+            if (faceUp)
+                CardArt::paintFace(p, QRectF(0, 0, w, h), c);
+            else
+                CardArt::paintBack(p, QRectF(0, 0, w, h), c.deck);
+            return img;
+        };
+        // Both caches are bounded and drop everything when full, which is how
+        // the test gets a cold one to work with. Every junk card is drawn BOTH
+        // ways: an earlier cut alternated, which put 150 faces against a
+        // 160-entry bound, so the face cache never actually emptied and that
+        // half of the check passed without testing anything -- confirmed by
+        // reintroducing the defect and watching only the back half go red.
+        //
+        // Junk heights follow the real card aspect, which is what keeps them
+        // off the subject's key: a junk card 62 wide is 86.8 tall and rounds to
+        // 87, where the subject rounds to 86.
+        auto empty = [&draw] {
+            for (int i = 0; i < 400; ++i) {
+                // The deck must NOT be derived from i's parity: the width
+                // below already is, so `i % 2` gave every width one deck and
+                // only 60 distinct back keys against a 64-entry bound -- the
+                // back cache then never emptied and that half of this check
+                // passed against the very defect it was written for.
+                const Card junk { .suit = static_cast<Suit>(i % 4),
+                                  .rank = 1 + (i % 13),
+                                  .faceUp = true,
+                                  .deck = (i / 60) % 2 };
+                const double w = 30.0 + (i % 60);
+                draw(junk, w, w * CardArt::kAspect, true);
+                draw(junk, w, w * CardArt::kAspect, false);
+            }
+        };
+
+        // 61.6 and 62.4 both round to 62; the height is held equal so the two
+        // land on one key rather than two.
+        const Card subject { .suit = Suit::Hearts, .rank = 7 };
+        for (int pass = 0; pass < 2; ++pass) {
+            const bool faceUp = pass == 0;
+
+            empty();
+            const QImage alone = draw(subject, 61.6, 86.4, faceUp);
+
+            empty();
+            draw(subject, 62.4, 86.4, faceUp);   // fills the shared entry first
+            const QImage after = draw(subject, 61.6, 86.4, faceUp);
+
+            check(alone == after,
+                  faceUp ? "a card face is the same picture whichever rect filled its cache entry"
+                         : "and so is a card back");
+        }
     }
 
     frameCost();
