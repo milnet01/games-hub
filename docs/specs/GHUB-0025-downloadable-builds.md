@@ -103,12 +103,12 @@ both. One matrix job:
 
 Steps: `actions/checkout`; `jurplel/install-qt-action` with
 `version: 6.8.3` and `modules: qtmultimedia`; **on the Windows leg only,
-`ilammy/msvc-dev-cmd`**; `cmake -S . -B build -G Ninja
+`scripts/setup-msvc.ps1`**; `cmake -S . -B build -G Ninja
 -DCMAKE_BUILD_TYPE=Release`; `cmake --build build`; `ctest --test-dir build
 --output-on-failure`. Qt 6.8.3 satisfies the existing
 `find_package(Qt6 6.5 REQUIRED ...)` floor.
 
-The `msvc-dev-cmd` step is not optional and is the whole reason Ninja can be
+The MSVC setup step is not optional and is the whole reason Ninja can be
 used on both legs: outside a developer command prompt CMake cannot find
 `cl.exe`, and the Ninja generator has no equivalent of the Visual Studio
 generator's own toolchain discovery, so configure fails with "No
@@ -143,8 +143,8 @@ that can run a desktop application already has them, and a stock
 and nothing Qt, which is what keeps the test honest.
 
 Both runners also need Ninja. It is not guaranteed on the Ubuntu image, so
-the Linux leg adds `ninja-build` to its `apt-get` line; on Windows the
-`msvc-dev-cmd` step puts Visual Studio's own `ninja.exe` on `PATH`.
+the Linux leg adds `ninja-build` to its `apt-get` line; on Windows
+`vcvarsall.bat` puts Visual Studio's own `ninja.exe` on `PATH`.
 
 ### 4.3 `.github/workflows/release.yml` — a tag becomes two files
 

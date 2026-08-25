@@ -7,7 +7,8 @@
 # that fails on GitHub. What this script supplies is the ENVIRONMENT those
 # commands run in, which on the runner comes from two actions:
 #
-#   ilammy/msvc-dev-cmd        -> vcvars64.bat
+#   scripts/setup-msvc.ps1     -> vcvars64.bat (was ilammy/msvc-dev-cmd
+#                                 until GHUB-0031)
 #   jurplel/install-qt-action  -> CMAKE_PREFIX_PATH, and Qt's bin on PATH
 #
 # The toolchain it expects is what GHUB-0091 installed: MSVC x64 from VS 2022

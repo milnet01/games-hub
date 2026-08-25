@@ -330,7 +330,7 @@ double-clicking a file.
   push, release, new branch); against the new one all seven pass.
   ctest is 3/3.
 
-- 📋 [GHUB-0031] **The Windows build rides on an action GitHub is deprecating the runtime under.**
+- ✅ [GHUB-0031] **The Windows build rides on an action GitHub is deprecating the runtime under.**
   Every CI run now annotates: `ilammy/msvc-dev-cmd@0b201ec74f` (v1.13.0)
   targets Node.js 20 and is being FORCED onto Node.js 24. Today that is a
   warning and the Windows leg is green. When the forcing is withdrawn the
@@ -350,6 +350,25 @@ double-clicking a file.
   **Layman:** A helper GitHub uses to build the Windows version is running on an old engine that GitHub will switch off; when it does, Windows builds and releases stop.
   Kind: chore.
   Source: in-session-2026-08-14 (CI annotation on run 31811637751).
+  Resolved (2026-08-25): upstream is unmaintained -- v1.13.0 (2024-01) is
+  still the latest release and master still declares `node20`, last touched
+  2024-03 -- so the bump route does not exist and the bullet's own fallback
+  was taken. `scripts/setup-msvc.ps1` does what the action did: ask vswhere
+  for the VS install, run its vcvarsall.bat, and export only the variables it
+  changed. Shared by ci.yml and release.yml rather than inlined twice, so the
+  release cannot drift from what CI proved.
+
+  Verified on the wintest box rather than assumed: 38 variables exported,
+  cl.exe reachable on the exported Path, INCLUDE / LIB / LIBPATH /
+  VCToolsInstallDir / VSCMD_ARG_TGT_ARCH all present. That probe also
+  corrected a claim this session had written down wrongly -- vcvarsall DOES
+  put Visual Studio's own ninja.exe on PATH, via
+  CommonExtensions\Microsoft\CMake\Ninja, so the spec's original statement
+  was right and the "it comes from the runner image" replacement was not.
+
+  One less third-party action holding a foothold in workflows that publish
+  binaries strangers download, which is the same reasoning that dropped
+  softprops/action-gh-release.
 
 - ✅ [GHUB-0041] **A donate entry in the hub, pointing at the funding links this repo already declares.**
   Asked for 2026-08-19. `.github/FUNDING.yml` was missing from this repo and

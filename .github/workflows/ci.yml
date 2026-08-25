@@ -61,13 +61,12 @@ jobs:
           sudo apt-get install -y -qq ninja-build libgl1-mesa-dev \
             libxkbcommon-x11-0 libxcb-cursor0
 
-      # Without a developer command prompt CMake cannot find cl.exe, and the
-      # Ninja generator has no toolchain discovery of its own. This step is
-      # what lets both legs share one build recipe. It also puts Visual
-      # Studio's ninja.exe on PATH.
+      # Was ilammy/msvc-dev-cmd until GHUB-0031; the script carries the
+      # reasoning and is shared with release.yml so the two cannot drift.
       - name: Set up MSVC environment
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1.13.0
+        shell: pwsh
+        run: ./scripts/setup-msvc.ps1
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release

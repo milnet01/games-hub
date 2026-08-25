@@ -213,7 +213,11 @@ jobs:
           modules: qtmultimedia
           cache: true
 
-      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1.13.0
+      # Was ilammy/msvc-dev-cmd until GHUB-0031; the script carries the
+      # reasoning and is shared with ci.yml so the two cannot drift.
+      - name: Set up MSVC environment
+        shell: pwsh
+        run: ./scripts/setup-msvc.ps1
 
       - name: Build
         run: |

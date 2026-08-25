@@ -64,6 +64,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **The Windows build no longer rides on an unmaintained third-party action.** (GHUB-0031)
+  `ilammy/msvc-dev-cmd` still declares Node 20, which GitHub is retiring,
+  and has had no release since January 2024 — so there was no version to
+  bump to. Both workflows now run `scripts/setup-msvc.ps1`, which does the
+  same job directly: find Visual Studio, run its `vcvarsall.bat`, export
+  the variables it changed. One shared script, so the release cannot drift
+  from what CI proved, and one less third-party action in workflows that
+  publish binaries strangers download.
+
 - **Canasta: the hardest computer now fishes** (GHUB-0103)
   The family's tactic. Holding three or more of a rank, it throws them out
   one at a time until a pair is left, hoping the player who discards to it
