@@ -258,6 +258,24 @@ public:
     void sortHand(int seat);
     const Team& team(int t) const { return m_teams[std::size_t(t)]; }
     const std::vector<Card>& pile() const { return m_pile; }
+    // Which seat discarded pile()[index], or -1 for a card nobody threw -- the
+    // up-card and whatever covered it at the deal, and any card in a pile
+    // restored from a save written before this was recorded.
+    //
+    // The pack keeps this because the AI cannot otherwise tell a rank the table
+    // has genuinely parted with from BAIT one seat keeps feeding in. Both look
+    // identical as a count, and the count is exactly what a fishing seat aims
+    // at (GHUB-0124).
+    int pileThrownBy(int index) const;
+    // How many INDEPENDENT sources have put `rank` into the pile: each seat
+    // that threw one counts once however many it threw, and the cards nobody
+    // threw -- the deal's up-card and its cover -- count once between them.
+    //
+    // A seat that has thrown the same rank twice is telling you it holds more
+    // of them, not fewer, so its second card is no evidence the rank is safe.
+    // A raw count cannot tell that from two seats genuinely letting the rank
+    // go, and the raw count is what a fishing seat feeds (GHUB-0124).
+    int pileRankSources(int rank) const;
     bool pileFrozen() const { return m_frozen; }
     // Where in pile() the card that froze it sits, or -1 when the pile is not
     // frozen. The table draws that card sideways and needs its DEPTH rather
@@ -355,7 +373,11 @@ public:
     // path — which is what the self-test's round trip uses — then stopped one
     // pair short and silently dropped goingOutNeedsADiscard on the way back
     // in. A stale figure here does not fail, it loses a rule.
-    static constexpr int kTail = 5;
+    // Tail 6 is not a rule pair: it is the pile's provenance, one seat per
+    // card. A stream that stops at 5 loads with the pile marked unknown, which
+    // turns the fishing defence off for that hand rather than refusing the
+    // save (GHUB-0124).
+    static constexpr int kTail = 6;
     // Leaves the engine untouched and returns false if the stream is from a
     // different version or runs out part way. `tail` says how many of the
     // fields added after the format was first written the stream carries: only
@@ -420,6 +442,9 @@ private:
 
     std::vector<Card> m_stock;
     std::vector<Card> m_pile;
+    // Parallel to m_pile: who threw each card. Kept in step at every point the
+    // pile changes -- the deal, a discard, and a take, which clears both.
+    std::vector<qint8> m_pileFrom;
 
     Phase m_phase = Phase::HandOver;
     int m_hand = 0;

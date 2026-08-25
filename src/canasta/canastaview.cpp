@@ -682,9 +682,11 @@ QByteArray CanastaView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    // Each version adds another pair to the engine's tail: rules that did not
-    // exist when the version before it was written.
-    out << quint32(6);
+    // Each version adds another field to the engine's tail. Up to 6 those were
+    // rules that did not exist when the version before it was written; 7 adds
+    // the pile's provenance, which is not a rule (GHUB-0124). Either way the
+    // version IS the tail count plus one, and load() reads that many.
+    out << quint32(7);
     m_engine.save(out);
     out << qint32(m_level) << m_useHouse << qint32(m_target) << m_sortHand;
     return blob;
@@ -698,7 +700,7 @@ bool CanastaView::restoreState(const QByteArray& blob)
     in >> version;
     // A game saved by an older build still comes back; it simply predates the
     // rules its tail does not carry, and their defaults stand.
-    if (version < 1 || version > 6 || !m_engine.load(in, int(version) - 1))
+    if (version < 1 || version > 7 || !m_engine.load(in, int(version) - 1))
         return false;
 
     qint32 level = 0;

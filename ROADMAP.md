@@ -4476,7 +4476,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-25.
 
-- 📋 [GHUB-0124] **The computer cannot tell WHO threw a card, so it cannot see fishing being done to it.**
+- ✅ [GHUB-0124] **The computer cannot tell WHO threw a card, so it cannot see fishing being done to it.**
   The half of GHUB-0103 that did not ship, filed rather than left as a
   gap. That bullet asked for both halves in one pass, on the grounds
   that "an AI that fishes but cannot see it being done to it is worse
@@ -4515,6 +4515,57 @@ open.
   of the pack, and an Ai could remember the pack between its own
   turns and attribute the four cards that appeared. It is per-seat
   state that a taken pack resets, and it was not attempted.
+  Resolved (2026-08-25): the pack now records WHO threw each card.
+  `Engine::m_pileFrom` runs parallel to `m_pile` and is kept in step at the three
+  points the pile changes -- the deal (seat -1, nobody threw it), a discard (the
+  discarding seat), and a take (both cleared). `pileThrownBy(i)` reads it.
+
+  The defence is one line at the point of temptation. Expert's
+  `safety += 50 * countRank(pile, rank)` becomes
+  `safety += 50 * e.pileRankSources(rank)`, which counts SOURCES rather than
+  cards: each seat that threw the rank counts once however many it threw, and the
+  cards nobody threw count once between them.
+
+  That shape is the whole finding, and it is not the cap this bullet ruled out. A
+  fisher throws them ONE AT A TIME, so capping the raw count at two penalised the
+  honest read and caught no bait -- measured at 117 -> 110 of 240. Counting
+  sources leaves two seats letting a rank go worth the full +100 while two from
+  the SAME seat is worth +50, because the second card is that seat telling you it
+  holds more of them.
+
+  The deal's up-card counts as one source rather than none, deliberately. It came
+  out of the STOCK rather than a hand, so it is real information, and the seat that
+  turned it cannot be fishing. Reading it as nothing instead broke
+  `canastaFirstRoundAndPileOpening`, whose whole fixture is an up-card -- and the
+  break was correct behaviour for a check about a different rule, which is how it
+  was caught.
+
+  Save tail 6 carries the provenance and the view's version goes 6 -> 7. A game
+  saved by an older build still loads: it comes back with the pile marked unknown,
+  which reads as one cautious source rather than several confident ones, so the
+  defence turns itself off for that hand rather than arguing wrongly. That
+  mattered here -- the alternative was bumping `kSaveVersion`, which refuses every
+  existing save, and GHUB-0126 is a fresh reminder of what losing a player's game
+  costs.
+
+  Locked by `canastaSeesWhoThrewIt`, which plays five real discards -- and the
+  turn order is the trap: it runs 1, 2, 3, 0, 1, so seat 1's second king is the
+  FIFTH throw. Getting that wrong made the discards fail while the source counts
+  still looked right, which is how the check first passed for the wrong reason.
+  Mutation-checked: counting raw cards instead of sources turns it red.
+
+  Ladder, against the 2026-08-25 baseline in CLAUDE.md: medium v easy 22/24 +2538
+  and hard v easy 23/24 +3844 and hard v medium 66/120 +233 are all UNCHANGED,
+  which is the check that matters -- the change is gated to Expert and the other
+  rungs must not move. Expert v hard went 117/240 -71 to 121/240 +14. Per
+  GHUB-0110 that is NOT evidence of improvement and must not be quoted as any; it
+  is evidence of no collapse, which is all the ladder can say.
+
+  NOT done, and deliberately: no second term penalising a throw INTO a rank a seat
+  is fishing. Removing the false safety is the defence this bullet asked for;
+  adding a penalty beside it is a separate judgement with no measurement behind it.
+  The cheaper per-seat approximation this bullet described is moot now that the
+  engine keeps the real thing.
   **Layman:** The computer can now fish -- throw one of three matching cards as bait -- but it still cannot spot anyone doing it to it, because it cannot see which player threw which card.
   Kind: feature.
   Source: in-session-2026-08-25.

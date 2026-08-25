@@ -957,14 +957,25 @@ Card Ai::chooseDiscard(const Engine& e) const
             // way most players do.
             //
             // This term is exactly what a fishing seat aims at (GHUB-0103), and
-            // capping it at two occurrences was tried as the defence against
-            // that: it cost 7 games of expert v hard, 117 -> 110 of 240. The
-            // reason it cannot work is worth keeping. A fisher throws them ONE
-            // AT A TIME, so the bait shows as one or two of a rank in the pack
-            // -- precisely where the count still means what it says. The tell is
-            // WHO threw them, and Engine::pile() records no such thing. See
-            // GHUB-0124.
-            safety += 50.0 * double(countRank(e.pile(), c.rank));
+            // it now counts SOURCES rather than cards: each seat that threw
+            // one counts once however many it threw (GHUB-0124).
+            //
+            // That is the whole defence, and the shape of it matters. Capping
+            // the raw count at two was tried first and cost 7 games of expert v
+            // hard, 117 -> 110 of 240: a fisher throws them ONE AT A TIME, so
+            // the bait shows as one or two of a rank -- precisely where a raw
+            // count still means what it says -- and the cap only penalised the
+            // honest read. The tell was never HOW MANY, it is WHO. Two of a
+            // rank from two different seats is the table genuinely letting it
+            // go; two from the SAME seat is one player telling you it holds
+            // more of them, and the second is no evidence of safety at all.
+            //
+            // Cards nobody threw -- the deal's up-card -- count once between
+            // them, because they came out of the stock rather than out of a
+            // hand. So a pile restored from a save written before the
+            // provenance existed reads as one cautious source rather than as
+            // several confident ones.
+            safety += 50.0 * double(e.pileRankSources(c.rank));
         }
 
         if (m_level == Level::Hard || m_level == Level::Expert) {

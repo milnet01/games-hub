@@ -84,6 +84,19 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **The Expert computer can now tell who threw each card, so it is harder to fish.** (GHUB-0124)
+  Throwing away a card that others have already discarded is usually safe
+  — they are unlikely to be holding a pair of it. A crafty player exploits
+  that by feeding the same rank into the pile one card at a time, so it
+  looks safe when it is really bait. The pack now remembers which player
+  threw each card, and Expert counts how many DIFFERENT players let a rank
+  go rather than how many cards are there. Two players discarding a king
+  still reads as safe; the same player discarding two does not.
+
+  Saved games from an older version still load. They simply do not carry
+  who threw what, so the computer plays that hand without the new
+  knowledge rather than refusing the save.
+
 - **Every game's rules are now checked by the test suite.** (GHUB-0066)
   Six games — Klondike, Spider, FreeCell, Pyramid, Snake and 2048 — kept
   their rules mixed into the drawing code, which meant the automated

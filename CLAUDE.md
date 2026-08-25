@@ -869,8 +869,11 @@ where their stock is built.
 **`canastaLevelsDiffer()` prints its four rungs on every run, and what the
 ladder reads today is the baseline for judging tomorrow's change** — the figures
 are re-read by running the suite, never assumed from a handoff. As of
-2026-08-25, after the Canasta AI pass: medium v easy 22/24 +2538, hard v easy
-23/24 +3844, hard v medium 66/120 +233, expert v hard 117/240 −71. Two things
+2026-08-25, after the Canasta AI pass and GHUB-0124: medium v easy 22/24 +2538,
+hard v easy 23/24 +3844, hard v medium 66/120 +233, expert v hard 121/240 +14.
+**The first three rungs are the useful reading when a change is gated to one
+level** — GHUB-0124 touched Expert alone, and those three not moving at all is
+what says so. Two things
 that reading does NOT mean. The absolute numbers are not a target — GHUB-0110
 settled that the ladder cannot separate a small change from noise, so a check
 against a hand-built position is the judge and this is context. And **the ladder

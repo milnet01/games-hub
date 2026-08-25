@@ -357,6 +357,10 @@ void Engine::save(QDataStream& out) const
     out << m_rules.goingOutNeedsADiscard << m_pendingRules.goingOutNeedsADiscard; // tail 4
     out << m_rules.bothReachingTargetIsADraw
         << m_pendingRules.bothReachingTargetIsADraw; // tail 5
+    // tail 6: who threw each card of the pile. Not a rule pair -- see kTail.
+    out << qint32(m_pileFrom.size());
+    for (const qint8 seat : m_pileFrom)
+        out << seat;
 }
 
 bool Engine::load(QDataStream& in, int tail)
@@ -429,8 +433,33 @@ bool Engine::load(QDataStream& in, int tail)
     if (tail >= 5)
         readPair(e.m_rules.bothReachingTargetIsADraw,
                  e.m_pendingRules.bothReachingTargetIsADraw);
+    if (tail >= 6) {
+        qint32 count = 0;
+        in >> count;
+        if (in.status() != QDataStream::Ok || count < 0
+            || count != qint32(e.m_pile.size()))
+            return false;
+        e.m_pileFrom.clear();
+        e.m_pileFrom.reserve(std::size_t(count));
+        for (qint32 i = 0; i < count; ++i) {
+            qint8 seat = 0;
+            in >> seat;
+            // -1 is "nobody threw it"; anything outside the table is a blob
+            // saying something the rules could not have produced.
+            if (seat < -1 || seat >= kSeats)
+                return false;
+            e.m_pileFrom.push_back(seat);
+        }
+    }
     if (in.status() != QDataStream::Ok)
         return false;
+
+    // A stream from before the provenance existed comes back with none. The
+    // pile is real and the game plays on; the seats are simply unknown, which
+    // reads as "nobody threw it" and turns the fishing defence off for the
+    // rest of the hand.
+    if (e.m_pileFrom.size() != e.m_pile.size())
+        e.m_pileFrom.assign(e.m_pile.size(), qint8(-1));
 
     // The pack has to still be whole, which is the one check that catches a
     // file that parsed cleanly but says something impossible.
@@ -441,6 +470,35 @@ bool Engine::load(QDataStream& in, int tail)
     *this = e;
     m_rng = rng;
     return true;
+}
+
+int Engine::pileThrownBy(int index) const
+{
+    if (index < 0 || index >= int(m_pileFrom.size()))
+        return -1;
+    return int(m_pileFrom[std::size_t(index)]);
+}
+
+int Engine::pileRankSources(int rank) const
+{
+    std::array<bool, kSeats> seats {};
+    bool unthrown = false;
+    for (int i = 0; i < int(m_pile.size()); ++i) {
+        if (m_pile[std::size_t(i)].rank != rank)
+            continue;
+        const int seat = pileThrownBy(i);
+        if (seat < 0 || seat >= kSeats) {
+            // The deal's up-card and whatever covered it. Nobody chose to let
+            // it go, so it is not a preference -- but it IS a card that came
+            // out of the stock rather than a hand, so it counts once. A pile
+            // restored from a save with no provenance is entirely this, which
+            // is what makes such a hand read cautiously rather than wrongly.
+            unthrown = true;
+            continue;
+        }
+        seats[std::size_t(seat)] = true;
+    }
+    return int(std::count(seats.begin(), seats.end(), true)) + (unthrown ? 1 : 0);
 }
 
 void Engine::sortHand(int seat)
@@ -489,6 +547,7 @@ void Engine::dealFrom(std::vector<Card> stock)
     m_outConcealed = false;
     m_frozen = false;
     m_pile.clear();
+    m_pileFrom.clear();
     m_error.clear();
     m_hasMelded.fill(false);
     m_turnsTaken = 0;
@@ -526,6 +585,7 @@ void Engine::dealFrom(std::vector<Card> stock)
         const Card c = m_stock.back();
         m_stock.pop_back();
         m_pile.push_back(c);
+        m_pileFrom.push_back(-1);   // turned by the deal, not thrown by anyone
         if (!isWild(c) && !isRedThree(c))
             break;
         m_frozen = true;
@@ -1192,6 +1252,7 @@ bool Engine::takePile(const std::vector<Card>& layDown)
 
     std::vector<Card> taken = m_pile;
     m_pile.clear();
+    m_pileFrom.clear();
     m_frozen = false;
     taken.pop_back(); // the top card is in the melds, not the hand
 
@@ -1278,6 +1339,7 @@ bool Engine::discard(const Card& c)
     m_error.clear();
     removeFromHand(seat, { c });
     m_pile.push_back(c);
+    m_pileFrom.push_back(qint8(seat));
     // A wild card thrown on the pile freezes it for everyone until it is taken.
     if (isWild(c))
         m_frozen = true;

@@ -4711,6 +4711,86 @@ void canastaFirstRoundAndPileOpening()
 
 // A game to 5000 is several sittings, so it has to survive being put away. The
 // test is that a position written out and read back is the same position.
+
+// The defence against being fished (GHUB-0124). Expert reads a rank already in
+// the pile as one the others have parted with, and therefore safe to throw --
+// which is exactly the belief a fisher feeds. The pack now records WHO threw
+// each card, and the reading counts SOURCES rather than cards.
+void canastaSeesWhoThrewIt()
+{
+    // Every seat holds eleven of one rank plus a card it will be told to
+    // throw, so the discards below are forced rather than chosen.
+    const auto handOf = [](int rank, const std::vector<Card>& extra) {
+        std::vector<Card> v;
+        for (int i = 0; i < 11 - int(extra.size()); ++i)
+            v.push_back(cd(i % 2 == 0 ? Suit::Clubs : Suit::Spades, rank));
+        for (const Card& c : extra)
+            v.push_back(c);
+        return v;
+    };
+
+    std::array<std::vector<Card>, 4> hands;
+    // Seat 0 throws nothing of interest, but it still has a turn: the order is
+    // 1, 2, 3, 0, 1, so seat 1's second king is the FIFTH throw and not the
+    // fourth. Getting that wrong makes the discards fail while the counts
+    // still look right, which is how this check first passed for the wrong
+    // reason.
+    hands[0] = handOf(4, { cd(Suit::Spades, 8) });
+    // Seat 1 will throw two kings -- the fisher's signature.
+    hands[1] = handOf(5, { cd(Suit::Hearts, kKing), cd(Suit::Diamonds, kKing) });
+    // Seats 2 and 3 throw a queen each: the table genuinely letting one go.
+    hands[2] = handOf(6, { cd(Suit::Hearts, kQueen) });
+    hands[3] = handOf(7, { cd(Suit::Diamonds, kQueen) });
+
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Clubs, 9)), 0);
+    check(e.currentSeat() == 1, "canasta: seat 1 leads");
+
+    // Seat 1 throws a king, seats 2 and 3 a queen each, seat 0 an eight, and
+    // then seat 1 its second king. Five throws, four seats, three ranks.
+    const Card thrown[] = { cd(Suit::Hearts, kKing), cd(Suit::Hearts, kQueen),
+                            cd(Suit::Diamonds, kQueen), cd(Suit::Spades, 8),
+                            cd(Suit::Diamonds, kKing) };
+    bool allThrown = true;
+    for (const Card& c : thrown) {
+        e.drawFromStock();
+        allThrown = allThrown && e.discard(c);
+    }
+    check(allThrown, "canasta: the five discards all went");
+
+    const auto inPile = [&e](int rank) {
+        return int(std::count_if(e.pile().begin(), e.pile().end(),
+                                 [rank](const Card& c) { return c.rank == rank; }));
+    };
+    check(inPile(kKing) == 2 && inPile(kQueen) == 2,
+          "canasta: two kings and two queens are in the pack");
+    check(e.pileRankSources(kKing) == 1,
+          "canasta: but the two kings came from ONE seat, so they are one source");
+    check(e.pileRankSources(kQueen) == 2,
+          "canasta: while the two queens came from two, so they are two");
+    check(e.pileRankSources(9) == 1,
+          "canasta: and the deal's own up-card counts once, having come from no hand");
+    check(e.pileThrownBy(0) == -1, "canasta: the up-card was thrown by nobody");
+
+    // Restoring a save keeps it. Nothing else in the engine would notice the
+    // provenance going missing, and a hand resumed mid-play is exactly when a
+    // fisher is halfway through baiting you.
+    QByteArray blob;
+    {
+        QDataStream out(&blob, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        e.save(out);
+    }
+    ca::Engine resumed;
+    {
+        QDataStream in(blob);
+        in.setVersion(QDataStream::Qt_6_0);
+        check(resumed.load(in), "canasta: the position saves and reads back");
+    }
+    check(resumed.pileRankSources(kKing) == 1 && resumed.pileRankSources(kQueen) == 2,
+          "canasta: and who threw what survives the round trip");
+}
+
 void canastaSaveAndResume()
 {
     ca::Rules house = ca::Rules::classic();
@@ -5006,6 +5086,7 @@ int main()
     canastaFirstRoundAndPileOpening();
     canastaHandSort();
     canastaSaveAndResume();
+    canastaSeesWhoThrewIt();
 
     snakeStartsLegal();
     snakeRefusesAReversal();
