@@ -1,12 +1,9 @@
 #pragma once
 
 #include "gameview.h"
+#include "twenty48/twenty48board.h"
 
 #include <QColor>
-
-#include <array>
-#include <random>
-#include <vector>
 
 // The tile palette and the ink that reads on it. Declared here rather than kept
 // in twenty48view.cpp's anonymous namespace so tests/uitest.cpp can assert the
@@ -34,9 +31,11 @@ public:
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
-    static constexpr int kSize = 4;
-    static constexpr int kCells = kSize * kSize;
-    static constexpr int kTarget = 2048;
+    // The board's shape belongs to the rules. Kept under the names the view
+    // and its tests already used.
+    static constexpr int kSize = Twenty48Board::kSize;
+    static constexpr int kCells = Twenty48Board::kCells;
+    static constexpr int kTarget = Twenty48Board::kTarget;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -45,16 +44,14 @@ protected:
     QSize minimumSizeHint() const override { return { 300, 340 }; }
 
 private:
-    enum class Direction { Left, Right, Up, Down };
+    using Direction = Twenty48Board::Direction;
 
     void buildActions();
     void newGame();
     void undo();
-    // Slides and merges. Returns false when nothing moved, in which case no
-    // new tile appears — that is what stops a dead key from wasting a turn.
-    bool slide(Direction direction);
-    void spawn();
-    bool canMove() const;
+    // Slides, and on a push that actually moved something lays a new tile and
+    // asks whether the board is now stuck.
+    void push(Direction direction);
     void checkEnd();
     void refresh(const QString& message = {});
     // The face a tile's number is drawn in. Solved against the font in use
@@ -62,19 +59,13 @@ private:
     // how tall a platform draws a digit is a property of the platform.
     QFont tileFont(int value, double cell) const;
 
-    int& at(int row, int col) { return m_board[std::size_t(row * kSize + col)]; }
-    int at(int row, int col) const { return m_board[std::size_t(row * kSize + col)]; }
+    int at(int row, int col) const { return m_board.at(row, col); }
 
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;
 
-    std::array<int, kCells> m_board {};
-    std::array<int, kCells> m_previous {};
-    int m_score = 0;
-    int m_previousScore = 0;
-    bool m_canUndo = false;
-    bool m_reachedTarget = false;
+    // The rules. Everything the view still owns is presentation: whether the
+    // "no moves left" box has been shown, and the undo ACTION's enabled state.
+    Twenty48Board m_board;
     bool m_finished = false;
-
-    std::mt19937 m_rng { std::random_device {}() };
 };

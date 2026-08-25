@@ -100,16 +100,9 @@ void Twenty48View::buildActions()
 
 void Twenty48View::newGame()
 {
-    m_board.fill(0);
-    m_previous.fill(0);
-    m_score = 0;
-    m_previousScore = 0;
-    m_canUndo = false;
-    m_reachedTarget = false;
+    m_board.newGame();
     m_finished = false;
     m_undoAction->setEnabled(false);
-    spawn();
-    spawn();
     setFocus();
     update();
     refresh();
@@ -123,120 +116,41 @@ void Twenty48View::activate()
 
 void Twenty48View::undo()
 {
-    if (!m_canUndo)
+    if (!m_board.canUndo())
         return;
-    m_board = m_previous;
-    m_score = m_previousScore;
-    m_canUndo = false;
+    m_board.undo();
     m_finished = false;
     m_undoAction->setEnabled(false);
     update();
     refresh();
 }
 
-void Twenty48View::spawn()
+// One push: slide, and only if something actually moved does a new tile
+// appear. Spawning on a dead key would hand the player a tile for nothing,
+// which is why slide() reports whether it moved anything.
+void Twenty48View::push(Direction direction)
 {
-    std::vector<int> free;
-    for (int i = 0; i < kCells; ++i)
-        if (m_board[std::size_t(i)] == 0)
-            free.push_back(i);
-    if (free.empty())
+    if (!m_board.slide(direction)) {
+        refresh(QStringLiteral("Nothing moves that way."));
         return;
-
-    std::uniform_int_distribution<std::size_t> pick(0, free.size() - 1);
-    // One in ten new tiles is a 4, as in the original.
-    std::uniform_int_distribution<int> four(0, 9);
-    m_board[std::size_t(free[pick(m_rng)])] = (four(m_rng) == 0) ? 4 : 2;
-}
-
-bool Twenty48View::slide(Direction direction)
-{
-    const std::array<int, kCells> before = m_board;
-    const int beforeScore = m_score;
-
-    // Every direction is the same operation over a line; only the traversal
-    // order changes, so the merge logic is written once.
-    auto lineOf = [&](int index, int step) {
-        std::vector<int*> line;
-        for (int i = 0; i < kSize; ++i) {
-            const int row = (direction == Direction::Left || direction == Direction::Right)
-                ? index
-                : (step > 0 ? i : kSize - 1 - i);
-            const int col = (direction == Direction::Left || direction == Direction::Right)
-                ? (step > 0 ? i : kSize - 1 - i)
-                : index;
-            line.push_back(&at(row, col));
-        }
-        return line;
-    };
-
-    const int step = (direction == Direction::Left || direction == Direction::Up) ? 1 : -1;
-
-    for (int index = 0; index < kSize; ++index) {
-        std::vector<int*> line = lineOf(index, step);
-
-        // Compact towards the front.
-        std::vector<int> values;
-        for (int* cell : line)
-            if (*cell != 0)
-                values.push_back(*cell);
-
-        // Merge equal neighbours once each, front to back.
-        std::vector<int> merged;
-        for (std::size_t i = 0; i < values.size(); ++i) {
-            if (i + 1 < values.size() && values[i] == values[i + 1]) {
-                const int value = values[i] * 2;
-                merged.push_back(value);
-                m_score += value;
-                if (value >= kTarget)
-                    m_reachedTarget = true;
-                ++i;
-            } else {
-                merged.push_back(values[i]);
-            }
-        }
-
-        for (std::size_t i = 0; i < line.size(); ++i)
-            *line[i] = (i < merged.size()) ? merged[i] : 0;
     }
 
-    if (m_board == before) {
-        m_score = beforeScore;
-        return false;
-    }
-
-    m_previous = before;
-    m_previousScore = beforeScore;
-    m_canUndo = true;
-    m_undoAction->setEnabled(true);
-    return true;
-}
-
-bool Twenty48View::canMove() const
-{
-    for (int i = 0; i < kCells; ++i)
-        if (m_board[std::size_t(i)] == 0)
-            return true;
-    for (int row = 0; row < kSize; ++row) {
-        for (int col = 0; col < kSize; ++col) {
-            const int v = at(row, col);
-            if (col + 1 < kSize && at(row, col + 1) == v)
-                return true;
-            if (row + 1 < kSize && at(row + 1, col) == v)
-                return true;
-        }
-    }
-    return false;
+    m_board.spawn();
+    m_undoAction->setEnabled(m_board.canUndo());
+    Sound::instance().play(Sound::kCardPlace);
+    update();
+    refresh();
+    checkEnd();
 }
 
 void Twenty48View::checkEnd()
 {
-    if (canMove() || m_finished)
+    if (m_board.canMove() || m_finished)
         return;
 
     m_finished = true;
     Sound::instance().play(Sound::kLose);
-    const bool newBest = Scores::instance().recordHigh(kBestKey, m_score);
+    const bool newBest = Scores::instance().recordHigh(kBestKey, m_board.score());
     refresh();
 
     QTimer::singleShot(200, this, [this, newBest] {
@@ -244,9 +158,9 @@ void Twenty48View::checkEnd()
         box.setWindowTitle(QStringLiteral("No moves left"));
         box.setText(QStringLiteral("The board is stuck."));
         box.setInformativeText(newBest
-                                   ? QStringLiteral("Score: %1 — a new best!").arg(m_score)
+                                   ? QStringLiteral("Score: %1 — a new best!").arg(m_board.score())
                                    : QStringLiteral("Score: %1.   Best: %2.")
-                                         .arg(m_score)
+                                         .arg(m_board.score())
                                          .arg(Scores::instance().best(kBestKey)));
         QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
@@ -259,17 +173,18 @@ void Twenty48View::checkEnd()
 void Twenty48View::refresh(const QString& message)
 {
     int highest = 0;
-    for (int v : m_board)
+    for (int v : m_board.cells())
         highest = std::max(highest, v);
 
     QString line = message.isEmpty()
         ? QStringLiteral("%1   Score %2   Highest %3   Best %4")
               .arg(m_finished ? QStringLiteral("Stuck")
-                              : m_reachedTarget ? QStringLiteral("Target reached — keep going!")
-                                                : QStringLiteral("Slide with the arrow keys"))
-              .arg(m_score)
+                              : m_board.reachedTarget()
+                          ? QStringLiteral("Target reached — keep going!")
+                          : QStringLiteral("Slide with the arrow keys"))
+              .arg(m_board.score())
               .arg(highest)
-              .arg(std::max(Scores::instance().best(kBestKey), m_score))
+              .arg(std::max(Scores::instance().best(kBestKey), m_board.score()))
         : message;
     Q_EMIT statusChanged(line);
 }
@@ -376,16 +291,7 @@ void Twenty48View::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    if (!slide(direction)) {
-        refresh(QStringLiteral("Nothing moves that way."));
-        return;
-    }
-
-    spawn();
-    Sound::instance().play(Sound::kCardPlace);
-    update();
-    refresh();
-    checkEnd();
+    push(direction);
 }
 
 // ---------------------------------------------------------------------------
@@ -401,14 +307,14 @@ QByteArray Twenty48View::saveState() const
 {
     // Nothing worth coming back to: a board already stuck, or the opening two
     // tiles nobody has pushed yet. An empty state also clears the stored one.
-    if (m_finished || (m_score == 0 && !m_canUndo))
+    if (m_finished || (m_board.score() == 0 && !m_board.canUndo()))
         return {};
 
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_score) << m_reachedTarget;
-    for (int value : m_board)
+    out << quint32(1) << qint32(m_board.score()) << m_board.reachedTarget();
+    for (int value : m_board.cells())
         out << qint32(value);
     return blob;
 }
@@ -424,28 +330,21 @@ bool Twenty48View::restoreState(const QByteArray& blob)
     if (version != 1 || in.status() != QDataStream::Ok || score < 0)
         return false;
 
-    // Read into a board of its own, so a blob that turns out to be nonsense
-    // leaves the game already on screen alone.
-    std::array<int, kCells> board {};
-    int tiles = 0;
-    for (int& cell : board) {
+    // Read into an array of its own and hand it to the core, which is what
+    // decides whether it is a board this game could have produced -- every tile
+    // a power of two, because nothing else comes out of a merge. A blob that
+    // turns out to be nonsense leaves the game already on screen alone.
+    std::array<int, kCells> cells {};
+    for (int& cell : cells) {
         qint32 value = 0;
         in >> value;
-        if (value != 0 && (value < 2 || value > (1 << 20) || (value & (value - 1)) != 0))
-            return false;
         cell = value;
-        if (value != 0)
-            ++tiles;
     }
-    if (in.status() != QDataStream::Ok || tiles == 0)
+    if (in.status() != QDataStream::Ok)
+        return false;
+    if (!m_board.restore(cells, score, reachedTarget))
         return false;
 
-    m_board = board;
-    m_previous = board;
-    m_score = score;
-    m_previousScore = score;
-    m_reachedTarget = reachedTarget;
-    m_canUndo = false;
     m_finished = false;
     m_undoAction->setEnabled(false);
     update();

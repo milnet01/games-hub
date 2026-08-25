@@ -15,6 +15,7 @@
 #include "reversi/ai.h"
 #include "reversi/board.h"
 #include "snake/snakeboard.h"
+#include "twenty48/twenty48board.h"
 
 #include <chrono>
 #include <cmath>
@@ -1136,6 +1137,193 @@ void snakePlaysByItsOwnRules()
     check(neverOverlaps, "snake: no square is ever occupied twice");
     check(alwaysInside, "snake: and no segment is ever outside the walls");
     check(foodAlwaysFree, "snake: food is never left under the snake");
+}
+
+
+// ---------------------------------------------------------------------------
+// 2048
+//
+// Named nowhere in this file until GHUB-0066: the rules lived inside the
+// widget, so the self-test could not link them.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A board built by hand, so a merge can be checked against a position rather
+// than hunted for in a real game. Reads row by row, top to bottom.
+Twenty48Board boardFrom(const std::array<int, Twenty48Board::kCells>& cells, int score = 0)
+{
+    Twenty48Board board;
+    const bool ok = board.restore(cells, score, false);
+    check(ok, "2048: the hand-built position is one the game could reach");
+    return board;
+}
+
+std::array<int, Twenty48Board::kCells> cellsOf(const Twenty48Board& board)
+{
+    return board.cells();
+}
+
+} // namespace
+
+void twenty48MergesOnce()
+{
+    section("2048");
+
+    // Four twos in a row become two fours, never an eight. Getting this wrong
+    // is the classic 2048 bug and it doubles the player's score.
+    Twenty48Board board = boardFrom({ 2, 2, 2, 2,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0 });
+    check(board.slide(Twenty48Board::Direction::Left), "2048: a row of four twos moves");
+    check(board.at(0, 0) == 4 && board.at(0, 1) == 4 && board.at(0, 2) == 0
+              && board.at(0, 3) == 0,
+          "2048: and merges into two fours, not one eight");
+    check(board.score() == 8, "2048: scoring each merge, so eight rather than sixteen");
+
+    // The merge is front to back, so 4 2 2 makes 4 4 and not 8.
+    Twenty48Board pair = boardFrom({ 4, 2, 2, 0,
+                                     0, 0, 0, 0,
+                                     0, 0, 0, 0,
+                                     0, 0, 0, 0 });
+    pair.slide(Twenty48Board::Direction::Left);
+    check(pair.at(0, 0) == 4 && pair.at(0, 1) == 4,
+          "2048: a merge takes the pair it meets first, leaving the four alone");
+
+    // And the merged tile cannot merge again in the same push.
+    Twenty48Board chain = boardFrom({ 2, 2, 4, 0,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0 });
+    chain.slide(Twenty48Board::Direction::Left);
+    check(chain.at(0, 0) == 4 && chain.at(0, 1) == 4,
+          "2048: a tile just made by a merge does not merge again in the same push");
+}
+
+void twenty48ReachesItsTarget()
+{
+    // Random play tops out around 256, so the one rule that decides the game
+    // has been WON is unreachable that way and needs a position.
+    Twenty48Board board = boardFrom({ 1024, 1024, 0, 0,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0 });
+    check(!board.reachedTarget(), "2048: two 1024s is not yet the target");
+    board.slide(Twenty48Board::Direction::Left);
+    check(board.at(0, 0) == Twenty48Board::kTarget && board.reachedTarget(),
+          "2048: merging them reaches it, and the board says so");
+    // And it stays reached: the game carries on afterwards rather than ending.
+    board.slide(Twenty48Board::Direction::Right);
+    check(board.reachedTarget(), "2048: which is not forgotten on the next push");
+}
+
+void twenty48DeadPushCostsNothing()
+{
+    // A push that moves nothing must not spawn, must not score and must not
+    // bank an undo -- otherwise a dead key hands the player a free tile.
+    Twenty48Board board = boardFrom({ 2, 4, 8, 16,
+                                      4, 8, 16, 32,
+                                      8, 16, 32, 64,
+                                      16, 32, 64, 128 });
+    const auto before = cellsOf(board);
+    check(!board.slide(Twenty48Board::Direction::Left), "2048: a push that moves nothing says so");
+    check(cellsOf(board) == before, "2048: and leaves the board exactly as it was");
+    check(board.score() == 0, "2048: and scores nothing");
+    check(!board.canUndo(), "2048: and banks no undo, so a dead key is not a free tile");
+    check(!board.canMove(), "2048: a full board with no equal neighbours is the end of the game");
+}
+
+void twenty48UndoStepsBack()
+{
+    Twenty48Board board = boardFrom({ 2, 2, 0, 0,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0 });
+    const auto before = cellsOf(board);
+    check(!board.canUndo(), "2048: a restored board offers no undo into a game it never played");
+    check(board.slide(Twenty48Board::Direction::Left), "2048: the push moves");
+    check(board.canUndo() && board.score() == 4, "2048: which banks an undo and scores");
+    board.undo();
+    check(cellsOf(board) == before && board.score() == 0,
+          "2048: and undo puts back both the board and the score");
+    check(!board.canUndo(), "2048: undo does not stack");
+}
+
+void twenty48RefusesABoardItCouldNotReach()
+{
+    Twenty48Board board;
+    std::array<int, Twenty48Board::kCells> cells {};
+    cells[0] = 3;
+    check(!board.restore(cells, 0, false), "2048: a tile that is not a power of two is refused");
+    cells[0] = 2;
+    check(!board.restore(cells, -1, false), "2048: and so is a negative score");
+    std::array<int, Twenty48Board::kCells> empty {};
+    check(!board.restore(empty, 0, false), "2048: an empty board is not a game in progress");
+    check(board.restore(cells, 0, false), "2048: a board of powers of two is accepted");
+}
+
+void twenty48PlaysByItsOwnRules()
+{
+    // Push at random until the board is stuck, many times over, checking after
+    // every push that nothing impossible has happened.
+    std::mt19937 rng(20260825);
+    const Twenty48Board::Direction kDirs[4] = {
+        Twenty48Board::Direction::Left, Twenty48Board::Direction::Right,
+        Twenty48Board::Direction::Up, Twenty48Board::Direction::Down
+    };
+
+    bool tilesAlwaysPowers = true;
+    bool scoreNeverFalls = true;
+    bool deadPushCostsNothing = true;
+    bool endsOnlyWhenStuck = true;
+    int games = 0;
+    int stuck = 0;
+    int highest = 0;
+
+    for (int game = 0; game < 200; ++game) {
+        ++games;
+        Twenty48Board board;
+        int pushes = 0;
+        while (board.canMove() && pushes < 2000) {
+            ++pushes;
+            const auto before = cellsOf(board);
+            const int scoreBefore = board.score();
+            const Twenty48Board::Direction dir = kDirs[rng() % 4];
+
+            if (!board.slide(dir)) {
+                if (cellsOf(board) != before || board.score() != scoreBefore)
+                    deadPushCostsNothing = false;
+                continue;
+            }
+            board.spawn();
+
+            if (board.score() < scoreBefore)
+                scoreNeverFalls = false;
+            for (int v : board.cells()) {
+                if (!Twenty48Board::isTile(v))
+                    tilesAlwaysPowers = false;
+                highest = std::max(highest, v);
+            }
+        }
+        if (!board.canMove()) {
+            ++stuck;
+            // Stuck means genuinely stuck: no empty square and no equal
+            // neighbours anywhere.
+            for (int i = 0; i < Twenty48Board::kCells; ++i) {
+                if (board.cells()[std::size_t(i)] == 0)
+                    endsOnlyWhenStuck = false;
+            }
+        }
+    }
+
+    std::printf("      2048: %d games, %d played to a stuck board, highest tile %d\n", games,
+                stuck, highest);
+    check(stuck > 0, "2048: the random games actually played themselves out");
+    check(tilesAlwaysPowers, "2048: every tile on the board is always a power of two");
+    check(scoreNeverFalls, "2048: the score never goes down");
+    check(deadPushCostsNothing, "2048: a push that moves nothing changes nothing");
+    check(endsOnlyWhenStuck, "2048: the game ends only on a board with no empty square left");
 }
 
 // ---------------------------------------------------------------------------
@@ -3797,6 +3985,13 @@ int main()
     snakeRefusesAReversal();
     snakeDiesAtTheWall();
     snakePlaysByItsOwnRules();
+
+    twenty48MergesOnce();
+    twenty48ReachesItsTarget();
+    twenty48DeadPushCostsNothing();
+    twenty48UndoStepsBack();
+    twenty48RefusesABoardItCouldNotReach();
+    twenty48PlaysByItsOwnRules();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;
