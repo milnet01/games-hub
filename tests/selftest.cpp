@@ -2563,6 +2563,82 @@ void canastaBlackThreeTiming()
           "canasta: so the block is spent on a live seat, not on one still shut out");
 }
 
+// The first canasta as insurance rather than a bonus (GHUB-0107). Under
+// canastaNeededToScore a side that ends the hand without one has its melds and
+// its red threes taken OFF its score rather than added, so the first canasta is
+// worth far more than the 300 it pays — and getting one down beats holding
+// cards back for the pack.
+//
+// One position, played twice: the same frozen table under Classic and under the
+// minus rule. The hand is nine cards, deliberately clear of the hand-size
+// release GHUB-0104 ships, so the only thing that can move the lone ace is this.
+void canastaFirstCanastaIsInsurance()
+{
+    check(ca::closeFirstUnderAMinus(ca::Meld { 5, std::vector<Card>(6, cd(Suit::Spades, 5)) },
+                                    ca::Meld { 6, std::vector<Card>(4, cd(Suit::Spades, 6)) }),
+          "canasta: caught a minus, the meld nearest a canasta takes the wild card first");
+    check(!ca::closeFirstUnderAMinus(ca::Meld { 6, std::vector<Card>(4, cd(Suit::Spades, 6)) },
+                                     ca::Meld { 5, std::vector<Card>(6, cd(Suit::Spades, 5)) }),
+          "canasta: and the one furthest away waits");
+
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(kKing);
+    // Three aces to open on — 60 clears the 50 bar — three sevens the trim
+    // holds back, and five singles.
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Spades, 7),    cd(Suit::Hearts, 7),    cd(Suit::Clubs, 7),
+                 cd(Suit::Clubs, 4),     cd(Suit::Clubs, 5),     cd(Suit::Clubs, 6),
+                 cd(Suit::Clubs, 9),     cd(Suit::Clubs, 10) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    // A wild up-card is covered by another card off the stock, so the deal eats
+    // one more than usual and every draw shifts down by one: seat 1's second
+    // draw is the SIXTH from the end, not the fifth.
+    std::vector<Card> below(kBelowCount, cd(Suit::Clubs, kQueen));
+    below[kBelowCount - 6] = cd(Suit::Diamonds, kAce);
+
+    for (int minus = 0; minus < 2; ++minus) {
+        ca::Rules rules = ca::Rules::classic();
+        rules.canastaNeededToScore = minus != 0;
+        ca::Engine e;
+        e.setRules(rules);
+        // A wild up-card freezes the pack from the start.
+        e.newGameFromStock(canastaStock(hands, 0, below, cd(Suit::Hearts, 2)), 0);
+        check(e.pileFrozen(), "canasta: the pack starts frozen");
+        check(e.rules().canastaNeededToScore == (minus != 0),
+              "canasta: with the minus rule set as the arm asks");
+
+        ca::Ai ai { ca::Level::Medium };
+        check(e.drawFromStock(), "canasta: seat 1 draws");
+        ai.playAndDiscard(e);
+        const ca::Meld* opened = e.team(1).meldOfRank(kAce);
+        check(opened != nullptr && opened->size() == 3,
+              "canasta: and opens on three aces, the least the bar asks for");
+
+        check(e.drawFromStock() && e.discard(cd(Suit::Clubs, 10)), "canasta: seat 2 throws");
+        check(e.drawFromStock() && e.discard(cd(Suit::Clubs, kJack)), "canasta: seat 3 throws");
+        check(e.drawFromStock() && e.discard(cd(Suit::Clubs, kKing)), "canasta: seat 0 throws");
+
+        check(e.currentSeat() == 1, "canasta: the turn comes back round");
+        check(e.drawFromStock(), "canasta: seat 1 draws its fourth ace");
+        check(e.hand(1).size() == 9,
+              "canasta: onto a hand of nine, clear of the hand-size release");
+        const std::vector<Card>& h = e.hand(1);
+        check(std::count_if(h.begin(), h.end(), [](const Card& c) { return c.rank == kAce; }) == 1,
+              "canasta: holding one ace against the three already down");
+        check(e.pileFrozen(), "canasta: with the pack still frozen");
+
+        ai.playAndDiscard(e);
+        const ca::Meld* now = e.team(1).meldOfRank(kAce);
+        check(now != nullptr && now->size() == (minus ? 4 : 3),
+              minus ? "canasta: caught a minus, the lone ace goes down towards the canasta"
+                    : "canasta: under Classic it stays in hand, because the pack is the prize");
+        check(e.team(1).meldOfRank(7) == nullptr,
+              "canasta: while the sevens stay back either way, having nothing down yet");
+    }
+}
+
 // What a discard's safety judgement is worth against this opponent
 // (GHUB-0121). Checked on figures rather than on a position played into
 // existence, the way discardRisk and openRequirementFor already are — the claim
@@ -3467,6 +3543,7 @@ int main()
     canastaFreezeReasons();
     canastaCountsThePack();
     canastaBlackThreeTiming();
+    canastaFirstCanastaIsInsurance();
     canastaThrowCaution();
     canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();

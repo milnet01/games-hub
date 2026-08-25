@@ -117,6 +117,13 @@ double throwCaution(const Team& theirs, int openRequirement)
     return std::max(0.30, 1.0 - double(openRequirement) / 170.0);
 }
 
+bool closeFirstUnderAMinus(const Meld& a, const Meld& b)
+{
+    // Nearest a canasta first. Size rather than the shortfall because
+    // canastaSize is the same for both and cancels.
+    return a.size() > b.size();
+}
+
 double blackThreeWorth(int packSize, double caution)
 {
     // A black three blocks the pack for exactly one turn — until it is covered
@@ -329,6 +336,17 @@ bool Ai::holdsWhileFrozen(const Engine& e, int rank, int naturals) const
     // And ending the hand beats keeping cards back for a pile you will not get
     // the chance to take.
     if (closingOut(e, e.hand(e.currentSeat()).size()))
+        return false;
+    // Under the minus rule the FIRST canasta is insurance rather than a bonus,
+    // and it is worth far more than the 300 it pays (GHUB-0107). A side that
+    // ends the hand without one has its melds AND its red threes taken off its
+    // score rather than added — handScoreFor — so every point it has showing is
+    // worth two to the other side. caughtAMinus is that exact position, named.
+    //
+    // So progress towards it beats holding a rank back for the pack. Only for a
+    // rank already on our table: those are the cards that shorten the road to a
+    // canasta, and a rank with nothing down yet is a road not started.
+    if (caughtAMinus(mine, r) && mine.meldOfRank(rank) != nullptr)
         return false;
     // The owner's rule, and it is about the HAND rather than the rank: "if you
     // have 10 cards in your hand you should still play as if you could take the
@@ -631,8 +649,29 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
 
     // Wild cards to finish a canasta. Worth 300 at least, which beats anything
     // a wild card does sitting in your hand.
+    //
+    // CHEAPEST first, but ONLY while caught a minus (GHUB-0107). It is the
+    // opposite of the ordinary instinct and deliberately so: the meld closest
+    // to a canasta is also the one likeliest to fill naturally, and closing it
+    // with a wild card turns a 500-point natural into a 300-point mixed one.
+    // Under the minus rule that trade is worth making, because a side ending
+    // the hand with no canasta at all has everything it has showing taken off
+    // its score instead of added — insurance beats the better canasta later.
+    //
+    // Left unsorted otherwise, and that was measured: sorting unconditionally
+    // cost a game of medium v easy and 200 points of its margin, which is the
+    // natural canasta being spent.
     if (m_level != Level::Easy) {
-        for (const Meld& m : mine.melds) {
+        std::vector<const Meld*> order;
+        for (const Meld& m : mine.melds)
+            order.push_back(&m);
+        if (caughtAMinus(mine, r))
+            std::stable_sort(order.begin(), order.end(),
+                             [](const Meld* a, const Meld* b) {
+                                 return closeFirstUnderAMinus(*a, *b);
+                             });
+        for (const Meld* mp : order) {
+            const Meld& m = *mp;
             if (m.rank == 3 || m.isCanasta(r))
                 continue;
             const int short_ = r.canastaSize - m.size();

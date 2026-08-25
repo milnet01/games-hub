@@ -3609,7 +3609,7 @@ open.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
 
-- 📋 [GHUB-0107] **Under the minus rule the FIRST canasta is insurance, and the AI prices it as 300 points.**
+- ✅ [GHUB-0107] **Under the minus rule the FIRST canasta is insurance, and the AI prices it as 300 points.**
   SUGGESTED, NOT REQUESTED. Offered to the owner on
   2026-08-24 and not yet answered; filed as considered so it
   survives the session rather than as planned work.
@@ -3629,6 +3629,36 @@ open.
 
   Both sides of that trade belong in the same pass.
   Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
+  Resolved (2026-08-25). Two edits, both gated on caughtAMinus so Classic
+  plays exactly as it did -- confirmed, the ladder reads identically on
+  both sides of this change, because canastaMatch builds a default Engine
+  and canastaNeededToScore is off there.
+
+  Ai::holdsWhileFrozen now releases a rank this side already has DOWN when
+  caught a minus. That is the mechanism the bullet was really about: the
+  frozen-pack hold was keeping cards back from the very canasta that stops
+  the side's whole table being subtracted. Only for a melded rank -- those
+  are the cards that shorten the road; a rank with nothing down yet is a
+  road not started.
+
+  closeFirstUnderAMinus orders the wild-card spend in chooseMelds nearest a
+  canasta first, and it is the bullet's own "opposite instinct" made
+  explicit: the meld closest to a canasta is also the likeliest to fill
+  naturally, so closing it with a wild turns a 500 natural into a 300
+  mixed. Worth it under the minus rule and not otherwise -- MEASURED, and
+  this is the finding: sorting unconditionally cost a game of medium v easy
+  and 200 points of its margin, which is that natural canasta being spent
+  for nothing. The header carries the figure.
+
+  canastaFirstCanastaIsInsurance holds it -- one frozen table played twice,
+  Classic and minus, with a hand of NINE so the GHUB-0104 hand-size release
+  cannot be what moves the card. The lone ace goes down under the rule and
+  stays in hand without it. The minus arm failed first time for an honest
+  reason worth keeping: a WILD up-card makes Engine::dealFrom turn a cover
+  card, so the deal eats one card more than usual and every draw shifts
+  down by one. The check says so where the stock is built.
+
+  Suite green at 544 checks, ctest 6/6.
   **Layman:** If being caught with no canasta turns your whole table against you, getting any canasta down early is worth far more than its bonus.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.

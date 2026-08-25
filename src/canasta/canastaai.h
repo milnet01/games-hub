@@ -63,6 +63,22 @@ int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& 
 // discardRisk already carries its own. Read that bullet before adding it.
 double throwCaution(const Team& theirs, int openRequirement);
 
+// Which of two unfinished melds to spend wild cards on first, for a side caught
+// a minus (GHUB-0107). True when `a` should be closed before `b`.
+//
+// Nearest a canasta first, which is the OPPOSITE of the ordinary instinct and
+// deliberately so: the meld closest to a canasta is also the one likeliest to
+// fill naturally, so closing it with a wild turns a 500-point natural into a
+// 300-point mixed one. Under canastaNeededToScore that trade is worth making --
+// a side ending the hand with no canasta at all has everything it is showing
+// taken OFF its score rather than added, so the first canasta is insurance
+// worth far more than the 300 it pays.
+//
+// Which is why chooseMelds applies it only while caughtAMinus is true. Sorting
+// unconditionally was measured and cost a game of medium v easy and 200 points
+// of its margin -- the natural canasta being spent for nothing.
+bool closeFirstUnderAMinus(const Meld& a, const Meld& b);
+
 // What throwing a black three is worth as a block (GHUB-0109). It stops anyone
 // taking the pack for exactly one turn, until it is covered — so it is worth
 // what would have been taken in that turn.

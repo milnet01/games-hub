@@ -64,6 +64,16 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: under the minus rule the computer treats its first canasta as insurance** (GHUB-0107)
+  With "a side with no canasta counts nothing in its favour" turned on --
+  the House default -- ending a hand without one does not merely lose the
+  bonus: everything that side has on the table is taken OFF its score
+  instead of added. So the first canasta is worth far more than the 300 it
+  pays. The computer now puts cards down towards it rather than holding
+  them back for the pack, and finishes the canasta nearest to done first
+  even though that spends a joker where waiting might have made a
+  500-point one. Under Classic rules nothing changes.
+
 - **Canasta: the computer spends a black three where it blocks something** (GHUB-0109)
   A black three on top stops the next player taking the pack for one turn.
   The computer already saved them for a fat pack; it now also weighs whether
