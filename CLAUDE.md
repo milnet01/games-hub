@@ -817,6 +817,29 @@ The self-test is where game logic gets proven — it plays 200 random Reversi
 games, 20 full AI Hearts games, 18 full AI Canasta games at three strengths,
 and flies pinballs. Prefer adding a check there over a UI test.
 
+**A test that builds a position with a WILD or a red three as the up-card gets
+one fewer card in the stock than it looks.** `Engine::dealFrom` covers such a
+turn-up with another card off the stock, so the pack starts at two and every
+subsequent draw shifts down by one — a card placed at `kBelowCount - 5` for a
+seat's second draw arrives at `kBelowCount - 6` instead. The symptom is a check
+whose hand simply does not contain the card it was built around, which reads as
+a broken AI. Cost a debug cycle on `canastaFirstCanastaIsInsurance`; both that
+check and `canastaAiOpensOnAJokerToKeepThePair` say which case they are in
+where their stock is built.
+
+**`canastaLevelsDiffer()` prints its four rungs on every run, and what the
+ladder reads today is the baseline for judging tomorrow's change** — the figures
+are re-read by running the suite, never assumed from a handoff. As of
+2026-08-25, after the Canasta AI pass: medium v easy 22/24 +2538, hard v easy
+23/24 +3844, hard v medium 66/120 +233, expert v hard 117/240 −71. Two things
+that reading does NOT mean. The absolute numbers are not a target — GHUB-0110
+settled that the ladder cannot separate a small change from noise, so a check
+against a hand-built position is the judge and this is context. And **the ladder
+plays default Rules**: `canastaMatch` builds a bare `ca::Engine`, so
+`canastaNeededToScore`, `deadHandIfNobodyGoesOut` and every other House flag are
+OFF there. Anything gated on a house rule is invisible to it, and a flat reading
+is then evidence of nothing at all.
+
 Two patterns from Canasta worth reusing. `Engine::newGameFromStock()` deals
 from a stock the caller supplies, so a check can build an exact position
 instead of hunting for a seed that produces one. And the scoring table and the
