@@ -64,6 +64,22 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: two limits on how freely the computer freezes the pack** (GHUB-0113)
+  It will not freeze more than twice in a hand -- each freeze throws away a
+  wild card worth 20 or 50 -- and it will not freeze a pack that was
+  already coming back to its own side, which a freeze locks it out of just
+  as surely as everyone else.
+
+- **Canasta: the computer opens small, keeps the pair, and freezes the pack** (GHUB-0122)
+  The owner's play, and the computer now makes it. Holding four eights and
+  a joker against an opening bar of 50, it lays the joker and TWO eights --
+  70, over the bar -- instead of all four eights, which is only 40 and does
+  not clear it at all. The other two eights stay in its hand, and it then
+  freezes the pack, which from that moment only a matching pair can take.
+  It also stops over-melding generally: it lays the least the opening asks
+  for whether or not the pack is frozen, where before it only held back on
+  a frozen one.
+
 - **Canasta: the computer stops hoarding once its hand runs short** (GHUB-0104)
   While the pack is frozen the computer keeps matching cards back rather
   than melding them away, because a frozen pack can only be taken with a

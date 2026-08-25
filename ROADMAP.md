@@ -3629,7 +3629,7 @@ open.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
 
-- 📋 [GHUB-0113] **The computer will freeze the pack twice in a hand and freeze one it could take itself.**
+- ✅ [GHUB-0113] **The computer will freeze the pack twice in a hand and freeze one it could take itself.**
   From published strategy, read 2026-08-24. Ai::wantsToFreeze already
   gets two things right: it will not freeze a pack under five cards
   ("freezing when the pile is small simply throws away a 20- or 50-point
@@ -3654,6 +3654,39 @@ open.
   anyone reaching for them on the AI items: none of the four describes
   fishing, so GHUB-0103 has no published source and the owner's own
   description is its specification.
+  Resolved (2026-08-25), and held back deliberately until GHUB-0122 shipped
+  with it -- the owner's call on 2026-08-25, made on the measurement below.
+
+  What ships. Ai::noteHand keeps a per-hand freeze count and
+  freezeBudgetLeft caps it at the published two, the counter keyed on the
+  stock GROWING rather than on Engine::handNumber(), because a new game
+  restarts the numbering while the seats live for the whole session.
+  freezeCostsUsThePack is the second half, a free function so it can be
+  checked on figures: it asks packWorthStayingFor whether the pack is
+  already coming back to us, but only of a side a freeze could actually
+  cost -- a side that has not opened is held to two naturals out of hand by
+  pileFrozenUntilOpened already, so a freeze takes nothing from it.
+
+  The premise was MEASURED before any of it was written, and both halves
+  were dead code at the time. Across the suite's full games the AI committed
+  409 freezes; every single one came from a side that had not opened, and
+  only 2 were a second freeze in a hand -- so the budget never bound, and
+  the pack-already-ours guard could never fire. Without the not-opened
+  carve-out it fired 263 times, every one of them wrongly.
+
+  GHUB-0122 is what made them live, exactly as expected: freezes rise to
+  1061, of which 224 come from an OPENED side, 29 are a second in a hand,
+  the budget now refuses 10 third attempts and the guard now stops 29
+  freezes. Neither figure is large and neither is zero.
+
+  NOT shipped, because it cannot arise: "do not freeze a pack you could
+  take on this turn". Ai::draw has already taken any pack it could take and
+  wanted, and wantsPile wants every pack of three cards or more at the two
+  levels that freeze, while a freeze needs five.
+
+  canastaFreezeLimits holds both on figures -- the budget at 0, 1, 2 and 3,
+  and the guard over three positions including the shut-out carve-out.
+  Suite green at 497 checks, ctest 6/6.
   **Layman:** Throwing a joker to freeze the pack costs 20 or 50 points, and the computer does it more often than it is worth -- including when the pack was ours for the taking.
   Kind: feature.
   Source: canasta-strategy-research-2026-08-24.
@@ -3891,7 +3924,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0122] **Opening on a joker to keep the pair that takes the pack, then freezing it.**
+- ✅ [GHUB-0122] **Opening on a joker to keep the pair that takes the pack, then freezing it.**
   The owner's second way of fishing, in his words: "say the opening
   score is 50 and you have a big joker (50 points) and four 8's. You
   open with the joker and two 8's and then freeze the pack. Or if the
@@ -3926,6 +3959,41 @@ open.
   path and wantsToFreeze. Same instinct, different functions, and the
   freeze half has to agree with GHUB-0113's budget rather than fight
   it.
+  Resolved (2026-08-25). Three edits, all in canastaai.cpp.
+
+  The opening trim now runs whether or not the pack is frozen. It was
+  `m_level != Level::Easy && e.pileFrozen()`; the frozen half is gone,
+  because the advice behind it is general -- "meld the minimum needed
+  cards, even if your hand can support more" -- and because this play needs
+  it on a pack that is NOT yet frozen, freezing being the second half of
+  the same move.
+
+  The missing half the bullet named is built: a wild may now be spent to
+  keep a natural PAIR back. One rank only, Hard and Expert only, and only
+  where the pack is already five cards, the same bar a freeze asks for --
+  keeping a key to a pack nobody would want is a wild card wasted. The
+  wilds are spent DEAREST first here, the opposite of everywhere else in
+  the file, because the substitution has to carry the value the pair took
+  with it: joker plus two eights is 70 against a bar of 50, and a two would
+  have made 40 and failed.
+
+  And Ai::wantsToFreeze now takes ANY natural pair in hand as the key,
+  where it wanted a pair of the current top card. That single condition
+  ruled the whole play out: the freezing card goes on TOP of the pack, so
+  the rank that will matter is one nobody has thrown yet. The published
+  advice says pairs, plural, not the top rank -- "freeze only if you hold
+  natural pairs so you can break the freeze yourself".
+
+  canastaAiOpensOnAJokerToKeepThePair holds all three from one position,
+  because the play is one move: seat 1 comes to a pack of five holding four
+  eights, a joker and two twos, opens on joker plus two eights, keeps the
+  pair, and freezes. Proved by mutation both ways -- disabling the
+  substitution loses the opening and the pair, and restoring the top-rank
+  freeze condition loses the freeze. Suite green at 497 checks, ctest 6/6.
+
+  Ladder, for the record and not as the judge (GHUB-0110): hard v easy
+  +3969 -> +4335, hard v medium 58 -> 64 of 120, expert v hard 115 -> 122
+  of 240, all measured against this session's GHUB-0104 state.
   **Layman:** Open with as little as you can, using a joker to make up the points, so the matching pair stays in your hand -- then freeze the pack that only you can now take.
   Kind: feature.
   Source: user-request-2026-08-24.

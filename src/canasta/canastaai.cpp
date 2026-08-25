@@ -117,6 +117,43 @@ double throwCaution(const Team& theirs, int openRequirement)
     return std::max(0.30, 1.0 - double(openRequirement) / 170.0);
 }
 
+bool freezeCostsUsThePack(const std::vector<Card>& pile, const std::vector<Card>& hand,
+                          const Team& mine, const Rules& r)
+{
+    // A side that has not opened is ALREADY held to two naturals out of hand by
+    // pileFrozenUntilOpened, so a freeze takes nothing from it and everything
+    // from an opened opponent. packWorthStayingFor reads that same shut-out
+    // position as "worth staying for", which is true and is not the question
+    // here — so it is asked only of a side the freeze could actually cost.
+    //
+    // Measured, because the carve-out is not a nicety: without it this stopped
+    // 263 of the 409 freezes the suite's full games made before GHUB-0122, and
+    // every one of them wrongly.
+    if (r.pileFrozenUntilOpened && !mine.opened)
+        return false;
+    return packWorthStayingFor(pile, hand, mine, false, r) > 0;
+}
+
+bool freezeBudgetLeft(int freezesThisHand)
+{
+    // "Do not freeze more than twice per hand" — rarepike.com, card-games.ca,
+    // suitedgames.com and pagat.com, read 2026-08-24 and listed on GHUB-0113.
+    return freezesThisHand < 2;
+}
+
+void Ai::noteHand(const Engine& e)
+{
+    // A fresh deal is the one moment the stock GROWS; inside a hand it only
+    // ever shrinks, and taking the pack does not touch it at all. Keyed on that
+    // rather than on Engine::handNumber(), because a new game restarts the
+    // numbering while these seats live for the whole session — so the number
+    // alone would carry a spent budget into the next game.
+    const int stock = e.stockCount();
+    if (stock > m_lastStock)
+        m_freezes = 0;
+    m_lastStock = stock;
+}
+
 int Ai::seen(const Engine& e, int rank) const
 {
     int n = countRank(e.hand(e.currentSeat()), rank);
@@ -258,6 +295,7 @@ bool Ai::wantsPile(const Engine& e) const
 
 bool Ai::draw(Engine& e)
 {
+    noteHand(e);
     std::vector<Card> take;
     const bool canTake = e.findPileTake(take);
     // With the stock gone, taking the pile is the only way to keep playing.
@@ -341,12 +379,19 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
                 groups.push_back(n);
         }
 
-        // Opening while the pile is frozen, lay only what the minimum asks for.
-        // Everything else is better in hand: it is a rank the opposition would
-        // then stop throwing, and the frozen pile is the thing worth waiting
-        // for. Cheapest ranks come out of the lay-down first, so the points
-        // that do go down are the ones least wanted back.
-        if (m_level != Level::Easy && e.pileFrozen()) {
+        // Lay only what the minimum asks for. Everything else is better in
+        // hand: it is a rank the opposition would then stop throwing, and the
+        // pack is the thing worth waiting for. Cheapest ranks come out of the
+        // lay-down first, so the points that do go down are the ones least
+        // wanted back.
+        //
+        // This used to run only while the pile was frozen. It runs always now
+        // (GHUB-0122), because the advice is general — "meld the minimum needed
+        // cards, even if your hand can support more", "a meld of three or four
+        // cards is a placeholder, the score lives in the canasta" — and because
+        // the owner's opening play needs it on a pack that is NOT yet frozen:
+        // freezing it is the second half of the same move.
+        if (m_level != Level::Easy) {
             std::sort(groups.begin(), groups.end(),
                       [&](const std::vector<Card>& a, const std::vector<Card>& b) {
                           return valueOf(a) < valueOf(b);
@@ -362,6 +407,50 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
                 } else {
                     ++it;
                 }
+            }
+        }
+
+        // Keep the pair that takes the pack (GHUB-0122). Opening on the
+        // minimum is only half the owner's play; the other half is WHAT the
+        // minimum is made of. From four eights and a joker against a bar of
+        // 50, laying the joker and two eights clears it at 70 and leaves the
+        // other two eights in hand — and two matching naturals in hand are the
+        // only thing that takes a frozen pack. Open on the four eights instead
+        // and the bar is not even cleared, let alone the pair kept.
+        //
+        // The joker rather than the two, deliberately: the substitution has to
+        // carry the value the pair took with it, and twenty would not have
+        // made the bar. So the wilds are spent dearest first here, which is the
+        // opposite of everywhere else in this file.
+        //
+        // One rank only. Keeping one pair back is the play; keeping several
+        // spends a wild card apiece for keys to the same lock. And only where
+        // there is a pack worth holding a key to — the same five cards a freeze
+        // asks for, since freezing it is the move this sets up.
+        if ((m_level == Level::Hard || m_level == Level::Expert) && int(e.pile().size()) >= 5) {
+            std::vector<Card> wilds = wildsAvailable();
+            std::reverse(wilds.begin(), wilds.end()); // dearest first
+            int total = 0;
+            for (const std::vector<Card>& g : groups)
+                total += valueOf(g);
+
+            for (std::vector<Card>& g : groups) {
+                if (wilds.empty())
+                    break;
+                std::vector<Card> cand(g.begin(), g.end() - std::min<std::size_t>(2, g.size()));
+                if (int(cand.size()) < r.minNaturalsPerMeld)
+                    continue; // cannot spare a pair and still be a meld
+                const int room = std::min(wildRoom(int(cand.size())),
+                                          r.minMeldSize - int(cand.size()));
+                const int want = std::max(1, r.minMeldSize - int(cand.size()));
+                if (want > room || want > int(wilds.size()))
+                    continue;
+                cand.insert(cand.end(), wilds.begin(), wilds.begin() + want);
+                if (total - valueOf(g) + valueOf(cand) < need)
+                    continue; // the pair cannot be spared and the bar still met
+                total += valueOf(cand) - valueOf(g);
+                g = cand;
+                break;
             }
         }
 
@@ -490,13 +579,62 @@ bool Ai::wantsToFreeze(const Engine& e, Card& wild) const
         || e.pile().empty())
         return false;
 
+    // Two a hand is the ceiling (GHUB-0113). Every freeze costs a wild card
+    // worth 20 or 50 in the hand, and past the second the pack is being locked
+    // more often than it is being won.
+    if (!freezeBudgetLeft(m_freezes))
+        return false;
+
     const int seat = e.currentSeat();
     const std::vector<Card>& h = e.hand(seat);
+    const Rules& r = e.rules();
+    const Team& mine = e.team(teamOf(seat));
     // Freezing is only worth 20 points of wild card when the pile is big enough
     // to be worth coming back for, and only if we hold the pair that takes it.
     if (int(e.pile().size()) < 5)
         return false;
-    if (countRank(h, e.pile().back().rank) < 2)
+    // "Freeze only if you hold natural pairs so you can break the freeze
+    // yourself" — and that is ANY pair, not a pair of whatever happens to be on
+    // top now. The freezing card goes on top of the pack, so the rank this seat
+    // has to match is one nobody has thrown yet; the key is a pair in hand
+    // waiting for its rank to come round. Reading it as the current top card
+    // ruled out the owner's whole opening play (GHUB-0122), which keeps two
+    // eights back and then freezes a pack showing something else entirely.
+    bool holdsAKey = false;
+    for (int rank = kAce; rank <= kKing && !holdsAKey; ++rank)
+        if (rank != 2 && rank != 3 && countRank(h, rank) >= 2)
+            holdsAKey = true;
+    if (!holdsAKey)
+        return false;
+    // Never freeze a pack this side is already positioned to claim: a freeze
+    // locks everyone out, us included, so it throws away the very thing it was
+    // meant to protect. packWorthStayingFor asks exactly that question and
+    // answers in points, nonzero meaning the pack is coming back to us as
+    // things stand.
+    //
+    // The other half of that advice — do not freeze a pack you could take on
+    // THIS turn — cannot arise and so is not coded. Ai::draw has already taken
+    // any pack it could take and wanted, and wantsPile wants every pack of
+    // three cards or more at these two levels, while a freeze needs five.
+    // Never freeze a pack this side is already positioned to claim: a freeze
+    // locks everyone out, us included, so it throws away the very thing it was
+    // meant to protect. packWorthStayingFor asks exactly that question and
+    // answers in points, nonzero meaning the pack is coming back to us as
+    // things stand.
+    //
+    // The carve-out is not a nicety and was measured: a side that has not
+    // opened is ALREADY held to two naturals out of hand by
+    // pileFrozenUntilOpened, so a freeze takes nothing from it and everything
+    // from an opened opponent — and packWorthStayingFor reads that same
+    // shut-out position as "worth staying for". Without the carve-out this
+    // guard stopped 263 of the 409 freezes the suite's full games make, every
+    // one of them wrongly.
+    //
+    // The other half of the advice — do not freeze a pack you could take on
+    // THIS turn — cannot arise and so is not coded. Ai::draw has already taken
+    // any pack it could take and wanted, and wantsPile wants every pack of
+    // three cards or more at these two levels, while a freeze needs five.
+    if (freezeCostsUsThePack(e.pile(), h, mine, r))
         return false;
 
     int spare = 0;
@@ -650,6 +788,7 @@ Card Ai::chooseDiscard(const Engine& e) const
 
 void Ai::playAndDiscard(Engine& e)
 {
+    noteHand(e);
     for (const auto& [cards, rank] : chooseMelds(e)) {
         e.meldCards(cards, rank);
         // Melding out ends the hand; there is nothing left to discard.
@@ -658,8 +797,10 @@ void Ai::playAndDiscard(Engine& e)
     }
 
     Card wild;
-    if (wantsToFreeze(e, wild) && e.discard(wild))
+    if (wantsToFreeze(e, wild) && e.discard(wild)) {
+        ++m_freezes;
         return;
+    }
 
     if (e.discard(chooseDiscard(e)))
         return;

@@ -63,6 +63,28 @@ int packWorthStayingFor(const std::vector<Card>& pile, const std::vector<Card>& 
 // discardRisk already carries its own. Read that bullet before adding it.
 double throwCaution(const Team& theirs, int openRequirement);
 
+// Whether freezing the pack would cost THIS side its own access to it
+// (GHUB-0113). "Your team is positioned to claim the pile — freezing costs you
+// access too": a freeze locks everyone out, so freezing a pack that is already
+// coming back to us throws away the thing it was meant to protect.
+//
+// False for a side that has not opened, which pileFrozenUntilOpened already
+// holds to two naturals out of hand — a freeze takes nothing from it. That is
+// the whole of the difference between this and packWorthStayingFor, which it
+// otherwise simply asks.
+bool freezeCostsUsThePack(const std::vector<Card>& pile, const std::vector<Card>& hand,
+                          const Team& mine, const Rules& r);
+
+// Whether this side may spend another wild card freezing the pack this hand
+// (GHUB-0113). Published strategy is explicit and numeric — "do not freeze more
+// than twice per hand" — and nothing counted them, so a hand with spare wilds
+// could spend three or four at 20 or 50 points each.
+//
+// A free function, like the four above, because the number is what wants
+// checking and a hand that reaches a third freeze cannot be built cheaply: the
+// pack has to be taken twice in between to unfreeze it.
+bool freezeBudgetLeft(int freezesThisHand);
+
 class Ai
 {
 public:
@@ -78,7 +100,15 @@ public:
     // Second half: lays down what it should, then discards, ending the turn.
     void playAndDiscard(Engine& e);
 
+    // How many wild cards this seat has spent freezing the pack in the hand
+    // being played. Public so a check can see the budget move without playing
+    // a hand as far as the ceiling.
+    int freezesThisHand() const { return m_freezes; }
+
 private:
+    // Notices a fresh deal and clears the freeze budget. Called at the top of
+    // both halves of a turn.
+    void noteHand(const Engine& e);
     bool wantsPile(const Engine& e) const;
     // How many of a rank are already accounted for — melded by anyone, sitting
     // in the pile, or in this seat's own hand. A rank with all eight visible is
@@ -103,6 +133,11 @@ private:
     bool wantsToFreeze(const Engine& e, Card& wild) const;
 
     Level m_level;
+    // The per-hand freeze budget, and how a fresh deal is spotted. See
+    // Ai::noteHand: a new game restarts Engine::handNumber() while these seats
+    // live for the whole session, so the hand number is not the key.
+    int m_freezes = 0;
+    int m_lastStock = -1;
     // Fixed default so an unseeded game still plays the same way twice, which
     // is what makes a failing self-test reproducible. Mutable because choosing
     // a discard reads it without otherwise changing the seat.

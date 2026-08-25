@@ -2329,6 +2329,116 @@ void canastaAiPlaysOutWhenTheHandGetsSmall()
           "canasta: which now go down, because a small hand will not build the pair");
 }
 
+// The owner's opening play, whole (GHUB-0122). Holding four eights and a joker
+// against a bar of 50, you open on the JOKER and two eights — 70, over the bar
+// — rather than on the four eights, which is 40 and does not even clear it. The
+// other two eights stay in hand, and then you freeze the pack that only your
+// side now holds the key to.
+//
+// One position, because the play is one move: opening on the minimum, choosing
+// what the minimum is made of, and freezing. Any of the three alone is a
+// different and worse move.
+void canastaAiOpensOnAJokerToKeepThePair()
+{
+    std::array<std::vector<Card>, 4> hands;
+    // Seat 0, 2 and 3 are driven by hand, so their cards only have to be
+    // something to throw.
+    hands[0] = filler(kKing);
+    hands[1] = { cd(Suit::Spades, 8), cd(Suit::Hearts, 8), cd(Suit::Clubs, 8),
+                 joker(true),         cd(Suit::Spades, 2), cd(Suit::Clubs, 2),
+                 cd(Suit::Clubs, 4),  cd(Suit::Clubs, 5),  cd(Suit::Clubs, 6),
+                 cd(Suit::Clubs, 9),  cd(Suit::Clubs, 10) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    // Draws go seat 1, 2, 3, 0, then seat 1 again — and the stock is drawn from
+    // the back, so the fifth from the end is seat 1's second draw. It is the
+    // fourth eight; everything else is a nine nobody can use.
+    // Queens, deliberately: seat 1 holds none, so no draw of its own hands it
+    // a second pair the wild-card branch could open on instead.
+    std::vector<Card> below(kBelowCount, cd(Suit::Clubs, kQueen));
+    below[kBelowCount - 5] = cd(Suit::Diamonds, 8);
+
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, below, cd(Suit::Diamonds, 7)), 0);
+    check(!e.pileFrozen(), "canasta: the pack starts open");
+
+    ca::Ai ai { ca::Level::Hard };
+    check(e.drawFromStock(), "canasta: seat 1 draws");
+    ai.playAndDiscard(e);
+    check(!e.team(1).opened,
+          "canasta: three eights and a joker cannot open on 50, so it does not");
+
+    check(e.drawFromStock() && e.discard(cd(Suit::Clubs, 10)), "canasta: seat 2 throws a ten");
+    check(e.drawFromStock() && e.discard(cd(Suit::Clubs, kJack)), "canasta: seat 3 throws a jack");
+    check(e.drawFromStock() && e.discard(cd(Suit::Clubs, kKing)), "canasta: seat 0 throws a king");
+
+    check(e.currentSeat() == 1 && e.pile().size() == 5,
+          "canasta: the turn comes back round to a pack of five");
+    check(e.drawFromStock(), "canasta: seat 1 draws its fourth eight");
+    const std::vector<Card>& h = e.hand(1);
+    check(std::count_if(h.begin(), h.end(), [](const Card& c) { return c.rank == 8; }) == 4,
+          "canasta: so it holds four of them");
+
+    ai.playAndDiscard(e);
+
+    const ca::Meld* eights = e.team(1).meldOfRank(8);
+    check(eights != nullptr && eights->size() == 3 && eights->wilds() == 1,
+          "canasta: which opens on the joker and TWO eights, not on all four");
+    const std::vector<Card>& after = e.hand(1);
+    check(std::count_if(after.begin(), after.end(), [](const Card& c) { return c.rank == 8; }) == 2,
+          "canasta: leaving the pair that takes a frozen pack in hand");
+    check(e.pileFrozen(),
+          "canasta: and freezing the pack, which only that pair now opens");
+}
+
+// The two limits on freezing, checked on figures rather than on a hand played
+// into existence (GHUB-0113). Reaching a third freeze needs the pack taken
+// twice in between, and the position where a freeze would cost us our own
+// access needs a whole hand built to arrive at it.
+void canastaFreezeLimits()
+{
+    check(ca::freezeBudgetLeft(0) && ca::freezeBudgetLeft(1),
+          "canasta: two freezes a hand are allowed");
+    check(!ca::freezeBudgetLeft(2) && !ca::freezeBudgetLeft(3),
+          "canasta: and a third is not, however many wild cards are spare");
+
+    const ca::Rules r = ca::Rules::classic();
+    // A pack of ten, four of them in a rank this side has melded — over the
+    // quarter that makes the next throw into it likely ours.
+    std::vector<Card> pack;
+    for (int i = 0; i < 4; ++i)
+        pack.push_back(cd(Suit::Spades, 6));
+    for (int i = 0; i < 6; ++i)
+        pack.push_back(cd(Suit::Hearts, kKing));
+    const std::vector<Card> hand { cd(Suit::Spades, 9), cd(Suit::Hearts, 9) };
+
+    ca::Team mine;
+    mine.opened = true;
+    ca::Meld sixes;
+    sixes.rank = 6;
+    for (int i = 0; i < 3; ++i)
+        sixes.cards.push_back(cd(Suit::Clubs, 6));
+    mine.melds.push_back(sixes);
+
+    check(ca::freezeCostsUsThePack(pack, hand, mine, r),
+          "canasta: freezing a pack already coming back to us costs us the pack");
+
+    // The same pack with only one card in a rank we hold is not coming back,
+    // so the freeze costs us nothing.
+    std::vector<Card> theirs(10, cd(Suit::Hearts, kKing));
+    theirs[0] = cd(Suit::Spades, 6);
+    check(!ca::freezeCostsUsThePack(theirs, hand, mine, r),
+          "canasta: a pack that is not coming back is free to freeze");
+
+    // And a side that has not opened is already held to two naturals out of
+    // hand, so a freeze takes nothing from it whatever the pack looks like.
+    ca::Team shut = mine;
+    shut.opened = false;
+    check(!ca::freezeCostsUsThePack(pack, hand, shut, r),
+          "canasta: a side that has not opened is shut out of the pack already");
+}
+
 // What a discard's safety judgement is worth against this opponent
 // (GHUB-0121). Checked on figures rather than on a position played into
 // existence, the way discardRisk and openRequirementFor already are — the claim
@@ -3228,6 +3338,8 @@ int main()
     canastaTakeAndOpenTogether();
     canastaAiHoldsWhileFrozen();
     canastaAiPlaysOutWhenTheHandGetsSmall();
+    canastaAiOpensOnAJokerToKeepThePair();
+    canastaFreezeLimits();
     canastaThrowCaution();
     canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();
