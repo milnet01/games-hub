@@ -2201,6 +2201,56 @@ void canastaAiHoldsWhileFrozen()
     }
 }
 
+// The other half of holding while frozen (GHUB-0104): the release is keyed on
+// HAND SIZE. A big hand has draws still to come, so a rank held back is a pair
+// waiting to happen; a small one does not, and the points are better on the
+// table than caught in it. One position proves both halves — the same sevens
+// stay back on a hand of twelve and go down on a hand of seven.
+void canastaAiPlaysOutWhenTheHandGetsSmall()
+{
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Four aces to open on, three sevens that stand as a meld on their own,
+    // and four singles to throw.
+    hands[1] = { cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), cd(Suit::Spades, 7),  cd(Suit::Hearts, 7),
+                 cd(Suit::Clubs, 7),      cd(Suit::Clubs, 4),    cd(Suit::Clubs, 5),
+                 cd(Suit::Clubs, 6),      cd(Suit::Clubs, 8) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    ca::Engine e;
+    // Every draw is an ace, so the second turn opens on a hand of seven that
+    // still holds the sevens. A wild up-card freezes the pile from the start.
+    const std::vector<Card> aces(kBelowCount, cd(Suit::Diamonds, kAce));
+    e.newGameFromStock(canastaStock(hands, 0, aces, cd(Suit::Hearts, 2)), 0);
+    check(e.pileFrozen(), "canasta: the pile starts frozen");
+
+    ca::Ai ai { ca::Level::Medium };
+    check(e.drawFromStock(), "canasta: seat 1 draws to a hand of twelve");
+    ai.playAndDiscard(e);
+    const ca::Meld* opened = e.team(1).meldOfRank(kAce);
+    check(opened != nullptr && opened->size() == 5, "canasta: and opens on its aces");
+    check(e.team(1).meldOfRank(7) == nullptr,
+          "canasta: holding the sevens back, because the hand is still big");
+
+    check(e.drawFromStock() && e.discard(cd(Suit::Clubs, 10)), "canasta: seat 2 throws a ten");
+    check(e.drawFromStock() && e.discard(cd(Suit::Clubs, kJack)), "canasta: seat 3 throws a jack");
+    check(e.drawFromStock() && e.discard(cd(Suit::Clubs, 9)), "canasta: seat 0 throws a nine");
+
+    check(e.currentSeat() == 1, "canasta: and the turn comes back round");
+    check(e.drawFromStock(), "canasta: seat 1 draws again");
+    check(e.hand(1).size() == 7, "canasta: onto a hand of seven, two-thirds of a deal gone");
+    const std::vector<Card>& h = e.hand(1);
+    check(std::count_if(h.begin(), h.end(), [](const Card& c) { return c.rank == 7; }) == 3,
+          "canasta: still holding its three sevens");
+    check(e.pileFrozen(), "canasta: with the pile still frozen");
+
+    ai.playAndDiscard(e);
+    check(e.team(1).meldOfRank(7) != nullptr,
+          "canasta: which now go down, because a small hand will not build the pair");
+}
+
 // What a discard's safety judgement is worth against this opponent
 // (GHUB-0121). Checked on figures rather than on a position played into
 // existence, the way discardRisk and openRequirementFor already are — the claim
@@ -3098,6 +3148,7 @@ int main()
     canastaAiOpens();
     canastaTakeAndOpenTogether();
     canastaAiHoldsWhileFrozen();
+    canastaAiPlaysOutWhenTheHandGetsSmall();
     canastaThrowCaution();
     canastaHouseGoesOutOnAThrownCard();
     canastaUnopenedPileAndLiveRules();

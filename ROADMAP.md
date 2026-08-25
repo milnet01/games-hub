@@ -3321,7 +3321,7 @@ open.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0104] **The computer lays melds down while the pack is frozen, spending the pairs that would take it.**
+- ✅ [GHUB-0104] **The computer lays melds down while the pack is frozen, spending the pairs that would take it.**
   Rules-grounded rather than a taste call, which is what makes
   it checkable. Engine::canTakePile demands two matching cards
   from HAND against a frozen pile. A pair melded is a pair no
@@ -3442,6 +3442,32 @@ open.
   "when do I stop holding" question: if the pack is frozen and it looks
   like nobody will ever take it and the stock is running out, play out if
   the score is decent. And see GHUB-0114 for the opposite case.
+  Resolved (2026-08-25). Reinstated on the owner's correction and shipped in
+  the shape he named: the release is keyed on HAND SIZE, not on how many of a
+  rank are held. Ai::holdsWhileFrozen now returns false once the hand is down
+  to two-thirds of a deal (7 of 11), expressed against Rules::handSize so a
+  house deal of thirteen moves the line with it.
+
+  canastaAiPlaysOutWhenTheHandGetsSmall in tests/selftest.cpp holds it, and
+  proves both halves from one position: the same three sevens stay back on a
+  hand of twelve and go down on a hand of seven. It fails on the pre-change
+  build. Suite green at 470 checks, ctest 6/6.
+
+  Judged by position rather than by win count, per GHUB-0110 -- and the ladder
+  reading is worth recording because it is NOT what the two reverted attempts
+  suggested. holdsWhileFrozen serves Medium, Hard and Expert alike, so the only
+  rung where this change lands asymmetrically is against Easy, and there it
+  IMPROVED: hard v easy 23/24 +3489 -> 23/24 +3969. The two symmetric rungs
+  moved down (hard v medium 70 -> 58 of 120, expert v hard 129 -> 115 of 240),
+  which is 1.6 and 1.3 sigma respectively on a match where neither side gains
+  anything from the change -- noise, not a strength signal. Both still pass
+  notTheWeakerPlayer.
+
+  NOT in this change: the third condition the owner named -- frozen pack,
+  nobody will ever take it, stock running out, so play out if the score is
+  decent. That is the same reading of the same position as GHUB-0114 with the
+  opposite answer, and this bullet's own note says neither should be written
+  without the other. It ships with GHUB-0114.
   **Layman:** A frozen pack can only be taken with two matching cards from your hand -- so melding those cards away is giving up on the pack without noticing.
   Kind: feature.
   Source: user-request-2026-08-24.

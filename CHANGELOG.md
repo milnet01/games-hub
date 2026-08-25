@@ -56,6 +56,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Canasta: the computer stops hoarding once its hand runs short** (GHUB-0104)
+  While the pack is frozen the computer keeps matching cards back rather
+  than melding them away, because a frozen pack can only be taken with a
+  pair out of your hand. It now stops doing that once its hand is down to
+  two-thirds of a deal: with few cards left there are too few draws to
+  come to turn a single card into a pair, and the points are worth more on
+  the table than caught in your hand at the end.
+
 - **Canasta: the computer stops being careful at a side that cannot open** (GHUB-0121)
   While the other side still has to open, they can only take the pack
   by opening off it -- the meld they take with has to be worth their

@@ -214,6 +214,20 @@ bool Ai::holdsWhileFrozen(const Engine& e, int rank, int naturals) const
     // the chance to take.
     if (closingOut(e, e.hand(e.currentSeat()).size()))
         return false;
+    // The owner's rule, and it is about the HAND rather than the rank: "if you
+    // have 10 cards in your hand you should still play as if you could take the
+    // pack, because when you pick up cards you more than likely are going to
+    // build up pairs". A big hand has draws still to come, so a single card of
+    // a rank is a pair waiting to happen and holding it back is holding a real
+    // key. A small hand has no such future — stop building, and put the points
+    // on the table before the hand ends with them still in it.
+    //
+    // Two-thirds of a deal rather than a bare number, so a house rule dealing
+    // thirteen moves the line with it. An earlier attempt keyed this on how
+    // many of the RANK were held (`naturals < 2`) and was reverted: that is
+    // true about this turn and false about the hand. See GHUB-0104.
+    if (int(e.hand(e.currentSeat()).size()) * 3 <= r.handSize * 2)
+        return false;
     return true;
 }
 
