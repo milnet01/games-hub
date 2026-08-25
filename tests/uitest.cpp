@@ -41,6 +41,7 @@
 #include <QFontMetricsF>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QElapsedTimer>
 #include <QPixmap>
 #include <QPushButton>
 #include <QStatusBar>
@@ -48,6 +49,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 namespace {
 
@@ -76,6 +78,56 @@ bool paints(QWidget* w)
     canvas.fill(Qt::black);
     w->render(&canvas);
     return !canvas.isNull();
+}
+
+// Mean milliseconds per frame over `frames` renders. render() is the same
+// trick paints() uses to force paintEvent through with no display attached;
+// the clock around it is the whole of GHUB-0049. One untimed render first, so
+// the figure is not paying for whatever the first paint sets up.
+//
+// This REPORTS. Nothing built on it may assert a threshold: a frame time is a
+// property of the machine, the compositor and the graphics stack, and
+// CLAUDE.md's rule from the three red Windows runs is that a test asserts what
+// the code does and only reports what the platform supplies.
+double msPerFrame(QWidget* w, int frames)
+{
+    QPixmap canvas(w->size());
+    canvas.fill(Qt::black);
+    w->render(&canvas);
+
+    QElapsedTimer clock;
+    clock.start();
+    for (int i = 0; i < frames; ++i)
+        w->render(&canvas);
+    return double(clock.nsecsElapsed()) / 1.0e6 / frames;
+}
+
+// Counts paint events delivered to one widget. render() bypasses the event
+// queue entirely, so what this counts is repaints the game asked for ITSELF —
+// which is exactly what "a deactivated view does no work" has to mean.
+class PaintCounter : public QObject
+{
+public:
+    int count = 0;
+
+protected:
+    bool eventFilter(QObject*, QEvent* event) override
+    {
+        if (event->type() == QEvent::Paint)
+            ++count;
+        return false;
+    }
+};
+
+// Let a view finish whatever it started, up to a deadline. Returns whether it
+// actually settled, so a caller can say so rather than reporting a figure taken
+// mid-animation as if it were a resting one.
+bool settle(GameView* view, int budgetMs)
+{
+    QDeadlineTimer deadline(budgetMs);
+    while (!deadline.hasExpired() && view->hasPendingAnimation())
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    return !view->hasPendingAnimation();
 }
 
 QLabel* statusLabel(QMainWindow* window)
@@ -167,6 +219,86 @@ QImage renderOf(QWidget* w)
     return canvas.toImage();
 }
 
+// ---- frameCost (GHUB-0049) ----
+//
+// Until this block existed nothing in the project had ever asked how long
+// anything takes, so no painting change could be shown to have helped. It
+// prints figures for a human to compare across a change and asserts one
+// thing only — see msPerFrame's comment for why a threshold here would be
+// a red CI leg waiting for a slow runner.
+//
+// The three subjects are the ones that say the most: Canasta mid-deal with
+// cards in the air, the same table at rest, and the fourteen-tile grid.
+//
+// Run it alone with `gameshub_uitest --bench`, which is what makes a
+// before-and-after pair cheap enough to actually take.
+void frameCost()
+{
+    std::printf("\n      frame cost (ms/frame, this machine — a reading, not a bar)\n");
+
+    const int frames = 60;
+
+    CanastaView canasta;
+    canasta.resize(1000, 740);
+    canasta.show();
+    pump(30);
+
+    // A fresh CanastaView deals, so the flights are already in the air and
+    // this is the worst frame the game ever draws: every card moving, the
+    // whole table repainted for each one.
+    const bool dealing = canasta.hasPendingAnimation();
+    const double dealMs = msPerFrame(&canasta, frames);
+    std::printf("        canasta, mid-deal%s   %6.2f\n",
+                dealing ? "        " : " (SETTLED)", dealMs);
+
+    canasta.activate();
+    const bool settled = settle(&canasta, 5000);
+    canasta.deactivate();
+    const double restMs = msPerFrame(&canasta, frames);
+    std::printf("        canasta, at rest%s    %6.2f\n",
+                settled ? "         " : " (STILL BUSY)", restMs);
+
+    KlondikeView klondike;
+    klondike.resize(1000, 740);
+    klondike.show();
+    pump(30);
+    std::printf("        klondike, full tableau        %6.2f\n",
+                msPerFrame(&klondike, frames));
+
+    HubWindow hub;
+    hub.resize(1000, 740);
+    hub.show();
+    pump(30);
+    std::printf("        hub, fourteen tiles           %6.2f\n",
+                msPerFrame(&hub, frames));
+
+    // The one honest assertion, because it is a property of the code
+    // rather than of the machine: a view the hub has left asks for no
+    // repaints at all. The positive control is what makes it mean
+    // anything — without it, a counter that never fires under the
+    // offscreen platform would pass the deactivated half for free.
+    CanastaView watched;
+    watched.resize(1000, 740);
+    watched.show();
+    PaintCounter counter;
+    watched.installEventFilter(&counter);
+
+    watched.activate();
+    pump(300);
+    const int whileActive = counter.count;
+
+    watched.deactivate();
+    pump(50);            // let anything already queued drain
+    counter.count = 0;
+    pump(300);
+    const int whileDeactivated = counter.count;
+
+    std::printf("        repaints in 300ms: active %d, deactivated %d\n", whileActive,
+                whileDeactivated);
+    check(whileActive > 0, "the repaint counter sees an active game working");
+    check(whileDeactivated == 0, "a deactivated game asks for no repaints at all");
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
@@ -177,6 +309,18 @@ int main(int argc, char* argv[])
     // player's real best scores.
     QCoreApplication::setOrganizationName(QStringLiteral("GamesHubTest"));
     QCoreApplication::setApplicationName(QStringLiteral("GamesSelfTest"));
+
+    // `--bench` runs the frame-cost figures alone. The rest of this suite takes
+    // half a minute, and a painting change wants the numbers taken twice — so
+    // without this the measurement costs more than the change it is judging,
+    // and stops being taken.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--bench") == 0) {
+            frameCost();
+            std::printf("\n%s\n", g_failures == 0 ? "Bench complete." : "FAILURES PRESENT.");
+            return g_failures == 0 ? 0 : 1;
+        }
+    }
 
     // ---- legibilityDefaultsOff (INV-5) ----
     //
@@ -2198,6 +2342,8 @@ int main(int argc, char* argv[])
         check(fresh.size().width() <= bar.width() && fresh.size().height() <= bar.height(),
               "a first run opens at a size that already fits beside your work");
     }
+
+    frameCost();
 
     std::printf("\n%s\n", g_failures == 0 ? "All UI checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;

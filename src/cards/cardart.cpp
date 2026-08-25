@@ -3,10 +3,16 @@
 #include "theme.h"
 
 #include <QLinearGradient>
+#include <QPaintDevice>
 #include <QPainterPath>
+#include <QPixmap>
+#include <QTransform>
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdint>
+#include <unordered_map>
 
 namespace {
 
@@ -243,7 +249,9 @@ void paintFace(QPainter& p, const QRectF& r, const Card& c)
         drawPip(p, QPointF(r.left() + r.width() * pip.x, top + span * pip.y), pipSize, suit);
 }
 
-void paintBack(QPainter& p, const QRectF& r, int deck)
+// The picture on a back, drawn from scratch. Everything below this is about
+// not having to call it.
+static void drawBack(QPainter& p, const QRectF& r, int deck)
 {
     const bool red = (deck % 2) != 0;
     const QColor backInk = red ? kBackInkRed : kBackInk;
@@ -288,6 +296,127 @@ void paintBack(QPainter& p, const QRectF& r, int deck)
     p.setBrush(Qt::NoBrush);
     p.setPen(QPen(QColor(255, 255, 255, 90), 1));
     p.drawPath(innerPath);
+}
+
+// A back is a pure function of its size and its deck colour, and it is the most
+// expensive thing this file draws: the lattice alone is about fifty antialiased
+// lines clipped to a rounded path, and Canasta keeps three hands of backs plus
+// the stock on the table at all times. Measured with `gameshub_uitest --bench`
+// before this cache existed, a resting Canasta table cost 24.5 ms a frame
+// against a 16 ms timer -- so the game could not meet its own clock, which is
+// the slowdown a player feels as the hand fills up (GHUB-0048).
+//
+// BACKS ONLY, and that is the whole of the design rather than a first step. A
+// cached pixmap drawn under the rotation of a fanned hand is resampled and goes
+// slightly soft. On a back there is nothing to read, so the softening costs
+// nothing. On a FACE it would trade a cost the player cannot see for a blur he
+// can -- this game is read by pip pattern -- so faces stay drawn live. Do not
+// "finish the job" by caching them without measuring what it does to a face at
+// the smallest scale the game draws one.
+static uint64_t backKey(int wPx, int hPx, int deck, int scaleQ)
+{
+    return uint64_t(wPx & 0xffff) | (uint64_t(hPx & 0xffff) << 16)
+        | (uint64_t(deck & 0xff) << 32) | (uint64_t(scaleQ & 0xffff) << 40);
+}
+
+// How far Theme::paintDropShadow reaches outside the card. Its widest stacked
+// rect spreads by depth * 3 * 0.6; the pixmap has to hold that or the cache
+// clips the shadow off and cards stop sitting on the table.
+static double shadowPad(double width)
+{
+    return std::max(1.5, width * 0.035) * 1.8 + 1.0;
+}
+
+void paintBack(QPainter& p, const QRectF& r, int deck)
+{
+    if (r.width() <= 0.0 || r.height() <= 0.0)
+        return;
+
+    // The scale the card will actually land on screen at, so the cache holds
+    // device pixels rather than logical ones. Without this every back goes
+    // soft on a HiDPI display, which for a partially sighted player is a
+    // straight loss however fast it runs.
+    const QTransform t = p.transform();
+    const double devScale = (p.device() != nullptr ? p.device()->devicePixelRatioF() : 1.0);
+
+    // A card that is only translated -- every stock pile, and every face-down
+    // card in a solitaire tableau -- can be blitted onto whole device pixels
+    // and comes back byte-identical to the drawn one. Only a card under a
+    // rotation, which here means a fanned hand, is resampled at all.
+    const bool plain = t.type() <= QTransform::TxTranslate;
+    const double zoom
+        = plain ? 1.0 : std::max(std::hypot(t.m11(), t.m12()), std::hypot(t.m21(), t.m22()));
+    const double dpr = devScale * zoom;
+    if (!(dpr > 0.0) || !std::isfinite(dpr))
+        return drawBack(p, r, deck);
+
+    // A WHOLE pixel, and that is load bearing rather than tidy. The card is
+    // drawn `pad` in from the pixmap's edge, so a fractional pad puts it at a
+    // fractional offset inside the cache and every lattice line antialiases
+    // differently from the card the game used to draw. Measured: with a
+    // fractional pad, 542 pixels of one back moved by more than 8 levels, all
+    // of them on the lattice.
+    const double pad = std::ceil(shadowPad(r.width()));
+    const QRectF padded = r.adjusted(-pad, -pad, pad, pad);
+
+    // Quantised, so a card drifting by a fraction of a pixel reuses its entry
+    // instead of filling the cache with near-duplicates.
+    // Rounded UP: a pixmap a rounding short of the padded rect clips the
+    // shadow it was padded for.
+    const int wPx = int(std::ceil(padded.width() * dpr));
+    const int hPx = int(std::ceil(padded.height() * dpr));
+    const int scaleQ = int(std::lround(dpr * 100.0));
+    if (wPx <= 0 || hPx <= 0 || wPx > 4096 || hPx > 4096)
+        return drawBack(p, r, deck);
+
+    static std::unordered_map<uint64_t, QPixmap> cache;
+    const uint64_t key = backKey(wPx, hPx, deck, scaleQ);
+
+    auto it = cache.find(key);
+    if (it == cache.end()) {
+        // A resize walks through sizes on its way to the one it stops at, so
+        // the map is bounded rather than left to grow with every intermediate
+        // width. Dropping the lot is fine: the next frame refills what it
+        // needs, and what it needs is a handful of entries.
+        if (cache.size() > 64)
+            cache.clear();
+
+        QPixmap pix(wPx, hPx);
+        pix.setDevicePixelRatio(dpr);
+        pix.fill(Qt::transparent);
+
+        QPainter into(&pix);
+        into.setRenderHint(QPainter::Antialiasing, true);
+        into.setRenderHint(QPainter::TextAntialiasing, true);
+        // Drawn at the origin of the pixmap's own logical space: the card sits
+        // `pad` in from each edge, which is the room the shadow needs.
+        drawBack(into, QRectF(pad, pad, r.width(), r.height()), deck);
+        into.end();
+
+        it = cache.emplace(key, std::move(pix)).first;
+    }
+
+    if (plain) {
+        // Drawn at the pixmap's own size, at a whole device pixel, with the
+        // transform out of the way -- so nothing is rescaled and nothing is
+        // shifted by a fraction of a pixel. Drawing into `padded` instead
+        // would resample every card by the rounding in wPx, and a card back
+        // measurably softens: 20% of the pixels in a stock pile moved by more
+        // than 8 levels when this path did not exist.
+        const QPointF where = padded.topLeft() + QPointF(t.dx(), t.dy());
+        p.save();
+        p.resetTransform();
+        p.drawPixmap(QPointF(std::round(where.x() * devScale) / devScale,
+                             std::round(where.y() * devScale) / devScale),
+                     it->second);
+        p.restore();
+        return;
+    }
+
+    const bool wasSmooth = p.testRenderHint(QPainter::SmoothPixmapTransform);
+    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    p.drawPixmap(padded, it->second, QRectF(it->second.rect()));
+    p.setRenderHint(QPainter::SmoothPixmapTransform, wasSmooth);
 }
 
 void paintSlot(QPainter& p, const QRectF& r, const QString& glyph)

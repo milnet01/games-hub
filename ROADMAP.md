@@ -726,7 +726,7 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   Kind: perf.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0048] **Every card is drawn from scratch, every frame, and nothing is ever cached.**
+- ✅ [GHUB-0048] **Every card is drawn from scratch, every frame, and nothing is ever cached.**
   There is no `QPixmap` and no `QPixmapCache` in the entire source tree. Every
   pixel is painted by `QPainter` on every paint event.
 
@@ -760,11 +760,48 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   and where it now is would cut that, but it is fiddly and easy to get subtly
   wrong -- a missed rectangle leaves smears on screen. Do the cache first, measure
   again, and only reach for this if the number still justifies it.
+  Resolved (2026-08-25): the owner reported Canasta slowing down during play, and
+  this was it. Measured with the new `--bench` (GHUB-0049), a RESTING Canasta table
+  cost 24.10 ms a frame against its own 16 ms timer -- so the game could never meet
+  its clock, and it got worse as the hand filled up. Now 8.87 ms. Klondike 20.42 ->
+  4.09, Canasta mid-deal 7.92 -> 3.27, the hub grid unchanged at ~2.3.
+
+  What shipped is a pixmap cache for card BACKS only, in cardart.cpp, keyed on size,
+  deck and the scale the card actually lands on screen at. perf put `CardArt::paintBack`
+  an order above `paintFace` and the reason is in the code: a back is ~50 antialiased
+  lines clipped to a rounded path, and Canasta keeps three fanned hands of backs plus
+  the stock on the table at all times.
+
+  FACES ARE DELIBERATELY NOT CACHED, and that is the finding rather than a shortcut.
+  A cached pixmap under the rotation of a fanned hand is resampled and goes slightly
+  soft; on a back there is nothing to read, on a face there is, and this game is read
+  by pip pattern. The bullet's own first trap says the same thing about HiDPI. Do not
+  "finish the job" without measuring what it does to a face at the smallest scale the
+  game draws one.
+
+  The second half -- update(QRect) instead of whole-widget update() -- is answered
+  rather than deferred. The bullet said to do the cache first, measure again, and
+  only reach for it if the number still justified it. At 8.87 ms against a 16 ms
+  budget it does not.
+
+  Two things worth keeping. The shadow padding inside the cache must be a WHOLE pixel:
+  with a fractional one the card sits at a fractional offset inside the pixmap and
+  every lattice line antialiases differently -- 542 pixels of one back moved by more
+  than 8 levels. And byte-identity was never available: the ORIGINAL code draws the
+  same back with a max channel difference of 35 when moved thirteen WHOLE pixels
+  sideways, so the lattice rasterisation is position-dependent on its own. The cache's
+  residual is that same effect, not a new defect -- measured with a scratch probe, both
+  at max 35.
+
+  Also a method note for the next visual change: `--shot` CANNOT compare two card
+  games. Two runs of the same build differ in 101,741 of 740,000 pixels because the
+  deal is random. That is GHUB-0093, and it cost two wrong readings here before it was
+  spotted.
   **Layman:** The card games redraw all fifty-odd cards sixty times a second, even the ones sitting still.
   Kind: perf.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0049] **Nothing in the project can measure a frame, so no painting fix can be proved.**
+- ✅ [GHUB-0049] **Nothing in the project can measure a frame, so no painting fix can be proved.**
   The three items above were found by reading source, and only the first carries a
   number -- taken by hand from `/proc` against a running process on 2026-08-20,
   under the offscreen platform, and not repeatable by anything in the repository.
@@ -795,6 +832,21 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   One thing it can assert honestly, because it is a property of the code rather
   than the machine: a view that has been deactivated does no work at all. That is
   the permanent guard for the first item in this section.
+  Resolved (2026-08-25): `frameCost()` in tests/uitest.cpp, runnable alone as
+  `gameshub_uitest --bench`. Four subjects rather than the three suggested --
+  Canasta mid-deal, Canasta at rest, a full Klondike tableau and the fourteen-tile
+  grid. Canasta at rest was added after the fact and is the one that mattered: it
+  costs THREE TIMES what mid-deal does, which is the opposite of the guess, because
+  a resting table has every card drawn where a dealing one still has most of them
+  in the stock.
+
+  Reports and does not assert, as the bullet asked. The one assertion is the one it
+  named -- a deactivated view does no work -- and it ships with a positive control,
+  because a paint counter that never fires under the offscreen platform would pass
+  the deactivated half for free and prove nothing.
+
+  It paid for itself inside the hour: GHUB-0048 was measured, fixed and re-measured
+  against it, and the first fix attempt was caught making the picture worse.
   **Layman:** There is no way to check whether a speed-up actually sped anything up.
   Kind: test.
   Source: in-session-2026-08-20.

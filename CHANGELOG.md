@@ -10,6 +10,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **The test suite can now measure how long a frame takes to draw.** (GHUB-0049)
+  `gameshub_uitest --bench` prints what four surfaces cost to draw, so a
+  change meant to speed something up can be shown to have done it. It
+  reports figures rather than failing against a threshold — a frame time
+  is a property of the machine, not of this code. It found the Canasta
+  slowdown above within minutes of existing.
+
 - **Canasta house rule: you win by reaching the target, and both sides reaching it is a draw** (GHUB-0123)
   On by default in House rules, off in Classic. The game is won by
   getting to the target score rather than by being ahead when somebody
@@ -177,6 +184,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   you make while doing what it told you.
 
 ### Fixed
+
+- **Canasta no longer slows down as the hand fills up.** (GHUB-0048)
+  A resting Canasta table was costing 24 milliseconds to draw against its
+  own 16-millisecond clock — so the game could never keep up, and it got
+  worse the more cards were on the table. It now costs 9. Card backs are
+  drawn once and kept rather than redrawn from scratch sixty times a
+  second; the back is the most expensive thing on the table and Canasta
+  shows three hands of them plus the stock at all times. Klondike, Spider,
+  Pyramid and Hearts get the same speed-up. Card faces are deliberately
+  still drawn fresh every frame, so nothing you read by its pip pattern is
+  ever resampled.
 
 - **Canasta: a frozen pile no longer shows the freezing card twice, or above cards thrown after it** (GHUB-0094)
   The wild card that freezes the pack is drawn once, lying sideways at the depth it was actually thrown at, so a later discard covers it instead of sliding underneath.
