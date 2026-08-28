@@ -30,7 +30,7 @@ if(GAMESHUB_SANITIZE)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Multimedia)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Multimedia Concurrent)
 qt_standard_project_setup()
 
 
@@ -140,7 +140,7 @@ qt_add_executable(gameshub
 )
 target_include_directories(gameshub PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_compile_definitions(gameshub PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
-target_link_libraries(gameshub PRIVATE Qt6::Widgets Qt6::Multimedia)
+target_link_libraries(gameshub PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
 
 # Console harness for every game's rules. No UI dependency, so it needs no
 # display and runs in milliseconds.
@@ -166,7 +166,7 @@ target_include_directories(gameshub_uitest PRIVATE src "${CMAKE_CURRENT_BINARY_D
 file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" GAMESHUB_SOURCE_DIR_FWD)
 target_compile_definitions(gameshub_uitest PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}"
                                                    GAMESHUB_SOURCE_DIR="${GAMESHUB_SOURCE_DIR_FWD}")
-target_link_libraries(gameshub_uitest PRIVATE Qt6::Widgets Qt6::Multimedia)
+target_link_libraries(gameshub_uitest PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
 
 enable_testing()
 add_test(NAME selftest COMMAND gameshub_selftest)

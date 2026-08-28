@@ -97,6 +97,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Undo works while the computer is still thinking** (GHUB-0047)
+  In Chess, Reversi and Draughts, Undo used to do nothing until the
+  computer had finished. It could not be pressed then anyway, because
+  the window was frozen. It now takes the move back and abandons
+  whatever the computer was working out.
+
 - **Taking a move back in the card games no longer copies the whole table** (GHUB-0056)
   Undo now takes the stored piles rather than copying them, and the
   four solitaires keep their history in a container built for it. The
@@ -239,6 +245,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   you make while doing what it told you.
 
 ### Fixed
+
+- **The window no longer freezes while the computer works out its move** (GHUB-0047)
+  Chess, Reversi and Draughts now think in the background. On a
+  middlegame position at the hardest level the window went from being
+  unresponsive for 420ms at a stretch — no repaint, no resize — to 8ms,
+  which is what it gives when it is doing nothing at all.
 
 - **A Canasta save claiming an absurd number of packs overflowed the check meant to catch it** (GHUB-0052)
   The check that a saved Canasta game still holds a whole pack

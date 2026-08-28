@@ -14,6 +14,7 @@
 #include "cards/cardart.h"
 #include "cards/cardcodec.h"
 #include "cards/cardflight.h"
+#include "chess/chessboard.h"
 #include "chess/chessview.h"
 #include "draughts/draughtsview.h"
 #include "freecell/freecellview.h"
@@ -3117,6 +3118,145 @@ int main(int argc, char* argv[])
             }
             check(harvested, "spider: completing a run is visible as thirteen cards leaving");
         }
+    }
+
+    // ---- theWindowAnswersWhileTheComputerThinks (GHUB-0047) ---------------
+    //
+    // Every engine used to search inside the signal handler that started it, on
+    // the thread that also paints and handles input, so the window was
+    // genuinely frozen for the duration. The measure is RELATIVE and
+    // deliberately so: how fast a timer ticks is a property of the machine, and
+    // this project has three red Windows legs to show for asserting an
+    // environment constant. So an idle view is timed first and the thinking one
+    // is held against it. On the old build the busy figure was near zero for
+    // the length of the search; a slow runner moves both numbers together.
+    {
+        // The LONGEST GAP between ticks, not how many there were. Counting
+        // ticks was the first attempt and it passed on the unfixed build --
+        // 50 against an idle 60 -- because a single 100ms freeze inside a
+        // 300ms window still leaves most of the ticks in place. What the
+        // player feels is the length of one stretch with no response, so that
+        // is what is measured.
+        const auto worstGapOver = [](int ms) {
+            QElapsedTimer clock;
+            clock.start();
+            qint64 last = 0;
+            qint64 worst = 0;
+            QTimer heartbeat;
+            heartbeat.setInterval(5);
+            QObject::connect(&heartbeat, &QTimer::timeout, [&] {
+                worst = std::max(worst, clock.elapsed() - last);
+                last = clock.elapsed();
+            });
+            heartbeat.start();
+            while (clock.elapsed() < ms)
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+            heartbeat.stop();
+            // The tail counts too: a freeze still running when the window
+            // closes has produced no tick to measure it with.
+            return std::max(worst, clock.elapsed() - last);
+        };
+
+        // A real middlegame rather than the opening, so the search has work to
+        // do. The moves are played through the engine's own game to guarantee
+        // they are legal, then written in the format ChessView saves.
+        chess::ChessGame game;
+        std::vector<chess::Move> line;
+        for (int ply = 0; ply < 21 && !game.isOver(); ++ply) {
+            const std::vector<chess::Move> legal = game.legalMoves();
+            if (legal.empty())
+                break;
+            // The middle of the list rather than the front: taking the first
+            // every time walks into a shuffling draw that gives the engine
+            // almost nothing to think about.
+            const chess::Move m = legal[legal.size() / 2];
+            line.push_back(m);
+            game.play(m);
+        }
+
+        QByteArray blob;
+        QDataStream out(&blob, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        // Level 2 is Hard, which carries the largest node budget and so the
+        // longest freeze this game was ever capable of.
+        out << quint32(1) << qint32(2) << qint32(line.size());
+        for (const chess::Move& m : line) {
+            out << qint8(m.from.row) << qint8(m.from.col) << qint8(m.to.row) << qint8(m.to.col)
+                << qint8(m.promotion);
+        }
+
+        ChessView chess;
+        chess.resize(620, 620);
+        chess.show();
+        pump(30);
+        const qint64 idle = worstGapOver(1200);
+
+        const bool loaded = chess.restoreState(blob);
+        check(loaded, "chess: a middlegame position with the computer to move loads");
+        const qint64 busy = loaded ? worstGapOver(1200) : 0;
+
+        std::printf("      longest stretch with no response: idle %lldms, "
+                    "while the computer thinks %lldms\n",
+                    static_cast<long long>(idle), static_cast<long long>(busy));
+        // Relative, with slack, because a heartbeat's own jitter belongs to the
+        // machine and this project has three red Windows legs from asserting an
+        // environment constant. The unfixed build froze for the whole search --
+        // a whole multiple of this bound, not a nudge past it.
+        check(idle < 60, "chess: an idle window answers promptly to begin with");
+        check(busy <= idle * 3 + 40,
+              "chess: the window never stops answering for long while the computer thinks");
+
+        // And the answer still arrives — a responsive window that never plays
+        // is not the win. WAITED FOR rather than timed: a fixed pump asserts
+        // how fast the machine is, and a first attempt at 4000ms duly failed
+        // under the sanitizer build, where the same search takes several times
+        // longer. The cap is only there so a genuine hang ends the run.
+        QElapsedTimer arriving;
+        arriving.start();
+        while (chess.saveState() == blob && arriving.elapsed() < 60000)
+            pump(50);
+        std::printf("      the computer's move arrived after %lldms\n",
+                    static_cast<long long>(arriving.elapsed()));
+        check(chess.saveState() != blob,
+              "chess: and the move it was working out is actually played");
+
+        // Abandonment, which the roadmap named as where this kind of change
+        // goes wrong. Every route that makes a search in flight answer the
+        // wrong question is taken while it is still running, and the last of
+        // them destroys the view outright — the one that would be a
+        // use-after-free rather than a wrong move. Worth running under
+        // -DGAMESHUB_SANITIZE=ON, where a worker still holding view state
+        // aborts instead of getting away with it.
+        for (int round = 0; round < 6; ++round) {
+            ChessView churn;
+            churn.resize(620, 620);
+            churn.show();
+            check(churn.restoreState(blob), "chess: the churn position loads");
+            pump(30);   // long enough for the search to have set off
+
+            switch (round % 3) {
+            case 0:
+                churn.deactivate();     // the hub leaves mid-search
+                churn.activate();
+                break;
+            case 1:
+                for (QAction* a : churn.gameActions()) {
+                    if (a->isCheckable() && a->text() == QStringLiteral("Easy"))
+                        a->trigger();   // a level change mid-search
+                }
+                break;
+            default:
+                for (QAction* a : churn.gameActions()) {
+                    if (a->text() == QStringLiteral("New Game"))
+                        a->trigger();   // a new game mid-search
+                }
+                break;
+            }
+            pump(20);
+            // ...and then the view goes away with a worker still running.
+        }
+        check(true, "chess: abandoning a search mid-flight leaves nothing behind");
+        pump(2500);   // let every abandoned worker finish into a dead view
     }
 
     fuzzSavedGames(150);

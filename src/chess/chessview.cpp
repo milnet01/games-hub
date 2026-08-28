@@ -15,6 +15,7 @@
 #include <QPushButton>
 #include <QRadialGradient>
 #include <QTimer>
+#include <QtConcurrent>
 
 #include <algorithm>
 
@@ -98,13 +99,21 @@ void ChessView::buildActions()
         a->setCheckable(true);
         a->setChecked(level == m_level);
         group->addAction(a);
-        connect(a, &QAction::triggered, this, [this, level] { m_level = level; });
+        connect(a, &QAction::triggered, this, [this, level] {
+            // A search already running is answering at the old strength.
+            const bool wasThinking = m_thinking;
+            abandonSearch();
+            m_level = level;
+            if (wasThinking)
+                advance();
+        });
         m_actions.append(a);
     }
 }
 
 void ChessView::newGame()
 {
+    abandonSearch();
     m_game.reset();
     m_human = Colour::White;
     m_selected.reset();
@@ -118,8 +127,13 @@ void ChessView::newGame()
 
 void ChessView::undo()
 {
-    if (!m_game.canUndo() || m_thinking)
+    if (!m_game.canUndo())
         return;
+    // Before GHUB-0047 this refused while the engine was thinking, because the
+    // window was frozen and the player could not have pressed it anyway. Now
+    // they can, and waiting for a search whose board is about to be thrown away
+    // would be the one thing the roadmap said not to do.
+    abandonSearch();
     // Step back to the player's own turn, so one undo takes back the reply too.
     while (m_game.canUndo()) {
         m_game.undo();
@@ -134,8 +148,23 @@ void ChessView::undo()
     advance();
 }
 
+void ChessView::deactivate()
+{
+    m_paused = true;
+    // An answer for a board the hub has left must not move a piece on it.
+    // activate() starts the thinking again, so the game is not left stuck on
+    // the computer's turn.
+    abandonSearch();
+}
+
 void ChessView::activate()
 {
+    m_paused = false;
+    // Picks the search back up if it was abandoned on the way out.
+    if (!m_finished && m_game.toMove() != m_human) {
+        advance();
+        return;
+    }
     refresh();
 }
 
@@ -208,6 +237,7 @@ bool ChessView::restoreState(const QByteArray& blob)
         return false; // decided since it was saved; nothing to resume into
 
     m_game = game;
+    abandonSearch();
     m_level = chess::Level(std::clamp<int>(level, 0, 2));
     for (QAction* a : m_actions) {
         if (a->isCheckable())
@@ -248,9 +278,55 @@ void ChessView::advance()
 
 void ChessView::playEngineMove()
 {
+    if (m_paused)
+        return;
+    startSearch();
+}
+
+void ChessView::startSearch()
+{
+    if (m_search == nullptr) {
+        m_search = new QFutureWatcher<SearchResult>(this);
+        connect(m_search, &QFutureWatcherBase::finished, this, [this] {
+            // isCanceled() guards the case where the watcher was pointed at a
+            // new search before this one reported: there is nothing to read.
+            if (!m_search->isCanceled() && m_search->future().resultCount() > 0)
+                engineMoveReady(m_search->result());
+        });
+    }
+
+    // Everything the search needs, BY VALUE. The worker must not reach back
+    // into the game: Board is copied per node by design and nothing is shared,
+    // which is exactly what makes this safe to move off the GUI thread.
+    const Board position = m_game.board();
+    const Level level = m_level;
+    const quint64 generation = m_generation;
+    m_search->setFuture(QtConcurrent::run([position, level, generation] {
+        SearchResult result;
+        result.generation = generation;
+        result.found = chooseMove(position, level, result.move);
+        return result;
+    }));
+}
+
+void ChessView::abandonSearch()
+{
+    // The answer in flight is now about a board that no longer exists. Bumping
+    // the generation is what discards it; the worker runs on and harms nothing.
+    ++m_generation;
     m_thinking = false;
-    Move move;
-    if (!chooseMove(m_game.board(), m_level, move)) {
+}
+
+void ChessView::engineMoveReady(const SearchResult& result)
+{
+    // The game moved on while this was being worked out -- a new game, an undo,
+    // a change of level, or the hub leaving the page. Drop it.
+    if (result.generation != m_generation)
+        return;
+
+    m_thinking = false;
+    const Move move = result.move;
+    if (!result.found) {
         advance();
         return;
     }

@@ -14,6 +14,7 @@
 #include <QPushButton>
 #include <QRadialGradient>
 #include <QTimer>
+#include <QtConcurrent>
 
 #include <algorithm>
 
@@ -75,7 +76,14 @@ void ReversiView::buildActions()
         a->setChecked(entry.value == m_difficulty);
         m_levelGroup->addAction(a);
         const Difficulty value = entry.value;
-        connect(a, &QAction::triggered, this, [this, value] { m_difficulty = value; });
+        connect(a, &QAction::triggered, this, [this, value] {
+            // A search already running is answering at the old strength.
+            const bool wasThinking = m_thinking;
+            abandonSearch();
+            m_difficulty = value;
+            if (wasThinking)
+                advance();
+        });
         m_actions.append(a);
     }
 
@@ -89,13 +97,27 @@ void ReversiView::buildActions()
     m_actions.append(hints);
 }
 
+void ReversiView::deactivate()
+{
+    // An answer for a board the hub has left must not place a disc on it.
+    m_paused = true;
+    abandonSearch();
+}
+
 void ReversiView::activate()
 {
+    m_paused = false;
+    // Picks the thinking back up if it was abandoned on the way out.
+    if (!m_finished && m_toMove != m_human) {
+        advance();
+        return;
+    }
     refresh();
 }
 
 void ReversiView::newGame()
 {
+    abandonSearch();
     m_board.reset();
     m_toMove = Player::Black;
     m_human = Player::Black;
@@ -109,8 +131,11 @@ void ReversiView::newGame()
 
 void ReversiView::undo()
 {
-    if (m_history.empty() || m_thinking)
+    if (m_history.empty())
         return;
+    // Before GHUB-0047 this refused while the engine was thinking, because the
+    // window was frozen and the player could not have pressed it. Now they can.
+    abandonSearch();
 
     // Step back to the last position where it was the player's turn, so one
     // undo rewinds both their move and the computer's reply.
@@ -158,7 +183,47 @@ void ReversiView::advance()
 
 void ReversiView::playEngineMove()
 {
-    const std::optional<Move> m = chooseMove(m_board, m_toMove, m_difficulty);
+    if (m_paused)
+        return;
+    startSearch();
+}
+
+void ReversiView::startSearch()
+{
+    if (m_search == nullptr) {
+        m_search = new QFutureWatcher<SearchResult>(this);
+        connect(m_search, &QFutureWatcherBase::finished, this, [this] {
+            if (!m_search->isCanceled() && m_search->future().resultCount() > 0)
+                engineMoveReady(m_search->result());
+        });
+    }
+
+    // By value: Board is a value type and the search relies on that, which is
+    // what makes it safe to hand to another thread.
+    const Board position = m_board;
+    const Player toMove = m_toMove;
+    const Difficulty difficulty = m_difficulty;
+    const quint64 generation = m_generation;
+    m_search->setFuture(QtConcurrent::run([position, toMove, difficulty, generation] {
+        SearchResult result;
+        result.generation = generation;
+        result.move = chooseMove(position, toMove, difficulty);
+        return result;
+    }));
+}
+
+void ReversiView::abandonSearch()
+{
+    ++m_generation;
+    m_thinking = false;
+}
+
+void ReversiView::engineMoveReady(const SearchResult& result)
+{
+    if (result.generation != m_generation)
+        return;
+
+    const std::optional<Move> m = result.move;
     m_thinking = false;
 
     if (!m) {
@@ -431,6 +496,7 @@ bool ReversiView::restoreState(const QByteArray& blob)
     m_board = board;
     m_toMove = Player(toMove);
     m_human = Player(human);
+    abandonSearch();
     m_difficulty = Difficulty(difficulty);
     m_lastMove = (hasLast == 1) ? std::optional<Move>(Move { lastRow, lastCol }) : std::nullopt;
     m_history.clear();

@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QRadialGradient>
 #include <QTimer>
+#include <QtConcurrent>
 
 #include <algorithm>
 
@@ -65,13 +66,21 @@ void DraughtsView::buildActions()
         a->setChecked(entry.level == m_level);
         m_levelGroup->addAction(a);
         const DraughtsLevel level = entry.level;
-        connect(a, &QAction::triggered, this, [this, level] { m_level = level; });
+        connect(a, &QAction::triggered, this, [this, level] {
+            // A search already running is answering at the old strength.
+            const bool wasThinking = m_thinking;
+            abandonSearch();
+            m_level = level;
+            if (wasThinking)
+                advance();
+        });
         m_actions.append(a);
     }
 }
 
 void DraughtsView::newGame()
 {
+    abandonSearch();
     m_board.reset();
     m_toMove = Side::Red;
     m_human = Side::Red;
@@ -87,8 +96,11 @@ void DraughtsView::newGame()
 
 void DraughtsView::undo()
 {
-    if (m_history.empty() || m_thinking)
+    if (m_history.empty())
         return;
+    // Before GHUB-0047 this refused while the engine was thinking, because the
+    // window was frozen and the player could not have pressed it. Now they can.
+    abandonSearch();
     // Step back to the player's own turn, so one undo takes back the reply too.
     while (!m_history.empty()) {
         const Snapshot s = m_history.back();
@@ -105,8 +117,21 @@ void DraughtsView::undo()
     advance();
 }
 
+void DraughtsView::deactivate()
+{
+    // An answer for a board the hub has left must not move a piece on it.
+    m_paused = true;
+    abandonSearch();
+}
+
 void DraughtsView::activate()
 {
+    m_paused = false;
+    // Picks the thinking back up if it was abandoned on the way out.
+    if (!m_finished && m_toMove != m_human) {
+        advance();
+        return;
+    }
     refresh();
 }
 
@@ -131,9 +156,48 @@ void DraughtsView::advance()
 
 void DraughtsView::playEngineMove()
 {
-    DraughtsMove move;
+    if (m_paused)
+        return;
+    startSearch();
+}
+
+void DraughtsView::startSearch()
+{
+    if (m_search == nullptr) {
+        m_search = new QFutureWatcher<SearchResult>(this);
+        connect(m_search, &QFutureWatcherBase::finished, this, [this] {
+            if (!m_search->isCanceled() && m_search->future().resultCount() > 0)
+                engineMoveReady(m_search->result());
+        });
+    }
+
+    // By value, so the worker cannot reach back into the game.
+    const DraughtsBoard position = m_board;
+    const Side toMove = m_toMove;
+    const DraughtsLevel level = m_level;
+    const quint64 generation = m_generation;
+    m_search->setFuture(QtConcurrent::run([position, toMove, level, generation] {
+        SearchResult result;
+        result.generation = generation;
+        result.found = chooseDraughtsMove(position, toMove, level, result.move);
+        return result;
+    }));
+}
+
+void DraughtsView::abandonSearch()
+{
+    ++m_generation;
     m_thinking = false;
-    if (!chooseDraughtsMove(m_board, m_toMove, m_level, move)) {
+}
+
+void DraughtsView::engineMoveReady(const SearchResult& result)
+{
+    if (result.generation != m_generation)
+        return;
+
+    const DraughtsMove move = result.move;
+    m_thinking = false;
+    if (!result.found) {
         advance();
         return;
     }
@@ -489,6 +553,7 @@ bool DraughtsView::restoreState(const QByteArray& blob)
     m_board = board;
     m_toMove = Side(toMove);
     m_human = Side(human);
+    abandonSearch();
     m_level = DraughtsLevel(level);
     m_selected.reset();
     m_selectedMoves.clear();

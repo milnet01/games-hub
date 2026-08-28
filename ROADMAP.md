@@ -737,7 +737,7 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   Kind: fix.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0047] **The computer thinks on the drawing thread, so the window stops answering while it does.**
+- ✅ [GHUB-0047] **The computer thinks on the drawing thread, so the window stops answering while it does.**
   There is no `QThread` and no `QtConcurrent` anywhere in `src/`. Every engine
   runs inside the signal handler that started it, on the thread that also paints
   and handles input, so the window is genuinely frozen for the duration: no
@@ -769,6 +769,72 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   The visible win is a window that stays alive and a "thinking" indicator that can
   actually animate. The strength win is separate and optional: with the UI no
   longer hostage to it, the node budget can be reconsidered on merit.
+  Resolved (2026-08-28): Chess, Reversi and Draughts now search on a
+  worker thread. Measured on a middlegame position at Hard: the window
+  went from 420ms with no response, in one stretch, to 8ms — which is
+  what an idle window gives.
+
+  A prerequisite the bullet did not mention, and it would have been a
+  real bug. All three engines pick between equally-good moves with a
+  function-local `static std::mt19937`. C++ guarantees thread-safe
+  INITIALISATION of one and says nothing about using it, and an
+  abandoned search keeps running while its replacement starts, so two
+  threads can be inside that function at once. They are `thread_local`
+  now. Per-thread seeding costs nothing: it only breaks ties.
+
+  The cancellation is by generation, as the bullet asked. Every search
+  carries the number the game held when it set off; an answer whose
+  number no longer matches is dropped. Bumped by a new game, an undo, a
+  level change, a restore and the hub leaving the page. The worker is
+  left to finish rather than made to poll a flag — it holds only copies,
+  it cannot reach the game, and stopping it early buys the player
+  nothing.
+
+  Abandoning what is in flight turned out NOT to be enough on its own.
+  advance() schedules the search on a short timer, so one that had been
+  SCHEDULED before the hub left would still set off afterwards and play
+  a move on a board nobody was looking at — GHUB-0073's fault in a new
+  form. m_paused closes it, and activate() picks the thinking back up so
+  the game is never left stuck on the computer's turn.
+
+  Undo changed behaviour deliberately. All three refused while the
+  engine was thinking, which was free when the window was frozen and the
+  player could not press it. Now they can, and waiting for a search
+  whose board is about to be discarded is the one thing the bullet said
+  not to do — so it abandons instead.
+
+  ChessView::advance() is still the single point that moves the game on;
+  the answer routes back through it rather than becoming a second path.
+
+  Verified. The freeze test measures the LONGEST GAP between heartbeat
+  ticks, not how many there were — counting was the first attempt and it
+  PASSED on the unfixed build (50 ticks against an idle 60), because one
+  100ms freeze inside a 300ms window still leaves most ticks standing.
+  Red/green with the gap metric: 420ms unfixed, 8ms fixed. A second
+  weakness was caught by the sanitizer build, where the same search takes
+  17.6s: the check that the move actually gets played waited a fixed
+  4000ms and failed. It waits for the outcome now, which is the project's
+  own rule about asserting the code rather than the machine.
+
+  Lifetime is the other risk and it is covered: six rounds that abandon a
+  running search by every route and then destroy the view outright, run
+  under ASan+UBSan with no error.
+
+  ThreadSanitizer was tried and is NOT usable here, so it is not being
+  claimed as evidence either way. Against a system Qt built without
+  instrumentation it reports thousands of races entirely inside Qt's own
+  allocator between Qt's own pooled threads — including on paths this
+  change never touched, and Qt was already spawning pool threads before
+  it. What is worth recording: not one report names an engine core, which
+  is the code that actually runs on the worker.
+
+  Not done: the node budget still does two jobs, choosing strength and
+  bounding the wait. The bullet calls reconsidering it separate and
+  optional, and it is a game-design decision rather than this one.
+
+  Windows unverified locally — the wintest box was powered down. CI is
+  the check, and this adds a Qt component (Concurrent) as well as
+  threading, so both legs are worth watching. ctest 6/6, local CI green.
   **Layman:** When the computer is working out its move the whole window freezes -- it cannot even be resized until it finishes.
   Kind: perf.
   Source: in-session-2026-08-20.

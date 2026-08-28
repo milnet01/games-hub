@@ -411,7 +411,14 @@ bool chooseMove(const Board& board, Level level, Move& out)
         if (best[i].second >= cutoff)
             candidates.push_back(best[i].first);
 
-    static std::mt19937 rng { std::random_device {}() };
+    // thread_local, not merely static (GHUB-0047). The search now runs on a
+    // worker thread, and a search that has been abandoned keeps running until
+    // it finishes -- so two threads can be inside this function at once. C++
+    // guarantees thread-safe INITIALISATION of a function-local static and
+    // nothing about using one, so a plain static here is a data race and
+    // undefined behaviour. Per-thread seeding is no loss: this only breaks ties
+    // between equally good moves.
+    static thread_local std::mt19937 rng { std::random_device {}() };
     std::uniform_int_distribution<std::size_t> pick(0, candidates.size() - 1);
     out = candidates[pick(rng)];
     return true;

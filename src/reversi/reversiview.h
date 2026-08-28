@@ -4,6 +4,8 @@
 #include "board.h"
 #include "gameview.h"
 
+#include <QFutureWatcher>
+
 #include <optional>
 #include <vector>
 
@@ -18,6 +20,9 @@ public:
 
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
+    // Not a QTimer, but the same duty: an answer arriving for a board the hub
+    // has left must not place a disc on it.
+    void deactivate() override;
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
@@ -60,5 +65,19 @@ private:
     std::vector<Snapshot> m_history;
     bool m_showHints = true;
     bool m_thinking = false;
+    // GHUB-0047. The search runs on a worker and the answer arrives back here;
+    // see ChessView for the full reasoning. A search the game has outrun is
+    // abandoned by generation rather than awaited, and m_paused stops one that
+    // was merely SCHEDULED from setting off after the hub has gone.
+    struct SearchResult {
+        std::optional<Move> move;
+        quint64 generation = 0;
+    };
+    void startSearch();
+    void abandonSearch();
+    void engineMoveReady(const SearchResult& result);
+    QFutureWatcher<SearchResult>* m_search = nullptr;
+    quint64 m_generation = 0;
+    bool m_paused = false;
     bool m_finished = false;
 };
