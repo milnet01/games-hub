@@ -3,6 +3,7 @@
 #include "cards/cardcodec.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 // A drag never runs deeper than the pack, and the history is bounded so a long
@@ -118,7 +119,7 @@ void FreeCellTable::pushUndo()
 {
     m_history.push_back({ m_columns, m_cells, m_foundations, m_moves });
     if (m_history.size() > kMaxHistory)
-        m_history.erase(m_history.begin());
+        m_history.pop_front();
 }
 
 void FreeCellTable::dropUndo()
@@ -212,10 +213,13 @@ void FreeCellTable::undo()
 {
     if (m_history.empty())
         return;
-    const Snapshot& s = m_history.back();
-    m_columns = s.columns;
-    m_cells = s.cells;
-    m_foundations = s.foundations;
+    // The snapshot is destroyed on the line below, so take its piles rather
+    // than copying them. Copy-assigning here allocates sixteen vectors and
+    // then frees the originals a line later, every single undo.
+    Snapshot& s = m_history.back();
+    m_columns = std::move(s.columns);
+    m_cells = std::move(s.cells);
+    m_foundations = std::move(s.foundations);
     m_moves = s.moves;
     m_history.pop_back();
 }

@@ -3,6 +3,7 @@
 #include "cards/cardcodec.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 constexpr std::size_t kMaxHistory = 200;
@@ -105,7 +106,7 @@ void KlondikeTable::pushUndo()
 {
     m_history.push_back({ m_stock, m_waste, m_foundations, m_tableau, m_score });
     if (m_history.size() > kMaxHistory)
-        m_history.erase(m_history.begin());
+        m_history.pop_front();
 }
 
 void KlondikeTable::dropUndo()
@@ -228,11 +229,14 @@ void KlondikeTable::undo()
 {
     if (m_history.empty())
         return;
-    const Snapshot& s = m_history.back();
-    m_stock = s.stock;
-    m_waste = s.waste;
-    m_foundations = s.foundations;
-    m_tableau = s.tableau;
+    // The snapshot is destroyed on the line below, so take its piles rather
+    // than copying them. Copy-assigning here allocates thirteen vectors and
+    // then frees the originals a line later, every single undo.
+    Snapshot& s = m_history.back();
+    m_stock = std::move(s.stock);
+    m_waste = std::move(s.waste);
+    m_foundations = std::move(s.foundations);
+    m_tableau = std::move(s.tableau);
     m_score = s.score;
     m_history.pop_back();
     m_held.clear();

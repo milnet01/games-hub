@@ -3,6 +3,7 @@
 #include "cards/card.h"
 
 #include <array>
+#include <deque>
 #include <random>
 #include <vector>
 
@@ -102,7 +103,7 @@ private:
     std::array<std::vector<Card>, kCells> m_cells;
     std::array<std::vector<Card>, kFoundations> m_foundations;
 
-    std::vector<Snapshot> m_history;
+    std::deque<Snapshot> m_history;
     std::mt19937 m_rng { std::random_device {}() };
     int m_moves = 0;
 };

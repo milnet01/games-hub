@@ -3,6 +3,7 @@
 #include "cards/card.h"
 
 #include <array>
+#include <deque>
 #include <random>
 #include <vector>
 
@@ -100,7 +101,7 @@ private:
     std::vector<Card> m_held;
     int m_heldFrom = -1;
 
-    std::vector<Snapshot> m_history;
+    std::deque<Snapshot> m_history;
     std::mt19937 m_rng { std::random_device {}() };
     int m_suits = 1;
     int m_completed = 0;

@@ -84,6 +84,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Taking a move back in the card games no longer copies the whole table** (GHUB-0056)
+  Undo now takes the stored piles rather than copying them, and the
+  four solitaires keep their history in a container built for it. The
+  measured win is in evicting the oldest position once the history is
+  full: 20x cheaper. Neither was perceptible on a single move.
+
 - **The Expert computer can now tell who threw each card, so it is harder to fish.** (GHUB-0124)
   Throwing away a card that others have already discarded is usually safe
   — they are unlikely to be holding a pair of it. A crafty player exploits

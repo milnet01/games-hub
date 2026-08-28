@@ -1185,7 +1185,7 @@ small in bytes and awkward in timing, and a growth curve that is fine at
 
 fourteen games and worth watching at thirty.
 
-- 📋 [GHUB-0056] **Undo copies the whole table on every move, and copies it again to undo one.**
+- ✅ [GHUB-0056] **Undo copies the whole table on every move, and copies it again to undo one.**
   Four solitaires keep undo as a stack of snapshots, and a snapshot is the entire
   table. FreeCell's is the widest: eight columns, four free cells and four
   foundations, so sixteen separate `std::vector<Card>` copies -- sixteen heap
@@ -1213,6 +1213,44 @@ fourteen games and worth watching at thirty.
   by replaying moves would drop the per-move allocation entirely. It is also a
   rewrite of four games' undo for a cost nobody has felt, so it belongs in this
   bullet as context for whoever touches that code next -- not as the work.
+  Resolved (2026-08-28): done, and the bullet had its two halves the
+  wrong way round. Measured with a scratch probe over 40,000 Klondike
+  moves, before and after, three runs each.
+
+  The "cheap fix" it named is not in the code. All four solitaires
+  already read `const Snapshot& s = m_history.back();` — a reference,
+  not the value copy the bullet quotes. The waste is one line further
+  in: each member is COPY-assigned from a snapshot destroyed on the
+  very next line. Moving out of the back before popping fixes the same
+  thing the bullet wanted fixed, at a different line. Worth ~15% of
+  undo churn (7.3 -> 6.1 ms per 40,000), which is marginal.
+
+  The structural half the bullet called "tidiness, not a fire" is the
+  whole win: 110 ms -> 5.3 ms per 40,000 pushes, a 20x reduction.
+  The bullet reasoned that `erase(begin())` move-assigns and a moved
+  vector is a pointer steal, so the shift would be cheap. It is cheap
+  per element and there are 2,600 of them per push once the history is
+  full (thirteen vectors, 200 snapshots), and that dominates the push
+  itself. `std::deque` with `pop_front()` makes it free. Klondike,
+  FreeCell and Spider only — Pyramid has NO cap, so it never runs the
+  eviction path and its vector is left alone.
+
+  Nobody would have felt either: 2.75us -> 0.13us per move. The bullet
+  said as much and it is still true.
+
+  Not done, deliberately: undo by replaying moves. The bullet records
+  it as context rather than the work, and this change makes the case
+  for it weaker rather than stronger.
+
+  Pyramid's history has no cap at all and grows for the life of a deal.
+  Bounded in practice by 28 cards plus redeals, so it is noted here
+  rather than filed.
+
+  Coverage was already there and is what proves the move is safe:
+  klondikeSurvivesRandomPlay and the Spider equivalent play 60 games
+  each, undoing on about a fifth of moves and asserting the pack is
+  whole after every one; FreeCell and Pyramid assert the table comes
+  back exactly. ctest 6/6.
   **Layman:** Each move in the card games saves a full snapshot of every pile; taking a move back copies it all a second time for no reason.
   Kind: perf.
   Source: in-session-2026-08-20.

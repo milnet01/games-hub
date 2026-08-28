@@ -3,6 +3,7 @@
 #include "cards/cardcodec.h"
 
 #include <algorithm>
+#include <utility>
 
 void PyramidTable::deal()
 {
@@ -148,10 +149,13 @@ void PyramidTable::undo()
 {
     if (m_history.empty())
         return;
-    const Snapshot& s = m_history.back();
-    m_pyramid = s.pyramid;
-    m_stock = s.stock;
-    m_waste = s.waste;
+    // The snapshot is destroyed on the line below, so take its piles rather
+    // than copying them. Copy-assigning here allocates three vectors and then
+    // frees the originals a line later, every single undo.
+    Snapshot& s = m_history.back();
+    m_pyramid = std::move(s.pyramid);
+    m_stock = std::move(s.stock);
+    m_waste = std::move(s.waste);
     m_pairs = s.pairs;
     m_redeals = s.redeals;
     m_history.pop_back();
