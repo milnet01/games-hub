@@ -1029,7 +1029,7 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0052] **Ten hand-audited parsers, and nothing but hands checking them.**
+- ✅ [GHUB-0052] **Ten hand-audited parsers, and nothing but hands checking them.**
   `restoreState()` has ten implementations, and they are the app's entire untrusted
   input surface — SECURITY.md names it as the one thing parsed that the app did
   not write. The code is good. `cardcodec::readPile` caps its count against
@@ -1062,6 +1062,76 @@ than any amount of hardening applied to an app with no sockets.
   The cores make this cheap: they are Qt-free or QtCore-only by the architecture
   rule, `gameshub_selftest` links only those cores, and the seeds come from code
   that already exists.
+  Resolved (2026-08-28): built, and it found two defects on its first
+  two runs — one of them only visible under the sanitizers the bullet
+  insisted on.
+
+  Two corrections to the bullet. There are TWELVE parsers, not ten.
+  And "the cores make this cheap" is wrong: restoreState() is on the
+  VIEWS, so the harness lives in gameshub_uitest and not in the
+  self-test the bullet points at. The cores hold restore()/load(),
+  which take structured data; the QDataStream parsing is above them.
+
+  `gameshub_uitest --fuzz [rounds]` seeds from each game's own
+  saveState(), mutates it the four ways the bullet named plus an empty
+  blob and pure noise, and holds two invariants taken from GameView's
+  own contract. Refused -> the position must be byte-identical to the
+  one held before the attempt, which is that contract's "the game keeps
+  the fresh one it already dealt". Accepted -> what it now holds must
+  re-save, re-load and survive being painted. Accepting a mutant is not
+  a failure and is reported rather than asserted: a flipped bit inside
+  a card's rank is usually still a legal position.
+
+  DEFECT 1, plain build, CanastaView::restoreState. It half-loaded on
+  refusal, twice over. m_useHouse and m_sortHand were streamed straight
+  into the members, so a truncated save could flip WHICH RULE SET IS IN
+  FORCE and then report itself corrupt. And m_engine.load() commits on
+  success while the tail after it could still fail, leaving the table
+  holding the mutant's game. Engine::load itself is clean and says why
+  -- "read into a copy, so a stream that runs out part way leaves the
+  game that is already on the table alone" -- so the view was breaking
+  the rule its own engine documents. Fixed with a pre-flight over the
+  whole blob; nothing is written until the last field has parsed.
+
+  DEFECT 2, ONLY under UBSan, canastaengine.cpp. readRules() takes
+  `decks` and `jokers` off the untrusted stream with no bound at all,
+  and load()'s pack-wholeness check -- the one check that catches a
+  file that parsed cleanly but says something impossible -- then
+  computes decks * 52. A mutant claiming 905,969,666 decks overflows
+  signed int, which is undefined behaviour, and an optimising build is
+  entitled to assume it cannot happen. The ordinary build scored that
+  mutant a clean pass. Bounded at the read instead.
+
+  Evidence: 96,000 mutants across all twelve parsers under ASan+UBSan,
+  clean. Red/green proved by stashing the Canasta fix and re-running --
+  HALF-LOADED ON REFUSAL: Canasta with it out, PASS with it in.
+
+  Snake and Pinball are the two games not covered, and correctly so:
+  neither overrides saveState, so there is no parser. Getting the other
+  twelve covered took a second pass -- the first run fuzzed three games
+  and skipped eleven, because a freshly opened game answers "nothing
+  worth keeping". nudgeIntoPlay() pokes at the board with clicks,
+  drags, select-then-move pairs, double-clicks and keys until something
+  is worth saving. It knows no game's rules on purpose, and names any
+  game it cannot start rather than passing quietly.
+
+  Wiring, so it stays run: -DGAMESHUB_SANITIZE=ON, a `sanitizers` job
+  in ci.yml, and 150 rounds inside the ordinary uitest. ASan runs with
+  detect_leaks=0 -- GHUB-0058 predicted the sounds would drown out leak
+  checking and it is right, so that stays off until GHUB-0057/0058 are
+  closed.
+
+  scripts/local-ci.sh needed two fixes to stay honest about this. It
+  read the `build` job ALONE, so a second job would have been invisible
+  to the mirror -- exactly the drift it exists to prevent. It now walks
+  every job and REFUSES an unknown one. And it applies nothing around a
+  `run:` body, so an `env:` block would have run differently here than
+  on CI, silently; it now refuses a step carrying one, and the fuzz
+  step keeps its settings inline. The sanitizer leg is opt-in locally
+  (--with-sanitizers) so the pre-push hook stays quick, and is named in
+  "Not checked locally" every run so that default cannot read as
+  coverage. Both guards were tested by feeding the script a doctored
+  workflow.
   **Layman:** The code that loads a saved game is careful, but nothing tests what happens if a save file is damaged or tampered with.
   Kind: security.
   Source: in-session-2026-08-20.

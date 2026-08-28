@@ -295,6 +295,23 @@ Rules readRules(QDataStream& in)
     return r;
 }
 
+// A pack no deal could have produced. `decks` and `jokers` are read straight
+// off an untrusted stream and are then multiplied out to size the pack that
+// load()'s wholeness check compares against -- so a hostile figure overflows
+// that multiply, which is undefined behaviour, before anything gets the chance
+// to refuse it. Bounding them here rather than widening the multiply is the
+// honest fix: a save claiming 905,969,666 decks is not a rounding problem, it
+// is not a Canasta game. The house rules dialog offers two decks; eight is
+// already far past anything anyone plays.
+//
+// Found by GHUB-0052's fuzzer under UndefinedBehaviorSanitizer. The same
+// mutant scored a clean pass in an ordinary build, which is exactly why that
+// bullet insisted the harness be run under sanitizers.
+bool plausiblePack(const Rules& r)
+{
+    return r.decks >= 1 && r.decks <= 8 && r.jokers >= 0 && r.jokers <= 64;
+}
+
 void writeTeam(QDataStream& out, const Team& t)
 {
     out << qint32(t.melds.size());
@@ -375,6 +392,9 @@ bool Engine::load(QDataStream& in, int tail)
     Engine e;
     e.m_rules = readRules(in);
     e.m_pendingRules = readRules(in);
+    // Before any arithmetic touches them -- see plausiblePack.
+    if (!plausiblePack(e.m_rules) || !plausiblePack(e.m_pendingRules))
+        return false;
     for (std::vector<Card>& h : e.m_hands)
         h = readCards(in);
     for (Team& t : e.m_teams)

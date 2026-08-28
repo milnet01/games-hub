@@ -694,6 +694,33 @@ QByteArray CanastaView::saveState() const
 
 bool CanastaView::restoreState(const QByteArray& blob)
 {
+    // A pre-flight over the whole blob, so nothing below can fail once the
+    // first byte of this game has been written (GHUB-0052). Engine::load is
+    // already all-or-nothing and says why -- "a stream that runs out part way
+    // leaves the game that is already on the table alone" -- but that only
+    // covers the engine. It commits on success, and the tail after it could
+    // still fail, which left the table holding the mutant's game while this
+    // returned false and GameView's contract promised the fresh deal was kept.
+    // m_useHouse and m_sortHand were worse: they were streamed into directly,
+    // so a truncated save could flip the rule set in force and then report
+    // itself corrupt. Found by fuzzing, which is what GHUB-0052 built.
+    {
+        QDataStream probe(blob);
+        probe.setVersion(QDataStream::Qt_6_0);
+        quint32 trialVersion = 0;
+        probe >> trialVersion;
+        ca::Engine trial;
+        if (trialVersion < 1 || trialVersion > 7 || !trial.load(probe, int(trialVersion) - 1))
+            return false;
+        qint32 trialLevel = 0;
+        qint32 trialTarget = 0;
+        bool trialHouse = false;
+        bool trialSort = false;
+        probe >> trialLevel >> trialHouse >> trialTarget >> trialSort;
+        if (probe.status() != QDataStream::Ok)
+            return false;
+    }
+
     QDataStream in(blob);
     in.setVersion(QDataStream::Qt_6_0);
     quint32 version = 0;

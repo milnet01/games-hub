@@ -8,6 +8,28 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # AUTORCC compiles sounds.qrc into whichever target lists it as a source.
 set(CMAKE_AUTORCC ON)
 
+# GHUB-0052. The saved-game fuzzer proves very little without these: an
+# out-of-bounds read that happens to land in owned memory returns a wrong
+# answer quietly and the harness scores it a pass, where ASan aborts on the
+# spot. Off by default because it makes the binary several times slower and is
+# not what a player runs; a separate build directory is the intended use.
+#
+#   cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+#         -DGAMESHUB_SANITIZE=ON
+#   cmake --build build-asan
+#   QT_QPA_PLATFORM=offscreen ./build-asan/gameshub_uitest --fuzz 2000
+#
+# MSVC has no UBSan and its ASan does not accept these flags, so this is a
+# GCC/Clang option and says so rather than failing obscurely on Windows.
+option(GAMESHUB_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+if(GAMESHUB_SANITIZE)
+    if(MSVC)
+        message(FATAL_ERROR "GAMESHUB_SANITIZE is a GCC/Clang option; MSVC ships no UBSan.")
+    endif()
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Multimedia)
 qt_standard_project_setup()
 

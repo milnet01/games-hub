@@ -49,6 +49,8 @@
 #include <QToolBar>
 
 #include <algorithm>
+#include <cstdlib>
+#include <random>
 #include <cstdio>
 #include <cstring>
 
@@ -310,6 +312,304 @@ void frameCost()
     check(whileDeactivated == 0, "a deactivated game asks for no repaints at all");
 }
 
+// ---- fuzzSavedGames (GHUB-0052) ----
+//
+// restoreState() is the app's entire untrusted input surface: SECURITY.md names
+// it as the one thing parsed that the app did not write. Every bound in those
+// parsers was put there by a person thinking about it, and until this block
+// existed every one of them was invisible to the suite — nothing fed a
+// malformed blob to any parser, so the next game, or an edit to an existing
+// one, had nothing to fail against.
+//
+// The seed is the game's own saveState(); the mutants are the four shapes the
+// roadmap named — flipped bits, truncations, inflated counts, appended garbage
+// — plus an empty blob and pure noise. Two invariants, both taken from
+// GameView's own contract:
+//
+//   refused  -> "the game keeps the fresh one it already dealt", so the
+//               position must be byte-identical to the one held before the
+//               attempt. A parser that writes as it reads and then bails is
+//               what this catches, and it is the defect worth having.
+//   accepted -> whatever it now holds must be a position it can save and load
+//               again, and must survive being painted.
+//
+// A parser that returns false has passed. Accepting a mutant is not a failure:
+// a flipped bit inside a card's rank is often still a position the rules could
+// have produced.
+//
+// **Run this under AddressSanitizer and UndefinedBehaviorSanitizer or it proves
+// very little** — an out-of-bounds read that lands in owned memory returns a
+// wrong answer quietly and scores a pass here, where ASan aborts on the spot.
+// Configure with -DGAMESHUB_SANITIZE=ON; `gameshub_uitest --fuzz` runs this
+// block alone so that build is cheap to exercise.
+QByteArray mutateBlob(const QByteArray& seed, std::mt19937& rng, int kind)
+{
+    QByteArray b = seed;
+    const int size = int(b.size());
+    // rng() is consumed directly rather than through a distribution: the
+    // library decides how a distribution consumes its bits, so an identical
+    // seed picks different mutants on MSVC and a CI failure stops being
+    // reproducible here. The same reasoning card.cpp's shuffle is built on.
+    switch (kind) {
+    case 0:   // one flipped bit
+        if (size > 0)
+            b[int(rng() % unsigned(size))] ^= char(1u << (rng() % 8));
+        return b;
+    case 1:   // one byte scribbled over
+        if (size > 0)
+            b[int(rng() % unsigned(size))] = char(rng() & 0xFF);
+        return b;
+    case 2:   // truncated anywhere, including to nothing
+        return b.left(size > 0 ? int(rng() % unsigned(size + 1)) : 0);
+    case 3: { // garbage appended
+        const int extra = 1 + int(rng() % 32);
+        for (int i = 0; i < extra; ++i)
+            b.append(char(rng() & 0xFF));
+        return b;
+    }
+    case 4: { // an inflated count: QDataStream is big-endian, so a length field
+              // overwritten with a huge value is what a reserve() would trust
+        if (size < 4)
+            return b;
+        const int at = int(rng() % unsigned(size - 3));
+        const bool huge = (rng() & 1u) != 0;
+        b[at] = char(huge ? 0x7F : 0xFF);
+        for (int i = 1; i < 4; ++i)
+            b[at + i] = char(0xFF);
+        return b;
+    }
+    case 5:   // nothing at all
+        return {};
+    default: { // pure noise of a plausible length
+        const int len = int(rng() % 128);
+        QByteArray noise;
+        for (int i = 0; i < len; ++i)
+            noise.append(char(rng() & 0xFF));
+        return noise;
+    }
+    }
+}
+
+// Plays at the board without knowing which game it is, so that a game whose
+// fresh position is "nothing worth keeping" has something to save. Deliberately
+// ignorant of every game's rules: anything smarter would be a second copy of
+// them, and would go stale the first time one changed.
+void nudgeIntoPlay(GameView* view)
+{
+    // No pump between events: a game applies a click in its own handler, so
+    // sendEvent is enough to change the position, and pumping for every one of
+    // the several hundred sent here would cost the suite half a minute.
+    const int kCols = 9;
+    const int kRows = 7;
+    const QSize size = view->size();
+    const auto at = [&](int c, int r) {
+        return QPointF(size.width() * (c + 0.5) / kCols, size.height() * (r + 0.5) / kRows);
+    };
+    const auto send = [&](QEvent::Type type, QPointF p, Qt::MouseButton button,
+                          Qt::MouseButtons held) {
+        QMouseEvent e(type, p, view->mapToGlobal(p), button, held, Qt::NoModifier);
+        QApplication::sendEvent(view, &e);
+    };
+    const auto click = [&](QPointF p) {
+        send(QEvent::MouseButtonPress, p, Qt::LeftButton, Qt::LeftButton);
+        send(QEvent::MouseButtonRelease, p, Qt::LeftButton, Qt::NoButton);
+    };
+    const auto drag = [&](QPointF a, QPointF b) {
+        send(QEvent::MouseButtonPress, a, Qt::LeftButton, Qt::LeftButton);
+        for (int step = 1; step <= 4; ++step)
+            send(QEvent::MouseMove, a + (b - a) * (step / 4.0), Qt::NoButton, Qt::LeftButton);
+        send(QEvent::MouseButtonRelease, b, Qt::LeftButton, Qt::NoButton);
+    };
+    const auto started = [&] { return !view->saveState().isEmpty(); };
+
+    // Single clicks: a stock pile, a Minesweeper square, a Reversi cell.
+    for (int r = 0; r < kRows; ++r) {
+        for (int c = 0; c < kCols; ++c) {
+            click(at(c, r));
+            if (started())
+                return;
+        }
+    }
+
+    // Keys, before the dearer gestures: Sudoku takes typing, 2048 and Snake
+    // take arrows.
+    const int keys[] = { Qt::Key_Right, Qt::Key_Up, Qt::Key_Left, Qt::Key_Down, Qt::Key_5 };
+    for (int key : keys) {
+        QKeyEvent down(QEvent::KeyPress, key, Qt::NoModifier,
+                       key == Qt::Key_5 ? QStringLiteral("5") : QString());
+        QKeyEvent up(QEvent::KeyRelease, key, Qt::NoModifier);
+        QApplication::sendEvent(view, &down);
+        QApplication::sendEvent(view, &up);
+        if (started())
+            return;
+    }
+
+    // Select-then-move, which is how Chess, Draughts and the board games take a
+    // move: one click picks a piece up and a second puts it down.
+    for (int r = 0; r < kRows; ++r) {
+        for (int c = 0; c < kCols; ++c) {
+            for (int step = 1; step <= 2; ++step) {
+                if (r - step < 0)
+                    continue;
+                click(at(c, r));
+                click(at(c, r - step));
+                if (started())
+                    return;
+                click(at(c, r));
+                click(at(std::min(c + step, kCols - 1), r - step));
+                if (started())
+                    return;
+            }
+        }
+    }
+
+    // Drags, which is how the solitaires move a card or a run.
+    for (int r = 0; r < kRows; ++r) {
+        for (int c = 0; c < kCols; ++c) {
+            for (int target = 0; target < kCols; ++target) {
+                if (target == c)
+                    continue;
+                drag(at(c, r), at(target, r));
+                if (started())
+                    return;
+            }
+        }
+    }
+
+    // Double-click, which sends a card home in most solitaires.
+    for (int r = 0; r < kRows; ++r) {
+        for (int c = 0; c < kCols; ++c) {
+            const QPointF p = at(c, r);
+            click(p);
+            QMouseEvent twice(QEvent::MouseButtonDblClick, p, view->mapToGlobal(p),
+                              Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(view, &twice);
+            send(QEvent::MouseButtonRelease, p, Qt::LeftButton, Qt::NoButton);
+            if (started())
+                return;
+        }
+    }
+}
+
+void fuzzSavedGames(int rounds)
+{
+    std::printf("\n      saved-game parsers under mutation (GHUB-0052)\n");
+
+    std::mt19937 rng(20260828u);
+    HubWindow probe;
+    QStringList halfLoaded;
+    QStringList inconsistent;
+    QStringList unplayable;
+    int gamesFuzzed = 0;
+    int gamesWithoutASave = 0;
+    int totalMutants = 0;
+    int totalAccepted = 0;
+
+    for (const QString& name : probe.gameNames()) {
+        HubWindow one;
+        one.openGameNamed(name);
+        one.show();
+        pump(40);
+        GameView* view = one.findChild<GameView*>();
+        if (view == nullptr)
+            continue;
+
+        // Freezes any clock or animation for the duration. Minesweeper and
+        // Sudoku save elapsedMs(), which is a RUNNING figure — two saves a
+        // millisecond apart differ, and the unchanged-on-refusal check below
+        // would then fail for reasons that have nothing to do with parsing.
+        // deactivate() suspends the clock and is idempotent, so re-calling it
+        // after each attempt keeps every comparison stable.
+        QByteArray seed = view->saveState();
+        if (seed.isEmpty()) {
+            // Most games answer "nothing worth keeping" for a position nobody
+            // has moved in, so a freshly opened one has no save to mutate. The
+            // first run of this block fuzzed three games and skipped eleven,
+            // which looked like coverage and was not. Poke at the board until
+            // something is worth saving: clicks across the surface for the card
+            // games and Minesweeper, arrows and typing for the rest. It is
+            // crude on purpose -- no game-specific knowledge to go stale, and
+            // any game it cannot start is named in the output rather than
+            // passing quietly.
+            nudgeIntoPlay(view);
+            seed = view->saveState();
+        }
+        view->deactivate();
+        seed = view->saveState();
+        if (seed.isEmpty()) {
+            ++gamesWithoutASave;
+            unplayable << name;
+            continue;
+        }
+        ++gamesFuzzed;
+
+        int accepted = 0;
+        int renders = 0;
+        for (int round = 0; round < rounds; ++round) {
+            const QByteArray mutant = mutateBlob(seed, rng, int(rng() % 7));
+            view->deactivate();
+            const QByteArray before = view->saveState();
+
+            const bool taken = view->restoreState(mutant);
+            ++totalMutants;
+            view->deactivate();
+            const QByteArray after = view->saveState();
+
+            if (!taken) {
+                if (after != before && !halfLoaded.contains(name))
+                    halfLoaded << name;
+            } else {
+                ++accepted;
+                // An accepted position must be one the game can hand back and
+                // take again. An empty answer is legitimate: the mutant landed
+                // on a finished game, which is "nothing worth keeping".
+                if (!after.isEmpty() && !view->restoreState(after)
+                    && !inconsistent.contains(name))
+                    inconsistent << name;
+                // Painting is where a position that parses but is not really
+                // legal tends to go out of range. Bounded, because a render is
+                // far dearer than a parse and this block also runs under ASan.
+                if (renders < 25) {
+                    ++renders;
+                    QPixmap canvas(view->size());
+                    canvas.fill(Qt::black);
+                    view->render(&canvas);
+                }
+            }
+
+            // Back to a known position for the next mutant.
+            view->deactivate();
+            if (!view->restoreState(seed) && !inconsistent.contains(name))
+                inconsistent << name;
+        }
+        totalAccepted += accepted;
+        std::printf("      %-12s %4d mutants, %4d refused, %4d taken\n", qPrintable(name),
+                    rounds, rounds - accepted, accepted);
+    }
+
+    std::printf("      %d games with a save fuzzed, %d with nothing to save, %d mutants\n",
+                gamesFuzzed, gamesWithoutASave, totalMutants);
+    if (!unplayable.isEmpty())
+        std::printf("      NO SAVE TO FUZZ (nudgeIntoPlay could not start them): %s\n",
+                    qPrintable(unplayable.join(QStringLiteral(", "))));
+
+    if (!halfLoaded.isEmpty())
+        std::printf("      HALF-LOADED ON REFUSAL: %s\n",
+                    qPrintable(halfLoaded.join(QStringLiteral(", "))));
+    if (!inconsistent.isEmpty())
+        std::printf("      WOULD NOT RELOAD ITS OWN SAVE: %s\n",
+                    qPrintable(inconsistent.join(QStringLiteral(", "))));
+
+    check(gamesFuzzed > 0, "at least one game offers a save to fuzz");
+    check(halfLoaded.isEmpty(), "a refused save leaves the game exactly as it was");
+    check(inconsistent.isEmpty(), "an accepted save is one the game can store and load again");
+    // Reported rather than asserted: how many mutants a parser accepts is a
+    // property of what the format happens to encode, not of this code. A bit
+    // flipped inside a card's rank is usually still a legal position.
+    std::printf("      %d of %d mutants were accepted as playable positions\n", totalAccepted,
+                totalMutants);
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
@@ -329,6 +629,22 @@ int main(int argc, char* argv[])
         if (std::strcmp(argv[i], "--bench") == 0) {
             frameCost();
             std::printf("\n%s\n", g_failures == 0 ? "Bench complete." : "FAILURES PRESENT.");
+            return g_failures == 0 ? 0 : 1;
+        }
+        // `--fuzz [rounds]` runs the saved-game parsers alone. A sanitizer
+        // build is several times slower than this one, and the rest of the
+        // suite has nothing to do with parsing — so without this the ASan run
+        // costs minutes and stops being taken, which is the state GHUB-0052
+        // was filed about.
+        if (std::strcmp(argv[i], "--fuzz") == 0) {
+            int rounds = 400;
+            if (i + 1 < argc) {
+                const int asked = std::atoi(argv[i + 1]);
+                if (asked > 0)
+                    rounds = asked;
+            }
+            fuzzSavedGames(rounds);
+            std::printf("\n%s\n", g_failures == 0 ? "Fuzz complete." : "FAILURES PRESENT.");
             return g_failures == 0 ? 0 : 1;
         }
     }
@@ -2574,6 +2890,8 @@ int main(int argc, char* argv[])
                          : "and so is a card back");
         }
     }
+
+    fuzzSavedGames(150);
 
     frameCost();
 

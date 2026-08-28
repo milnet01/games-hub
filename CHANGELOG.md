@@ -10,6 +10,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Saved games are now tested against damaged and tampered save files** (GHUB-0052)
+  Loading a saved game is the only thing the app reads that it did not
+  write. A new harness corrupts each game's own save thousands of ways
+  and requires every game to refuse it cleanly, run under the
+  compiler's memory-error and undefined-behaviour detectors. It found
+  two real defects on its first two runs.
+
 - **Sudoku comes back where you left it, clock included.** (GHUB-0009)
   A part-solved puzzle reopens with your answers, your pencil marks, the
   square you were on and the time you had spent on it. Pause already
@@ -226,6 +233,18 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   you make while doing what it told you.
 
 ### Fixed
+
+- **A Canasta save claiming an absurd number of packs overflowed the check meant to catch it** (GHUB-0052)
+  The check that a saved Canasta game still holds a whole pack
+  multiplied out a pack size taken straight from the file, with no
+  limit on it. Found only under the undefined-behaviour detector; an
+  ordinary build passed the same file.
+
+- **A damaged Canasta save could change your rule set and then call itself corrupt** (GHUB-0052)
+  Canasta wrote parts of a save into the live game as it read them, so
+  a truncated file could switch you between House and Classic rules, or
+  leave the mutant's table in place, while reporting that it had kept
+  your game. It now reads the whole file before changing anything.
 
 - **Undo in FreeCell and Klondike no longer makes the card disappear.**
   (GHUB-0126)

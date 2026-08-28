@@ -78,3 +78,58 @@ jobs:
       # both binaries run headless on both runners with nothing set here.
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  # GHUB-0052. restoreState() is the app's whole untrusted input surface, and
+  # every bound in those parsers is invisible to an ordinary build: an
+  # out-of-bounds read that lands in owned memory returns a wrong answer
+  # quietly and the fuzzer scores it a pass. This leg is the one that can see
+  # them, and it earned its place immediately — it found a signed overflow in
+  # Canasta's pack-wholeness check that the ordinary build had just passed.
+  #
+  # Its own job rather than a step on the matrix: MSVC ships no UBSan, so this
+  # is Linux only, and a sanitized binary is far too slow to run the whole
+  # suite through.
+  sanitizers:
+    name: Saved-game fuzz (ASan/UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
+        with:
+          version: '6.8.3'
+          arch: linux_gcc_64
+          modules: qtmultimedia
+          cache: true
+
+      - name: Install Linux build and runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build libgl1-mesa-dev \
+            libxkbcommon-x11-0 libxcb-cursor0
+
+      - name: Configure with sanitizers
+        run: >
+          cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DGAMESHUB_SANITIZE=ON
+
+      # Only the test binary: the app itself is not what this leg runs.
+      - name: Build the sanitized test binary
+        run: cmake --build build-asan --target gameshub_uitest
+
+      # detect_leaks=0 deliberately. This app frees neither its sound effects
+      # nor a game once opened — GHUB-0058 and GHUB-0057 are those bullets,
+      # and GHUB-0058 says in as many words that they would drown out the leak
+      # checking this fuzz needs. Turn it on when those are closed, not before.
+      # The settings are inline rather than in an `env:` block so that
+      # scripts/local-ci.sh runs this step exactly as CI does: it executes the
+      # workflow's own `run:` bodies and applies nothing around them.
+      - name: Fuzz the saved-game parsers
+        run: |
+          QT_QPA_PLATFORM=offscreen \
+          ASAN_OPTIONS=detect_leaks=0 \
+          UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
+          ./build-asan/gameshub_uitest --fuzz 4000

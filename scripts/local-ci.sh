@@ -21,6 +21,7 @@
 #
 # Usage:  scripts/local-ci.sh            # lint + build + test the Linux leg
 #         scripts/local-ci.sh --lint     # workflow linters only (docs pushes)
+#         scripts/local-ci.sh --with-sanitizers   # add the ASan/UBSan fuzz leg
 
 # shellcheck disable=SC2016  # the ${{ }} literal below is deliberately unexpanded
 set -uo pipefail
@@ -29,6 +30,19 @@ cd "$(dirname "$0")/.." || exit 1
 WORKFLOW=.github/workflows/ci.yml
 FAILED=0
 SKIPPED=()
+# The sanitizer leg is real work rather than a lint, so it is opt-in here and
+# always runs on CI. See the job guard in the step loop below.
+WITH_SANITIZERS=0
+SANITIZERS_NOTED=0
+LAST_JOB=
+LINT_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --lint)             LINT_ONLY=1 ;;
+        --with-sanitizers)  WITH_SANITIZERS=1 ;;
+        *) echo "unknown option '$arg'"; exit 1 ;;
+    esac
+done
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
@@ -63,7 +77,7 @@ for tool in actionlint yamllint zizmor; do
     fi
 done
 
-if [ "${1:-}" = "--lint" ]; then
+if [ "$LINT_ONLY" -eq 1 ]; then
     echo
     bold "Lint-only run (documentation change) — build and tests not run."
     exit $FAILED
@@ -84,7 +98,7 @@ Set up MSVC environment|windows-only|
 RULES
 )
 
-bold "Steps from $WORKFLOW (Linux leg)"
+bold "Steps from $WORKFLOW (Linux legs)"
 
 # Via a temp file, not $(...): command substitution strips NUL bytes, so the
 # whole step list came back empty and the run reported success having
@@ -97,21 +111,38 @@ STEPS_RUN=0
 python3 - "$WORKFLOW" > "$STEPS_FILE" <<'PY'
 import sys, yaml
 wf = yaml.safe_load(open(sys.argv[1]))
-job = wf['jobs']['build']
-for step in job['steps']:
-    cond = step.get('if', '')
-    if "runner.os == 'Windows'" in cond:
-        kind = 'WINDOWS'
-    elif 'uses' in step:
-        kind = 'USES'
-    else:
-        kind = 'RUN'
-    name = step.get('name') or step.get('uses', '').split('@')[0]
-    body = step.get('run', '') if kind == 'RUN' else step.get('uses', '')
-    # NUL between records, \x1e between fields: a `run:` block is multi-line,
-    # so a newline-separated record would be split mid-body and the step
-    # would run only its first line -- silently, and green.
-    sys.stdout.write('\x1e'.join([kind, name, body]) + '\0')
+# Every job, not just `build`. This read the build job alone until GHUB-0052
+# added a second one, and a job this script cannot see is the same silent
+# drift a step it cannot see would be -- worse, because it is a whole leg.
+# An unknown job stops the run exactly as an unknown step does.
+known = ('build', 'sanitizers')
+for name in wf['jobs']:
+    if name not in known:
+        sys.stdout.write('\x1e'.join(['UNKNOWNJOB', name, '']) + '\0')
+for job_name in known:
+    job = wf['jobs'].get(job_name)
+    if job is None:
+        continue
+    for step in job['steps']:
+        cond = step.get('if', '')
+        if "runner.os == 'Windows'" in cond:
+            kind = 'WINDOWS'
+        elif 'uses' in step:
+            kind = 'USES'
+        else:
+            kind = 'RUN'
+        name = step.get('name') or step.get('uses', '').split('@')[0]
+        body = step.get('run', '') if kind == 'RUN' else step.get('uses', '')
+        # This script runs a `run:` body and applies nothing around it, so a
+        # step carrying an `env:` block would execute here WITHOUT it and
+        # differ from CI quietly. Refuse rather than mirror it wrongly; put
+        # the setting inline in the run body instead.
+        if step.get('env'):
+            kind = 'HASENV'
+        # NUL between records, \x1e between fields: a `run:` block is
+        # multi-line, so a newline-separated record would be split mid-body
+        # and the step would run only its first line -- silently, and green.
+        sys.stdout.write('\x1e'.join([kind, name, body, job_name]) + '\0')
 PY
 PARSE_RC=$?
 [ $PARSE_RC -eq 0 ] || { echo "could not parse $WORKFLOW (is python3-yaml installed?)"; exit 1; }
@@ -121,8 +152,37 @@ while IFS= read -r -d '' REC; do
     KIND=${REC%%$'\x1e'*}
     REST=${REC#*$'\x1e'}
     NAME=${REST%%$'\x1e'*}
-    BODY=${REST#*$'\x1e'}
+    REST=${REST#*$'\x1e'}
+    BODY=${REST%$'\x1e'*}
+    JOB=${REST##*$'\x1e'}
     [ -z "$KIND" ] && continue
+
+    if [ "$KIND" = "HASENV" ]; then
+        bad "step '$NAME' carries an env: block, which this script does not apply — inline it in the run body"
+        continue
+    fi
+    if [ "$KIND" = "UNKNOWNJOB" ]; then
+        bad "UNKNOWN JOB '$NAME' in $WORKFLOW — teach $0 about it or it runs nowhere but CI"
+        continue
+    fi
+
+    # The sanitizer leg CAN run here, unlike the Windows one — it is simply
+    # dear: its own build tree, and a binary several times slower. Off by
+    # default so the pre-push hook stays quick, named in the summary every
+    # run so that default never reads as coverage.
+    if [ "$JOB" = "sanitizers" ] && [ "$WITH_SANITIZERS" -eq 0 ]; then
+        [ "$SANITIZERS_NOTED" -eq 0 ] && {
+            note "sanitizers job — not run (pass --with-sanitizers)"
+            SKIPPED+=("the ASan/UBSan saved-game fuzz")
+            SANITIZERS_NOTED=1
+        }
+        continue
+    fi
+    if [ "$JOB" != "$LAST_JOB" ]; then
+        echo
+        bold "Steps from the '$JOB' job"
+        LAST_JOB=$JOB
+    fi
     RULE=$(printf '%s\n' "$STEP_RULES" | awk -F'|' -v n="$NAME" '$1==n {print $2"|"$3}')
     RULE_KIND=${RULE%%|*}
     RULE_CHECK=${RULE#*|}
@@ -195,7 +255,7 @@ fi
 
 echo
 if [ $FAILED -eq 0 ]; then
-    bold "Local CI passed. The Windows leg is unverified unless you ran wintest-ci.sh."
+    bold "Local CI passed — but only for what ran. See 'Not checked locally' above."
 else
     bold "Local CI FAILED — do not push."
 fi
