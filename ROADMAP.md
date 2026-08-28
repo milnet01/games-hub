@@ -1727,7 +1727,7 @@ draws, whether or not it has had one.
   Kind: ux.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0065] **One game animates and thirteen teleport.**
+- 🚧 [GHUB-0065] **One game animates and thirteen teleport.**
   Canasta has card flights. Nothing else does. In every other game a card is in
   one place, and then it is in another, with nothing in between: a deal arrives
   fully formed, a run lands on a foundation, a trick gathers itself up. The move
@@ -1755,6 +1755,65 @@ draws, whether or not it has had one.
   large surface if taken all at once; the auto-moves above are where the ambiguity
   actually is, and dealing animations are the pretty part rather than the useful
   part. Start where a player currently cannot tell what happened.
+  Progress (2026-08-28): the auto-move half is done — the part the
+  bullet says to start with. Left open deliberately; the rest of the
+  surface it describes is untouched.
+
+  A correction first. The bullet's clearest case — "an auto-move to a
+  foundation, cards leave on their own, SEVERAL AT A TIME" — is not
+  behaviour this app has. KlondikeTable::autoFinishStep() exists and
+  is called by the self-test and by nothing else; no view offers it.
+  So the teleports a player actually meets are a double-click sending
+  ONE card home, and Spider harvesting a completed run. Both are now
+  animated.
+
+  src/cards/cardflight.* is the shared piece: a card, where it left,
+  where it is going, an eased position and a stagger. Presentation, so
+  it sits in GAME_VIEW_SOURCES even though it needs nothing from
+  QtWidgets — the reasoning legibility.cpp already carries. Two of
+  Canasta's three traps are handled inside it: suppressAt() consumes
+  ONE flight per answer, so two identical cards arriving together
+  suppress two destination copies rather than one twice, and a locked
+  test covers exactly that. The third cannot be — a flight carries a
+  destination captured when the card left, so the caller must clear
+  them when the layout moves. All three views therefore clear on both
+  deactivate() and applyLegibility(); the caption band comes off the
+  height these games solve their card size from, so the switch moves
+  every rect on the surface.
+
+  Each view owns a QTimer and so overrides deactivate(), which is
+  GHUB-0046's boundary and the rule CLAUDE.md states structurally
+  rather than by observation.
+
+  Spider is the starkest and got the most care: thirteen cards leave a
+  column at once, staggered so it reads as a sequence. They fly to the
+  stock corner, which is the only anchor on that surface meaning "put
+  away" — Spider draws no completed-runs pile, and the count lives in
+  the status bar, the one place this project knows the owner does not
+  read. Giving those runs a home on the play surface is a layout change
+  and a bigger item; the motion at least answers where they went.
+
+  Tested rather than eyeballed, because --shot photographs a game the
+  moment it opens and can never see a flight. flightsInTheAir() exists
+  so a check can ask what no rendered picture can answer, on the
+  precedent of SudokuView::marksFitAt. Klondike and FreeCell open fresh
+  deals until one has a home-able ace (three, both times) and assert
+  the card flies, lands and stops the timer. Spider's position is
+  BUILT — a one-suit game, King down to Two in the first column, the
+  Ace alone in the second — because no amount of poking at a random
+  deal completes a run; it then asserts all thirteen fly, that they are
+  still going after a tick that would have finished one unstaggered
+  card, and that they all arrive.
+
+  Still to do, and why this stays open: dealing animations (the bullet
+  calls them the pretty part rather than the useful part), Klondike's
+  stock and waste, Pyramid's matched pairs, the board games, and
+  Spider's harvest via dealRow rather than a drop — that path can
+  complete several runs across several columns at once and needs the
+  table to say which, where the drop path already reports its column.
+
+  Frame cost unchanged: canasta at rest 7.69 against the 7.70 recorded
+  on 2026-08-25. It costs nothing when nothing is flying. ctest 6/6.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.

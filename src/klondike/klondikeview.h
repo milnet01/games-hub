@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cards/card.h"
+#include "cards/cardflight.h"
 #include "gameview.h"
 #include "klondike/klondiketable.h"
 
@@ -9,6 +10,8 @@
 
 #include <array>
 #include <vector>
+
+class QTimer;
 
 class KlondikeView : public GameView
 {
@@ -20,6 +23,22 @@ public:
     QList<QAction*> gameActions() override { return m_actions; }
     double smallestCardWidth() const override { return cardWidth(); }
     void activate() override;
+    // A game that owns a QTimer overrides this. The flight timer is one
+    // (GHUB-0046), and the rule is structural rather than observed: no test
+    // can see a board that happens to be still when the hub leaves it.
+    void deactivate() override;
+    // The caption band comes off the height these views solve their card size
+    // from, so the switch moves every rect on the surface. A flight carries a
+    // destination captured when the card left (cardflight.h), so it has to be
+    // landed rather than left pointing at an address that has moved.
+    void applyLegibility(bool enabled) override;
+
+    // Exists so a test can ask what no rendered picture can answer: whether a
+    // card is actually in the air, rather than whether two frames differ. Same
+    // reasoning as SudokuView::marksFitAt — a check that cannot reach the state
+    // it is about ends up asserting something weaker and calling it coverage.
+    int flightsInTheAir() const { return int(m_flights.size()); }
+
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
@@ -74,6 +93,21 @@ private:
     void dealFromStock();
     void checkWin();
     void refresh();
+
+    // GHUB-0065. Sends `card` on its way from `fromRect` to foundation
+    // `foundation`, which the caller has already moved it to in the model. The
+    // destination is captured here, when the card leaves, so anything that
+    // moves the layout must clear m_flights -- see cardflight.h.
+    void launchToFoundation(const Card& card, QRectF fromRect, int foundation);
+    // The foundation whose pile grew, given the sizes before the move. A
+    // successful send does not say which one took the card.
+    int grownFoundation(const std::array<std::size_t, 4>& before) const;
+
+    std::vector<cardflight::Flight> m_flights;
+    // Per-repaint scratch for cardflight::suppressAt. Cleared at the top of
+    // paintEvent, never read outside it.
+    mutable std::vector<char> m_flightConsumed;
+    QTimer* m_flightTimer = nullptr;
 
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;

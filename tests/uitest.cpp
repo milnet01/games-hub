@@ -12,6 +12,8 @@
 #include "theme.h"
 #include "canasta/canastaview.h"
 #include "cards/cardart.h"
+#include "cards/cardcodec.h"
+#include "cards/cardflight.h"
 #include "chess/chessview.h"
 #include "draughts/draughtsview.h"
 #include "freecell/freecellview.h"
@@ -57,6 +59,18 @@
 namespace {
 
 int g_failures = 0;
+
+// Hoisted out of the deactivate() block when GHUB-0065 gave a second caller a
+// reason to ask the same question: how many of this widget's timers are still
+// running.
+int activeTimers(QWidget* w)
+{
+    int running = 0;
+    for (QTimer* timer : w->findChildren<QTimer*>())
+        if (timer->isActive())
+            ++running;
+    return running;
+}
 
 void check(bool ok, const char* what)
 {
@@ -1163,14 +1177,6 @@ int main(int argc, char* argv[])
     // matters as much as the leaving half**: a deactivate() with no resume
     // freezes the game, which is a worse bug than the one it fixes.
     {
-        const auto activeTimers = [](QWidget* w) {
-            int running = 0;
-            for (QTimer* timer : w->findChildren<QTimer*>())
-                if (timer->isActive())
-                    ++running;
-            return running;
-        };
-
         // Each in its own scope, ending stopped. A view left running here keeps
         // its timer alive through everything below — Pinball's physics ticks
         // and repaints on every pump, which turned a 34-second suite into one
@@ -2888,6 +2894,228 @@ int main(int argc, char* argv[])
             check(alone == after,
                   faceUp ? "a card face is the same picture whichever rect filled its cache entry"
                          : "and so is a card back");
+        }
+    }
+
+    // ---- cardsShowTheirJourney (GHUB-0065) --------------------------------
+    //
+    // Motion is information: it answers *what just changed and where did it
+    // go*, which a redraw of the finished position cannot, because by the time
+    // you look the change is over. Three things are checked, and the first is
+    // the one no picture could answer — hence GameView's flightsInTheAir().
+    {
+        // The helper first, on its own, because two of its three rules are the
+        // ones Canasta paid real time to learn.
+        std::vector<cardflight::Flight> flights;
+        cardflight::Flight a;
+        a.card = Card { .suit = Suit::Hearts, .rank = 7, .faceUp = true, .deck = 0 };
+        a.from = QPointF(0, 0);
+        a.to = QPointF(100, 0);
+        a.speed = 1.0;
+        flights.push_back(a);
+
+        check(cardflight::positionOf(flights.front()) == QPointF(0, 0),
+              "a flight starts where the card was");
+        check(cardflight::advance(flights, 0.5), "and is still in the air half way");
+        const double half = cardflight::positionOf(flights.front()).x();
+        check(half > 40.0 && half < 60.0, "eased, so half the time is about half the distance");
+        check(!cardflight::advance(flights, 0.6), "it lands and is dropped");
+        check(flights.empty(), "leaving nothing behind to draw");
+
+        // A delayed flight must not lose the part of the tick that ran out its
+        // wait, or a staggered run gains a frame of lag per card.
+        flights.clear();
+        cardflight::Flight late = a;
+        late.delay = 0.01;
+        flights.push_back(late);
+        cardflight::advance(flights, 0.51);
+        check(cardflight::positionOf(flights.front()).x() > 40.0,
+              "a delay spends what is left of the tick on the journey");
+
+        // The trap that cost Canasta: two identical cards arriving together
+        // must suppress two destination copies, not one of them twice. Two
+        // packs are shuffled together in this project, so this is routine.
+        flights.clear();
+        flights.push_back(a);
+        cardflight::Flight twin = a;
+        twin.card.deck = 1;   // deliberately outside operator==
+        flights.push_back(twin);
+        std::vector<char> consumed;
+        consumed.assign(flights.size(), 0);
+        check(cardflight::suppressAt(flights, consumed, -1, a.card),
+              "a card on its way is suppressed at its destination");
+        check(cardflight::suppressAt(flights, consumed, -1, a.card),
+              "and an identical second one suppresses the SECOND copy");
+        check(!cardflight::suppressAt(flights, consumed, -1, a.card),
+              "a third asks for a flight that is not there and is refused");
+        consumed.assign(flights.size(), 0);
+        check(!cardflight::suppressAt(flights, consumed, 2, a.card),
+              "suppression is per destination, not per card");
+
+        // Now the real views. A Klondike or FreeCell deal only sometimes leaves
+        // an ace where a double-click can reach it, so this opens fresh games
+        // until one takes the move — and says so if none ever does, rather than
+        // passing on a game where nothing was ever tried.
+        const auto doubleClickEverywhere = [](GameView* view, const auto& airborne) {
+            for (int r = 0; r < 8; ++r) {
+                for (int c = 0; c < 9; ++c) {
+                    const QPointF p(view->width() * (c + 0.5) / 9.0,
+                                    view->height() * (r + 0.5) / 8.0);
+                    QMouseEvent press(QEvent::MouseButtonPress, p, view->mapToGlobal(p),
+                                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                    QMouseEvent twice(QEvent::MouseButtonDblClick, p, view->mapToGlobal(p),
+                                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                    QMouseEvent release(QEvent::MouseButtonRelease, p, view->mapToGlobal(p),
+                                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                    QApplication::sendEvent(view, &press);
+                    QApplication::sendEvent(view, &release);
+                    QApplication::sendEvent(view, &twice);
+                    QApplication::sendEvent(view, &release);
+                    if (airborne())
+                        return true;
+                }
+            }
+            return false;
+        };
+
+        int klondikeTries = 0;
+        bool klondikeFlew = false;
+        for (; klondikeTries < 40 && !klondikeFlew; ++klondikeTries) {
+            KlondikeView v;
+            v.resize(820, 620);
+            v.show();
+            pump(10);
+            klondikeFlew = doubleClickEverywhere(&v, [&v] { return v.flightsInTheAir() > 0; });
+            if (!klondikeFlew)
+                continue;
+
+            // It must land on its own, and the timer must not outlive it.
+            pump(1200);
+            check(v.flightsInTheAir() == 0, "klondike: a card sent home lands and stops flying");
+            check(activeTimers(&v) == 0, "klondike: and the flight timer stops once it has");
+        }
+        check(klondikeFlew, "klondike: double-clicking an ace sends it home with a visible journey");
+
+        int freecellTries = 0;
+        bool freecellFlew = false;
+        for (; freecellTries < 40 && !freecellFlew; ++freecellTries) {
+            FreeCellView v;
+            v.resize(900, 640);
+            v.show();
+            pump(10);
+            freecellFlew = doubleClickEverywhere(&v, [&v] { return v.flightsInTheAir() > 0; });
+            if (!freecellFlew)
+                continue;
+
+            // deactivate() must clear the air, not merely pause it: a flight
+            // carries a destination captured when the card left, and the hub
+            // resizes this page the moment it leaves.
+            check(v.flightsInTheAir() > 0, "freecell: a card is in the air to begin with");
+            v.deactivate();
+            check(v.flightsInTheAir() == 0, "freecell: and leaving the game clears the air");
+            check(activeTimers(&v) == 0, "freecell: with no timer left running behind it");
+        }
+        check(freecellFlew, "freecell: double-clicking an ace sends it home with a visible journey");
+
+        std::printf("      klondike found a home-able ace in %d deals, freecell in %d\n",
+                    klondikeTries, freecellTries);
+
+        // Spider is the starkest case in the bullet — thirteen cards leave a
+        // column at once — and the only one no amount of poking at a random
+        // deal will reach. So the position is BUILT: a one-suit game with King
+        // down to Two in the first column and the Ace sitting alone in the
+        // second, which is one drag away from a completed run.
+        {
+            std::vector<Card> deck = makeDeck(2, 1);
+            std::array<std::vector<Card>, 14> byRank {};
+            for (Card c : deck) {
+                c.faceUp = true;
+                if (c.rank >= 1 && c.rank <= 13)
+                    byRank[std::size_t(c.rank)].push_back(c);
+            }
+
+            std::array<std::vector<Card>, 10> columns {};
+            bool everyRankPresent = true;
+            for (int rank = kKing; rank >= 2; --rank) {
+                if (byRank[std::size_t(rank)].empty()) {
+                    everyRankPresent = false;
+                    break;
+                }
+                columns[0].push_back(byRank[std::size_t(rank)].back());
+                byRank[std::size_t(rank)].pop_back();
+            }
+            check(everyRankPresent && !byRank[std::size_t(kAce)].empty(),
+                  "spider: a two-pack one-suit deck has every rank to build a run from");
+            columns[1].push_back(byRank[std::size_t(kAce)].back());
+            byRank[std::size_t(kAce)].pop_back();
+
+            // Everything else has to come back too: Spider's own restore
+            // refuses a position that is not two whole packs less the runs
+            // already taken off.
+            std::vector<Card> rest;
+            for (std::vector<Card>& bucket : byRank)
+                rest.insert(rest.end(), bucket.begin(), bucket.end());
+            std::vector<Card> stock;
+            for (std::size_t i = 0; i < rest.size(); ++i) {
+                if (i < 40)
+                    columns[2 + (i % 8)].push_back(rest[i]);
+                else
+                    stock.push_back(rest[i]);
+            }
+
+            QByteArray blob;
+            QDataStream out(&blob, QIODevice::WriteOnly);
+            out.setVersion(QDataStream::Qt_6_0);
+            out << quint32(1) << qint32(1) << qint32(0) << qint32(1);
+            for (const std::vector<Card>& col : columns)
+                cardcodec::writePile(out, col);
+            cardcodec::writePile(out, stock);
+
+            bool harvested = false;
+            // The Ace's exact rect is the view's own business, so the drag is
+            // swept over the second column's strip until one takes. Same
+            // reasoning as nudgeIntoPlay: no copy of the layout to go stale.
+            for (int attempt = 0; attempt < 12 && !harvested; ++attempt) {
+                SpiderView v;
+                v.resize(900, 640);
+                v.show();
+                pump(10);
+                if (!v.restoreState(blob)) {
+                    check(false, "spider: the built position is one the rules could have reached");
+                    break;
+                }
+                pump(10);
+
+                const QPointF from(v.width() * 1.5 / 10.0, 24.0 + attempt * 12.0);
+                const QPointF to(v.width() * 0.5 / 10.0, v.height() * 0.25);
+                QMouseEvent press(QEvent::MouseButtonPress, from, v.mapToGlobal(from),
+                                  Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(&v, &press);
+                for (int step = 1; step <= 4; ++step) {
+                    const QPointF at = from + (to - from) * (step / 4.0);
+                    QMouseEvent move(QEvent::MouseMove, at, v.mapToGlobal(at), Qt::NoButton,
+                                     Qt::LeftButton, Qt::NoModifier);
+                    QApplication::sendEvent(&v, &move);
+                }
+                QMouseEvent release(QEvent::MouseButtonRelease, to, v.mapToGlobal(to),
+                                    Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QApplication::sendEvent(&v, &release);
+
+                if (v.flightsInTheAir() == 0)
+                    continue;
+                harvested = true;
+                check(v.flightsInTheAir() == SpiderTable::kRunLength,
+                      "spider: a completed run sends every one of its thirteen cards on its way");
+                // Staggered, so it reads as a sequence rather than one smear —
+                // which means it must still be going after a tick that would
+                // have finished a single unstaggered card.
+                pump(200);
+                check(v.flightsInTheAir() > 0, "spider: and they leave in order rather than at once");
+                pump(3000);
+                check(v.flightsInTheAir() == 0, "spider: the whole run arrives and stops flying");
+                check(activeTimers(&v) == 0, "spider: with no timer left running behind it");
+            }
+            check(harvested, "spider: completing a run is visible as thirteen cards leaving");
         }
     }
 

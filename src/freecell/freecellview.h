@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cards/card.h"
+#include "cards/cardflight.h"
 #include "freecell/freecelltable.h"
 #include "gameview.h"
 
@@ -9,6 +10,8 @@
 
 #include <array>
 #include <vector>
+
+class QTimer;
 
 // FreeCell: every card face up from the start, four cells to park singles in,
 // and almost every deal winnable.
@@ -22,6 +25,21 @@ public:
     QList<QAction*> gameActions() override { return m_actions; }
     double smallestCardWidth() const override { return cardWidth(); }
     void activate() override;
+    // A game that owns a QTimer overrides this — structural, not observed
+    // (GHUB-0046). The flight timer is one.
+    void deactivate() override;
+    // The caption band comes off the height these views solve their card size
+    // from, so the switch moves every rect on the surface. A flight carries a
+    // destination captured when the card left (cardflight.h), so it has to be
+    // landed rather than left pointing at an address that has moved.
+    void applyLegibility(bool enabled) override;
+
+    // Exists so a test can ask what no rendered picture can answer: whether a
+    // card is actually in the air, rather than whether two frames differ. Same
+    // reasoning as SudokuView::marksFitAt — a check that cannot reach the state
+    // it is about ends up asserting something weaker and calling it coverage.
+    int flightsInTheAir() const { return int(m_flights.size()); }
+
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
@@ -82,6 +100,15 @@ private:
 
     // The rules. What is left here is the pointer, the drag and the drawing.
     FreeCellTable m_table;
+
+    // GHUB-0065. Cards on their way to a foundation. The destination is
+    // captured when the card leaves, so anything moving the layout clears
+    // these — see cardflight.h.
+    std::vector<cardflight::Flight> m_flights;
+    mutable std::vector<char> m_flightConsumed;
+    QTimer* m_flightTimer = nullptr;
+    void launchToFoundation(const Card& card, QRectF fromRect, int foundation);
+    int grownFoundation(const std::array<std::size_t, 4>& before) const;
 
     std::vector<Card> m_drag;
     Spot m_dragFrom;

@@ -283,12 +283,22 @@ void FreeCellView::paintEvent(QPaintEvent*)
             CardArt::paintFace(p, r, m_table.cells()[std::size_t(i)].back());
     }
 
+    // One match per flight, so two identical cards in the air do not both
+    // suppress the same destination copy. Reset every repaint.
+    m_flightConsumed.assign(m_flights.size(), 0);
+
     for (int i = 0; i < 4; ++i) {
         const QRectF r = pileOrigin(PileKind::Foundation, i);
-        if (m_table.foundations()[std::size_t(i)].empty())
+        const std::vector<Card>& pile = m_table.foundations()[std::size_t(i)];
+        // A foundation shows its top card only, so one still on its way here is
+        // drawn a rank down until it lands — otherwise it is on screen twice.
+        std::size_t shown = pile.size();
+        if (shown > 0 && cardflight::suppressAt(m_flights, m_flightConsumed, i, pile.back()))
+            --shown;
+        if (shown == 0)
             CardArt::paintSlot(p, r, QStringLiteral("A"));
         else
-            CardArt::paintFace(p, r, m_table.foundations()[std::size_t(i)].back());
+            CardArt::paintFace(p, r, pile[shown - 1]);
     }
 
     for (int col = 0; col < kColumns; ++col) {
@@ -309,6 +319,12 @@ void FreeCellView::paintEvent(QPaintEvent*)
                                              : QColor(0xe8, 0x51, 0x4f, 130));
             }
         }
+    }
+
+    // Cards on their way home, above the table and below the hand.
+    for (const cardflight::Flight& f : m_flights) {
+        const QPointF at = cardflight::positionOf(f);
+        CardArt::paintFace(p, QRectF(at, QSizeF(cardWidth(), cardHeight())), f.card);
     }
 
     if (m_dragging && !m_drag.empty()) {
@@ -450,11 +466,78 @@ void FreeCellView::mouseDoubleClickEvent(QMouseEvent* event)
     const Spot s = hitTest(event->position());
     if (!s.valid || s.index < 0 || s.kind == PileKind::Foundation)
         return;
+    // Where the card stands and what the foundations hold, BEFORE the move: a
+    // successful send does not report where the card went, and afterwards
+    // there is nothing left at the old address to measure.
+    const std::vector<Card>& source = pileFor(s.kind, s.pile);
+    if (source.empty())
+        return;
+    const Card moving = source.back();
+    const QRectF fromRect = s.kind == PileKind::Column
+        ? cardRect(s.pile, int(source.size()) - 1)
+        : pileOrigin(s.kind, s.pile);
+    std::array<std::size_t, 4> before {};
+    for (int f = 0; f < 4; ++f)
+        before[std::size_t(f)] = m_table.foundations()[std::size_t(f)].size();
+
     if (m_table.sendToFoundation(s.kind, s.pile)) {
         Sound::instance().play(Sound::kCardPlace);
+        launchToFoundation(moving, fromRect, grownFoundation(before));
         m_undoAction->setEnabled(m_table.canUndo());
         update();
         refresh();
         checkWin();
     }
+}
+
+int FreeCellView::grownFoundation(const std::array<std::size_t, 4>& before) const
+{
+    for (int f = 0; f < 4; ++f) {
+        if (m_table.foundations()[std::size_t(f)].size() > before[std::size_t(f)])
+            return f;
+    }
+    return -1;
+}
+
+void FreeCellView::launchToFoundation(const Card& card, QRectF fromRect, int foundation)
+{
+    if (foundation < 0)
+        return;
+
+    cardflight::Flight f;
+    f.card = card;
+    f.from = fromRect.topLeft();
+    f.to = pileOrigin(PileKind::Foundation, foundation).topLeft();
+    f.destination = foundation;
+    m_flights.push_back(f);
+
+    if (m_flightTimer == nullptr) {
+        m_flightTimer = new QTimer(this);
+        m_flightTimer->setInterval(16);
+        connect(m_flightTimer, &QTimer::timeout, this, [this] {
+            if (!cardflight::advance(m_flights, 0.016))
+                m_flightTimer->stop();
+            update();
+        });
+    }
+    m_flightTimer->start();
+}
+
+void FreeCellView::deactivate()
+{
+    // A card in the air carries a destination captured when it left, and the
+    // hub may resize this page while it is away.
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+}
+
+void FreeCellView::applyLegibility(bool enabled)
+{
+    // Land them where the model already believes they are, then let the base
+    // re-lay-out. Keeping them would put a card down at its old destination.
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    GameView::applyLegibility(enabled);
 }

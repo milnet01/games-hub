@@ -116,6 +116,7 @@ set(GAME_VIEW_SOURCES
     src/donatedialog.cpp
     src/scores.cpp
     src/cards/cardart.cpp
+    src/cards/cardflight.cpp
     src/chess/chessart.cpp
     src/chess/chessview.cpp
     src/klondike/klondikeview.cpp

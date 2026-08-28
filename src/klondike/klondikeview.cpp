@@ -358,12 +358,23 @@ void KlondikeView::paintEvent(QPaintEvent*)
     else
         CardArt::paintFace(p, pileOrigin(PileKind::Waste, 0), m_table.waste().back());
 
+    // One match per flight, so two identical cards in the air do not both
+    // suppress the same destination copy. Reset every repaint.
+    m_flightConsumed.assign(m_flights.size(), 0);
+
     for (int f = 0; f < 4; ++f) {
         const QRectF r = pileOrigin(PileKind::Foundation, f);
-        if (m_table.foundations()[std::size_t(f)].empty())
+        const std::vector<Card>& pile = m_table.foundations()[std::size_t(f)];
+        // A foundation shows its top card only, so a card still on its way here
+        // is drawn one rank down until it arrives -- otherwise it is on screen
+        // twice and the journey is a lie.
+        std::size_t shown = pile.size();
+        if (shown > 0 && cardflight::suppressAt(m_flights, m_flightConsumed, f, pile.back()))
+            --shown;
+        if (shown == 0)
             CardArt::paintSlot(p, r, QStringLiteral("A"));
         else
-            CardArt::paintFace(p, r, m_table.foundations()[std::size_t(f)].back());
+            CardArt::paintFace(p, r, pile[shown - 1]);
     }
 
     for (int col = 0; col < 7; ++col) {
@@ -379,6 +390,12 @@ void KlondikeView::paintEvent(QPaintEvent*)
             else
                 CardArt::paintBack(p, r);
         }
+    }
+
+    // Cards on their way home, above the table and below the hand.
+    for (const cardflight::Flight& f : m_flights) {
+        const QPointF at = cardflight::positionOf(f);
+        CardArt::paintFace(p, QRectF(at, QSizeF(cardWidth(), cardHeight())), f.card);
     }
 
     // The dragged stack rides above everything else.
@@ -520,9 +537,77 @@ void KlondikeView::mouseDoubleClickEvent(QMouseEvent* event)
     if (!s.valid || s.kind == PileKind::Stock || s.index < 0)
         return;
 
+    // Where the card is standing, and which foundations hold what, BEFORE the
+    // move: a successful send does not report where the card went, and once it
+    // has gone there is nothing left at the old address to measure.
+    const std::vector<Card>& source = pileFor(s.kind, s.pile);
+    if (source.empty())
+        return;
+    const Card moving = source.back();
+    const QRectF fromRect = cardRect(s.kind, s.pile, int(source.size()) - 1);
+    std::array<std::size_t, 4> before {};
+    for (int f = 0; f < 4; ++f)
+        before[std::size_t(f)] = m_table.foundations()[std::size_t(f)].size();
+
     if (m_table.sendToFoundation(s.kind, s.pile)) {
+        launchToFoundation(moving, fromRect, grownFoundation(before));
         update();
         refresh();
         checkWin();
     }
+}
+
+int KlondikeView::grownFoundation(const std::array<std::size_t, 4>& before) const
+{
+    for (int f = 0; f < 4; ++f) {
+        if (m_table.foundations()[std::size_t(f)].size() > before[std::size_t(f)])
+            return f;
+    }
+    return -1;
+}
+
+void KlondikeView::launchToFoundation(const Card& card, QRectF fromRect, int foundation)
+{
+    if (foundation < 0)
+        return;
+
+    cardflight::Flight f;
+    f.card = card;
+    f.from = fromRect.topLeft();
+    f.to = pileOrigin(PileKind::Foundation, foundation).topLeft();
+    f.destination = foundation;
+    m_flights.push_back(f);
+
+    if (m_flightTimer == nullptr) {
+        m_flightTimer = new QTimer(this);
+        // 16ms is the frame budget the bench in gameshub_uitest measures
+        // against; Klondike's full tableau costs a small fraction of it.
+        m_flightTimer->setInterval(16);
+        connect(m_flightTimer, &QTimer::timeout, this, [this] {
+            if (!cardflight::advance(m_flights, 0.016))
+                m_flightTimer->stop();
+            update();
+        });
+    }
+    m_flightTimer->start();
+}
+
+void KlondikeView::deactivate()
+{
+    // A card in the air carries a destination captured when it left, and the
+    // hub may resize this page while it is away. Landing them now is both
+    // correct and what the model already believes.
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+}
+
+void KlondikeView::applyLegibility(bool enabled)
+{
+    // Land them where the model already believes they are, then let the base
+    // re-lay-out. Keeping them would put a card down at its old destination.
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    GameView::applyLegibility(enabled);
 }

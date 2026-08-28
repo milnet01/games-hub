@@ -317,6 +317,12 @@ void SpiderView::paintEvent(QPaintEvent*)
             CardArt::paintBack(p, s.translated(-i * 5.0, -i * 2.0));
     }
 
+    // A completed run on its way out, above the table and below the hand.
+    for (const cardflight::Flight& f : m_flights) {
+        const QPointF at = cardflight::positionOf(f);
+        CardArt::paintFace(p, QRectF(at, QSizeF(cardWidth(), cardHeight())), f.card);
+    }
+
     if (m_dragging && !m_drag.empty()) {
         const double w = cardWidth();
         const double h = cardHeight();
@@ -411,6 +417,19 @@ void SpiderView::mouseReleaseEvent(QMouseEvent* event)
         }
     }
 
+    // What the target column holds, and where each card is sitting, BEFORE the
+    // drop. A completed run is taken off inside dropOn(), so by the time it
+    // reports Completed those thirteen cards no longer exist to be measured.
+    std::vector<Card> preColumn;
+    std::vector<QRectF> preRects;
+    if (target >= 0) {
+        preColumn = m_table.columns()[std::size_t(target)];
+        for (int i = 0; i < int(preColumn.size()); ++i)
+            preRects.push_back(cardRect(target, i));
+    }
+    const std::vector<Card> dragged = m_drag;
+    const QPointF dragTopLeft(m_dragPos.x() - m_dragGrab.x(), m_dragPos.y() - m_dragGrab.y());
+
     // The view decides WHICH column the drop landed on; the table decides
     // whether the run may go there, turns over what it uncovered and takes off
     // a completed run.
@@ -420,8 +439,25 @@ void SpiderView::mouseReleaseEvent(QMouseEvent* event)
         m_table.putBack();
     } else {
         Sound::instance().play(Sound::kCardPlace);
-        if (result == SpiderTable::Drop::Completed)
+        if (result == SpiderTable::Drop::Completed) {
             Sound::instance().play(Sound::kWin);
+            // The pile as it stood the instant before the harvest: what was in
+            // the column, then the run that was just dropped on top of it. The
+            // last kRunLength of that is what left.
+            std::vector<Card> pile = preColumn;
+            std::vector<QRectF> rects = preRects;
+            const double w = cardWidth();
+            const double h = cardHeight();
+            for (int i = 0; i < int(dragged.size()); ++i) {
+                pile.push_back(dragged[std::size_t(i)]);
+                rects.emplace_back(dragTopLeft.x(), dragTopLeft.y() + i * h * 0.26, w, h);
+            }
+            if (int(pile.size()) >= SpiderTable::kRunLength) {
+                const std::size_t first = pile.size() - SpiderTable::kRunLength;
+                launchCompletedRun({ pile.begin() + qsizetype(first), pile.end() },
+                                   { rects.begin() + qsizetype(first), rects.end() });
+            }
+        }
     }
     m_undoAction->setEnabled(m_table.canUndo());
 
@@ -430,4 +466,60 @@ void SpiderView::mouseReleaseEvent(QMouseEvent* event)
     update();
     refresh();
     checkWin();
+}
+
+void SpiderView::launchCompletedRun(const std::vector<Card>& run,
+                                    const std::vector<QRectF>& fromRects)
+{
+    if (run.size() != fromRects.size() || run.empty())
+        return;
+
+    // The stock corner: the one anchor on this surface that means "put away".
+    // Spider draws no completed-runs pile — the count lives in the status bar,
+    // which is the one place this project knows the owner does not read. Giving
+    // those runs a home of their own is a layout change and a bigger item than
+    // this one; the motion at least answers where they went.
+    const QPointF home = stockRect().topLeft();
+    for (int i = 0; i < int(run.size()); ++i) {
+        cardflight::Flight f;
+        f.card = run[std::size_t(i)];
+        f.from = fromRects[std::size_t(i)].topLeft();
+        f.to = home;
+        f.delay = i * cardflight::kStagger;
+        f.speed = 2.2;
+        // Nothing on this surface draws a completed run, so there is no
+        // destination copy to suppress and no key to suppress it by.
+        f.destination = -1;
+        m_flights.push_back(f);
+    }
+
+    if (m_flightTimer == nullptr) {
+        m_flightTimer = new QTimer(this);
+        m_flightTimer->setInterval(16);
+        connect(m_flightTimer, &QTimer::timeout, this, [this] {
+            if (!cardflight::advance(m_flights, 0.016))
+                m_flightTimer->stop();
+            update();
+        });
+    }
+    m_flightTimer->start();
+}
+
+void SpiderView::deactivate()
+{
+    // A flight carries a destination captured when the card left, and the hub
+    // may resize this page while it is away.
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+}
+
+void SpiderView::applyLegibility(bool enabled)
+{
+    // Land them where the model already believes they are, then let the base
+    // re-lay-out. Keeping them would put a card down at its old destination.
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    GameView::applyLegibility(enabled);
 }

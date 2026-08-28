@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cards/card.h"
+#include "cards/cardflight.h"
 #include "gameview.h"
 #include "spider/spidertable.h"
 
@@ -9,6 +10,8 @@
 
 #include <array>
 #include <vector>
+
+class QTimer;
 
 class SpiderView : public GameView
 {
@@ -20,6 +23,21 @@ public:
     QList<QAction*> gameActions() override { return m_actions; }
     double smallestCardWidth() const override { return cardWidth(); }
     void activate() override;
+    // A game that owns a QTimer overrides this — structural, not observed
+    // (GHUB-0046). The flight timer is one.
+    void deactivate() override;
+    // The caption band comes off the height these views solve their card size
+    // from, so the switch moves every rect on the surface. A flight carries a
+    // destination captured when the card left (cardflight.h), so it has to be
+    // landed rather than left pointing at an address that has moved.
+    void applyLegibility(bool enabled) override;
+
+    // Exists so a test can ask what no rendered picture can answer: whether a
+    // card is actually in the air, rather than whether two frames differ. Same
+    // reasoning as SudokuView::marksFitAt — a check that cannot reach the state
+    // it is about ends up asserting something weaker and calling it coverage.
+    int flightsInTheAir() const { return int(m_flights.size()); }
+
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
@@ -51,6 +69,15 @@ private:
     void dealRow();
     void checkWin();
     void refresh();
+
+    // GHUB-0065. A completed run is thirteen cards leaving a column at once,
+    // and until this existed the only sign it had happened was a count in the
+    // status bar. They fly to the stock corner, staggered, so the run reads as
+    // a sequence rather than a disappearance.
+    void launchCompletedRun(const std::vector<Card>& run, const std::vector<QRectF>& fromRects);
+
+    std::vector<cardflight::Flight> m_flights;
+    QTimer* m_flightTimer = nullptr;
 
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;
