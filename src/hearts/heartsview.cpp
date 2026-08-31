@@ -381,41 +381,11 @@ QRectF HeartsView::handCardRect(int index) const
     return { x, height() - h - 16 - (lifted ? h * kPassLift : 0.0), w, h };
 }
 
-// cardWidth() is capped at 92, so past a certain width the trick stops moving
-// down the window while the hand stays anchored to the bottom -- and the plate
-// grows UPWARD from the bottom of whatever area it is given, so a gap too small
-// to hold it does not shrink it, it puts it over the card you just played. That
-// is GHUB-0084, and clamping the area's height to zero did not close it because
-// Theme::layoutCaption bails on zero WIDTH, not zero height. Measure the plate
-// and raise the trick by the shortfall instead.
-double HeartsView::trickLift() const
-{
-    const QRectF surface(rect());
-    const QString text = captionText();
-    if (text.isEmpty())
-        return 0.0;
-    const double lift = m_selected.empty() ? 0.0 : cardHeight() * kPassLift;
-    const double bottom = height() - cardHeight() - 16 - lift;
-    // A hair of clearance, not an exact fit: raising the trick by exactly the
-    // shortfall leaves the plate's top flush with the card's bottom, and the
-    // two then intersect by a rounding error. Measured on the Windows box,
-    // which has real fonts and so measures a taller plate than this machine --
-    // here the lift never fired at these shapes and nothing moved.
-    constexpr double kClear = 2.0;
-    const double plate =
-        Theme::captionRect(surface, text, captionFont(surface)).height() + kClear;
-    const double w = cardWidth() * 0.9;
-    const double trickBottom = height() / 2.0 - cardHeight() * 0.25 + w * 1.4 * 0.55 * 0.4
-        + w * 1.4;
-    const double shortfall = plate - (bottom - trickBottom);
-    return std::max(0.0, shortfall);
-}
-
 QRectF HeartsView::trickCardRect(int seat) const
 {
     const double w = cardWidth() * 0.9;
     const double h = w * 1.4;
-    const QPointF c(width() / 2.0, height() / 2.0 - cardHeight() * 0.25 - trickLift());
+    const QPointF c(width() / 2.0, height() / 2.0 - cardHeight() * 0.25);
     const double dx = w * 0.85;
     const double dy = h * 0.55;
 

@@ -49,9 +49,6 @@ protected:
     QRectF captionArea() const;
     QRectF handCardRect(int index) const;
     QRectF trickCardRect(int seat) const;
-    // How far the trick is raised so the caption's plate fits between it and the
-    // hand. Zero at most window shapes; see the comment on the definition.
-    double trickLift() const;
 
     // The room a seat's fanned stack of backs takes, at its fullest. Reachable
     // from a test because a stack that does not fit is invisible to every other
