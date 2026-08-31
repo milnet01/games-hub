@@ -1293,6 +1293,37 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-08-20.
 
+- 📋 [GHUB-0127] **Bound the remaining values a saved game supplies.**
+  The CRITICAL and HIGH save defects are fixed. This is the MEDIUM
+  remainder, each verified against source by its lane. Hearts adopts
+  totals and handPoints with no range check, and its restore count is
+  aggregate-only, so a seat can come back with an empty hand and the
+  timer then loops with no way out but New Game. 2048 bounds a
+  restored score only below, so the next merge overflows, and kMaxTile
+  admits tiles well past anything reachable. Minesweeper bounds
+  elapsed below but not above and narrows it to int, writing a best
+  time nothing can beat; Sudoku's sibling bound is also too loose.
+  FreeCell's restore never validates the foundations. Klondike and
+  Spider check the pack but not the column invariants their own
+  canLift and movableRunLength assume.
+  **Layman:** A hand-edited save file can still put silly numbers into a few games.
+  Kind: security.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0128] **Close the release pipeline's remaining supply-chain gaps.**
+  The unpinned linuxdeploy fetch and the writable smoke-test mount are
+  fixed. Still open: neither release build job runs ctest and ci.yml
+  cannot trigger on a tag, so a release can publish from a commit whose
+  suite never ran on either OS. The changelog check proves the heading
+  exists, not that the notes are non-empty. wintest-ci.sh drives a
+  recursive remote delete from an unvalidated WINTEST_DIR. And
+  local-ci.sh keys STEP_RULES on a step's free-text name, so renaming a
+  step in ci.yml silently promotes it from guarded to executed -- which
+  would run apt-get from inside a pre-push hook.
+  **Layman:** A few smaller risks in the machinery that publishes the downloads.
+  Kind: security.
+  Source: review-code sweep 2026-08-31.
+
 ### 🧠 Memory
 
 Measured before written, on 2026-08-20: the hub sitting on the tile grid holds
@@ -1677,6 +1708,45 @@ progress.
   **Layman:** Leaving Snake mid-game ran the snake into a wall while you were elsewhere, and leaving Hearts finished the hand without you.
   Kind: fix.
   Source: in-session-2026-08-20 (CLAUDE.md cold gate, loop 3).
+
+- 📋 [GHUB-0135] **The per-page window size ratchets up and cannot come back down.**
+  Every view calls setMinimumSize(minimumSizeHint()), and
+  QStackedLayout takes the largest minimum over every page it has
+  BUILT. So once Canasta exists the window cannot go below its width
+  on any page: applyPageGeometry restores the stored size, Qt clamps
+  it up, and the next rememberPage writes the clamped value over the
+  stored one. Permanent, and dependent on which games were opened
+  that session. Making the hidden page's size policy Ignored is the
+  likely fix.
+  **Layman:** Once you have opened Canasta, no other game's window can be made as small again -- and it is remembered that way.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0136] **--shot and --legible write to the player's stored settings.**
+  takeShot's own comment says answering a question about the app
+  should not change what the player chose. But openGameNamed reaches
+  rememberPage with m_geometryReady already true, so even a REFUSED
+  shot has written window/geometry/menu; and --legible goes through
+  Legibility::setEnabled, which persists, so a crash between the two
+  writes leaves large play on for good. An ephemeral flag on
+  HubWindow and a non-persisting setter would remove the reason
+  CLAUDE.md's shot recipe needs XDG_CONFIG_HOME.
+  **Layman:** Taking a screenshot changes what the app remembers, which is why the recipe needs a scratch settings directory.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0137] **Decide what hasPendingAnimation() is for, or drop the claim.**
+  Declared on GameView, overridden once by Canasta, asserted by
+  tests, and described in CLAUDE.md as how a game says it is holding
+  state a settings change would consume -- with no product caller.
+  Three lanes found it independently. The hazard it names is now
+  guarded for background pages by the applyLegibility isVisible fix,
+  and is deliberate for the visible one. So either the hub consults
+  it before storeSave/rememberPage, or it and the CLAUDE.md claim go.
+  Not a call to make from a review.
+  **Layman:** A safety mechanism the notes describe has nothing in the app that asks it.
+  Kind: investigate.
+  Source: review-code sweep 2026-08-31.
 
 ### ✨ Look and feel
 
@@ -2514,6 +2584,42 @@ inventing one.
   **Layman:** The rules for choosing a version number exist now, but the page someone actually reads before a release does not mention them.
   Kind: doc.
   Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0144] **README denies two things the app already does.**
+  It lists Sudoku among the games that do not resume, and Sudoku has
+  saved and restored since GHUB-0009 -- so the count above that list
+  is wrong by one too. It also says the other twelve games ignore the
+  legibility switch, which GHUB-0071 closed for all fourteen. Both are
+  the document's side, not the code's.
+  **Layman:** The README says some features are missing that shipped a while ago.
+  Kind: doc-fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0145] **Correct the stale claims a lane read past in CLAUDE.md and the specs.**
+  The measured card floors and the pinned linuxdeploy fetch were
+  corrected as part of the audit. Left: CLAUDE.md still says the chess
+  engine searches on the GUI thread, which GHUB-0047 moved to a
+  worker, and it is the stated justification for the node budgets, so
+  anyone tuning planFor reads a constraint that no longer exists.
+  GHUB-0025 says one matrix job where ci.yml has two, and its section
+  4.6 Windows snippet omits the -NoNewWindow and MainWindowHandle
+  checks its own prose requires -- an implementer copying that block
+  would re-ship the failure loop 6 was run to catch.
+  **Layman:** A few notes describe how things used to work.
+  Kind: doc-fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0146] **Canasta's discardCannotBeTaken comment is inverted.**
+  The header describes it as though it were named discardCanBeTaken:
+  it says the fourth seat is the one this returns true for, and the
+  body returns FALSE for the fourth seat and true for the three before
+  it. Both live callers follow the code and are correct, so this is
+  the document's side -- but it is a loaded gun for the next author of
+  an AI rule, in exactly the place CLAUDE.md already flags as the
+  hardest quarter of a bug to notice.
+  **Layman:** A comment says the opposite of what the code does, in the trickiest corner of the rules.
+  Kind: doc-fix.
+  Source: review-code sweep 2026-08-31.
 
 ## P03 — Considered
 
@@ -3394,6 +3500,42 @@ open.
   **Layman:** In Hearts the stack of cards on the right is drawn slightly too far right, so its edge is cut off by the window.
   Kind: fix.
   Source: in-session-2026-08-22 first --shot of a game.
+
+- 📋 [GHUB-0132] **Give the tiles an accessible name, and the board games a keyboard.**
+  GameTile paints its own miniature and never calls setText, and
+  setAccessibleName appears nowhere in src/ -- so QAccessibleButton
+  has no name to report for any of the fourteen tiles on the page
+  every player lands on first. Separately, Chess, Reversi, Draughts,
+  Minesweeper, Canasta, Klondike, Spider, FreeCell and Pyramid have no
+  keyPressEvent and no focus policy: Canasta's Space and Return
+  shortcuts are gated on a selection only a mouse can make, so they
+  cannot be reached at all.
+  **Layman:** Screen readers see fourteen unnamed buttons, and several games can only be played with a mouse.
+  Kind: accessibility.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0133] **Reversi's legal-move hints ignore the legibility switch.**
+  draughtsview.cpp raises its hint alpha under the switch and says
+  why: 60 is a hint you can look past, which is the wrong thing to be
+  for the player the switch is for. Reversi's is a flat alpha 70 at
+  radius cell*0.12 -- fainter than the value that reasoning rejected --
+  and the hints are its primary play affordance. Its pass notice is
+  also overwritten after 320ms, and a pass is the one event that
+  leaves the board looking unchanged.
+  **Layman:** The dots showing where you can play stay faint when large play is on.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0134] **The donate dialog shrinks its own text on a pixel-sized font.**
+  QFont::pointSizeF() returns -1 when the size was set in pixels, and
+  donatedialog.cpp adds to it. The legibility branch then produces a
+  2.0pt dialog font and the heading an unconditional 3.0pt one. The
+  same dialog dims its URL label with QPalette::Dark, a 3D-shadow role
+  with no guaranteed contrast against the window, on the one address
+  the partially sighted owner is asked to read.
+  **Layman:** On some systems the Support dialog would come up microscopic, worst of all in the large-text branch.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
 
 ### 🎨 Play
 
@@ -4914,6 +5056,41 @@ open.
   Source: in-session-2026-08-25 (found by GHUB-0066's FreeCell extraction).
   Lanes: freecell.
 
+- 📋 [GHUB-0129] **Decide whether the Canasta opening prune should survive the extend pass.**
+  chooseMelds prunes groups the opening minimum does not need, and its
+  own comment says they are better in hand -- a rank the opposition
+  would then stop throwing -- and says GHUB-0122 widened it to run on
+  an unfrozen pile deliberately. The extend pass below then finds the
+  same cards in `remaining` and lays them anyway. But the selftest
+  asserts exactly that: with the pile open the sevens go down, and
+  they are held only while it is frozen. Both are yours. A fix was
+  written and REVERTED rather than edit either side to fit the other.
+  **Layman:** Two parts of the Canasta AI disagree about whether to hold a rank back, and only you can say which is right.
+  Kind: investigate.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0130] **Klondike accepts a drop back onto the column a run came from.**
+  Spider refuses a same-column drop; Klondike does not, so the move
+  scores and banks a no-op undo snapshot. Repeated, it inflates the
+  persisted top score and evicts real states from the 200-deep
+  history. Same shape: sendToFoundation will bounce an Ace between two
+  empty foundations, and dealFromStock snapshots before checking the
+  stock and waste are both empty.
+  **Layman:** Lifting a card and putting it straight back counts as a move and eats your undo history.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0131] **Draughts cannot choose between two capture chains ending on one square.**
+  English draughts lets you take any available chain. Two chains from
+  one square to one landing square that capture different pieces are
+  routine for a king; the first match in m_selectedMoves wins and the
+  destination dot is drawn twice in the same place with no cue. The
+  same file has no draw condition at all, so two lone kings shuffle
+  forever and announceResult(Side) cannot express the outcome.
+  **Layman:** When two different jump paths finish in the same place, the game silently picks one.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on
@@ -5145,6 +5322,48 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   **Layman:** The score book works, but its web address is long; a shorter one needs a change the domain provider will not let us make ourselves.
   Kind: chore.
   Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0141] **Make the shared room safe to join and to leave.**
+  The book-destroying join and the stranded Connecting panel are
+  fixed. Still open: sanitise() whitelists fields but does not coerce
+  types, so a room written with numeric names throws inside render()
+  and freezes a watcher's phone -- reachable by anyone who guesses a
+  four-letter code. Sharing claims a code with no existence check and
+  nothing ever deletes a room, so a new share can land on a live book.
+  Take over scoring makes a second scorer without demoting the first,
+  and scorerId is written and read nowhere. A failed connection
+  reports nothing at all.
+  **Layman:** Sharing a game has a few ways to go wrong that nobody would spot at the table.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0142] **The service worker caches every successful GET, cross-origin included.**
+  sw.js has no URL filter: the fetch handler caches any ok response
+  and then serves cache-first forever. If the database client falls
+  back to HTTP long-polling -- its normal behaviour on a restrictive
+  network, which is the kitchen-table case the file is written for --
+  those responses are cached and replayed, and sync breaks with no
+  invalidation short of clearing site data. Cache same-origin plus the
+  pinned SDK prefix only, skip the database origin, and pass the put
+  promise to waitUntil.
+  **Layman:** The offline cache can swallow the live database traffic and break syncing for good on that phone.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0143] **The score book README describes a setup that cannot work.**
+  It says to open index.html in a phone browser and add it to the home
+  screen. Neither the service worker nor the manifest installs from
+  file:// -- both need a secure origin -- so the headline offline
+  feature needs the directory hosted, and no step says so. The setup
+  steps also omit bumping CACHE in sw.js, which its own comment says
+  is required or the old copy is served forever. And its claim that
+  the drift guard catches a house rule changed in the game is wrong:
+  scorepad-check.py compares the phone against the Rules struct
+  defaults, while the opening minimums are editable in the House
+  dialog and stored in QSettings.
+  **Layman:** Following the instructions as written would not give you a working offline score book.
+  Kind: doc-fix.
+  Source: review-code sweep 2026-08-31.
 
 ### 🧰 Tests
 
@@ -5564,6 +5783,46 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   **Layman:** The test that decides whether a change to the computer player helped cannot actually tell a small improvement from luck, so it blocks good changes and bad ones alike.
   Kind: investigate.
   Source: in-session-2026-08-24 GHUB-0101 and GHUB-0104 attempts.
+
+- 📋 [GHUB-0138] **Wire legibility-check.py into ctest, and fail loudly when a checker is absent.**
+  scripts/legibility-check.py has no add_test and no CI step, though
+  GHUB-0017 names --thresholds as INV-4's test; it passes today only
+  when run by hand. And CMakeLists registers the prepush and scorepad
+  tests inside if(BASH_PROGRAM) and if(Python3_Interpreter_FOUND), so
+  on a configure without either the test simply is not registered and
+  ctest reports 100% passed over a smaller suite -- against
+  local-ci.sh's own stated principle that an absent linter must be
+  called out.
+  **Layman:** Two checks can silently not run, and a green test report looks the same either way.
+  Kind: test.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0139] **Give check-code a .clang-tidy, and reconsider suppressing unusedFunction.**
+  clang-tidy has no config in the tree, so its resolved check set is
+  empty: it prints usage and exits without reading a file. Eight lanes
+  reported findings in its territory -- narrowing conversions, signed
+  char to cctype, integer overflow on restore, unguarded front() and
+  pop_back(). Separately, cppcheck runs with unusedFunction suppressed
+  on every run, and five lanes found dead public symbols that no tool
+  therefore decided: forgetHistory in four games, Minefield::reset,
+  SudokuGrid::clearMarks, Ai::freezesThisHand, Board::fullmoveNumber.
+  **Layman:** One of the three C++ analysers is analysing nothing at all.
+  Kind: test.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0140] **Lock the fixes that landed without a regression test.**
+  The audit added and proved red: the Canasta House-rule tails, the
+  seat's own discards, the Pyramid save bound and Snake's turn queue.
+  The rest went in without one, and these are the behavioural ones
+  worth locking: the three engine games' stale-timer guard, the six
+  save-deletion fixes, Hearts' trick lift and Next Hand action,
+  FreeCell's supermove source column and its fan compression, and
+  Sudoku's toolbar sync. The stale-timer guard is the one to write
+  first -- it is the run's only CRITICAL class and its symptom was a
+  deadlocked board.
+  **Layman:** Some of the audit fixes have nothing stopping them coming back.
+  Kind: test.
+  Source: review-code sweep 2026-08-31.
 
 ### 🎨 More games, if wanted
 

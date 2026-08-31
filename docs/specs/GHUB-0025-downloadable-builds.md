@@ -181,10 +181,20 @@ costs a deleted tag and nothing else.
 ```bash
 # linuxdeploy and its Qt plugin live in two different repositories; --plugin
 # qt finds the second by name on PATH. Neither ships with the runner.
+#
+# Pinned to dated release tags and checksummed, not fetched from `continuous`:
+# that tag is force-moved on every upstream commit, and these two binaries
+# assemble the AppImage strangers download, which is the same argument §4.3
+# makes for pinning every `uses:` to a SHA. The workflow holds the current tags
+# and sums; they are not restated here, because a second copy of a pin is a
+# copy that goes stale.
 base=https://github.com/linuxdeploy
-curl -fsSLO "$base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+main=linuxdeploy-x86_64.AppImage
+curl -fsSLO "$base/linuxdeploy/releases/download/$LINUXDEPLOY_TAG/$main"
 plugin=linuxdeploy-plugin-qt
-curl -fsSLO "$base/$plugin/releases/download/continuous/$plugin-x86_64.AppImage"
+curl -fsSLO "$base/$plugin/releases/download/$PLUGIN_TAG/$plugin-x86_64.AppImage"
+echo "$LINUXDEPLOY_SHA  $main" | sha256sum -c -
+echo "$PLUGIN_SHA  $plugin-x86_64.AppImage" | sha256sum -c -
 chmod +x linuxdeploy*.AppImage
 export PATH="$PWD:$PATH"
 export APPIMAGE_EXTRACT_AND_RUN=1   # the runner has no FUSE 2

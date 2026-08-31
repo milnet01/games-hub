@@ -8,6 +8,83 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Changed
+
+- **SECURITY.md now says which half of the project it is describing.**
+  Its no-network and no-personal-data claims are about the desktop
+  game. The phone score book talks to a hosted database, and has its
+  own section and its own reporting advice.
+
+### Fixed
+
+- **The score book's A+ and A- now scale the numbers, not just the buttons.**
+  Every size on the page is relative to the root, which the control
+  was not changing -- so the running total, the deal and the opening
+  minimum stayed fixed. Joining a shared game also no longer discards
+  the book already on the phone.
+
+- **2048 and Snake update the on-board caption when a move is refused or the game is paused.**
+
+- **Snake keeps the second tap when you take a corner quickly.**
+
+- **Pinball's flippers keep time, and the backglass stops covering the table.**
+  The flippers were advanced once per frame but measured per physics
+  step, so an identical swing gave a different kick depending on the
+  timing, and a ball resting near the tip could be knocked through the
+  blade toward the drain. The score strip sat over the top of the
+  playfield, and large play made it cover more.
+
+- **Sudoku's Pencil and Show Errors buttons agree with the puzzle they are above.**
+  After resuming they displayed the opposite of what was in force, so
+  the first press appeared to do nothing.
+
+- **The mute switch is remembered between sessions.**
+
+- **Hearts stops covering the card you just played, and Close no longer ends the match.**
+  The caption plate could sit over your own trick card at wide, short
+  windows. Declining the hand-over box left the match unplayable, and
+  it survived a restart; there is a Next Hand button now.
+
+- **Canasta remembers both of its remaining house rules, and its difficulty.**
+  The freeze-card T and stacking canastas were lost on every resume
+  while the toolbar still said House, and the chosen difficulty was
+  never stored at all. Resuming also dropped the Expert-partner
+  setting.
+
+- **Pyramid's stock and waste no longer cover the bottom row.**
+  They were drawn over the only row a fresh deal exposes, and a click
+  in the overlap dealt from the stock instead of taking the card.
+
+- **Resuming a saved game and leaving it no longer deletes it.**
+  Klondike, Spider, FreeCell, Pyramid, Reversi and Draughts read a
+  just-restored game as untouched and cleared the stored one, so
+  opening a save and pressing Back lost it.
+
+- **The computer no longer plays your move.**
+  In Chess, Reversi and Draughts a search scheduled just before New
+  Game, Undo or a level change could still fire and play a move for
+  you -- after which the board sat waiting for a side that would never
+  move. Reversi could also declare the game over twice and count the
+  win twice.
+
+### Security
+
+- **Canasta bounds its saved hand size and validates the cards it reads back.**
+  A saved game could claim a hand larger than the pack, which dealt
+  past the end of the stock, and its card reader accepted any suit,
+  rank or deck at all.
+
+- **A crafted Pyramid save can no longer report itself won.**
+  The pack check accepted a subset, so a table missing 24 cards
+  loaded, and one with every card removed and no pairs taken banked a
+  best score on load.
+
+- **The release no longer builds from a moving tag.**
+  linuxdeploy and its Qt plugin were fetched from a rolling tag,
+  unverified, and assemble the published AppImage. Both are pinned to
+  dated releases and checked against a SHA-256, and the smoke-test
+  container can no longer write to the workspace.
+
 ## [0.5.0] - 2026-08-31
 
 ### Added

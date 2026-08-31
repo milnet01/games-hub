@@ -545,11 +545,14 @@ so a card in the air would otherwise land where its destination used to be.
 they do are unreachable.** Measured, not assumed: every card view calls
 `setMinimumSize(minimumSizeHint())`, so the smallest card each can actually
 reach — at its smallest window, **with the legibility switch on** — is Klondike
-67.9, FreeCell 59.4, Spider 54.2, Hearts 52.5, Pyramid 52.1 and Canasta's melds
+67.9, FreeCell 59.4, Spider 54.2, Pyramid 49.0, Hearts 47.2 and Canasta's melds
 46.4, all clear of `kFaceMinWidth`. **The band is subtracted only by the four
 that reserve one**, so Hearts' and Canasta's figures carry no band cost at all
-and would not survive one being added. **Pyramid and FreeCell are the two the
-band actually costs** — 68.6 and 67.4 before it — and they clear by 13% and 29%.
+and would not survive one being added. **Hearts' figure was 52.5 until its
+`smallestCardWidth()` was corrected**: it reported the hand card, and Hearts
+draws the TRICK at 0.9 of one, so the published floor was overstated by that
+factor. **Pyramid's was 52.1 until its height budget was corrected** to the fan
+step its painter actually uses. Both are now the narrowest here after Canasta.
 Klondike and Spider reserve a band and are still decided by their width at their
 smallest windows, so it costs them nothing there. FreeCell joined that list on
 2026-08-21 (GHUB-0083): its height budget had been assuming a column of about
