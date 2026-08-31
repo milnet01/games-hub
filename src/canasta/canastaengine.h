@@ -377,7 +377,11 @@ public:
     // card. A stream that stops at 5 loads with the pile marked unknown, which
     // turns the fishing defence off for that hand rather than refusing the
     // save (GHUB-0124).
-    static constexpr int kTail = 6;
+    // Tails 7 and 8 are freezeCardMakesATee and canastasStackOnRedThrees. They
+    // were in neither writeRules() nor a tail, so a resumed House game came back
+    // with the freeze card drawn as a cross and canastas fanned in the meld row,
+    // while the toolbar still read House -- the same class as GHUB-0120 above.
+    static constexpr int kTail = 8;
     // Leaves the engine untouched and returns false if the stream is from a
     // different version or runs out part way. `tail` says how many of the
     // fields added after the format was first written the stream carries: only

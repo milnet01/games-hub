@@ -20,6 +20,12 @@
 
 namespace {
 constexpr int kMaxRedeals = 2;
+// The margin and the fan step are shared by the layout and by the height budget
+// that sizes the card. They were two independent literals until the budget's
+// 0.52 drifted from the painter's 0.46-of-a-card-height, and the stock and waste
+// were drawn over the bottom row at every window size.
+constexpr double kMargin = 16.0;
+constexpr double kFanStep = 0.46;
 const QString kBestKey = QStringLiteral("pyramid/best_pairs");
 }
 
@@ -47,6 +53,7 @@ void PyramidView::buildActions()
 
 void PyramidView::newGame()
 {
+    m_resumed = false;
     m_table.deal();
     Sound::instance().play(Sound::kShuffle);
     clearSelection();
@@ -85,7 +92,7 @@ void PyramidView::undo()
 // in: cards are taken by clicking, so nothing is ever in mid-air.
 QByteArray PyramidView::saveState() const
 {
-    if (m_won || !m_table.canUndo())
+    if (m_won || (!m_table.canUndo() && !m_resumed))
         return {};
 
     QByteArray blob;
@@ -146,6 +153,7 @@ bool PyramidView::restoreState(const QByteArray& blob)
 
     m_won = false;
     m_announced = false;
+    m_resumed = true;
     clearSelection();
     m_undoAction->setEnabled(false);
     update();
@@ -161,11 +169,14 @@ double PyramidView::cardWidth() const
 {
     // The widest row is seven cards, overlapping by half a card each side.
     const double byWidth = (width() - 40.0) / (kRows * 0.62 + 0.4) / 1.6;
-    // The caption's strip comes off the height before the card is sized: the
-    // piles are anchored to the top, so a smaller card is what keeps the tail
-    // of a long column clear of the sentence under it.
+    // What the height must hold, in card heights: six fan steps down the
+    // pyramid, the bottom row's whole card, and the stock/waste row that
+    // pileTop() anchors to the bottom. kFanStep is pyramidRect()'s own step, so
+    // the budget and the painter cannot drift apart again. The caption's strip
+    // comes off first, because pileTop() sits above it.
+    constexpr double kHeightCost = (kRows - 1) * kFanStep + 1.0 + 1.0;
     const double byHeight =
-        (height() - 40.0 - captionBand(QRectF(rect()))) / (1.4 + (kRows - 1) * 0.52 + 1.6);
+        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * kHeightCost);
     return std::max(30.0, std::min(byWidth * 1.6, byHeight));
 }
 
@@ -174,10 +185,10 @@ QRectF PyramidView::pyramidRect(int row, int index) const
     const double w = cardWidth();
     const double h = cardHeight();
     const double stepX = w * 0.56;
-    const double stepY = h * 0.46;
+    const double stepY = h * kFanStep;
     const double rowWidth = stepX * row + w;
     const double left = (width() - rowWidth) / 2 + index * stepX;
-    return { left, 16 + row * stepY, w, h };
+    return { left, kMargin + row * stepY, w, h };
 }
 
 QRectF PyramidView::stockRect() const
@@ -197,7 +208,7 @@ QRectF PyramidView::wasteRect() const
 // the band off the height it sizes against; the anchor has to take it off too.
 double PyramidView::pileTop() const
 {
-    return height() - captionBand(QRectF(rect())) - cardHeight() - 16;
+    return height() - captionBand(QRectF(rect())) - cardHeight() - kMargin;
 }
 
 std::optional<int> PyramidView::pyramidAt(QPointF pos) const

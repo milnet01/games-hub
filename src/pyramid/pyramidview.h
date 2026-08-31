@@ -75,6 +75,10 @@ private:
     Source m_selectedSource = Source::Pyramid;
     int m_selectedIndex = -1;
 
+    // Restoring a save clears the table's undo history, so canUndo() alone reads
+    // a resumed deal as untouched and saveState() then returns {}, which the hub
+    // treats as "delete the stored game". This says the deal is worth keeping.
+    bool m_resumed = false;
     bool m_won = false;
     bool m_announced = false;
 };

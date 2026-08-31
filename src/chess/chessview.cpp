@@ -278,7 +278,16 @@ void ChessView::advance()
 
 void ChessView::playEngineMove()
 {
-    if (m_paused)
+    // A scheduled search can outlive the position it was scheduled for. New
+    // Game, Undo and a level change all call abandonSearch(), which discards an
+    // answer already in flight -- but none of them can cancel a singleShot that
+    // has not fired yet, and when it does fire startSearch() captures the CURRENT
+    // board and the CURRENT generation, so engineMoveReady's generation test
+    // passes and the engine plays the human's move on a board it was never
+    // launched for. m_thinking is the flag to read: advance() is the only thing
+    // that sets it and every abandon path clears it, so it says whether this
+    // timer is still the live one.
+    if (m_paused || m_finished || !m_thinking || m_game.toMove() == m_human)
         return;
     startSearch();
 }
@@ -322,6 +331,11 @@ void ChessView::engineMoveReady(const SearchResult& result)
     // The game moved on while this was being worked out -- a new game, an undo,
     // a change of level, or the hub leaving the page. Drop it.
     if (result.generation != m_generation)
+        return;
+
+    // Defence in depth for the same hazard playEngineMove() guards: a result
+    // whose turn is no longer the engine's is not ours to play.
+    if (m_finished || m_game.toMove() == m_human)
         return;
 
     m_thinking = false;

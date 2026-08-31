@@ -48,6 +48,7 @@ void FreeCellView::buildActions()
 
 void FreeCellView::newGame()
 {
+    m_resumed = false;
     m_table.deal();
     Sound::instance().play(Sound::kShuffle);
     m_drag.clear();
@@ -84,7 +85,7 @@ void FreeCellView::undo()
 // the card games save differently from Chess.
 QByteArray FreeCellView::saveState() const
 {
-    if (m_won || !m_table.canUndo())
+    if (m_won || (!m_table.canUndo() && !m_resumed))
         return {};
 
     // A run lifted in mid-drag belongs to the pile it came from until it is
@@ -138,6 +139,7 @@ bool FreeCellView::restoreState(const QByteArray& blob)
     m_dragging = false;
     m_pressValid = false;
     m_won = false;
+    m_resumed = true;
     m_undoAction->setEnabled(false);
     update();
     refresh();

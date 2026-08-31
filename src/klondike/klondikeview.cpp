@@ -70,6 +70,7 @@ void KlondikeView::buildActions()
 
 void KlondikeView::newGame()
 {
+    m_resumed = false;
     m_table.deal();
     Sound::instance().play(Sound::kShuffle);
     m_drag.clear();
@@ -114,7 +115,7 @@ QByteArray KlondikeView::saveState() const
 {
     // Nothing worth coming back to: a deal already solved, or one nobody has
     // touched. An empty state also clears whatever was stored before.
-    if (m_won || !m_table.canUndo())
+    if (m_won || (!m_table.canUndo() && !m_resumed))
         return {};
 
     // A run lifted in mid-drag has been erased from its pile and is held until
@@ -171,6 +172,7 @@ bool KlondikeView::restoreState(const QByteArray& blob)
     m_dragging = false;
     m_pressValid = false;
     m_won = false;
+    m_resumed = true;
     m_undoAction->setEnabled(false);
     for (QAction* a : m_actions) {
         if (a->isCheckable())

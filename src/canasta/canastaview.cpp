@@ -32,6 +32,10 @@ namespace ca = canasta;
 
 namespace {
 
+// The blob's version is the engine's tail count plus one, and stating it twice
+// is how GHUB-0120 lost a rule. Derive it so the pair cannot drift.
+constexpr quint32 kBlobVersion = ca::Engine::kTail + 1;
+
 constexpr double kTick = 1.0 / 60.0;
 // Long enough to follow, short enough that three computer seats do not become
 // a wait. Each half-turn gets one of these.
@@ -221,19 +225,26 @@ ca::Rules loadHouse()
     const auto get = [&](const char* key, int fallback) {
         return s.value(QString::fromLatin1(kHouseGroup) + QLatin1String(key), fallback).toInt();
     };
-    r.handSize = get("handSize", r.handSize);
-    r.canastaSize = get("canastaSize", r.canastaSize);
-    r.maxWildsPerMeld = get("maxWilds", r.maxWildsPerMeld);
-    r.openMinBelowZero = get("openBelowZero", r.openMinBelowZero);
-    r.openMinUnder1500 = get("openUnder1500", r.openMinUnder1500);
-    r.openMinUnder3000 = get("openUnder3000", r.openMinUnder3000);
-    r.openMinAbove3000 = get("openAbove3000", r.openMinAbove3000);
-    r.naturalCanastaBonus = get("naturalCanasta", r.naturalCanastaBonus);
-    r.mixedCanastaBonus = get("mixedCanasta", r.mixedCanastaBonus);
-    r.redThreeValue = get("redThree", r.redThreeValue);
-    r.allRedThreesValue = get("allRedThrees", r.allRedThreesValue);
-    r.goingOutBonus = get("goingOut", r.goingOutBonus);
-    r.concealedGoingOutBonus = get("concealed", r.concealedGoingOutBonus);
+    // Every one of these is clamped by its spin box in editHouseRules(). This is
+    // the path a hand-edited or corrupt settings file takes, and it had no clamp
+    // at all -- handSize alone reaches an unguarded pop_back in Engine::dealFrom.
+    // Same reasoning as loadTarget() above; the bounds are the dialog's own.
+    const auto clamped = [&](const char* key, int fallback, int lo, int hi) {
+        return std::clamp(get(key, fallback), lo, hi);
+    };
+    r.handSize = clamped("handSize", r.handSize, 7, 15);
+    r.canastaSize = clamped("canastaSize", r.canastaSize, 4, 10);
+    r.maxWildsPerMeld = clamped("maxWilds", r.maxWildsPerMeld, 0, 5);
+    r.openMinBelowZero = clamped("openBelowZero", r.openMinBelowZero, 0, 300);
+    r.openMinUnder1500 = clamped("openUnder1500", r.openMinUnder1500, 0, 300);
+    r.openMinUnder3000 = clamped("openUnder3000", r.openMinUnder3000, 0, 300);
+    r.openMinAbove3000 = clamped("openAbove3000", r.openMinAbove3000, 0, 300);
+    r.naturalCanastaBonus = clamped("naturalCanasta", r.naturalCanastaBonus, 0, 2000);
+    r.mixedCanastaBonus = clamped("mixedCanasta", r.mixedCanastaBonus, 0, 2000);
+    r.redThreeValue = clamped("redThree", r.redThreeValue, 0, 500);
+    r.allRedThreesValue = clamped("allRedThrees", r.allRedThreesValue, 0, 2000);
+    r.goingOutBonus = clamped("goingOut", r.goingOutBonus, 0, 1000);
+    r.concealedGoingOutBonus = clamped("concealed", r.concealedGoingOutBonus, 0, 1000);
     r.requireCanastaToGoOut = get("requireCanasta", 1) != 0;
     r.blackThreeBlocksPile = get("blackThreeBlocks", 1) != 0;
     r.unfrozenPileTakeableWithWild = get("wildTake", 1) != 0;
@@ -455,6 +466,8 @@ CanastaView::CanastaView(QWidget* parent)
     m_timer->setInterval(16);
     connect(m_timer, &QTimer::timeout, this, &CanastaView::tick);
 
+    m_level = ca::Level(std::clamp(
+        QSettings().value(QStringLiteral("canasta/level"), int(ca::Level::Medium)).toInt(), 0, 3));
     m_useHouse = QSettings().value(QStringLiteral("canasta/useHouse"), false).toBool();
     m_sortHand = QSettings().value(QStringLiteral("canasta/sortHand"), true).toBool();
     m_sharpPartner = QSettings().value(QStringLiteral("canasta/sharpPartner"), false).toBool();
@@ -516,6 +529,9 @@ void CanastaView::buildActions()
         const ca::Level value = entry.value;
         connect(a, &QAction::triggered, this, [this, value] {
             m_level = value;
+            // Every other toolbar choice here is remembered; this one was not,
+            // so finishing a game (which clears the save) reopened on Medium.
+            QSettings().setValue(QStringLiteral("canasta/level"), int(value));
             applyLevels();
             refresh();
         });
@@ -682,11 +698,11 @@ QByteArray CanastaView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    // Each version adds another field to the engine's tail. Up to 6 those were
-    // rules that did not exist when the version before it was written; 7 adds
-    // the pile's provenance, which is not a rule (GHUB-0124). Either way the
-    // version IS the tail count plus one, and load() reads that many.
-    out << quint32(7);
+    // Each version adds another field to the engine's tail, so the version IS
+    // the tail count plus one and load() reads that many. kBlobVersion derives
+    // it from Engine::kTail rather than restating it: enumerating the tails
+    // here is what went stale, twice.
+    out << kBlobVersion;
     m_engine.save(out);
     out << qint32(m_level) << m_useHouse << qint32(m_target) << m_sortHand;
     return blob;
@@ -710,7 +726,8 @@ bool CanastaView::restoreState(const QByteArray& blob)
         quint32 trialVersion = 0;
         probe >> trialVersion;
         ca::Engine trial;
-        if (trialVersion < 1 || trialVersion > 7 || !trial.load(probe, int(trialVersion) - 1))
+        if (trialVersion < 1 || trialVersion > kBlobVersion
+            || !trial.load(probe, int(trialVersion) - 1))
             return false;
         qint32 trialLevel = 0;
         qint32 trialTarget = 0;
@@ -727,7 +744,7 @@ bool CanastaView::restoreState(const QByteArray& blob)
     in >> version;
     // A game saved by an older build still comes back; it simply predates the
     // rules its tail does not carry, and their defaults stand.
-    if (version < 1 || version > 7 || !m_engine.load(in, int(version) - 1))
+    if (version < 1 || version > kBlobVersion || !m_engine.load(in, int(version) - 1))
         return false;
 
     qint32 level = 0;
@@ -738,8 +755,10 @@ bool CanastaView::restoreState(const QByteArray& blob)
 
     m_level = ca::Level(std::clamp<int>(level, 0, 3));
     m_target = target;
-    for (ca::Ai& ai : m_ai)
-        ai.setLevel(m_level);
+    // Not a hand-rolled loop: applyLevels() is the only place m_sharpPartner is
+    // honoured, so setting the levels directly here dropped the Expert-partner
+    // rule on every resumed game while the toolbar still showed it ticked.
+    applyLevels();
 
     // Nothing was in the air when the game was put away, and nothing is now.
     m_flights.clear();
@@ -900,6 +919,17 @@ void CanastaView::applyLegibility(bool enabled)
 
     const QSize was = window()->size();
     setMinimumSize(minimumSizeHint());
+
+    // The minimum is this widget's own and moves whether or not anyone is
+    // looking. The WINDOW is shared with every other game, so touching it from
+    // a background page resizes whatever is actually on screen and records a
+    // size that never belonged to Canasta. GHUB-0017 INV-2 requires every
+    // constructed game to be NOTIFIED, not that every one of them may resize.
+    // window() == this is a free-standing view that owns its own window, which
+    // is the shape the reversibility check uses and the one case where an
+    // unshown view may still resize.
+    if (window() != this && !isVisible())
+        return GameView::applyLegibility(enabled);
 
     if (enabled) {
         // Qt clamps the window up to the new minimum, and HubWindow writes that

@@ -4799,6 +4799,11 @@ void canastaSaveAndResume()
     house.canastaMakesRankSafe = true;
     house.wildsFewerThanNaturals = true;
     house.canastaNeededToScore = true;
+    // Both default false, so a tail that stops short brings them back false and
+    // the round-trip check below goes red. They were carried by no tail at all
+    // until then, so a resumed House game silently lost them.
+    house.freezeCardMakesATee = true;
+    house.canastasStackOnRedThrees = true;
 
     ca::Engine e { house };
     e.newGame(1234);
@@ -4831,7 +4836,9 @@ void canastaSaveAndResume()
         && back.stockCount() == e.stockCount() && back.pile().size() == e.pile().size()
         && back.dealer() == e.dealer() && back.pileFrozen() == e.pileFrozen()
         && back.rules().targetScore == house.targetScore && back.rules().canastaMakesRankSafe
-        && back.rules().canastaNeededToScore && back.openRequirement(0) == e.openRequirement(0);
+        && back.rules().canastaNeededToScore && back.rules().freezeCardMakesATee
+        && back.rules().canastasStackOnRedThrees
+        && back.openRequirement(0) == e.openRequirement(0);
     for (int s = 0; s < ca::kSeats; ++s)
         same = same && back.hand(s) == e.hand(s);
     for (int t = 0; t < ca::kTeams; ++t) {

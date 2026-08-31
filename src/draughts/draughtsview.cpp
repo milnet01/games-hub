@@ -80,6 +80,7 @@ void DraughtsView::buildActions()
 
 void DraughtsView::newGame()
 {
+    m_resumed = false;
     abandonSearch();
     m_board.reset();
     m_toMove = Side::Red;
@@ -156,7 +157,14 @@ void DraughtsView::advance()
 
 void DraughtsView::playEngineMove()
 {
-    if (m_paused)
+    // A scheduled search can outlive the position it was scheduled for. New
+    // Game, Undo, a level change and activate() all leave a singleShot in
+    // flight that abandonSearch() cannot cancel -- and when it fires,
+    // startSearch() captures the CURRENT board and the CURRENT generation, so
+    // engineMoveReady's generation test passes and the engine plays the human's
+    // move. m_thinking is the flag to read: advance() is the only thing that
+    // sets it and every abandon path clears it.
+    if (m_paused || m_finished || !m_thinking || m_toMove == m_human)
         return;
     startSearch();
 }
@@ -193,6 +201,10 @@ void DraughtsView::abandonSearch()
 void DraughtsView::engineMoveReady(const SearchResult& result)
 {
     if (result.generation != m_generation)
+        return;
+
+    // Defence in depth for the same hazard playEngineMove() guards.
+    if (m_finished || m_toMove == m_human)
         return;
 
     const DraughtsMove move = result.move;
@@ -454,7 +466,7 @@ QByteArray DraughtsView::saveState() const
 {
     // Nothing worth coming back to: a finished game, or one nobody has moved in.
     // An empty state also clears whatever was stored before.
-    if (m_finished || m_history.empty())
+    if (m_finished || (m_history.empty() && !m_resumed))
         return {};
 
     QByteArray blob;
@@ -561,6 +573,7 @@ bool DraughtsView::restoreState(const QByteArray& blob)
     m_history.clear();
     m_thinking = false;
     m_finished = false;
+    m_resumed = true;
     m_undoAction->setEnabled(false);
     if (m_levelGroup != nullptr)
         m_levelGroup->actions().at(level)->setChecked(true);

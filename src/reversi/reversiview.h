@@ -79,5 +79,9 @@ private:
     QFutureWatcher<SearchResult>* m_search = nullptr;
     quint64 m_generation = 0;
     bool m_paused = false;
+    // Restoring a save clears the undo history, so m_history.empty() alone reads
+    // a resumed game as untouched and saveState() then returns {}, which the hub
+    // treats as "delete the stored game". This says the position is worth keeping.
+    bool m_resumed = false;
     bool m_finished = false;
 };

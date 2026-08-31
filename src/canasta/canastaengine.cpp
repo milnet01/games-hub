@@ -309,7 +309,12 @@ Rules readRules(QDataStream& in)
 // bullet insisted the harness be run under sanitizers.
 bool plausiblePack(const Rules& r)
 {
-    return r.decks >= 1 && r.decks <= 8 && r.jokers >= 0 && r.jokers <= 64;
+    // handSize is bounded here because dealFrom() pops kSeats * handSize cards
+    // off the stock without checking it holds them: a saved blob claiming a
+    // large hand walks an empty vector. The dialog clamps 7..15; this is the
+    // path a hand-edited or corrupt file takes, and it has no clamp of its own.
+    return r.decks >= 1 && r.decks <= 8 && r.jokers >= 0 && r.jokers <= 64
+        && r.handSize >= 1 && r.handSize <= 20;
 }
 
 void writeTeam(QDataStream& out, const Team& t)
@@ -378,6 +383,9 @@ void Engine::save(QDataStream& out) const
     out << qint32(m_pileFrom.size());
     for (const qint8 seat : m_pileFrom)
         out << seat;
+    out << m_rules.freezeCardMakesATee << m_pendingRules.freezeCardMakesATee; // tail 7
+    out << m_rules.canastasStackOnRedThrees
+        << m_pendingRules.canastasStackOnRedThrees; // tail 8
 }
 
 bool Engine::load(QDataStream& in, int tail)
@@ -471,6 +479,11 @@ bool Engine::load(QDataStream& in, int tail)
             e.m_pileFrom.push_back(seat);
         }
     }
+    if (tail >= 7)
+        readPair(e.m_rules.freezeCardMakesATee, e.m_pendingRules.freezeCardMakesATee);
+    if (tail >= 8)
+        readPair(e.m_rules.canastasStackOnRedThrees,
+                 e.m_pendingRules.canastasStackOnRedThrees);
     if (in.status() != QDataStream::Ok)
         return false;
 
@@ -586,6 +599,11 @@ void Engine::dealFrom(std::vector<Card> stock)
     }
 
     m_stock = std::move(stock);
+    // plausiblePack bounds handSize on the way in, so this cannot fire from a
+    // save; it is here because the pop below has no bound of its own and a
+    // caller supplying its own stock (newGameFromStock) can be short.
+    if (int(m_stock.size()) < kSeats * m_rules.handSize)
+        return;
 
     const int first = (m_dealer + 1) % kSeats;
     for (int i = 0; i < m_rules.handSize; ++i) {

@@ -84,6 +84,7 @@ void SpiderView::buildActions()
 
 void SpiderView::newGame()
 {
+    m_resumed = false;
     m_table.deal(m_table.suits());
     Sound::instance().play(Sound::kShuffle);
     m_drag.clear();
@@ -118,7 +119,7 @@ void SpiderView::undo()
 // the card games save differently from Chess.
 QByteArray SpiderView::saveState() const
 {
-    if (m_won || !m_table.canUndo())
+    if (m_won || (!m_table.canUndo() && !m_resumed))
         return {};
 
     // A run lifted in mid-drag belongs to the column it came from until it is
@@ -177,6 +178,7 @@ bool SpiderView::restoreState(const QByteArray& blob)
         if (a->isCheckable())
             a->setChecked(a->text() == mode);
     }
+    m_resumed = true;
     update();
     refresh();
     return true;
