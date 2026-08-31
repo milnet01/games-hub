@@ -1880,6 +1880,15 @@ draws, whether or not it has had one.
 
   Frame cost unchanged: canasta at rest 7.69 against the 7.70 recorded
   on 2026-08-25. It costs nothing when nothing is flying. ctest 6/6.
+  Shipped in 0.5.0 (2026-08-31): the auto-move half only, so this
+  stays open. The release notes describe the work but deliberately do
+  NOT cite this id on the entry's bullet line — cut-release reads a
+  bullet-line id as a claim that the item closed, and stops the release
+  when the roadmap disagrees. The id sits in the entry's prose instead,
+  which that gate treats as a cross-reference rather than a claim. Put
+  the citation back on the bullet line when the rest lands: the deals,
+  the board games, Klondike's stock and waste, Pyramid's matched pairs,
+  and Spider's harvest via dealRow.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
