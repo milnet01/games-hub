@@ -8,13 +8,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-31
+
 ### Added
 
-- **Cards you send home now travel there instead of teleporting** (GHUB-0065)
+- **Cards you send home now travel there instead of teleporting**
   Double-click a card home in Klondike or FreeCell and you can see
   which one went and where it landed. In Spider, a completed run leaves
   its column as thirteen cards flying off one after another, rather
   than simply not being there any more. Only Canasta did this before.
+  This is the first half of GHUB-0065, which stays open: the deals,
+  the board games and Klondike's stock are still to come.
 
 - **Saved games are now tested against damaged and tampered save files** (GHUB-0052)
   Loading a saved game is the only thing the app reads that it did not
