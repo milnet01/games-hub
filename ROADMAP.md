@@ -3537,6 +3537,12 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
+- 📋 [GHUB-0147] **The Hearts caption can still sit over the card you played.**
+  GHUB-0084 again. captionArea() clamps its own height to zero when the\ngap runs out, but Theme::layoutCaption bails on zero WIDTH and anchors\nthe plate to the bottom of whatever area it gets, growing upward -- so\na gap too small to hold the plate does not shrink it, it puts it over\nthe seat-0 card. cardWidth() caps at 92, so past a certain width the\ntrick stops moving down while the hand stays anchored: at 1900x564,\nthe widest shape the hub allows at its floor, the gap is about 28px\nagainst a plate of about 44.\n\nA trickLift() that measured the plate and raised the trick by the\nshortfall was written, and REVERTED. It reddened the Windows leg\ntwice. The uitest check only requires no overlap once the plate FITS\nthe gap, and the lift made that true at 620x480 and 900x600 where it\nhad been false -- then the plate landed on the card anyway. The\nreported numbers say the lift and trickCardRect disagree about\ngeometry they each derive separately, and none of it reproduces on\nLinux, where the lift never fires at those shapes.\n\nWhoever takes this: measure on both platforms, and do not let the fix\nrecompute seat 0's rect a second time. The wintest box has real fonts\nand is where this shows up; scripts/wintest-ci.sh runs it, but read\nbuild/Testing/Temporary/LastTest.log rather than the console, because\nctest's progress redraw destroys the FAIL line.
+  **Layman:** At wide, short windows the sentence on the table can cover your own card, and the obvious fix broke Windows twice.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
 ### 🎨 Play
 
 - 💭 [GHUB-0018] **Canasta cannot take a move back.**
