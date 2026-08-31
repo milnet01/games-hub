@@ -161,6 +161,12 @@ private:
     // stack -- see meldCardCentre.
     std::vector<int> meldOrder(int team) const;
     QPointF meldCardCentre(int team, int slot, int index) const;
+    // The badge's height. Shared with paintMeldBadge, because the fan below has
+    // to leave room for it and two copies of the figure would be two answers.
+    double meldBadgeHeight() const;
+    // The step down a meld column, tightened when the longest meld in the band
+    // would otherwise carry its badge out of bandFor(team).
+    double meldStep(int team) const;
     QPointF seatAnchor(int seat) const;
     // The Lay down button, on the felt between your melds and your hand. Empty
     // when there is nothing to lay down, which is also when it is not drawn.

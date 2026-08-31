@@ -32,11 +32,17 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+/* A+/A- scales the ROOT, not the body. Every size in this sheet is in rem and
+   rem resolves against the root, so setting --scale on the body left the
+   running total, the deal, the opening minimum and every note fixed while the
+   button labels grew -- the wrong way round for the reader it is there for.
+   16px is the browser default, so nothing moves at scale 1. */
+html { font-size: calc(16px * var(--scale)); }
 body {
   background: var(--bg);
   color: var(--ink);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: calc(19px * var(--scale));
+  font-size: 1.1875rem;
   line-height: 1.4;
   -webkit-text-size-adjust: 100%;
 }
@@ -324,7 +330,20 @@ async function joinRoom(code) {
   sync = "connecting"; render();
   if (!(await connect())) { render(); return; }
   room = { code: String(code).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4), scorer: false };
-  if (room.code.length < 4) { room = null; return; }
+  if (room.code.length < 4) {
+    // Leaving sync on "connecting" here stranded the panel with no way back:
+    // it has no cancel, so the join field was gone until the page reloaded.
+    room = null;
+    sync = db ? "off" : "unavailable";
+    render();
+    return;
+  }
+  // The first value from the room overwrites S wholesale, and saveLocal() then
+  // puts it in storage -- so joining while a game was in play destroyed this
+  // phone's own book with no confirmation and no undo, from a button that sits
+  // on the same screen as the game. File it into the history first, the way
+  // starting a new game and restoring one already do.
+  fileCurrentGame();
   gotBook = false;
   S.started = true;   // a watcher never sets players up; the book arrives whole
   view = "game";
@@ -457,7 +476,12 @@ let view = "game";   // game | dashboard
 
 function render() {
   document.documentElement.style.setProperty("--scale", String(scale));
-  if (room && !room.scorer && !gotBook && !S.started) {
+  // Gate on having nothing to show, not on setup state: joinRoom sets
+  // S.started before it renders, so this could never fire and a joining phone
+  // went straight to an empty board reading 0/0 -- which is what the README
+  // says would look broken. A watcher still holding last week's book sees that
+  // instead of a spinner, which is also what it says.
+  if (room && !room.scorer && !gotBook && !S.hands.length) {
     app.innerHTML = waitingView();
     const u = document.getElementById("unshare");
     if (u) u.onclick = stopSharing;

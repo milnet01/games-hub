@@ -4,6 +4,11 @@ Games is a single-player desktop game collection. It is worth being honest
 about how small its attack surface is, because that is what tells you which
 reports matter.
 
+**This section is about the desktop app.** `scorepad/` is a separate thing —
+a phone score book that talks to a hosted database — and § The score book
+below covers it. The two have different answers, and a reader who takes the
+claims below as the whole repository's will get the score book wrong.
+
 ## What it touches
 
 - **No network.** Nothing in the app opens a socket, fetches a URL or phones
@@ -21,12 +26,26 @@ reports matter.
   a board that could not have been reached is refused. A save that fails
   those checks is discarded and a new game starts.
 
+## The score book
+
+`scorepad/` is a phone score book for a real table, and it does not share the
+claims above. It loads the Firebase SDK from `gstatic.com`, and sharing a game
+opens a subscription to a hosted Realtime Database and writes the players'
+initials, every hand's scores and a per-device id to it. A room is named by a
+four-letter code with no password, so anyone who guesses one can read that
+room, and — depending on the deployed database rules, which are not in this
+repository — write to it. `scorepad/README.md` sets out the trade and how to
+lock the rules down.
+
+Nothing here reaches the desktop app: the two share numbers, not a process.
+
 ## Reporting something
 
 Open a [security advisory](https://github.com/milnet01/games-hub/security/advisories/new),
-or a normal issue if you would rather do it in the open — for a game
-collection with no network and no credentials, most findings are fine to
-discuss publicly.
+or a normal issue if you would rather do it in the open. For the desktop app —
+no network, no credentials — most findings are fine to discuss publicly. A
+finding about the score book's rooms or database rules is not: send that as an
+advisory, because a live room code is somebody's game in progress.
 
 Please include what you did, what happened, and which download or commit you
 were on (`gameshub --version` prints it).

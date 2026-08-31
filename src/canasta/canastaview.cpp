@@ -1291,9 +1291,34 @@ QPointF CanastaView::meldCardCentre(int team, int slot, int index) const
     const double usable = meldRowWidth(team);
     const double pitch = usable / slotCount;
     const double x = band.left() + pitch * (slot + 0.5);
-    const double step = cardHeight() * kMeldScale * 0.17;
-    const double y = band.top() + cardHeight() * kMeldScale * 0.5 + step * index;
+    const double y = band.top() + cardHeight() * kMeldScale * 0.5 + meldStep(team) * index;
     return { x, y };
+}
+
+double CanastaView::meldBadgeHeight() const
+{
+    return cardWidth() * kMeldScale * 0.52;
+}
+
+double CanastaView::meldStep(int team) const
+{
+    const double h = cardHeight() * kMeldScale;
+    const double full = h * 0.17;
+    int longest = 1;
+    for (int rank : meldOrder(team)) {
+        if (const ca::Meld* m = m_engine.team(team).meldOfRank(rank))
+            longest = std::max(longest, int(m->size()));
+    }
+    if (longest < 2)
+        return full;
+    // The column starts half a card below the band's top and the badge hangs
+    // half a card plus a hair below the last card's centre, so a fixed 0.17
+    // step carried the badge out of the band at five cards -- and a canasta is
+    // seven. Below the band is your own hand and the lay-down button for team
+    // 0, and the stock and discard row for team 1, both painted afterwards. The
+    // badge is the only thing that NAMES a meld at this size.
+    const double room = bandFor(team).height() - h - meldBadgeHeight() - 3.0;
+    return std::max(1.0, std::min(full, room / (longest - 1)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1442,6 +1467,13 @@ void CanastaView::flyToPile(const Card& c, const QPointF& from)
 void CanastaView::flyMeldArrivals(int team, std::vector<std::pair<int, Card>> gains,
                                   const QPointF& from, double& delay)
 {
+    // canastaOrder() reads m_canastaOrder, and refresh() is what updates it --
+    // but every caller here builds its flights BEFORE calling refresh(). So a
+    // meld that has just become a canasta was missing from meldOrder() (which
+    // skips stacked ones) AND from the stale canastaOrder(), and got no flight
+    // at all. Bring the order up to date first.
+    trackCanastas();
+
     // Every meld the team owns, canastas included. meldOrder() alone leaves
     // the stacked ones out, and the card that COMPLETED a canasta is exactly
     // the one whose flight matters most -- without this it simply appeared.
@@ -2037,7 +2069,7 @@ void CanastaView::paintMeldBadge(QPainter& p, const ca::Meld& m, const QPointF& 
     // stack of eights are the same picture. Two copies of it would be two
     // answers to "what is this pile".
     const double scale = kMeldScale;
-    const double bh = cardWidth() * scale * 0.52;
+    const double bh = meldBadgeHeight();
     const QString name = m.rank == 3 ? QStringLiteral("3♠") : rankLabel(m.rank);
     // The wild count rides on the badge because a squared or stacked meld
     // shows only slivers, and "is there a joker in there?" is the question it
