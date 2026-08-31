@@ -275,7 +275,10 @@ public:
     // of them, not fewer, so its second card is no evidence the rank is safe.
     // A raw count cannot tell that from two seats genuinely letting the rank
     // go, and the raw count is what a fishing seat feeds (GHUB-0124).
-    int pileRankSources(int rank) const;
+    // exceptSeat is not counted. The asking seat passes its own: its earlier
+    // discards are still in the pile, and reading them back as evidence that
+    // the TABLE is parting with the rank is a seat believing its own bait.
+    int pileRankSources(int rank, int exceptSeat = -1) const;
     bool pileFrozen() const { return m_frozen; }
     // Where in pile() the card that froze it sits, or -1 when the pile is not
     // frozen. The table draws that card sideways and needs its DEPTH rather

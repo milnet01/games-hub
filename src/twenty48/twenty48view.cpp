@@ -131,7 +131,12 @@ void Twenty48View::undo()
 void Twenty48View::push(Direction direction)
 {
     if (!m_board.slide(direction)) {
+        // refresh() emits the sentence; the on-board caption is only redrawn by
+        // a repaint, and nothing else schedules one on this path. Without the
+        // update the play surface -- the one surface read during play -- keeps
+        // showing the previous sentence while the status bar changes.
         refresh(QStringLiteral("Nothing moves that way."));
+        update();
         return;
     }
 

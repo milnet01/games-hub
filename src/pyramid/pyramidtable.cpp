@@ -180,6 +180,20 @@ bool PyramidTable::restore(const std::vector<Slot>& pyramid, const std::vector<C
     cardcodec::gather(all, waste);
     if (!cardcodec::fitsPack(all, 1, 4))
         return false;
+    // fitsPack is a SUBSET test, so a short table passes it -- which is why
+    // cardcodec.h asks a game that removes cards to pair it with a count of its
+    // own, as Spider and Hearts do. Without it, 28 pyramid slots with an empty
+    // stock and waste loses 24 cards in silence, and a table with every slot
+    // removed and no pairs reports cleared() at once: a crafted save handing out
+    // a win and a best score. A pair takes two cards, but a King goes alone and
+    // counts as one all the same, so the exact total is not derivable from
+    // `pairs` -- the bound is. Both shapes above are still refused: each is 52
+    // cards short of anything this range allows.
+    const int live = int(std::count_if(pyramid.begin(), pyramid.end(),
+                                       [](const Slot& s) { return !s.removed; }))
+        + int(stock.size()) + int(waste.size());
+    if (live > 52 - pairs || live < 52 - 2 * pairs)
+        return false;
 
     m_pyramid = pyramid;
     m_stock = stock;

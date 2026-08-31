@@ -222,6 +222,16 @@ THRESHOLD_GREP = (
 def check_thresholds() -> int:
     result = subprocess.run(THRESHOLD_GREP, shell=True, cwd=ROOT,
                             capture_output=True, text=True)
+    # grep exits 1 for "no matches", which is the pass. Anything else means the
+    # pipeline could not run -- no grep on PATH, src/ renamed, a bad -E pattern
+    # -- and that produces empty stdout, exactly like a clean tree. INV-4 is the
+    # only thing that catches a second hardcoded 46, so a pass it did not earn
+    # is a dead invariant announcing itself as green.
+    if result.returncode not in (0, 1) or result.stderr.strip():
+        print("FAIL  the threshold grep could not run:")
+        for line in result.stderr.splitlines() or [f"exit status {result.returncode}"]:
+            print(f"      {line}")
+        return 1
     hits = [line for line in result.stdout.splitlines() if line.strip()]
     if hits:
         print("FAIL  the 46-pixel threshold is stated outside cardart.h:")

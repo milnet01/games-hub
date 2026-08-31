@@ -512,7 +512,7 @@ int Engine::pileThrownBy(int index) const
     return int(m_pileFrom[std::size_t(index)]);
 }
 
-int Engine::pileRankSources(int rank) const
+int Engine::pileRankSources(int rank, int exceptSeat) const
 {
     std::array<bool, kSeats> seats {};
     bool unthrown = false;
@@ -520,6 +520,10 @@ int Engine::pileRankSources(int rank) const
         if (m_pile[std::size_t(i)].rank != rank)
             continue;
         const int seat = pileThrownBy(i);
+        // Guarded on exceptSeat >= 0 so the default (-1, count everybody) does
+        // not collide with the -1 that means "nobody threw it".
+        if (exceptSeat >= 0 && seat == exceptSeat)
+            continue;
         if (seat < 0 || seat >= kSeats) {
             // The deal's up-card and whatever covered it. Nobody chose to let
             // it go, so it is not a preference -- but it IS a card that came

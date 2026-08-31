@@ -502,7 +502,9 @@ void HubWindow::buildChrome()
 
     m_soundAction = new QAction(QStringLiteral("🔊 Sound"), this);
     m_soundAction->setCheckable(true);
-    m_soundAction->setChecked(true);
+    // Set before the connection below, so restoring the stored state does not
+    // write it straight back and does not click.
+    m_soundAction->setChecked(!Sound::instance().muted());
     m_soundAction->setToolTip(QStringLiteral("Turn game sounds on or off"));
     connect(m_soundAction, &QAction::toggled, this, [this](bool on) {
         Sound::instance().setMuted(!on);

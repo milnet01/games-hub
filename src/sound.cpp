@@ -1,7 +1,12 @@
 #include "sound.h"
 
+#include <QSettings>
 #include <QSoundEffect>
 #include <QUrl>
+
+namespace {
+const QString kMutedKey = QStringLiteral("audio/muted");
+}
 
 Sound& Sound::instance()
 {
@@ -14,11 +19,18 @@ Sound::Sound()
     // The offscreen platform has no audio device, and the test suite runs
     // there — creating effects would only produce warnings.
     m_available = qgetenv("QT_QPA_PLATFORM") != "offscreen";
+    // Stored like the legibility switch beside it in the toolbar. Without this
+    // the mute was discarded on every launch, while README introduces the two
+    // as a pair and says the setting is remembered.
+    m_muted = QSettings().value(kMutedKey, false).toBool();
 }
 
 void Sound::setMuted(bool muted)
 {
+    if (m_muted == muted)
+        return;
     m_muted = muted;
+    QSettings().setValue(kMutedKey, muted);
 }
 
 void Sound::setVolume(double volume)

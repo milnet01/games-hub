@@ -506,6 +506,7 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
     std::vector<std::pair<std::vector<Card>, int>> out;
     std::vector<Card> remaining = e.hand(seat);
 
+
     const auto naturalsOf = [&](int rank) {
         std::vector<Card> v;
         for (const Card& c : remaining)
@@ -975,7 +976,7 @@ Card Ai::chooseDiscard(const Engine& e) const
             // hand. So a pile restored from a save written before the
             // provenance existed reads as one cautious source rather than as
             // several confident ones.
-            safety += 50.0 * double(e.pileRankSources(c.rank));
+            safety += 50.0 * double(e.pileRankSources(c.rank, seat));
         }
 
         if (m_level == Level::Hard || m_level == Level::Expert) {

@@ -1441,7 +1441,29 @@ void pyramidPairsMustMakeThirteen()
     fill(21, 2);                               // 26, 27
 
     PT table;
-    check(table.restore(pyramid, {}, {}, 0, 0), "pyramid: the hand-built position is accepted");
+    // The stock takes the rest of the pack. restore() checks that the cards
+    // still in play come to 52 less two per pair taken, so a 28-card table with
+    // an empty stock is refused -- it is 24 cards short and cannot be won, and
+    // accepting it let a crafted save report itself cleared. The pyramid layout
+    // below is unchanged; only the cards nobody has dealt yet move.
+    const std::vector<Card> rest(deck.begin() + 23, deck.end());
+    check(table.restore(pyramid, rest, {}, 0, 0),
+          "pyramid: the hand-built position is accepted");
+
+    // The two shapes a crafted save takes. fitsPack is a subset test and
+    // accepted both: the first loses 24 cards and cannot be won, the second
+    // reports itself cleared the moment it loads and banks a best score.
+    {
+        PT shortTable;
+        check(!shortTable.restore(pyramid, {}, {}, 0, 0),
+              "pyramid: a table with the stock missing is refused");
+        std::vector<PT::Slot> emptied = pyramid;
+        for (PT::Slot& s : emptied)
+            s.removed = true;
+        PT clearedTable;
+        check(!clearedTable.restore(emptied, rest, {}, 0, 0),
+              "pyramid: and so is one claiming to be cleared with no pairs taken");
+    }
 
     check(!table.takePair(PT::Source::Pyramid, 23, PT::Source::Pyramid, 24),
           "pyramid: five and five make ten, so they are refused");
@@ -4771,6 +4793,20 @@ void canastaSeesWhoThrewIt()
     check(e.pileRankSources(9) == 1,
           "canasta: and the deal's own up-card counts once, having come from no hand");
     check(e.pileThrownBy(0) == -1, "canasta: the up-card was thrown by nobody");
+
+    // A seat reading the pack must not count its OWN discards. Its earlier throw
+    // is still lying there, and reading it back as the table parting with the
+    // rank is a seat believing its own bait -- which made Expert more willing to
+    // throw the second of a pair, not less.
+    int kingSeat = -1;
+    for (int i = 0; i < int(e.pile().size()); ++i)
+        if (e.pile()[std::size_t(i)].rank == kKing)
+            kingSeat = e.pileThrownBy(i);
+    check(kingSeat >= 0, "canasta: the kings were thrown by a seat at the table");
+    check(e.pileRankSources(kKing, kingSeat) == 0,
+          "canasta: and that seat reading the pack counts none of its own kings");
+    check(e.pileRankSources(9, kingSeat) == 1,
+          "canasta: while the up-card nobody threw still counts, whoever is asking");
 
     // Restoring a save keeps it. Nothing else in the engine would notice the
     // provenance going missing, and a hand resumed mid-play is exactly when a

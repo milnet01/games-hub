@@ -49,6 +49,9 @@ void SnakeView::buildActions()
         else
             m_timer->stop();
         refresh();
+        // The timer has just stopped, so nothing else will repaint: without
+        // this the board caption still reads "Go" for the whole pause.
+        update();
     });
     m_actions.append(pause);
 }
