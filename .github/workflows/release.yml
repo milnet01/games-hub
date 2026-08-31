@@ -79,12 +79,27 @@ jobs:
       # --plugin qt finds the second by name on PATH. The runner has no
       # FUSE 2, so every AppImage involved -- these two and the appimagetool
       # linuxdeploy spawns -- has to extract itself instead of mounting.
+      # Pinned to dated release tags and checksummed. `continuous` is force-moved
+      # on every upstream commit, and these two binaries ASSEMBLE the AppImage
+      # that strangers download -- which is the same argument that pins every
+      # `uses:` above to a SHA, applied to the tools rather than the actions.
+      # The linuxdeploy sum is GitHub's own published asset digest; the plugin's
+      # release predates that API field, so its sum was computed from the
+      # downloaded asset.
       - name: Fetch linuxdeploy
+        env:
+          LINUXDEPLOY_TAG: 1-alpha-20251107-1
+          LINUXDEPLOY_SHA: c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d
+          PLUGIN_TAG: 1-alpha-20250213-1
+          PLUGIN_SHA: 15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724
         run: |
           base=https://github.com/linuxdeploy
-          curl -fsSLO "$base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+          main=linuxdeploy-x86_64.AppImage
+          curl -fsSLO "$base/linuxdeploy/releases/download/$LINUXDEPLOY_TAG/$main"
           plugin=linuxdeploy-plugin-qt
-          curl -fsSLO "$base/$plugin/releases/download/continuous/$plugin-x86_64.AppImage"
+          curl -fsSLO "$base/$plugin/releases/download/$PLUGIN_TAG/$plugin-x86_64.AppImage"
+          echo "$LINUXDEPLOY_SHA  $main" | sha256sum -c -
+          echo "$PLUGIN_SHA  $plugin-x86_64.AppImage" | sha256sum -c -
           chmod +x linuxdeploy*.AppImage
 
       - name: Stage the AppDir
@@ -170,7 +185,10 @@ jobs:
           # version line printed by the first run would pass the step for a
           # second run that died.
           set -o pipefail
-          docker run --rm -v "$PWD:/w" ubuntu:24.04 sh -c '
+          # Read-only: the container runs as root and this step runs BEFORE
+          # upload-artifact, so a writable mount would let it rewrite the
+          # AppImage between building it and publishing it. It only reads.
+          docker run --rm -v "$PWD:/w:ro" ubuntu:24.04 sh -c '
             set -e
             apt-get update -qq >/dev/null
             apt-get install -y -qq --no-install-recommends \

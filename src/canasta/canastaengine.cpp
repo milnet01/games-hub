@@ -217,6 +217,14 @@ Card readCard(QDataStream& in)
     bool faceUp = false;
     qint8 deck = 0;
     in >> suit >> rank >> faceUp >> deck;
+    // The same bounds cardcodec::readCard applies. Canasta keeps its own reader
+    // because the format differs -- a wider rank field, so the two are not
+    // interchangeable without breaking every stored game -- but it validated
+    // NOTHING, on the one input SECURITY.md names as untrusted. A rank outside
+    // the pack is then consumed by every rank-keyed lookup in the engine and
+    // the AI.
+    if (suit < 0 || suit > 3 || rank < kJoker || rank > kKing || deck < 0 || deck > 7)
+        in.setStatus(QDataStream::ReadCorruptData);
     return Card { Suit(suit), int(rank), faceUp, int(deck) };
 }
 
@@ -234,7 +242,15 @@ std::vector<Card> readCards(QDataStream& in)
     std::vector<Card> cards;
     // A count from a corrupt file must not be trusted into an allocation; two
     // packs plus jokers is 108, and nothing here can legitimately exceed that.
-    for (qint32 i = 0; i < n && i < 512 && in.status() == QDataStream::Ok; ++i)
+    // Truncating at the ceiling and carrying on left the stream DESYNCHRONISED
+    // and the load then survived or failed by luck of the downstream count
+    // check, so an impossible count is corruption rather than a short read.
+    if (n < 0 || n > 512) {
+        in.setStatus(QDataStream::ReadCorruptData);
+        return cards;
+    }
+    cards.reserve(std::size_t(n));
+    for (qint32 i = 0; i < n && in.status() == QDataStream::Ok; ++i)
         cards.push_back(readCard(in));
     return cards;
 }

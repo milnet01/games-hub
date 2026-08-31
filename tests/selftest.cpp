@@ -1020,6 +1020,21 @@ void snakeRefusesAReversal()
     check(board.pending() == QPoint(1, 0), "snake: and the buffered turn is left alone");
     check(board.turn({ 0, -1 }), "snake: turning across is allowed");
     check(board.pending() == QPoint(0, -1), "snake: and is what the next step takes");
+
+    // The corner double-tap the header promises. A single-slot buffer could not
+    // do it: the second tap overwrote the first, so the Up was discarded and the
+    // snake carried straight on. Up is already queued from the check above.
+    check(board.turn({ 1, 0 }), "snake: a second turn queues behind the first");
+    check(board.pending() == QPoint(0, -1), "snake: the first is still what steps next");
+    board.step();
+    check(board.direction() == QPoint(0, -1), "snake: and the first turn is the one taken");
+    board.step();
+    check(board.direction() == QPoint(1, 0),
+          "snake: with the second taken on the step after, not swallowed");
+    // Checked against the turn ahead of it in the queue, not against the
+    // direction in force -- Right, then Up, then Left is a legal path.
+    check(board.turn({ 0, -1 }), "snake: turning up from right is allowed");
+    check(board.turn({ -1, 0 }), "snake: and left from that queued up, which is not a reversal");
     // Two squares at once would step the head straight over a body segment
     // without the collision test ever seeing it.
     check(!board.turn({ 2, 0 }) && !board.turn({ 1, 1 }) && !board.turn({ 0, 0 }),

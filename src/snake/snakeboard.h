@@ -42,7 +42,7 @@ public:
     QPoint food() const { return m_food; }
     QPoint direction() const { return m_direction; }
     // The turn `step()` will take. Not the same as direction() until it does.
-    QPoint pending() const { return m_pending; }
+    QPoint pending() const { return m_turns.empty() ? m_direction : m_turns.front(); }
     int score() const { return m_score; }
     bool dead() const { return m_dead; }
     // The snake fills the grid and there is nowhere left to put food. Reachable
@@ -61,7 +61,14 @@ private:
 
     std::deque<QPoint> m_snake;
     QPoint m_direction { 1, 0 };
-    QPoint m_pending { 1, 0 };
+    // Up to two turns waiting, so a corner taken as a quick double-tap is not
+    // swallowed. A single slot could not do it: the second tap overwrote the
+    // first, so Right-Up-Right dropped the Up and the snake never turned. Each
+    // entry is checked against the one BEFORE it rather than against
+    // m_direction, which is what makes Right-Up-Left legal -- checking a queued
+    // turn against the applied direction refused it as a reversal.
+    static constexpr std::size_t kMaxTurns = 2;
+    std::deque<QPoint> m_turns;
     QPoint m_food;
 
     std::mt19937 m_rng { std::random_device {}() };

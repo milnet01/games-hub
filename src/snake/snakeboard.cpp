@@ -18,7 +18,7 @@ void SnakeBoard::newGame()
         m_snake.push_back(QPoint(kWidth / 2 - i, midRow));
 
     m_direction = { 1, 0 };
-    m_pending = { 1, 0 };
+    m_turns.clear();
     m_score = 0;
     m_dead = false;
     placeFood();
@@ -37,11 +37,21 @@ bool SnakeBoard::turn(QPoint direction)
     const int steps = std::abs(direction.x()) + std::abs(direction.y());
     if (steps != 1)
         return false;
-    // Reversing straight into your own neck is never what the player meant.
-    // Harmless at length one, where there is no neck to hit.
-    if (direction + m_direction == QPoint(0, 0) && m_snake.size() > 1)
+    if (m_turns.size() >= kMaxTurns)
         return false;
-    m_pending = direction;
+    // Reversing straight into your own neck is never what the player meant.
+    // Harmless at length one, where there is no neck to hit. Measured against
+    // the last turn already queued, because that is the direction this one
+    // actually follows.
+    const QPoint previous = m_turns.empty() ? m_direction : m_turns.back();
+    if (direction + previous == QPoint(0, 0) && m_snake.size() > 1)
+        return false;
+    // A repeat of where we are already going changes nothing, so it does not
+    // take a slot the next real turn needs -- but it IS a turn the player made,
+    // and the view reads this return value to know the game has started.
+    if (direction == previous)
+        return true;
+    m_turns.push_back(direction);
     return true;
 }
 
@@ -50,7 +60,10 @@ SnakeBoard::Step SnakeBoard::step()
     if (m_dead)
         return Step::Died;
 
-    m_direction = m_pending;
+    if (!m_turns.empty()) {
+        m_direction = m_turns.front();
+        m_turns.pop_front();
+    }
     const QPoint next = m_snake.front() + m_direction;
 
     // The tail square is about to be vacated, so running into it is legal —
