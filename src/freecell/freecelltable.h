@@ -103,6 +103,13 @@ private:
     std::array<std::vector<Card>, kCells> m_cells;
     std::array<std::vector<Card>, kFoundations> m_foundations;
 
+    // The column a run was lifted from, or -1. The view holds the run while it
+    // is in the air (FreeCell uncovers nothing, so it does not need the table
+    // to), but the run's own column then reads EMPTY to maxMoveSize and doubles
+    // the supermove limit. A column whose cards are in your hand is not a free
+    // staging area.
+    int m_liftedColumn = -1;
+
     std::deque<Snapshot> m_history;
     std::mt19937 m_rng { std::random_device {}() };
     int m_moves = 0;

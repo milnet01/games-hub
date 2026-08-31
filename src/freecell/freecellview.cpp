@@ -186,10 +186,22 @@ QRectF FreeCellView::pileOrigin(PileKind kind, int pile) const
     return {};
 }
 
+double FreeCellView::fanStep(int column) const
+{
+    const double full = fanStep();
+    const int n = int(m_table.columns()[std::size_t(column)].size());
+    if (n < 2)
+        return full;
+    const double top = pileOrigin(PileKind::Column, column).top();
+    const double room =
+        height() - kMargin - captionBand(QRectF(rect())) - top - cardHeight();
+    return std::max(1.0, std::min(full, room / (n - 1)));
+}
+
 QRectF FreeCellView::cardRect(int column, int index) const
 {
     QRectF r = pileOrigin(PileKind::Column, column);
-    r.moveTop(r.top() + index * fanStep());
+    r.moveTop(r.top() + index * fanStep(column));
     return r;
 }
 

@@ -85,6 +85,11 @@ private:
     QRectF pileOrigin(PileKind kind, int pile) const;
     QRectF cardRect(int column, int index) const;
     double fanStep() const { return cardHeight() * kFanStep; }
+    // kLongestDealtColumn budgets the DEAL. Building descending runs in the
+    // tableau is the game, and an eighth card ran under the caption plate or
+    // off the bottom edge, where hitTest can never reach it. A column past its
+    // budget fans tighter instead.
+    double fanStep(int column) const;
     Spot hitTest(QPointF pos) const;
 
     const std::vector<Card>& pileFor(PileKind kind, int pile) const

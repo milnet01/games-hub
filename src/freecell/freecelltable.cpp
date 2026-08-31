@@ -13,6 +13,7 @@ constexpr std::size_t kMaxHistory = 300;
 
 void FreeCellTable::deal()
 {
+    m_liftedColumn = -1;
     std::vector<Card> deck = makeDeck(1, 4);
     shuffleCards(deck, m_rng);
 
@@ -64,8 +65,11 @@ int FreeCellTable::maxMoveSize(bool toEmptyColumn) const
             ++freeCells;
     }
     int emptyColumns = 0;
-    for (const std::vector<Card>& c : m_columns) {
-        if (c.empty())
+    for (int i = 0; i < kColumns; ++i) {
+        // A column only looks empty because its cards are in the player's hand.
+        if (i == m_liftedColumn)
+            continue;
+        if (m_columns[std::size_t(i)].empty())
             ++emptyColumns;
     }
 
@@ -133,6 +137,7 @@ std::vector<Card> FreeCellTable::lift(PileKind kind, int index, int from)
     std::vector<Card>& source = pileAt(kind, index);
     if (from < 0 || from >= int(source.size()))
         return {};
+    m_liftedColumn = kind == PileKind::Column ? index : -1;
     if (kind == PileKind::Column) {
         // Only a run in alternating colours moves together.
         if (from < firstMovableIndex(index))
@@ -153,6 +158,7 @@ void FreeCellTable::putBack(PileKind kind, int index, const std::vector<Card>& r
     std::vector<Card>& source = pileAt(kind, index);
     for (const Card& c : run)
         source.push_back(c);
+    m_liftedColumn = -1;
     dropUndo();
 }
 
@@ -188,6 +194,7 @@ bool FreeCellTable::dropOnColumn(const std::vector<Card>& run, int column, int* 
 
     for (const Card& c : run)
         m_columns[std::size_t(column)].push_back(c);
+    m_liftedColumn = -1;
     ++m_moves;
     return true;
 }
@@ -213,6 +220,7 @@ void FreeCellTable::undo()
 {
     if (m_history.empty())
         return;
+    m_liftedColumn = -1;
     // The snapshot is destroyed on the line below, so take its piles rather
     // than copying them. Copy-assigning here allocates sixteen vectors and
     // then frees the originals a line later, every single undo.
@@ -252,6 +260,7 @@ bool FreeCellTable::restore(const std::array<std::vector<Card>, kColumns>& colum
     m_cells = cells;
     m_foundations = foundations;
     m_moves = moves;
+    m_liftedColumn = -1;
     m_history.clear();
     return true;
 }

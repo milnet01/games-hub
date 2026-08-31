@@ -58,6 +58,12 @@ private:
     // Table units -> widget pixels.
     double scale() const;
     QPointF toScreen(QPointF p) const;
+    // The strip across the top of the cabinet. Reserved out of the height
+    // before the table is scaled, because it is opaque and used to be painted
+    // OVER the playfield -- and the legibility switch makes it taller, so the
+    // switch that exists to help hid more of the board rather than less.
+    // Derived from the widget rather than from scale(), which it constrains.
+    double glassHeight() const;
 
     QList<QAction*> m_actions;
     QTimer* m_timer = nullptr;

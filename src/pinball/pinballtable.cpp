@@ -143,21 +143,28 @@ void PinballTable::advance(double seconds)
     if (m_gameOver)
         return;
 
-    // Flippers move towards their target angle at a fixed rate; the angular
-    // speed is what gives the ball its kick.
-    for (Flipper* f : { &m_left, &m_right }) {
-        f->previousAngle = f->angle;
-        const double target = f->pressed ? f->activeAngle : f->restAngle;
-        const double rate = 18.0 * seconds;
-        if (std::abs(target - f->angle) <= rate)
-            f->angle = target;
-        else
-            f->angle += (target > f->angle) ? rate : -rate;
-    }
-
     double remaining = seconds;
     while (remaining > 0.0 && !m_gameOver) {
         const double dt = std::min(kSubStep, remaining);
+        // Flippers move towards their target angle at a fixed rate, and the
+        // angular speed is what gives the ball its kick. They step WITH the
+        // ball: collideFlipper reads (angle - previousAngle) / dt, so advancing
+        // a whole frame's travel here and dividing it by a substep overstated
+        // the blade's speed by the ratio between the two -- about 7.7x at a
+        // 16 ms frame, and more on the short final slice, so an identical swing
+        // delivered a different kick depending on which slice contact landed
+        // in. It also moved the tip further in one instant than the contact
+        // band is wide, which put a resting ball on the FAR side of the blade
+        // and then pushed it toward the drain.
+        for (Flipper* f : { &m_left, &m_right }) {
+            f->previousAngle = f->angle;
+            const double target = f->pressed ? f->activeAngle : f->restAngle;
+            const double rate = 18.0 * dt;
+            if (std::abs(target - f->angle) <= rate)
+                f->angle = target;
+            else
+                f->angle += (target > f->angle) ? rate : -rate;
+        }
         stepPhysics(dt);
         remaining -= dt;
     }

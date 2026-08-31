@@ -161,18 +161,26 @@ void PinballView::refresh()
                              .arg(hint));
 }
 
+double PinballView::glassHeight() const
+{
+    const bool large = Legibility::instance().enabled();
+    return std::max(large ? 30.0 : 20.0, height() * (large ? 0.075 : 0.05));
+}
+
 double PinballView::scale() const
 {
-    // The +24 leaves room for the wooden rails drawn outside the playfield.
+    // The +24 leaves room for the wooden rails drawn outside the playfield, and
+    // the backglass takes its strip off the height before anything is scaled.
     return std::min(width() / (PinballTable::kWidth + 24.0),
-                    height() / (PinballTable::kHeight + 24.0));
+                    (height() - glassHeight()) / (PinballTable::kHeight + 24.0));
 }
 
 QPointF PinballView::toScreen(QPointF p) const
 {
     const double s = scale();
+    const double g = glassHeight();
     return { (width() - PinballTable::kWidth * s) / 2 + p.x() * s,
-             (height() - PinballTable::kHeight * s) / 2 + p.y() * s };
+             g + (height() - g - PinballTable::kHeight * s) / 2 + p.y() * s };
 }
 
 // A flipper is a tapered bat, not a plain bar: wide at the pivot, narrow at
@@ -449,8 +457,9 @@ void PinballView::paintEvent(QPaintEvent*)
     // and both labels on it come up together, which is the only way the strip
     // does not simply clip a bigger number.
     const bool large = Legibility::instance().enabled();
-    const QRectF glass(table.left(), table.top(), table.width(),
-                       std::max(large ? 30.0 : 20.0, (large ? 44.0 : 30.0) * s));
+    // Above the playfield, in the strip scale() reserved for it.
+    const double g = glassHeight();
+    const QRectF glass(table.left(), std::max(0.0, table.top() - g), table.width(), g);
     p.setPen(Qt::NoPen);
     QLinearGradient strip(glass.topLeft(), glass.bottomLeft());
     strip.setColorAt(0.0, QColor(0x0e, 0x12, 0x22, 235));

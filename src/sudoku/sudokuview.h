@@ -76,5 +76,12 @@ private:
     qint64 m_elapsedMs = 0; // banked before the current run of the clock
     qint64 elapsedMs() const;
     QAction* m_pauseAction = nullptr;
+    // Held so restoreState() can put them back in step with the board it just
+    // loaded. Without a handle, Pencil and Show Errors came back showing the
+    // opposite of what was in force, and the first press then did nothing --
+    // pressing Pencil to turn it OFF left it on.
+    QAction* m_pencilAction = nullptr;
+    QAction* m_errorsAction = nullptr;
+    QActionGroup* m_levelGroup = nullptr;
     QTimer* m_tick = nullptr;
 };

@@ -129,29 +129,30 @@ void SudokuView::buildActions()
     });
     m_actions.append(m_pauseAction);
 
-    auto* pencil = new QAction(QStringLiteral("Pencil"), this);
-    pencil->setCheckable(true);
-    pencil->setShortcut(QKeySequence(Qt::Key_P));
-    connect(pencil, &QAction::toggled, this, [this](bool on) {
+    m_pencilAction = new QAction(QStringLiteral("Pencil"), this);
+    m_pencilAction->setCheckable(true);
+    m_pencilAction->setShortcut(QKeySequence(Qt::Key_P));
+    connect(m_pencilAction, &QAction::toggled, this, [this](bool on) {
         m_pencil = on;
         refresh();
     });
-    m_actions.append(pencil);
+    m_actions.append(m_pencilAction);
 
-    auto* errors = new QAction(QStringLiteral("Show Errors"), this);
-    errors->setCheckable(true);
-    errors->setChecked(true);
-    connect(errors, &QAction::toggled, this, [this](bool on) {
+    m_errorsAction = new QAction(QStringLiteral("Show Errors"), this);
+    m_errorsAction->setCheckable(true);
+    m_errorsAction->setChecked(true);
+    connect(m_errorsAction, &QAction::toggled, this, [this](bool on) {
         m_highlightErrors = on;
         update();
     });
-    m_actions.append(errors);
+    m_actions.append(m_errorsAction);
 
     auto* sep = new QAction(this);
     sep->setSeparator(true);
     m_actions.append(sep);
 
-    auto* group = new QActionGroup(this);
+    m_levelGroup = new QActionGroup(this);
+    QActionGroup* group = m_levelGroup;
     group->setExclusive(true);
     const struct { const char* name; SudokuGrid::Level level; } kLevels[] = {
         { "Easy", SudokuGrid::Level::Easy },
@@ -592,8 +593,16 @@ bool SudokuView::restoreState(const QByteArray& blob)
     // charge the player for the moment in between.
     m_suspended = true;
     m_tick->stop();
+    // The toolbar has to agree with the board it is now sitting above -- all
+    // four pieces of state restoreState() sets, not just the clock.
     if (m_pauseAction != nullptr)
         m_pauseAction->setChecked(m_paused);
+    if (m_pencilAction != nullptr)
+        m_pencilAction->setChecked(m_pencil);
+    if (m_errorsAction != nullptr)
+        m_errorsAction->setChecked(m_highlightErrors);
+    if (m_levelGroup != nullptr)
+        m_levelGroup->actions().at(int(m_level))->setChecked(true);
     update();
     refresh();
     return true;
