@@ -165,6 +165,13 @@ the Windows leg — the only place MSVC is exercised — does not run on branch
 work until a pull request opens. `release.yml`
 turns a tag into a Linux AppImage and a Windows zip on the releases page.
 
+**`ci.yml` has a THIRD job** — `Saved-game fuzz (ASan/UBSan)`, on the same
+triggers, and it is not one of the two test binaries. `scripts/local-ci.sh`
+skips it unless given `--with-sanitizers`, and prints that it skipped it. So a
+plain local run is green against two of `ci.yml`'s three jobs, and the Windows
+leg is uncovered on top of that: `scripts/wintest-ci.sh` is the only local
+route to it, and it exits without running anything when the box is off.
+
 Cutting a release is three edits, a check and a tag, **in this order**:
 
 1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`.

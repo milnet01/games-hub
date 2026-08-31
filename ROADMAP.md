@@ -2495,6 +2495,22 @@ inventing one.
   Small when picked up: amend the Releasing section to name both
   standards and state the 0.x consequence in one sentence, then
   gate as a standard.
+  Confirmed live while cutting 0.5.0 (2026-08-31). The Releasing
+  section's five steps say to bump CMakeLists and README and never say
+  to WHICH number; the answer came from docs/standards/versioning-overrides.md
+  plus the global standard, neither of which this file names. The
+  release was breaking (canastaview.cpp's save stamp moved 4 to 7,
+  which section 1 of the overrides makes a breaking surface), so under
+  the 0.x shift it was 0.5.0 and not the 0.4.1 the step list invites.
+
+  A second edit belongs in the SAME gate, since it lands in the same
+  section. cut-release reads an ID on a changelog entry's BULLET LINE
+  as a claim that the item shipped, and stops the release when the
+  roadmap still has it open — GHUB-0065 hit exactly this. An ID in the
+  entry's continuation prose is a cross-reference and passes. Nothing
+  in the Releasing section says so, and the gate is the only thing that
+  catches it. Write both rules at once rather than gating this section
+  twice.
   **Layman:** The rules for choosing a version number exist now, but the page someone actually reads before a release does not mention them.
   Kind: doc.
   Source: in-session-2026-08-20.
