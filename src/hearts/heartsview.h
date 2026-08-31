@@ -17,7 +17,9 @@ public:
     explicit HeartsView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
-    double smallestCardWidth() const override { return cardWidth(); }
+    // The TRICK is the smallest face this game draws, at 0.9 of a hand card --
+    // reporting the hand card overstated the floor by that factor.
+    double smallestCardWidth() const override { return cardWidth() * 0.9; }
     // Names the suit that was led. That sentence exists nowhere else in this
     // game: the led card is one of up to four in a heap in the middle, and
     // which suit it is decides every legal play you have.
@@ -47,6 +49,9 @@ protected:
     QRectF captionArea() const;
     QRectF handCardRect(int index) const;
     QRectF trickCardRect(int seat) const;
+    // How far the trick is raised so the caption's plate fits between it and the
+    // hand. Zero at most window shapes; see the comment on the definition.
+    double trickLift() const;
 
     // The room a seat's fanned stack of backs takes, at its fullest. Reachable
     // from a test because a stack that does not fit is invisible to every other
@@ -57,6 +62,9 @@ private:
     void buildActions();
     void newGame();
     void confirmPass();
+    // Deal the next hand. Reached from the hand-over box's accept button and
+    // from the toolbar, so declining the box no longer ends the match.
+    void startNextHand();
     // Runs the computer seats until it is the human's turn again, or the trick
     // is full. Driven by a timer so the play is watchable.
     void step();
@@ -70,10 +78,14 @@ private:
 
     QList<QAction*> m_actions;
     QAction* m_passAction = nullptr;
+    QAction* m_nextHandAction = nullptr;
 
     HeartsEngine m_engine;
     std::vector<Card> m_selected; // cards chosen for passing
     QTimer* m_timer = nullptr;
     bool m_awaitingCollect = false;
     bool m_announced = false;
+    // The hand-over box came due while the hub was on another page; activate()
+    // raises it when we are back.
+    bool m_announcePending = false;
 };

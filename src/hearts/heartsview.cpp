@@ -85,6 +85,16 @@ void HeartsView::buildActions()
     m_passAction->setEnabled(false);
     connect(m_passAction, &QAction::triggered, this, &HeartsView::confirmPass);
     m_actions.append(m_passAction);
+
+    // nextHand() had exactly one caller: the hand-over box's accept button. So
+    // Close ended the match for good -- the phase stays HandOver, step() returns
+    // at once, no click is accepted, and saveState() stores that state, so it
+    // survived a restart too. The only way out was New Game, which threw away
+    // every accumulated total.
+    m_nextHandAction = new QAction(QStringLiteral("Next Hand"), this);
+    m_nextHandAction->setEnabled(false);
+    connect(m_nextHandAction, &QAction::triggered, this, &HeartsView::startNextHand);
+    m_actions.append(m_nextHandAction);
 }
 
 void HeartsView::newGame()
@@ -109,6 +119,11 @@ void HeartsView::activate()
     if (m_awaitingCollect
         || (m_engine.phase() == HeartsEngine::Phase::Playing && m_engine.currentPlayer() != 0))
         m_timer->start(kAiDelayMs);
+    // An announcement that came due while the hub was elsewhere.
+    if (m_announcePending) {
+        m_announcePending = false;
+        announceHand();
+    }
     refresh();
 }
 
@@ -116,6 +131,20 @@ void HeartsView::deactivate()
 {
     m_timer->stop();
 }
+
+void HeartsView::startNextHand()
+{
+    if (m_engine.phase() != HeartsEngine::Phase::HandOver)
+        return;
+    m_engine.nextHand();
+    m_announced = false;
+    m_selected.clear();
+    update();
+    refresh();
+    if (m_engine.phase() == HeartsEngine::Phase::Playing)
+        m_timer->start(kAiDelayMs);
+}
+
 
 void HeartsView::confirmPass()
 {
@@ -194,6 +223,18 @@ void HeartsView::announceHand()
     m_announced = true;
 
     QTimer::singleShot(300, this, [this] {
+        // deactivate() stops m_timer, and cannot stop this. Leaving Hearts
+        // inside the 300 ms would otherwise open a modal box over whatever game
+        // the hub moved to, and its Next Hand would then run a whole hand on a
+        // page nobody is looking at -- the defect the deactivate() override
+        // exists to prevent, reached by a second route. Hold it until we are
+        // back instead.
+        if (!isVisible()) {
+            m_announced = false;
+            m_announcePending = true;
+            return;
+        }
+        m_announcePending = false;
         const bool over = m_engine.phase() == HeartsEngine::Phase::GameOver;
         // A win is recorded by the total you finished on — lower is better.
         const bool newBest = over && m_engine.winner() == 0
@@ -232,17 +273,10 @@ void HeartsView::announceHand()
         if (box.clickedButton() != go)
             return;
 
-        if (over) {
+        if (over)
             newGame();
-        } else {
-            m_engine.nextHand();
-            m_announced = false;
-            m_selected.clear();
-            update();
-            refresh();
-            if (m_engine.phase() == HeartsEngine::Phase::Playing)
-                m_timer->start(kAiDelayMs);
-        }
+        else
+            startNextHand();
     });
 }
 
@@ -302,6 +336,8 @@ void HeartsView::refresh()
 
     m_passAction->setEnabled(m_engine.phase() == HeartsEngine::Phase::Passing
                              && m_selected.size() == 3);
+    if (m_nextHandAction != nullptr)
+        m_nextHandAction->setEnabled(m_engine.phase() == HeartsEngine::Phase::HandOver);
 
     Q_EMIT statusChanged(QStringLiteral("%1   You %2  West %3  North %4  East %5   %6")
                              .arg(state)
@@ -345,11 +381,35 @@ QRectF HeartsView::handCardRect(int index) const
     return { x, height() - h - 16 - (lifted ? h * kPassLift : 0.0), w, h };
 }
 
+// cardWidth() is capped at 92, so past a certain width the trick stops moving
+// down the window while the hand stays anchored to the bottom -- and the plate
+// grows UPWARD from the bottom of whatever area it is given, so a gap too small
+// to hold it does not shrink it, it puts it over the card you just played. That
+// is GHUB-0084, and clamping the area's height to zero did not close it because
+// Theme::layoutCaption bails on zero WIDTH, not zero height. Measure the plate
+// and raise the trick by the shortfall instead.
+double HeartsView::trickLift() const
+{
+    const QRectF surface(rect());
+    const QString text = captionText();
+    if (text.isEmpty())
+        return 0.0;
+    const double lift = m_selected.empty() ? 0.0 : cardHeight() * kPassLift;
+    const double bottom = height() - cardHeight() - 16 - lift;
+    const double plate =
+        Theme::captionRect(surface, text, captionFont(surface)).height();
+    const double w = cardWidth() * 0.9;
+    const double trickBottom = height() / 2.0 - cardHeight() * 0.25 + w * 1.4 * 0.55 * 0.4
+        + w * 1.4;
+    const double shortfall = plate - (bottom - trickBottom);
+    return std::max(0.0, shortfall);
+}
+
 QRectF HeartsView::trickCardRect(int seat) const
 {
     const double w = cardWidth() * 0.9;
     const double h = w * 1.4;
-    const QPointF c(width() / 2.0, height() / 2.0 - cardHeight() * 0.25);
+    const QPointF c(width() / 2.0, height() / 2.0 - cardHeight() * 0.25 - trickLift());
     const double dx = w * 0.85;
     const double dy = h * 0.55;
 
