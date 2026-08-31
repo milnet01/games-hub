@@ -396,8 +396,14 @@ double HeartsView::trickLift() const
         return 0.0;
     const double lift = m_selected.empty() ? 0.0 : cardHeight() * kPassLift;
     const double bottom = height() - cardHeight() - 16 - lift;
+    // A hair of clearance, not an exact fit: raising the trick by exactly the
+    // shortfall leaves the plate's top flush with the card's bottom, and the
+    // two then intersect by a rounding error. Measured on the Windows box,
+    // which has real fonts and so measures a taller plate than this machine --
+    // here the lift never fired at these shapes and nothing moved.
+    constexpr double kClear = 2.0;
     const double plate =
-        Theme::captionRect(surface, text, captionFont(surface)).height();
+        Theme::captionRect(surface, text, captionFont(surface)).height() + kClear;
     const double w = cardWidth() * 0.9;
     const double trickBottom = height() / 2.0 - cardHeight() * 0.25 + w * 1.4 * 0.55 * 0.4
         + w * 1.4;
