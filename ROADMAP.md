@@ -5367,6 +5367,41 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
+- 📋 [GHUB-0165] **Play-test the pinball flippers after the timing fix, and re-tune if they feel dead.**
+  The units fix moved the flipper integration into the substep loop, so
+  the measured angular speed falls from about 138 to 18 -- the true
+  rate. The kick constants in collideFlipper were NOT re-tuned: 1.55 on
+  the reflection, and min(swing * 26.0, 520.0), which used to saturate
+  at 520 on every contact and now yields 468. The surface-velocity term
+  is the one that changed most, dropping by the same factor.
+  pinballLaunch and the containment checks still pass, and those are
+  about the plunger rather than the flippers, so nothing in the suite
+  says how the flippers now FEEL. If a swing reads as weak, those three
+  constants are where to look, and CLAUDE.md's warning applies -- they
+  may have been tuned by eye against the error. Take a --bench reading
+  before and after any change.
+  **Layman:** The flippers were fixed to keep proper time, and nobody has actually played them since.
+  Kind: investigate.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0166] **Three Canasta house-rule promises have never been seen rendered.**
+  verify-delivery ran over 0.5.0 and found no promise untrue, but three
+  came back unverified rather than delivered, all for one reason:
+  --shot photographs a game the MOMENT it opens, and a frozen pack, a
+  stacked canasta and its colour badge do not exist at the deal.
+  GHUB-0095 (the freezing card lies as a T), GHUB-0096 (finished
+  canastas stack on the red threes, turned about) and GHUB-0097 (a
+  stacked canasta names itself by the colour of its top card). Their
+  uitest checks pass, which is real evidence, but nothing has put the
+  rendered result in front of a person. CLAUDE.md records the throwaway
+  harness that reaches them -- five source edits, reverted afterwards --
+  and notes it found two defects no arithmetic in the project had
+  flagged. GHUB-0093's --seed, or a --turns flag, would retire that
+  harness and make these checkable for good.
+  **Layman:** Three things the release promised about how Canasta looks cannot be photographed, so nobody has checked them by eye.
+  Kind: test.
+  Source: verify-delivery 0.5.0, 2026-08-31.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on
