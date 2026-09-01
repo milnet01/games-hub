@@ -1748,6 +1748,63 @@ progress.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.
 
+- 📋 [GHUB-0155] **Scores::clear() wipes the whole settings store, not the scores.**
+  scores.cpp: Scores::clear() is QSettings::clear() on the
+  default-constructed, whole-application scope. It destroys
+  display/legibility, audio/muted, donate/ask, donate/launches, every
+  window/geometry/<page>, every saved/<game> and canasta/house/* --
+  not the scores its class name and header promise. It has zero product
+  callers today, which is the only reason it has not lost anyone's
+  saved games; GHUB-0068 explicitly anticipates a reset-everything
+  button in a Preferences dialog, and this is the method whose name
+  someone will reach for. Remove the score keys it owns, and leave
+  whole-store wiping to a method named for that.
+  **Layman:** The method named for clearing scores actually erases everything the app remembers, including saved games.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0156] **The hub's stored settings are written unchecked, and a stored read can silently return zero.**
+  hubwindow.cpp consults QSettings::status() nowhere and never syncs on
+  the close path, so a full disk or a read-only ~/.config loses every
+  saved game and remembered size in silence -- against the README's
+  promise that closing mid-game brings it back. scores.cpp reads with
+  QVariant::toInt(), which returns 0 rather than the fallback on a
+  non-numeric stored value: for the recordLow games (Minesweeper and
+  Sudoku times, Spider and FreeCell moves, the Hearts total) that
+  leaves best() at 0 and recordLow then refuses every future result
+  forever. Use the ok-flag overload and treat a bad read as absent.
+  Also: restoreGeometry's return is dropped, so a corrupt geometry key
+  skips the 880x680 fallback and the window gets no sizing at all.
+  **Layman:** If the app cannot write its settings it says nothing, and a damaged best score can lock you out of ever beating it.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0157] **The legibility toolbar button does not follow the switch it sets.**
+  hubwindow.cpp connects the action's toggled signal to
+  Legibility::setEnabled, and nothing connects Legibility::changed back
+  to the action. Under --shot --legible the photograph shows the
+  toolbar reading "Normal", unchecked, with large play plainly on --
+  visible in this sweep's own screenshots. One connect fixes it, and
+  setEnabled is already a no-op when unchanged so there is no loop.
+  **Layman:** Turn large play on any other way and the toolbar still says Normal.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0158] **--help and a mistyped flag open a message box on Windows instead of exiting.**
+  main.cpp routes --version around QCommandLineParser via an argv scan
+  for exactly this reason -- qt_add_executable sets WIN32_EXECUTABLE, so
+  showVersion() puts its output in a message box. --help and every
+  parser ERROR still go through process(), which uses the same
+  mechanism: gameshub.exe --gaem spider opens a modal dialog and hangs
+  where it should exit 1. Use parser.parse() plus explicit errorText()
+  handling. Same family: parseSize has no upper bound, so --size
+  999999x999999 attempts an enormous pixmap; and geometryKey/saveKey
+  are built from the registered display name, so renaming a tile
+  orphans its save, its geometry and its scores with no migration.
+  **Layman:** On Windows a typo in a command-line option pops a dialog and hangs rather than printing an error.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
 ### ✨ Look and feel
 
 Not decoration. Every item here is a piece of information the game currently
@@ -2091,6 +2148,76 @@ draws, whether or not it has had one.
   **Layman:** A canasta with no wild cards in it is squared up with a red card showing; one built with a joker or a two shows a black card.
   Kind: feature.
   Source: user-request-2026-08-24.
+
+- 📋 [GHUB-0151] **The card's corner index can clip, and it is all that is left at small sizes.**
+  cardart.cpp: paintFace draws the corner index into a box 0.24 of the
+  card's width, and drawText(rect, flags, text) CLIPS. Two digits at
+  the index font need roughly 0.25 to 0.27 of the width, so "10" is
+  tight on a normal face -- and on a font-less offscreen environment,
+  where digits measure the full em box, it is about 0.45 and clips to
+  roughly half. Below kFaceMinWidth paintFace returns early and the
+  corner index is the ENTIRE card, which is where it matters most.
+  Qt::TextDontClip on both drawText calls is the fix the project
+  already uses for this class in Sudoku's pencil marks; with
+  AlignLeft|AlignTop the origin does not move.
+  **Layman:** The number in a card's corner can be cut off, exactly where it is the only thing identifying the card.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0152] **CardArt leaves the caller's painter in a state it did not set.**
+  cardart.cpp: paintSlot and paintHighlight set pen, brush and font on
+  the caller's QPainter and never restore them. Worse, the two paths
+  through paintFace leave it in DIFFERENT states -- a cached blit
+  touches nothing, while the fallback (any non-translate transform, or
+  a card over 4096 device pixels) draws live and leaks the last font and
+  ink pen. So a caller that works today breaks when a card is rotated
+  or the window grows. Only CanastaView::paintCard wraps in
+  save()/restore(); spiderview calls paintHighlight bare inside a paint
+  loop. Same shape in chessart.cpp's paintPiece, which is shared with
+  the hub tile, so it leaks onto two surfaces. Wrap each public entry
+  point and document the postcondition.
+  **Layman:** Drawing a card can change the colours used by whatever is drawn next.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0153] **Canasta's table has several layout figures that do not survive a change of shape.**
+  canastaview.cpp, all MEDIUM, none fixed. The hover lift disagrees
+  between the hit test and the painter, so the top sixth of a card you
+  can see is not clickable and a strip of felt below it is. The four
+  human* entry points have no animating() guard, where mousePressEvent
+  does -- Space is bound to Meld, so pressing it mid-flight can draw one
+  card in two places. cardsFitTable is false at reachable window sizes,
+  because the horizontal inset is driven by the SMALLER dimension, so a
+  taller window shrinks the usable width. A discard that freezes the
+  pack flies flat to the pile centre and then jumps and rotates. Two
+  fonts inherit bold from the previous painter against evident intent.
+  The score plate's width tracks table width while its font tracks
+  height (+53% against +5.4% between two reachable shapes). The CANASTA!
+  flourish is the only string sized in POINTS, scaled from width, drawn
+  into a pixel rect that clips. And suppressed() skips the ring and
+  badge along with the card, so a whole canasta vanishes while one card
+  flies to it.
+  **Layman:** A few numbers on the Canasta table are sized against the wrong dimension, or inherit a style from whatever was drawn before.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0154] **Canasta's rules dialog runs the clock, does not scroll, and syncs its toolbar by text.**
+  canastaview.cpp. The dialog is modal for input but m_timer is never
+  stopped, so tick() keeps driving aiHalfTurn on the three computer
+  seats at kAiPause -- a slow read of a 27-row form can let the hand
+  finish unwatched, which is the situation deactivate()'s own comment
+  says the computers must stop for. That form has no QScrollArea: 27
+  rows plus a 3-line label and a button box is past the 768px floor
+  GHUB-0017 names, and a QDialog does not scroll. applyRules() neither
+  calls trackCanastas() nor refresh(), so lowering canastaSize mid-hand
+  turns melds into canastas the paint order does not know about; it
+  also announces a rule-set change when only the TARGET moved.
+  restoreState syncs the toolbar by comparing QAction::text() against
+  untranslated literals, so adding tr() -- which the Qt standard
+  requires -- breaks the sync silently.
+  **Layman:** The House rules window can let a whole hand play out behind it, runs off the bottom of a small screen, and is wired up in a way that translating the app would break.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
 
 ### 🎨 Games agreed and not yet started
 
@@ -2618,6 +2745,50 @@ inventing one.
   an AI rule, in exactly the place CLAUDE.md already flags as the
   hardest quarter of a bug to notice.
   **Layman:** A comment says the opposite of what the code does, in the trickiest corner of the rules.
+  Kind: doc-fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0161] **Decide whether this project localises, because nothing here says.**
+  Eight of the nineteen review lanes reported it independently: a
+  project-wide search for tr( under src/ returns nothing, and every
+  user-visible string is a bare QStringLiteral.
+  ~/.claude/standards/languages/qt.md requires tr() around every
+  user-visible string from the first commit, and no override is
+  recorded here -- so either the strings need it or the override does.
+  What makes it more than a style question: canastaview.cpp syncs its
+  toolbar after a restore by comparing QAction::text() against those
+  same untranslated literals, so retrofitting tr() as the standard asks
+  would break that sync with no compile error and no crash -- just ticks
+  that stop matching. Whichever way this goes, that comparison should
+  stop matching on text first.
+  **Layman:** Every visible word in the app is written in a way that cannot be translated, and no note says whether that is on purpose.
+  Kind: investigate.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0162] **Sundry small defects in the shared code and the tooling, kept so they are not lost.**
+  CARDS: the face cache is bounded at 160 ENTRIES rather than bytes
+  (~40MB full, ~160MB at devicePixelRatio 2); its key is computed from
+  the padded size, so two distinct card sizes can collide; the pixmap
+  caches are function-local statics destroyed after QGuiApplication;
+  cardflight's faceUp field is honoured by no consumer -- all three
+  users draw face-up unconditionally; makeDeck guards a negative joker
+  count and not a negative deck count.
+  SOUND: QSoundEffect::status() is never read, so a missing WAV and the
+  empty-.qrc catastrophe are both silent at runtime; the offscreen probe
+  is an exact string match and misses offscreen:enable_fonts.
+  DONATE: a --game launch with an unknown name suppresses the prompt
+  though no game opened; QDesktopServices::openUrl has no scheme check
+  (the URL is generated from FUNDING.yml, so low risk).
+  PYTHON: legibility-check.py's grep -v kFaceMinWidth drops WHOLE lines,
+  the shape the file rejects by name three lines above; its QColor regex
+  matches only the call form while the rest of the tree brace-
+  initialises, which is how it shipped a plausible wrong number once
+  already; it hardcodes the ternary polarity it claims to read from
+  source, so an inverted inkFor would go undetected; its tile list is
+  never checked against the case labels; scorepad-check.py never checks
+  its matched band count against the array length; make_sounds.py writes
+  a structurally valid WAV for a silent recipe.
+  **Layman:** The last of the small findings, written down rather than forgotten.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.
 
@@ -5097,6 +5268,105 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
+- 📋 [GHUB-0148] **Canasta: red threes taken with the pile step past the no-legal-move guard.**
+  canastaengine.cpp: placeRedThrees(seat, false) strips the red threes
+  out of a taken pile AFTER keepsADiscard() has already sized the
+  resulting hand. validateTake computes after = hand - layDown + pile
+  - 1 from the raw pile, and keepsADiscard clears it at after >= 2.
+  Land on after - reds == 1 with no canasta and the seat is stranded:
+  canDiscard refuses and every meld refuses, which is the hang
+  CLAUDE.md calls the expensive symptom. Land on 0 and goOut() takes
+  the seat out with no canasta at all, bypassing requireCanastaToGoOut,
+  which goOut performs no check of its own for. Reachable only when the
+  deal turned a red three into the pile. Count the pile's red threes
+  inside validateTake and subtract them before calling keepsADiscard.
+  **Layman:** A rare take can strand the hand with nothing legal to do, or let a side go out when it should not be allowed to.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0149] **Canasta AI: several judgement terms rest on figures that are not what they claim.**
+  canastaai.cpp, all MEDIUM, none fixed. "Eight of every rank" is
+  hardcoded where 4 * r.decks is meant, and a save may carry decks 1
+  to 8 -- under one deck worthHolding's cheapest gate is dead and the
+  unseen count goes negative, which flips packCountSafety's second term
+  positive with no bound. handShowing is docked our own hand's value on
+  our side and not on theirs, so runTheHandDead's goingOutBonus margin
+  is consumed by an ordinary hand and killingTheHand fires on level
+  positions -- and it is gated on a House flag, so the ladder cannot
+  see it. The GHUB-0122 pair-keeping opening conflates "cards still
+  needed" with "wilds this meld may take", so it only ever fires on a
+  group of exactly four. chooseDiscard calls front() on the hand with
+  no guard. Hard and Expert's wantsPile thresholds are byte-identical
+  under comments claiming a difference, and kEndgameStock has a diverged
+  copy (< 8 against <= 8). The per-hand freeze budget is not persisted,
+  so a save reloads with the ceiling refilled.
+  **Layman:** A handful of the computer's decisions are built on numbers that are wrong in ways the strength ladder cannot see.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0150] **Canasta: pending rule changes take effect at the next game, not the next hand.**
+  canastaengine.h documents pack size, jokers and hand size as taking
+  effect "from the next hand". applyRules pins those three on m_rules
+  and leaves the new values in m_pendingRules, which is consumed by
+  newGame() and newGameFromStock() and by nothing else -- nextHand()
+  calls deal(), which reads m_rules. Given the stated intent (nobody
+  should have to abandon a game to correct a house rule) the code is
+  the likely wrong side; if not, the comment is.
+  **Layman:** Change the hand size mid-game and it does not apply until you start a whole new game, with nothing saying so.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0159] **Chess moves the game on by two paths, and its search wastes most of its budget.**
+  chessview.cpp: engineMoveReady plays a move and then re-implements
+  advance()'s over-check, refresh and announce block inline rather than
+  calling it -- a second path through the function CLAUDE.md names as
+  the single point that moves the game on. The two agree today; it is
+  the structural reason the stale-timer CRITICAL was reachable, and
+  closing it makes a recurrence harder. Separately, chessai.cpp's
+  quiescence calls board.legalMoves() and then discards the quiet moves:
+  roughly 35 moves fully legality-checked (each copying the board and
+  running inCheck) to keep about 5 captures, inside a fixed NODE budget
+  -- so Hard's ~1.2s buys several times less search than it could.
+  Also in that file: setFromFen validates geometry but not the king
+  count or the side not to move, so a position derived from a bad FEN
+  can never be checkmate; plain char is passed to <cctype>; and the
+  halfmove clock uses atoi, so an absurd value silently disables the
+  fifty-move draw.
+  **Layman:** The chess engine does the same job in two places, and throws away most of the thinking it pays for.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0160] **The remaining per-game defects the sweep found and this pass did not fix.**
+  One place for the MEDIUM and LOW remainder, by game.
+  HEARTS: the queen breaking hearts is a variant no document states;
+  winner() breaks a tie by lowest seat, which is the human; playCard's
+  return is discarded and the sound plays regardless; five public
+  methods index before their guard.
+  KLONDIKE/SPIDER: deactivate() clears the flights but not a lifted run,
+  so the board locks against every further pick-up; Spider's height
+  budget steps 2.2 where its deal reaches 2.85; the stock hit test runs
+  before the columns and they overlap; double-click ignores the clicked
+  index and sends the column's top card; undo and newGame do not clear
+  m_flights.
+  FREECELL/PYRAMID: FreeCell's restore does not validate the
+  foundations; a no-op drop counts a move, and moves are the score;
+  Pyramid's redeal glyph is the only on-surface cue and degrades to
+  blank without a font.
+  REVERSI/DRAUGHTS: the Draughts Snapshot lacks lastMove, so undo leaves
+  the gold highlight pointing at a move that is gone; the board is
+  heap-allocated and copied per search node where Reversi's is a
+  std::array.
+  MINESWEEPER/SUDOKU: Sudoku's default constructor generates a full
+  puzzle that is always discarded (three generations to restore one
+  save); pencil-mode delete is a visible no-op and clearMarks has no
+  caller; Restart never restarts the tick; Minesweeper's difficulty is
+  remembered and Sudoku's is not.
+  2048: undo does not restore m_reachedTarget; trailing bytes past the
+  sixteenth cell are accepted.
+  **Layman:** A list of smaller game bugs, kept so none of them is lost.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on
@@ -5828,6 +6098,51 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   deadlocked board.
   **Layman:** Some of the audit fixes have nothing stopping them coming back.
   Kind: test.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0163] **smallestCardWidth cannot tell a game with no cards from a game that forgot.**
+  gameview.h: the base returns 0.0 and the header documents 0 as "a
+  game that draws no cards" -- so the inherited value and a forgotten
+  override are the same value, and cardsKeepTheirFaces skips that game
+  without saying so. Its checked >= 6 floor is already met by the six
+  games that do override it, so a fifteenth card game that forgets is
+  caught by nothing and ships drawing faces too small to read. This
+  sweep found the related half: Hearts DID override it and returned the
+  wrong card, publishing a floor overstated by a factor of 0.9, and
+  nothing could see that either. Return -1.0 from the base meaning "not
+  answered", have a genuinely cardless game say 0.0 explicitly, and let
+  the check fail on -1.
+  **Layman:** The check that stops a card being drawn too small to read skips any game that forgets to answer it, silently.
+  Kind: fix.
+  Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0164] **The last of the small findings, so the sweep leaves nothing unrecorded.**
+  Everything the sweep found at LOW that no other item above carries.
+  HUB: closeEvent stores state but never calls deactivate() on the
+  current view, unlike showMenu and openGame; currentView() is a
+  fourteen-entry string scan run on every statusChanged, including
+  Pinball's per-frame ones.
+  SCORES: names[qBound(0, difficulty, 2)] silently aliases an
+  out-of-range difficulty onto the hard key, so a fourth Reversi level
+  would share a stored best with the third.
+  CANASTA ENGINE: dealFrom discards placeRedThrees' return where
+  drawFromStock treats false as "stock ran dry"; meldableRanks can never
+  return 3, so the four-black-threes finish -- the one ending
+  goingOutNeedsADiscard exists to permit -- is never highlighted on the
+  board, and the highlight is the affordance; freezeCardIndex can be -1
+  while pileFrozen() is true after a restore, and the view consumes
+  both.
+  CANASTA VIEW: a click on an empty pile during Draw is a completely
+  silent no-op where every other refusal explains itself; leaveEvent
+  clears the two hover fields and not m_overButton; meldCardCentre
+  allocates and sorts per call inside meldRankAt's double loop.
+  DEAD SYMBOLS no tool decided, because cppcheck runs with
+  unusedFunction suppressed: forgetHistory() in four games with zero
+  callers including tests, Minefield::reset(), SudokuGrid::clearMarks(),
+  Ai::freezesThisHand(), Board::fullmoveNumber(), Sound::volume() and
+  setVolume(), GameView::lastStatus().
+  **Layman:** The remaining minor items, written down so the list is complete.
+  Kind: fix.
   Source: review-code sweep 2026-08-31.
 
 ### 🎨 More games, if wanted
