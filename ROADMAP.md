@@ -2830,12 +2830,27 @@ inventing one.
   Kind: doc.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0144] **README denies two things the app already does.**
+- ✅ [GHUB-0144] **README denies two things the app already does.**
   It lists Sudoku among the games that do not resume, and Sudoku has
   saved and restored since GHUB-0009 -- so the count above that list
   is wrong by one too. It also says the other twelve games ignore the
   legibility switch, which GHUB-0071 closed for all fourteen. Both are
   the document's side, not the code's.
+  Resolved (2026-09-02): and the count was wrong by TWO, not one.
+  Twelve games implement saveState/restoreState, not ten -- the list
+  omitted Hearts as well as Sudoku, and Hearts has had a save with its
+  own pack-and-trick-count check for some time. Verified by reading
+  the overrides rather than the prose.
+
+  Both passages are now written by EXCEPTION rather than by count --
+  "almost every game", "the two that do not are Snake and Pinball" --
+  so adding a fifteenth game cannot silently make them wrong again,
+  which is how this one went stale.
+
+  The legibility paragraph now says every game answers the switch and
+  names the three that answer in a shape other than a caption: Canasta
+  by its window size, Sudoku by its pencil marks, Pinball by growing
+  the backglass.
   **Layman:** The README says some features are missing that shipped a while ago.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.
@@ -2854,7 +2869,7 @@ inventing one.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0146] **Canasta's discardCannotBeTaken comment is inverted.**
+- ✅ [GHUB-0146] **Canasta's discardCannotBeTaken comment is inverted.**
   The header describes it as though it were named discardCanBeTaken:
   it says the fourth seat is the one this returns true for, and the
   body returns FALSE for the fourth seat and true for the three before
@@ -2862,6 +2877,23 @@ inventing one.
   the document's side -- but it is a loaded gun for the next author of
   an AI rule, in exactly the place CLAUDE.md already flags as the
   hardest quarter of a bug to notice.
+  Resolved (2026-09-02): the whole comment block was inverted, not
+  just the tail the finding quoted. Its opening two lines -- "whether
+  what the current seat throws CAN be taken" and "FALSE only while the
+  rule bars the seat that plays next" -- are the same inversion, so
+  fixing only the sentence about the fourth seat would have left the
+  block contradicting itself.
+
+  Verified against the implementation: kSeats is 4 and the body is
+  noMeldingFirstRound && m_turnsTaken + 1 < kSeats, so the first three
+  seats get true and the fourth false.
+
+  No test was needed. canastaFirstRoundSafeThrow already drives four
+  real turns and asserts exactly { true, true, true, false }, so the
+  polarity was locked the whole time -- it was only the prose that
+  said otherwise. The comment now names the inverted reading as the
+  trap and says what it costs: right three times a round, wrong on the
+  fourth.
   **Layman:** A comment says the opposite of what the code does, in the trickiest corner of the rules.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.

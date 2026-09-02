@@ -73,18 +73,19 @@ last played, and Canasta on the rule set you last used — Classic or House. You
 pick them once rather than every time, and finishing a game no longer forgets
 them.
 
-**Ten of the games pick up where you left off.** Close the window in the middle
-of one and it comes back exactly as you left it — Chess, Canasta, Draughts,
-Reversi, Minesweeper, 2048, and all four card games (Klondike, Spider, FreeCell
-and Pyramid). Canasta brings back the whole table: every hand, the melds, the
-pile, the stock, the scores and the rules in force. Chess brings back the board
-*and* the moves that led to it, so Undo still works.
+**Almost every game picks up where you left off.** Close the window in the
+middle of one and it comes back exactly as you left it — Chess, Canasta,
+Draughts, Reversi, Minesweeper, Sudoku, Hearts, 2048, and all four card games
+(Klondike, Spider, FreeCell and Pyramid). Canasta brings back the whole table:
+every hand, the melds, the pile, the stock, the scores and the rules in force.
+Chess brings back the board *and* the moves that led to it, so Undo still
+works.
 
 There is nothing to press and no save button — it just happens. Starting a
 fresh game is what New Game is for. Finish a game and nothing is kept, so you
 never come back to a board you have already won.
 
-The four that do not do this yet are Hearts, Sudoku, Snake and Pinball.
+The two that do not do this yet are Snake and Pinball.
 
 **Minesweeper and Sudoku can be paused**, which stops the clock and covers the
 board, so walking away costs you nothing. Snake has its own pause on the space
@@ -97,12 +98,13 @@ turns the effects on and off. 🔍 reads **Normal** or **Large**: turn it on for
 larger, higher-contrast play. It is remembered, so you set it once. The label
 always says which way it is set now, not what clicking will do.
 
-> The games are being adapted to that switch one at a time, so turning it on
-> does not change every board yet. **Canasta** and **Sudoku** are done: Canasta
-> keeps the window large enough that a melded card still shows its pips instead
-> of becoming a sliver, and Sudoku grows its pencil marks — as far as they can
-> go while nine of them still fit in a square — and prints them bold. The other
-> twelve ignore the switch for now.
+> Every game answers that switch, and not all of them in the same way. Most
+> put what they are saying onto the board itself, in large type, because the
+> status bar is easy to miss while you are playing. **Canasta** keeps the
+> window large enough that a melded card still shows its pips instead of
+> becoming a sliver. **Sudoku** grows its pencil marks — as far as they can go
+> while nine of them still fit in a square — and prints them bold. **Pinball**
+> grows the backglass and its labels rather than adding a caption.
 
 **Chess.** You are White and move first. Click a piece to select it — the
 squares it can reach show a dot, and the ones it can capture show a ring.

@@ -326,14 +326,20 @@ public:
     // reason given reads as a bug rather than as a rule.
     bool meldingAllowed() const;
 
-    // Whether what the current seat throws can be taken by anybody at all.
-    // False only while the first-round rule still bars the seat that plays
-    // NEXT — which is a different question from meldingAllowed(), and the
-    // difference is the whole of it. The fourth seat of the first round is
-    // itself barred from melding, but the turn after it is the first seat
-    // playing a SECOND time, by which point the rule has lifted. So the fourth
-    // seat is the one seat in the round whose discard is live, and this
-    // returns true for it while returning false for the three before it.
+    // True when what the current seat throws cannot be taken by anybody at all,
+    // which is what makes the throw free. True only while the first-round rule
+    // still bars the seat that plays NEXT — a different question from
+    // meldingAllowed(), and the difference is the whole of it. The fourth seat
+    // of the first round is itself barred from melding, but the turn after it
+    // is the first seat playing a SECOND time, by which point the rule has
+    // lifted. So the fourth seat is the one seat in the round whose discard is
+    // live, and this returns FALSE for that seat while returning true for the
+    // three before it.
+    //
+    // Read the other way round — as though it were named discardCanBeTaken —
+    // it is a loaded gun, in the corner CLAUDE.md already calls the hardest
+    // quarter of a bug to notice: an AI rule built on the inverted reading is
+    // right three times a round and wrong on the fourth.
     //
     // The AI reads it to know when a throw is free: with nothing takeable, a
     // black three's blocking power is worth nothing and the card it would
