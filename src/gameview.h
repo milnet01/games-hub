@@ -65,6 +65,22 @@ public:
     // those are different things. A board frozen mid-deal is static — it will
     // pass any stillness probe — while still holding state the next settings
     // change will eat.
+    //
+    // Its consumer is the TEST HARNESS, by design, and nothing in the app
+    // consults it — said here because a review has already read that absence as
+    // dead machinery once (GHUB-0137). The every-game legibility block cannot
+    // compare two renders of a game that is still dealing, and it cannot ask
+    // the pixels either: a staggered deal has lulls where every remaining card
+    // is only counting down its delay, so two matching frames mean nothing.
+    // This is the one honest answer to "has it finished yet".
+    //
+    // The app deliberately does NOT wait on it. The one place that would
+    // consult it is applyLegibility on the visible page, and Canasta already
+    // clears its flights there on purpose: a card in the air carries a
+    // destination captured when it left, so it would otherwise land where that
+    // destination used to be. Deferring the switch until the deal settled would
+    // leave it looking unresponsive for a second, which is a worse trade for
+    // the reader the switch is for.
     virtual bool hasPendingAnimation() const { return false; }
 
     // The narrowest card this game draws at its current size, measured at the

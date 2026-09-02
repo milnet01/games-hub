@@ -1781,7 +1781,7 @@ progress.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0137] **Decide what hasPendingAnimation() is for, or drop the claim.**
+- ✅ [GHUB-0137] **Decide what hasPendingAnimation() is for, or drop the claim.**
   Declared on GameView, overridden once by Canasta, asserted by
   tests, and described in CLAUDE.md as how a game says it is holding
   state a settings change would consume -- with no product caller.
@@ -1790,6 +1790,39 @@ progress.
   and is deliberate for the visible one. So either the hub consults
   it before storeSave/rememberPage, or it and the CLAUDE.md claim go.
   Not a call to make from a review.
+  Resolved (2026-09-02). Owner deferred the call and said "I do like
+  animations", which is what decided it.
+
+  Neither of the two options offered. It is NOT wired to a product
+  caller, and it is NOT deleted. It has six consumers already -- they
+  are all in the TEST HARNESS, which is not the same as none, and the
+  finding said "no PRODUCT caller" rather than "no caller".
+
+  The load-bearing one is the every-game legibility block: it cannot
+  compare two renders of a game that is still dealing, and it cannot
+  ask the pixels either, because a staggered deal has lulls where every
+  remaining card is only counting down its delay and two matching
+  frames mean nothing. CLAUDE.md records that mistake reddening both CI
+  legs. hasPendingAnimation() is the only honest answer to "has it
+  finished yet", and settle() is built on it.
+
+  Wiring it to the app was considered and rejected on merit. The one
+  place that would consult it is applyLegibility on the visible page,
+  and Canasta clears its flights there deliberately -- a card in the
+  air carries a destination captured when it left, so it would land
+  where that destination used to be. Deferring the switch until the
+  deal settled would leave it looking unresponsive for about a second,
+  which is a worse trade for the reader the switch exists for. Waiting
+  before storeSave was also rejected: the engine is already updated
+  when a flight launches, so a save taken mid-flight is correct, and
+  the wait would buy nothing.
+
+  The CLAUDE.md paragraph needed no correction -- re-read, it is framed
+  around the testing hazard throughout and never claims the app
+  consults it. What was missing was any statement of the ABSENCE, which
+  is why a lane read it as dead machinery. gameview.h now says outright
+  that the consumer is the harness, that the app deliberately does not
+  wait, and why.
   **Layman:** A safety mechanism the notes describe has nothing in the app that asks it.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.
