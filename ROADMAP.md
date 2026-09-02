@@ -6649,7 +6649,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: test.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0139] **Give check-code a .clang-tidy, and reconsider suppressing unusedFunction.**
+- ✅ [GHUB-0139] **Give check-code a .clang-tidy, and reconsider suppressing unusedFunction.**
   clang-tidy has no config in the tree, so its resolved check set is
   empty: it prints usage and exits without reading a file. Eight lanes
   reported findings in its territory -- narrowing conversions, signed
@@ -6658,6 +6658,33 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   on every run, and five lanes found dead public symbols that no tool
   therefore decided: forgetHistory in four games, Minefield::reset,
   SudokuGrid::clearMarks, Ai::freezesThisHand, Board::fullmoveNumber.
+  Resolved (2026-09-02) for the .clang-tidy half. The findings it
+  uncovers are GHUB-0170.
+
+  The premise checked out exactly: with no config the check set
+  resolves to empty, so clang-tidy printed its usage and analysed
+  nothing, and every class eight lanes reported by hand came back the
+  moment it had one -- 12 narrowing conversions, 9 signed char to
+  <cctype>, 2 unchecked atoi.
+
+  The set is chosen for defects rather than style, and the three
+  families switched off were switched off after MEASURING them: 112 of
+  the first run's 184 warnings, not one naming a defect. A fourth,
+  misc-use-internal-linkage, is off because it is WRONG here -- 203
+  warnings naming LOCAL VARIABLES, which cannot be made static or moved
+  into a namespace at all. The counts and the reasoning are in the file.
+  69 remain.
+
+  WarningsAsErrors is deliberately empty. Nothing in CI runs clang-tidy,
+  so promoting these would fail a build over findings nobody had
+  triaged; that is the switch to throw once GHUB-0170 is worked through.
+
+  The unusedFunction half is NOT this repository's to change --
+  suppressing it is check-code's own invocation, not a setting in this
+  tree. What it would have found was removed by hand under GHUB-0164:
+  forgetHistory in four games, Minefield::reset and Ai::freezesThisHand.
+  Two more it would have named are kept on purpose with a comment saying
+  why, and one, GameView::lastStatus, was not dead at all.
   **Layman:** One of the three C++ analysers is analysing nothing at all.
   Kind: test.
   Source: review-code sweep 2026-08-31.
@@ -6806,6 +6833,41 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   **Layman:** The remaining minor items, written down so the list is complete.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0170] **Work through the 69 findings clang-tidy can now see.**
+  GHUB-0139 gave clang-tidy a config; this is what it then found. It
+  had been resolving to an EMPTY check set, so none of this was ever
+  reported -- which is why eight review lanes reported findings in its
+  territory by hand.
+
+  69 after tuning, and the tuning is recorded in .clang-tidy with the
+  counts behind it. By class:
+
+    12  narrowing conversions
+     9  signed char handed to <cctype>
+     7  misplaced widening cast
+     6  throwing static initialisation (cert-err58-cpp)
+     5  unchecked return value (cert-err33-c)
+     4  virtual call during construction
+     3  parameter passed by value that could be by reference
+     2  uninitialised member
+     2  integer division where a float was probably meant
+     2  implicit widening of a multiplication
+     1  vector growth inside a loop
+    16  the remainder, one or two of a kind
+
+  None is urgent and none was reachable by a player as far as the sweep
+  found. The two worth reading first are the integer divisions and the
+  narrowing conversions, since those are the classes that produce a
+  wrong number rather than a slow one.
+
+  Not to be done in one pass: the value of this list is that it now
+  EXISTS and is reproducible with `clang-tidy -p build $(git ls-files
+  'src/*.cpp')`. WarningsAsErrors is deliberately empty until the list
+  is worked through, and that is the moment to turn it on.
+  **Layman:** Turning the third analyser on found sixty-nine things worth looking at; none is urgent, and they should be worked through rather than left.
+  Kind: fix.
+  Source: GHUB-0139, measured 2026-09-02.
 
 ### 🎨 More games, if wanted
 

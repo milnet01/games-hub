@@ -1,0 +1,65 @@
+# clang-tidy resolves to an EMPTY check set without a config: it prints its
+# usage and exits without reading a file, so a run that looks clean has analysed
+# nothing. That is what this file is for (GHUB-0139). Three analysers are meant
+# to cover this codebase and one of them was doing nothing at all, which is why
+# eight review lanes reported findings in its territory by hand -- narrowing
+# conversions, a signed char handed to <cctype>, integer overflow on restore,
+# unguarded front() and pop_back().
+#
+# The set is chosen for defects rather than for style. This project's own
+# conventions are held by CLAUDE.md and by review, not by a linter, so the
+# readability- and modernize- families are left out: they would bury the
+# findings that matter under hundreds that do not.
+Checks: >
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-narrowing-conversions,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-slicing,
+  misc-*,
+  performance-*,
+  -bugprone-easily-swappable-parameters,
+  -misc-include-cleaner,
+  -misc-no-recursion,
+  -misc-non-private-member-variables-in-classes,
+  -misc-use-anonymous-namespace,
+  -misc-const-correctness,
+  -misc-override-with-different-visibility,
+  -misc-use-internal-linkage,
+  -performance-enum-size
+
+# The three above are switched off after MEASURING them, not on suspicion.
+# Together they were 112 of the first run's 184 warnings and not one of them
+# named a defect, so leaving them on would bury the twelve narrowing
+# conversions and the nine signed-char conversions that this file exists to
+# surface.
+#
+#   misc-const-correctness (65) asks for const on locals. A style preference,
+#   and this project's conventions are held by CLAUDE.md and by review.
+#
+#   misc-override-with-different-visibility (28) is every view declaring
+#   sizeHint and minimumSizeHint protected where QWidget has them public. That
+#   is the deliberate shape of all fourteen views, and GHUB-0017 records why
+#   the alternative -- opening those headers up -- was rejected.
+#
+#   performance-enum-size (19) asks for narrower underlying types. A
+#   micro-optimisation on enums that are never stored in bulk.
+#
+# misc-use-internal-linkage is off for a different reason: it is WRONG here. It
+# produced 203 warnings, and the ones checked name LOCAL VARIABLES -- a `blob`
+# inside a saveState(), an `out` beside it -- which cannot be made static or
+# moved into an anonymous namespace at all. A checker that cannot be acted on
+# is worse than no checker, because every run has to re-triage it.
+
+# Qt's own headers are not ours to fix, and AUTOMOC's generated sources are not
+# written by anybody. Only what is in src/ is answerable here.
+HeaderFilterRegex: 'src/.*\.h$'
+ExcludeHeaderFilterRegex: '.*_autogen.*'
+
+# Reported, not enforced. Nothing in CI runs clang-tidy today, so promoting
+# these to errors would fail a build for a finding nobody had triaged. Turn this
+# on when the backlog it finds has been worked through, and not before.
+WarningsAsErrors: ''
+FormatStyle: none
