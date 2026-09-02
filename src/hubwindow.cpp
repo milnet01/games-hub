@@ -535,6 +535,14 @@ void HubWindow::buildChrome()
                                        : QStringLiteral("🔍 Normal"));
     });
     m_legibilityAction->setChecked(Legibility::instance().enabled());
+    // And the other way round. The switch moves without this button being
+    // touched -- --legible sets it before the window exists -- and nothing was
+    // listening, so the toolbar read "Normal", unchecked, beside large play
+    // plainly on. setEnabled() is a no-op when unchanged, so this cannot loop,
+    // and setChecked() emits toggled only on a real change, which is what
+    // carries the label across too.
+    connect(&Legibility::instance(), &Legibility::changed,
+            m_legibilityAction, &QAction::setChecked);
     m_toolBar->addAction(m_legibilityAction);
 
     // A Help menu rather than a fifteenth tile: the grid keeps all of its slots
@@ -591,27 +599,50 @@ void HubWindow::rememberPage()
 
     // saveGeometry() carries the position, the size and whether the window was
     // maximised, which is why it is used rather than pos() and size().
-    QSettings().setValue(geometryKey(m_page), saveGeometry());
+    QSettings s;
+    s.setValue(geometryKey(m_page), saveGeometry());
+    checkSettingsWritable(s);
 
     for (const Entry& e : m_entries)
         if (e.view != nullptr && e.name == m_page)
             storeSave(e);
 }
 
+void HubWindow::checkSettingsWritable(QSettings& s)
+{
+    // setValue() returns void and the flush happens when the QSettings goes out
+    // of scope, so a full disk or a read-only ~/.config loses every saved game
+    // and every remembered size without a word -- against the README's promise
+    // that closing mid-game brings it back. status() is the only place the
+    // failure is reported, and nothing was reading it.
+    s.sync();
+    if (s.status() == QSettings::NoError || m_settingsTroubleReported)
+        return;
+
+    // Said once. The status bar is where it can still be acted on; by the close
+    // path the window is going away and there is nowhere left to say it.
+    m_settingsTroubleReported = true;
+    m_status->setText(QStringLiteral(
+        "Settings cannot be saved — games and window sizes will not be remembered."));
+}
+
 void HubWindow::applyPageGeometry(const QString& page)
 {
+    // restoreGeometry() answers false on a blob it cannot read -- one written
+    // by another Qt, or a truncated one. Dropping that answer let a corrupt key
+    // count as "restored", so the fallback below was skipped and the window
+    // opened with no sizing at all.
     const QVariant saved = QSettings().value(geometryKey(page));
-    if (saved.isValid())
-        restoreGeometry(saved.toByteArray());
-    else if (!m_geometryReady)
-        resize(880, 680); // first run, with nothing remembered for anything
+    const bool restored = saved.isValid() && restoreGeometry(saved.toByteArray());
+    if (!restored && !m_geometryReady)
+        resize(880, 680); // first run, or nothing readable remembered for anything
     // Switching to a game that has never been sized keeps the size you are
     // already looking at, rather than jumping to an arbitrary default.
     m_page = page;
     m_geometryReady = true;
 }
 
-void HubWindow::storeSave(const Entry& e) const
+void HubWindow::storeSave(const Entry& e)
 {
     if (e.view == nullptr)
         return;
@@ -625,6 +656,7 @@ void HubWindow::storeSave(const Entry& e) const
         s.remove(saveKey(e.name));
     else
         s.setValue(saveKey(e.name), state);
+    checkSettingsWritable(s);
 }
 
 void HubWindow::closeEvent(QCloseEvent* event)

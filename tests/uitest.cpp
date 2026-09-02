@@ -1735,6 +1735,105 @@ int main(int argc, char* argv[])
         scores.clear();
     }
 
+    // ---- Clearing scores clears SCORES, and nothing else ----
+    //
+    // Every family the app stores lives in one QSettings scope, so a method
+    // named for one of them can silently take the rest with it. This one used
+    // to: saved games, remembered window sizes, the legibility switch and the
+    // Canasta house rules all went with the high scores. Nothing calls it in
+    // the app yet, which is the only reason it has not cost anyone a save --
+    // GHUB-0068 anticipates the reset button that will reach for the name.
+    //
+    // The keys below are deliberately ones nothing reads, so the check cannot
+    // disturb a later block, while still sitting in the families that matter.
+    {
+        Scores& scores = Scores::instance();
+        const QString aSave = QStringLiteral("saved/NotARealGame");
+        const QString aSize = QStringLiteral("window/geometry/NotARealPage");
+        const QString aRule = QStringLiteral("canasta/house/notARealRule");
+
+        QSettings store;
+        store.setValue(aSave, QByteArray("a deal in progress"));
+        store.setValue(aSize, QByteArray("a remembered size"));
+        store.setValue(aRule, 4);
+        store.sync();
+
+        scores.recordHigh(Scores::pinballBestScore(), 4321);
+        scores.recordHigh(QStringLiteral("chess/wins"), 7);
+        scores.clear();
+
+        check(!scores.has(Scores::pinballBestScore()), "clearing scores forgets a best");
+        // chess and draughts count wins rather than a best_, so a rule written
+        // for the one spelling would walk straight past them.
+        check(!scores.has(QStringLiteral("chess/wins")), "clearing scores forgets a win tally too");
+
+        QSettings after;
+        check(after.value(aSave).toByteArray() == QByteArray("a deal in progress"),
+              "clearing scores leaves a saved game standing");
+        check(after.value(aSize).toByteArray() == QByteArray("a remembered size"),
+              "clearing scores leaves a remembered window size standing");
+        check(after.value(aRule).toInt() == 4,
+              "clearing scores leaves a house rule standing");
+
+        after.remove(aSave);
+        after.remove(aSize);
+        after.remove(aRule);
+        after.sync();
+        scores.clear();
+    }
+
+    // ---- A stored best that is not a number reads as no record ----
+    //
+    // QVariant::toInt() answers 0 for one. In the games where smaller is
+    // better -- Minesweeper and Sudoku times, Spider and FreeCell moves, the
+    // Hearts total -- a best of 0 is a score nobody can beat, so recordLow
+    // refused every future result and the record could never be set again.
+    {
+        Scores& scores = Scores::instance();
+        const QString key = Scores::minesweeperBestTime(0);
+
+        QSettings store;
+        store.setValue(key, QStringLiteral("not a time"));
+        store.sync();
+
+        check(!scores.has(key), "a best that is not a number reads as no record");
+        check(scores.best(key, 999) == 999, "and best() answers the fallback, not zero");
+        check(scores.recordLow(key, 42), "so a real time is still recorded over it");
+        check(scores.best(key) == 42, "and it becomes the record");
+        scores.clear();
+    }
+
+    // ---- The legibility button follows the switch it sets ----
+    //
+    // The button set the switch and nothing listened the other way, so anything
+    // moving it without pressing the button left the toolbar reading "Normal",
+    // unchecked, beside large play plainly on. --legible does exactly that,
+    // before the window exists.
+    {
+        Legibility::instance().setEnabled(false);
+        HubWindow hub;
+        hub.resize(900, 700);
+
+        QAction* legibility = nullptr;
+        for (QToolBar* bar : hub.findChildren<QToolBar*>())
+            for (QAction* a : bar->actions())
+                if (a->text().contains(QStringLiteral("Normal"))
+                    || a->text().contains(QStringLiteral("Large")))
+                    legibility = a;
+
+        check(legibility != nullptr, "the hub has a legibility button");
+        if (legibility != nullptr) {
+            check(!legibility->isChecked(), "which starts unchecked with the switch off");
+            Legibility::instance().setEnabled(true);
+            check(legibility->isChecked(), "follows the switch when something else moves it");
+            check(legibility->text().contains(QStringLiteral("Large")),
+                  "and carries its label across with it");
+            Legibility::instance().setEnabled(false);
+            check(!legibility->isChecked(), "and follows it back again");
+        }
+        Legibility::instance().setEnabled(false);
+    }
+
     // ---- The sound effects are compiled into the binary ----
     {
         const QStringList effects = { QStringLiteral("ui_click"), QStringLiteral("ui_back"),

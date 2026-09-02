@@ -1748,7 +1748,7 @@ progress.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0155] **Scores::clear() wipes the whole settings store, not the scores.**
+- ✅ [GHUB-0155] **Scores::clear() wipes the whole settings store, not the scores.**
   scores.cpp: Scores::clear() is QSettings::clear() on the
   default-constructed, whole-application scope. It destroys
   display/legibility, audio/muted, donate/ask, donate/launches, every
@@ -1759,11 +1759,21 @@ progress.
   button in a Preferences dialog, and this is the method whose name
   someone will reach for. Remove the score keys it owns, and leave
   whole-store wiping to a method named for that.
+  Resolved (2026-09-02): clear() removes score keys only, matched by
+  shape rather than by a list -- a leaf beginning best_, or the leaf
+  wins, which is how chess and draughts spell theirs. A list here
+  would be a second copy, since the keys are declared partly in
+  scores.h and partly as constants inside the views, and the game it
+  missed would keep its record through a reset with nothing to say so.
+  The header now states what the method does and does not touch.
+  Locked in uitest: a saved game, a remembered window size and a house
+  rule all stand through a clear, and both spellings of a score go.
+  Proven red against the old whole-store wipe.
   **Layman:** The method named for clearing scores actually erases everything the app remembers, including saved games.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0156] **The hub's stored settings are written unchecked, and a stored read can silently return zero.**
+- ✅ [GHUB-0156] **The hub's stored settings are written unchecked, and a stored read can silently return zero.**
   hubwindow.cpp consults QSettings::status() nowhere and never syncs on
   the close path, so a full disk or a read-only ~/.config loses every
   saved game and remembered size in silence -- against the README's
@@ -1775,17 +1785,34 @@ progress.
   forever. Use the ok-flag overload and treat a bad read as absent.
   Also: restoreGeometry's return is dropped, so a corrupt geometry key
   skips the 880x680 fallback and the window gets no sizing at all.
+  Resolved (2026-09-02): all three parts. has() and best() use the
+  ok-flag overload, so a stored value that is not a number reads as no
+  record rather than as zero -- which for the recordLow games was a
+  score nobody could beat, locking the record for good. Writes go
+  through checkSettingsWritable(), which syncs and reads status(), and
+  says once in the status bar that games and window sizes will not be
+  remembered; it is said there rather than on the close path, where
+  the window is going away and there is nowhere left to say it.
+  applyPageGeometry honours restoreGeometry's return, so an unreadable
+  blob still reaches the 880x680 fallback instead of leaving the
+  window unsized. Four checks in uitest cover the corrupt best, proven
+  red.
   **Layman:** If the app cannot write its settings it says nothing, and a damaged best score can lock you out of ever beating it.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0157] **The legibility toolbar button does not follow the switch it sets.**
+- ✅ [GHUB-0157] **The legibility toolbar button does not follow the switch it sets.**
   hubwindow.cpp connects the action's toggled signal to
   Legibility::setEnabled, and nothing connects Legibility::changed back
   to the action. Under --shot --legible the photograph shows the
   toolbar reading "Normal", unchecked, with large play plainly on --
   visible in this sweep's own screenshots. One connect fixes it, and
   setEnabled is already a no-op when unchanged so there is no loop.
+  Resolved (2026-09-02): one connect from Legibility::changed to
+  QAction::setChecked. setEnabled() is a no-op when unchanged so it
+  cannot loop, and setChecked() emits toggled only on a real change,
+  which carries the label across as well. Two checks in uitest, proven
+  red.
   **Layman:** Turn large play on any other way and the toolbar still says Normal.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

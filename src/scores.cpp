@@ -40,12 +40,23 @@ QString Scores::spiderBestMoves(int suits)
 
 bool Scores::has(const QString& key) const
 {
-    return settings().contains(key);
+    // A key holding something that is not a number counts as no record at all.
+    // QVariant::toInt() answers 0 for one, and for the recordLow games — times
+    // and move counts, where smaller is better — a best of 0 is a score nobody
+    // can beat, so every future result would be refused. Reading it as absent
+    // means the next result simply replaces it.
+    if (!settings().contains(key))
+        return false;
+    bool ok = false;
+    settings().value(key).toInt(&ok);
+    return ok;
 }
 
 int Scores::best(const QString& key, int fallback) const
 {
-    return settings().value(key, fallback).toInt();
+    bool ok = false;
+    const int value = settings().value(key, fallback).toInt(&ok);
+    return ok ? value : fallback;
 }
 
 bool Scores::recordHigh(const QString& key, int value)
@@ -68,6 +79,22 @@ bool Scores::recordLow(const QString& key, int value)
 
 void Scores::clear()
 {
-    settings().clear();
-    settings().sync();
+    // Scores only. QSettings::clear() on this scope takes the whole store with
+    // it — the legibility switch, the mute, the donate counter, every saved
+    // game and every remembered window size — none of which this class owns.
+    // Nothing calls it in the app today, but GHUB-0068 anticipates a
+    // reset-everything button, and this is the name someone reaches for.
+    //
+    // Matched by shape rather than by a list, because the keys are declared
+    // partly here and partly as constants inside the views: a list here would
+    // be a second copy, and the game whose key it missed would keep its record
+    // through a reset with nothing to say so.
+    QSettings& s = settings();
+    const QStringList keys = s.allKeys();
+    for (const QString& key : keys) {
+        const QString leaf = key.section(QLatin1Char('/'), -1);
+        if (leaf.startsWith(QLatin1String("best_")) || leaf == QLatin1String("wins"))
+            s.remove(key);
+    }
+    s.sync();
 }

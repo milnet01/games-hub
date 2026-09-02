@@ -17,6 +17,25 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **The toolbar's large-play button follows the switch however it was moved.** (GHUB-0157)
+  Turning large play on any other way -- the --legible option does it
+  before the window exists -- left the button reading "Normal" and
+  unchecked, next to large play plainly on.
+
+- **The app says so when it cannot save your settings.** (GHUB-0156)
+  A full disk or a read-only settings folder lost every saved game and
+  remembered window size in silence. The status line now says once
+  that games and window sizes will not be remembered. A window size
+  that cannot be read also falls back to the normal opening size
+  rather than leaving the window unsized.
+
+- **A damaged best score no longer locks you out of ever beating it.** (GHUB-0156)
+  A stored best that was not a number read back as zero. In the games
+  where smaller is better -- Minesweeper and Sudoku times, Spider and
+  FreeCell moves, the Hearts total -- zero is a score nobody can beat,
+  so every later result was refused. It now reads as no record at all,
+  and the next result simply sets it.
+
 - **The score book's A+ and A- now scale the numbers, not just the buttons.**
   Every size on the page is relative to the root, which the control
   was not changing -- so the running total, the deal and the opening

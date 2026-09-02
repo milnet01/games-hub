@@ -29,5 +29,9 @@ public:
     bool recordHigh(const QString& key, int value);
     bool recordLow(const QString& key, int value);
 
+    // Forgets every recorded best, and nothing else. It does NOT reset the
+    // app: the legibility switch, the mute, saved games and remembered window
+    // sizes all live in the same store and are left alone. A reset-everything
+    // button belongs in a method named for that.
     void clear();
 };

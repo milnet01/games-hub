@@ -10,6 +10,7 @@ class GameView;
 class QStackedWidget;
 class QToolBar;
 class QLabel;
+class QSettings;
 
 // The hub: a grid of game tiles, plus one page per game. Games are built the
 // first time they are opened, so starting the hub costs nothing but the tiles.
@@ -63,7 +64,10 @@ private:
     void rememberPage();
     void applyPageGeometry(const QString& page);
     // A game's position, kept between sessions for the games that offer one.
-    void storeSave(const Entry& e) const;
+    void storeSave(const Entry& e);
+    // Reads back whether a settings write actually landed, and says so once if
+    // it did not. QSettings reports that nowhere else.
+    void checkSettingsWritable(QSettings& s);
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -90,4 +94,7 @@ private:
     // for the tile menu.
     QString m_page;
     bool m_geometryReady = false;
+    // Said once per session: repeating it on every page switch would bury the
+    // status line the player is actually reading.
+    bool m_settingsTroubleReported = false;
 };
