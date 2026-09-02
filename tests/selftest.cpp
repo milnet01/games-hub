@@ -4401,9 +4401,18 @@ void canastaRunsThePackDead()
 
     // And the seat acts on it: a pack it could take, and it draws instead,
     // because taking the pack does not empty the stock and drawing does.
+    //
+    // The lead has to be ON THE TABLE. Built out of cards in hand it is not a
+    // lead this seat can see: it knows its own cards exactly and the other
+    // three only by their count, so a side holding points against three hands
+    // that may hold as many is level, and Ai::killingTheHand says so
+    // (GHUB-0149). Seat 0 therefore opens on a canasta of kings first.
     std::array<std::vector<Card>, 4> hands;
-    hands[0] = filler(4);
-    hands[1] = filler(kKing); // 110 points in hand, and a king on the pack
+    hands[0] = std::vector<Card>(7, cd(Suit::Clubs, kKing));
+    hands[0].push_back(cd(Suit::Spades, kAce)); // the ace it throws, for seat 1 to match
+    for (int i = 0; i < 3; ++i)
+        hands[0].push_back(cd(Suit::Hearts, 4));
+    hands[1] = filler(kAce);
     hands[2] = filler(5);
     hands[3] = filler(6);
     const std::vector<Card> below(6, cd(Suit::Clubs, 9));
@@ -4413,13 +4422,21 @@ void canastaRunsThePackDead()
         rules.deadHandIfNobodyGoesOut = dead != 0;
         ca::Engine e;
         e.setRules(rules);
-        e.newGameFromStock(canastaStock(hands, 0, below, cd(Suit::Diamonds, kKing)), 0);
+        // Dealer 3, so seat 0 leads and can put its kings down before seat 1
+        // has to decide anything.
+        e.newGameFromStock(canastaStock(hands, 3, below, cd(Suit::Hearts, kAce)), 3);
 
-        check(e.currentSeat() == 1 && e.stockCount() == 6,
-              "canasta: seat 1 to play with six cards left in the stock");
+        check(e.currentSeat() == 0, "canasta: seat 0 leads");
+        check(e.drawFromStock(), "canasta: and draws");
+        check(e.meldCards(std::vector<Card>(7, cd(Suit::Clubs, kKing))),
+              "canasta: opening on a canasta of kings, which is a lead seat 1 can see");
+        check(e.discard(cd(Suit::Spades, kAce)), "canasta: throwing the ace");
+
+        check(e.currentSeat() == 1 && e.stockCount() == 5,
+              "canasta: seat 1 to play with five cards left in the stock");
         std::vector<Card> take;
         check(e.findPileTake(take),
-              "canasta: and a pack it could take, opening on kings off the top card");
+              "canasta: and a pack it could take, opening on aces off the top card");
 
         ca::Ai ai { ca::Level::Hard };
         const bool took = ai.draw(e);

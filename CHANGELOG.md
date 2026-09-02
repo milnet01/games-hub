@@ -17,6 +17,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Canasta AI: several judgement terms rest on figures that are not what they claim.** (GHUB-0149)
+  The pack count follows the deck count, the run-it-dead judgement measures
+  both sides the same way, the pair-keeping open works on more than one hand
+  shape, and the freeze budget survives saving and reopening a game.
+
 - **The legibility threshold check could never run on Windows, and reddened master.** (GHUB-0171)
   The check shelled out to a grep pipeline, which cmd.exe cannot run.
   It is a Python scan now, so it behaves the same on both platforms.

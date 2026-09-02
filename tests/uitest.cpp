@@ -755,6 +755,48 @@ int main(int argc, char* argv[])
         check(readable, "2048: every tile's ink clears 3:1 against its own colour");
     }
 
+    // ---- canastaSaveFromBeforeTheFreezeBudget (GHUB-0149) ----
+    //
+    // The seats' per-hand freeze budget joined the save blob, which moved the
+    // version. A save written by the build before it must still load: the
+    // version leads the blob, and an older one simply predates a tail this
+    // build knows about. Getting that wrong loses every game in progress on
+    // the machine, silently, at the moment the player reopens one.
+    //
+    // The old blob is built from a current one rather than pasted in as bytes:
+    // a literal would fix the engine's own tail count too, and that moves for
+    // reasons this check is not about.
+    {
+        CanastaView canasta;
+        canasta.resize(1000, 740);
+        canasta.show();
+        pump(40);
+        canasta.deactivate();
+
+        const QByteArray now = canasta.saveState();
+        check(!now.isEmpty(), "canasta: a dealt game has a save to start from");
+
+        // Two qint32 per seat is what this build appends; step the version back
+        // one and drop them, which is exactly what the previous build wrote.
+        const int tail = int(sizeof(qint32)) * 2 * canasta::kSeats;
+        QByteArray older = now.left(now.size() - tail);
+        check(older.size() > int(sizeof(quint32)),
+              "canasta: and it is longer than the tail this build adds");
+        QDataStream vs(&older, QIODevice::ReadWrite);
+        vs.setVersion(QDataStream::Qt_6_0);
+        quint32 version = 0;
+        vs >> version;
+        vs.device()->seek(0);
+        vs << quint32(version - 1);
+
+        CanastaView resumed;
+        check(resumed.restoreState(older),
+              "canasta: a save from the build before the freeze budget still loads");
+        check(!resumed.saveState().isEmpty(),
+              "canasta: and what it loaded is a game it can save again");
+        resumed.deactivate();
+    }
+
     // ---- canastaLegibleMelds (GHUB-0017 INV-3, in Canasta's own numbers) ----
     //
     // The mechanism's spec withdrew INV-3 and INV-6 to whichever per-game pass

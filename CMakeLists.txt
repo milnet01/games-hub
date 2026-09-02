@@ -236,6 +236,15 @@ elseif(UNIX)
     # check the Linux leg already ran would be an alarm with nothing behind it.
     add_test(NAME scorepad_needs_python COMMAND ${CMAKE_COMMAND} -E false)
     add_test(NAME legibility_needs_python COMMAND ${CMAKE_COMMAND} -E false)
+else()
+    # Windows with no interpreter CMake will use. Said out loud, because the
+    # alternative is a silent one: the owner's Windows box has only the Store
+    # stub python.exe, so it registers four tests where the GitHub runner
+    # registers six, and a green run there was read as full coverage while the
+    # runner was failing on one of the two missing checks.
+    message(STATUS
+            "gameshub: no Python3 interpreter -- the scorepad and legibility "
+            "checks are NOT registered; ctest here runs fewer tests than CI")
 endif()
 
 # ---------------------------------------------------------------------------

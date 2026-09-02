@@ -210,8 +210,20 @@ public:
     void playAndDiscard(Engine& e);
 
     // How many wild cards this seat has spent freezing the pack in the hand
-    // being played. Public so a check can see the budget move without playing
-    // a hand as far as the ceiling.
+    // being played, and the stock count that budget was last measured against.
+    // Public so the view can carry both across a save: the seats are rebuilt on
+    // load, and a fresh seat starts with the ceiling refilled (GHUB-0149). The
+    // comment here described an accessor that was never declared.
+    int freezesThisHand() const { return m_freezes; }
+    int lastStock() const { return m_lastStock; }
+    // Puts a saved budget back. Negative freezes would read as budget to spare
+    // rather than spent, so the floor is held here; an absurdly large figure
+    // only means this seat stops freezing, which is harmless.
+    void resumeHand(int freezes, int lastStock)
+    {
+        m_freezes = freezes > 0 ? freezes : 0;
+        m_lastStock = lastStock < -1 ? -1 : lastStock;
+    }
 
 private:
     // Notices a fresh deal and clears the freeze budget. Called at the top of

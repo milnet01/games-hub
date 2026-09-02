@@ -5797,7 +5797,7 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0149] **Canasta AI: several judgement terms rest on figures that are not what they claim.**
+- ✅ [GHUB-0149] **Canasta AI: several judgement terms rest on figures that are not what they claim.**
   canastaai.cpp, all MEDIUM, none fixed. "Eight of every rank" is
   hardcoded where 4 * r.decks is meant, and a save may carry decks 1
   to 8 -- under one deck worthHolding's cheapest gate is dead and the
@@ -5847,6 +5847,72 @@ open.
 
   NOT YET CHECKED: the GHUB-0122 pair-keeping opening said to conflate
   "cards still needed" with "wilds this meld may take".
+  Resolved (2026-09-02). Every confirmed claim fixed, the corrected
+  one fixed where the correction pointed, and the one left unchecked
+  now checked and CONFIRMED.
+
+  The pack count is 4 * r.decks in all three places -- chooseDiscard's
+  packCountSafety and fishingWorth arguments, and worthHolding's bait
+  gate. Under one deck that gate could never fire and the unseen count
+  went negative, which flipped packCountSafety's second term positive
+  with no bound. Off the pack it cannot go negative at all, so the
+  unbounded path is gone rather than clamped.
+
+  chooseDiscard returns a default Card on an empty hand instead of
+  calling front(). The engine never asks in that state; the guard says
+  so out loud.
+
+  The tail literal `stockCount() < 8` is `<= kEndgameStock`, which was
+  both off by one against the constant and not following it.
+
+  killingTheHand docks BOTH sides for the cards they hold, at the
+  per-card rate of this seat's own hand -- the only one it can see.
+  Card counts are public at a real table, so reading them is not the
+  seat looking at hands it cannot. Docking ours alone made our figure
+  systematically the lower of the two.
+
+  The self-test's integration half of canastaRunsThePackDead was
+  asserting that defect: its "behind" position was built entirely out
+  of cards in hand, which is not a lead this seat can see. Seat 0 now
+  opens on a canasta of kings first, so the lead is on the table. The
+  six unit checks of runTheHandDead pass unchanged either way -- they
+  take the numbers directly.
+
+  wantsPile's Hard and Expert arms were byte-identical under two
+  comments describing a difference. Merged into one arm with one
+  honest comment. Deliberately NOT given an invented threshold:
+  separating them is a strength change and belongs with GHUB-0129, not
+  with a correctness fix.
+
+  CONFIRMED, the claim the diagnosis left open: the GHUB-0122
+  pair-keeping open took `min(wildRoom(n), minMeldSize - n)` as its
+  room and `max(1, minMeldSize - n)` as its want, so a five-group --
+  which spares its pair and is already legal on three naturals --
+  asked for a wild it had no room for. It only ever fired on a group
+  of exactly four. The two figures are separate now, want floors at
+  zero, and the loop no longer breaks out when there is no wild to
+  spend, because a group that big needs none.
+
+  The freeze budget is persisted. It is AI policy rather than engine
+  state, so it goes in the view's blob tail, and that is the first
+  field there which is not an engine tail -- so the blob version stops
+  being Engine::kTail + 1 and the engine tail is clamped rather than
+  read off the version. Ai gained freezesThisHand(), lastStock() and
+  resumeHand(); the header already documented an accessor that had
+  never been declared.
+
+  A uitest check covers the part that would hurt a player: a save from
+  the build before the tail existed still loads. Proven red by
+  dropping the version guard. The existing restoreState fuzz covers
+  the new field for round-trip and mutation.
+
+  Ladder after, all four rungs: medium v easy 22/24 +2538, hard v easy
+  23/24 +3844, hard v medium 66/120 +236, expert v hard 116/240 -183.
+  Against the 2026-09-02 baseline that is +3 and +1 on the two rungs
+  that moved; the first two are identical. The fixes sit in paths the
+  ladder's default Rules barely reach -- it plays two decks, so the
+  deck arithmetic is a no-op there, and deadHandIfNobodyGoesOut is a
+  House flag the ladder never sets.
   **Layman:** A handful of the computer's decisions are built on numbers that are wrong in ways the strength ladder cannot see.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

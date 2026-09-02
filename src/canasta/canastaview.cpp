@@ -34,7 +34,20 @@ namespace {
 
 // The blob's version is the engine's tail count plus one, and stating it twice
 // is how GHUB-0120 lost a rule. Derive it so the pair cannot drift.
-constexpr quint32 kBlobVersion = ca::Engine::kTail + 1;
+// How many fields the blob carries that are NOT engine tails. It was zero, so
+// the version and the engine's tail count were one number; the seats' freeze
+// budget is the first field of the view's own (GHUB-0149), and with it the two
+// part company. The engine tail is clamped rather than read off the version.
+constexpr int kViewTail = 1;
+constexpr quint32 kBlobVersion = ca::Engine::kTail + 1 + kViewTail;
+
+// How many engine tail fields a blob of this version carries. An older blob
+// simply predates tails this build knows about; a current one stops at the
+// engine's own count rather than running on into the view's fields.
+constexpr int engineTailFor(quint32 version)
+{
+    return std::min(int(version) - 1, ca::Engine::kTail);
+}
 
 constexpr double kTick = 1.0 / 60.0;
 // Long enough to follow, short enough that three computer seats do not become
@@ -698,13 +711,17 @@ QByteArray CanastaView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    // Each version adds another field to the engine's tail, so the version IS
-    // the tail count plus one and load() reads that many. kBlobVersion derives
-    // it from Engine::kTail rather than restating it: enumerating the tails
-    // here is what went stale, twice.
+    // kBlobVersion derives from Engine::kTail rather than restating it:
+    // enumerating the tails here is what went stale, twice.
     out << kBlobVersion;
     m_engine.save(out);
     out << qint32(m_level) << m_useHouse << qint32(m_target) << m_sortHand;
+    // The seats' per-hand freeze budget. Not engine state -- it is this AI's
+    // policy, and the rules core has no business holding it -- but it died with
+    // the seats on close, so a resumed hand came back with the ceiling
+    // refilled (GHUB-0149).
+    for (const ca::Ai& ai : m_ai)
+        out << qint32(ai.freezesThisHand()) << qint32(ai.lastStock());
     return blob;
 }
 
@@ -727,7 +744,7 @@ bool CanastaView::restoreState(const QByteArray& blob)
         probe >> trialVersion;
         ca::Engine trial;
         if (trialVersion < 1 || trialVersion > kBlobVersion
-            || !trial.load(probe, int(trialVersion) - 1))
+            || !trial.load(probe, engineTailFor(trialVersion)))
             return false;
         qint32 trialLevel = 0;
         qint32 trialTarget = 0;
@@ -736,6 +753,14 @@ bool CanastaView::restoreState(const QByteArray& blob)
         probe >> trialLevel >> trialHouse >> trialTarget >> trialSort;
         if (probe.status() != QDataStream::Ok)
             return false;
+        if (trialVersion >= kBlobVersion) {
+            qint32 spent = 0;
+            qint32 stock = 0;
+            for (std::size_t i = 0; i < m_ai.size(); ++i)
+                probe >> spent >> stock;
+            if (probe.status() != QDataStream::Ok)
+                return false;
+        }
     }
 
     QDataStream in(blob);
@@ -744,7 +769,7 @@ bool CanastaView::restoreState(const QByteArray& blob)
     in >> version;
     // A game saved by an older build still comes back; it simply predates the
     // rules its tail does not carry, and their defaults stand.
-    if (version < 1 || version > kBlobVersion || !m_engine.load(in, int(version) - 1))
+    if (version < 1 || version > kBlobVersion || !m_engine.load(in, engineTailFor(version)))
         return false;
 
     qint32 level = 0;
@@ -755,6 +780,19 @@ bool CanastaView::restoreState(const QByteArray& blob)
 
     m_level = ca::Level(std::clamp<int>(level, 0, 3));
     m_target = target;
+
+    // An older save predates the budget and its seats start fresh, which is the
+    // behaviour it was written under.
+    if (version >= kBlobVersion) {
+        for (ca::Ai& ai : m_ai) {
+            qint32 spent = 0;
+            qint32 stock = 0;
+            in >> spent >> stock;
+            ai.resumeHand(spent, stock);
+        }
+        if (in.status() != QDataStream::Ok)
+            return false;
+    }
     // Not a hand-rolled loop: applyLevels() is the only place m_sharpPartner is
     // honoured, so setting the levels directly here dropped the Expert-partner
     // rule on every resumed game while the toolbar still showed it ticked.

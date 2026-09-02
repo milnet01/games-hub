@@ -29,6 +29,19 @@ int handShowing(const Team& t, const std::vector<Card>& ourCards, const Rules& r
     return handScoreFor(t, ourCards, {}, false, false, r);
 }
 
+// What one card still in somebody's hand is worth against them, taken off this
+// seat's own cards because they are the only hand it can see. Used to dock the
+// three hidden hands at the rate the visible one sets.
+double perCardHeld(const std::vector<Card>& ourCards, const Rules& r)
+{
+    if (ourCards.empty())
+        return 0.0;
+    int v = 0;
+    for (const Card& c : ourCards)
+        v += cardValue(c, r);
+    return double(v) / double(ourCards.size());
+}
+
 } // namespace
 
 // Two rounds of the table. The same figure chooseDiscard already calls late in
@@ -305,10 +318,30 @@ bool Ai::killingTheHand(const Engine& e) const
 {
     const int seat = e.currentSeat();
     const Rules& r = e.rules();
-    const Team& mine = e.team(teamOf(seat));
-    const Team& theirs = e.team(teamOf(seat) ^ 1);
-    return runTheHandDead(handShowing(mine, e.hand(seat), r), handShowing(theirs, {}, r),
-                          e.stockCount(), r);
+    const int us = teamOf(seat);
+    const Team& mine = e.team(us);
+    const Team& theirs = e.team(us ^ 1);
+
+    // Cards still held count AGAINST the side holding them when a hand is
+    // scored where it stands, which is the whole reason to kill one. Only this
+    // seat's own hand is visible, so the other three are docked at the same
+    // per-card rate rather than not at all -- docking ours alone made our
+    // figure systematically the lower of the two, and runTheHandDead's margin
+    // was then eaten by an ordinary hand (GHUB-0149).
+    //
+    // Card COUNTS are public at a real table, so reading them is not the seat
+    // looking at hands it cannot see.
+    const std::vector<Card>& ours = e.hand(seat);
+    const double perCard = perCardHeld(ours, r);
+    int ourHeld = 0;
+    int theirHeld = 0;
+    for (int s = 0; s < kSeats; ++s)
+        (teamOf(s) == us ? ourHeld : theirHeld) += int(e.hand(s).size());
+
+    const int ourShowing =
+        handShowing(mine, ours, r) - int(perCard * double(ourHeld - int(ours.size())));
+    const int theirShowing = handShowing(theirs, {}, r) - int(perCard * double(theirHeld));
+    return runTheHandDead(ourShowing, theirShowing, e.stockCount(), r);
 }
 
 int Ai::seen(const Engine& e, int rank) const
@@ -335,9 +368,11 @@ bool Ai::worthHolding(const Engine& e, int rank, int naturals) const
     // not worth the points sitting in your hand.
     if (int(e.pile().size()) < 4)
         return false;
-    // Bait only works if somebody can still throw one. A rank with all eight
-    // accounted for will never come, so those points belong on the table.
-    if (seen(e, rank) >= 8)
+    // Bait only works if somebody can still throw one. A rank with every card
+    // accounted for will never come, so those points belong on the table. How
+    // many that is comes off the pack: a save may carry one deck, and against a
+    // hardcoded eight this gate could never fire at all (GHUB-0149).
+    if (seen(e, rank) >= 4 * e.rules().decks)
         return false;
     // Never hold so much that going out becomes impossible, and never hold a
     // rank the opponents have shown they are collecting.
@@ -466,13 +501,16 @@ bool Ai::wantsPile(const Engine& e) const
     case Level::Medium:
         return v >= 30 || n >= 5;
     case Level::Hard:
-        // Opening off the pile is usually the strongest move in the game, so it
-        // is worth taking a thin pile to do it.
-        return !mine.opened || v >= 15 || n >= 3;
     case Level::Expert:
-        // Pile control is the game, but a pile so thin it is not worth the
-        // tempo is one to leave. Measured: taking every pile going is slightly
-        // worse than being choosy about the smallest ones.
+        // One test, deliberately shared. Opening off the pile is usually the
+        // strongest move in the game, so a thin pile is worth taking to do it,
+        // and past that both levels want pile control.
+        //
+        // These were two arms with two comments describing a difference the
+        // expressions did not have -- byte-identical, so the ladder could not
+        // say which half was wrong (GHUB-0149). Merged rather than given an
+        // invented threshold: separating them is a strength change and belongs
+        // with the judgement work, not with a correctness fix.
         return !mine.opened || v >= 15 || n >= 3;
     }
     return false;
@@ -621,15 +659,21 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
                 total += valueOf(g);
 
             for (std::vector<Card>& g : groups) {
-                if (wilds.empty())
-                    break;
+                // No early exit on an empty wild pile: a group big enough to
+                // spare its pair and still be legal needs no wild at all, and
+                // the want check below is what says so.
                 std::vector<Card> cand(g.begin(), g.end() - std::min<std::size_t>(2, g.size()));
                 if (int(cand.size()) < r.minNaturalsPerMeld)
                     continue; // cannot spare a pair and still be a meld
-                const int room = std::min(wildRoom(int(cand.size())),
-                                          r.minMeldSize - int(cand.size()));
-                const int want = std::max(1, r.minMeldSize - int(cand.size()));
-                if (want > room || want > int(wilds.size()))
+                // Two different figures, and conflating them was GHUB-0149: how
+                // many cards the meld is still SHORT of legal, and how many
+                // wilds it may hold at all. Taking the smaller of the two and
+                // then demanding at least one meant a five-group -- which
+                // spares its pair and is already legal on three naturals --
+                // asked for a wild it had no room for, so this only ever fired
+                // on a group of exactly four.
+                const int want = std::max(0, r.minMeldSize - int(cand.size()));
+                if (want > wildRoom(int(cand.size())) || want > int(wilds.size()))
                     continue;
                 cand.insert(cand.end(), wilds.begin(), wilds.begin() + want);
                 if (total - valueOf(g) + valueOf(cand) < need)
@@ -890,6 +934,11 @@ Card Ai::chooseDiscard(const Engine& e) const
         ? throwCaution(theirs, e.openRequirement(teamOf(seat) ^ 1))
         : 1.0;
 
+    // A seat with no cards has nothing to throw, and front() on an empty hand
+    // is undefined rather than merely wrong. Engine::playAndDiscard never asks
+    // in that state; this is the guard that says so out loud (GHUB-0149).
+    if (h.empty())
+        return {};
     Card best = h.front();
     double bestScore = -1e9;
 
@@ -980,12 +1029,17 @@ Card Ai::chooseDiscard(const Engine& e) const
         }
 
         if (m_level == Level::Hard || m_level == Level::Expert) {
-            // Count the pack. Eight of every rank exist; the ones this seat can
-            // see are the ones nobody else can be holding. A rank with all
-            // eight accounted for cannot take the pile off anybody, which makes
-            // it the safest card there is — and the fewer that are unseen, the
-            // less likely the pair that would punish the throw.
-            safety += packCountSafety(8 - seen(e, c.rank), pileSize);
+            // Count the pack. Four of every rank per deck exist; the ones this
+            // seat can see are the ones nobody else can be holding. A rank
+            // wholly accounted for cannot take the pile off anybody, which
+            // makes it the safest card there is — and the fewer that are
+            // unseen, the less likely the pair that would punish the throw.
+            //
+            // Off the pack rather than a hardcoded eight (GHUB-0149): a save
+            // may carry one deck, and the difference went negative there, which
+            // flipped packCountSafety's second term positive with no bound.
+            const int ofRank = 4 * r.decks;
+            safety += packCountSafety(ofRank - seen(e, c.rank), pileSize);
 
             // Never break a pair while an unpaired card would do, and never
             // feed a rank this seat is holding as bait for the pile.
@@ -1000,13 +1054,13 @@ Card Ai::chooseDiscard(const Engine& e) const
             // Nothing thrown on a free turn can be taken by anybody, so there
             // is no follow-up to fish for either.
             if (!freeThrow && m_level == Level::Expert)
-                score += fishingWorth(countRank(h, c.rank), pileSize, 8 - seen(e, c.rank));
+                score += fishingWorth(countRank(h, c.rank), pileSize, ofRank - seen(e, c.rank));
             // A wild card thrown away is a canasta thrown away.
             if (isWild(c))
                 score -= 60.0;
             // Late in the hand the pile matters less than not being caught
             // holding points, so the ranking flattens towards raw value.
-            if (e.stockCount() < 8)
+            if (e.stockCount() <= kEndgameStock)
                 score -= 0.5 * double(cardValue(c, r));
         }
 
