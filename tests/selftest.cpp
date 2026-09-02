@@ -4018,6 +4018,67 @@ void canastaAiHoldsWhileFrozen()
     }
 }
 
+// Holding a rank back on an OPEN pile (GHUB-0129). chooseMelds prunes the
+// groups an opening does not need, because a rank the opposition can see is a
+// rank they stop throwing -- and the extend pass then found the same cards
+// standing on their own and laid them anyway, on the same turn, so at Hard the
+// prune decided nothing at all.
+//
+// The pile is deliberately NOT frozen here: canastaAiHoldsWhileFrozen owns that
+// half, and at Medium, which is what proves this change is gated to the two
+// levels the owner asked for rather than applied to all of them.
+void canastaAiHoldsTheKeyOnAnOpenPile()
+{
+    // The reading itself, on figures. A rank the table can still feed is worth
+    // waiting on a thinner pile for; one with a single card left is a long shot
+    // the pile has to be worth. Four is the floor, and is where this began as a
+    // flat figure.
+    check(ca::packWorthHoldingFor(1) > ca::packWorthHoldingFor(2),
+          "canasta: one card of a rank unseen needs a bigger pile than two do");
+    check(ca::packWorthHoldingFor(3) == 4 && ca::packWorthHoldingFor(8) == 4,
+          "canasta: and past three unseen it settles at the floor");
+
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Seat 1 opens on aces and holds three sevens -- a meld standing on its own,
+    // which is the whole question.
+    hands[1] = { cd(Suit::Spades, kAce),  cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Diamonds, kAce), cd(Suit::Spades, kAce), cd(Suit::Spades, 7),
+                 cd(Suit::Hearts, 7),      cd(Suit::Clubs, 7),     cd(Suit::Spades, 2),
+                 cd(Suit::Clubs, 5),       cd(Suit::Hearts, 8) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    for (int level = 0; level < 2; ++level) {
+        const ca::Level playing = level == 0 ? ca::Level::Medium : ca::Level::Hard;
+        ca::Engine e;
+        // Dealer 1, so seat 1 plays LAST in the round and the three seats before
+        // it grow the pile past the size a held rank is worth waiting for.
+        e.newGameFromStock(canastaStock(hands, 1, spare(), cd(Suit::Diamonds, 9)), 1);
+        check(!e.pileFrozen(), "canasta: the pile starts open");
+
+        // Driven rather than played, so nothing takes the pile or melds early.
+        for (int seat : { 2, 3, 0 }) {
+            check(e.currentSeat() == seat, "canasta: the seats play in dealing order");
+            check(e.drawFromStock(), "canasta: each draws");
+            check(e.discard(e.hand(seat).front()), "canasta: and throws one on");
+        }
+        check(int(e.pile().size()) == 4, "canasta: which leaves four cards on the pile");
+
+        ca::Ai ai { playing };
+        e.drawFromStock();
+        ai.playAndDiscard(e);
+
+        const ca::Meld* aces = e.team(1).meldOfRank(kAce);
+        check(aces != nullptr && aces->size() >= 4, "canasta: it opens either way");
+        const ca::Meld* sevens = e.team(1).meldOfRank(7);
+        check((sevens == nullptr) == (playing == ca::Level::Hard),
+              playing == ca::Level::Hard
+                  ? "canasta: Hard keeps its sevens as the key to a pile worth taking"
+                  : "canasta: while Medium lays them down, as it always did");
+    }
+}
+
 // The other half of holding while frozen (GHUB-0104): the release is keyed on
 // HAND SIZE. A big hand has draws still to come, so a rank held back is a pair
 // waiting to happen; a small one does not, and the points are better on the
@@ -5475,6 +5536,7 @@ int main()
     canastaAiOpens();
     canastaTakeAndOpenTogether();
     canastaAiHoldsWhileFrozen();
+    canastaAiHoldsTheKeyOnAnOpenPile();
     canastaAiPlaysOutWhenTheHandGetsSmall();
     canastaAiOpensOnAJokerToKeepThePair();
     canastaFreezeLimits();

@@ -5659,7 +5659,7 @@ open.
   Source: in-session-2026-08-25 (found by GHUB-0066's FreeCell extraction).
   Lanes: freecell.
 
-- 📋 [GHUB-0129] **Decide whether the Canasta opening prune should survive the extend pass.**
+- ✅ [GHUB-0129] **Decide whether the Canasta opening prune should survive the extend pass.**
   chooseMelds prunes groups the opening minimum does not need, and its
   own comment says they are better in hand -- a rank the opposition
   would then stop throwing -- and says GHUB-0122 widened it to run on
@@ -5681,6 +5681,48 @@ open.
   prints four rungs and hard-vs-medium is already the closest of them,
   so a change to Hard is the one most likely to collapse a rung. The
   reading as of 2026-08-25 is in CLAUDE.md and is the baseline.
+  Resolved (2026-09-02). Judgement added rather than a side picked,
+  per the owner's decision, and gated to Hard and Expert.
+
+  Neither half was edited to fit the other. The prune in chooseMelds
+  stands, the extend pass stands, and what now decides between them is
+  worthHolding -- which already asked two of the owner's three
+  questions and was simply unreachable below Expert.
+
+  Widened to Hard. Without it Hard pruned its opening for the pack and
+  then laid the same cards on the same turn, so the prune decided
+  nothing there at all. Easy and Medium are untouched.
+
+  The reading it lacked was what has been thrown away, which it asked
+  as a hard gate -- lay the rank if every card is accounted for -- and
+  never as a weight. packWorthHoldingFor grades it: a rank with three
+  or more still unseen is one the table can feed, so a thinner pack is
+  worth waiting for; one with a single card left is a long shot the
+  pack has to be worth. Seven down to a floor of four, and four is
+  where this began as a flat figure, so nothing moves for the common
+  case.
+
+  The frozen half is deliberately NOT asked here. holdsWhileFrozen
+  owns it for every level above Easy, and asking twice would be two
+  answers. Whether a meld helps the partner was already asked and
+  still is: a rank the SIDE has down is laid, never held, because
+  those are the cards that shorten the road to a canasta.
+
+  Two checks. canastaAiHoldsTheKeyOnAnOpenPile builds one position and
+  plays it at Medium and at Hard: Medium lays the sevens down as it
+  always did, Hard keeps them. Both arms assert, so neither is
+  vacuous, and the Medium arm is what proves the gating. The graded
+  reading is checked on figures beside it, which is this file's
+  convention for a free function.
+
+  Ladder re-measured, all four rungs, against the post-GHUB-0149
+  reading. medium v easy 22/24 +2538, unchanged to the digit -- which
+  is what says the change is gated where the owner asked. hard v
+  medium 66/120 +236 to 69/120 +424, the closest rung and the one most
+  at risk, which widened rather than collapsed. expert v hard 116/240
+  -183 to 121/240 -1, back to level. hard v easy 23/24 +3844 to 22/24
+  +3547, a rung saturated at 22 to 23 of 24 where one game is not a
+  reading. CLAUDE.md's baseline is updated.
   **Layman:** Two parts of the Canasta AI disagree about whether to hold a rank back, and only you can say which is right.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.

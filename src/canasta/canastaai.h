@@ -79,6 +79,26 @@ double throwCaution(const Team& theirs, int openRequirement);
 // are subtracted from the same discard's score.
 double fishingWorth(int held, int packSize, int unseen);
 
+// How big a pack has to be before a rank that stands on its own is worth
+// keeping in hand rather than laying down (GHUB-0129), given how many of that
+// rank nobody has yet accounted for.
+//
+// chooseMelds prunes the groups an opening does not need, on the reasoning that
+// a rank the opposition can SEE is a rank they stop throwing -- and GHUB-0122
+// widened that to an unfrozen pack on purpose. The extend pass then found the
+// same cards standing on their own and laid them anyway, on the same turn. This
+// is what weighs the two against each other, and the reading it adds is what
+// has been thrown away: a rank with three or four still unaccounted for is one
+// the table can still feed, so a thinner pack is worth waiting for, while a
+// rank with one left is a long shot the pack has to be worth.
+//
+// Zero unseen is the caller's to answer -- nobody can throw a rank that is all
+// accounted for, so there is no bait at any pack size.
+//
+// The frozen half of the question is NOT asked here: Ai::holdsWhileFrozen owns
+// it, for every level above Easy, and asking twice would be two answers.
+int packWorthHoldingFor(int unseen);
+
 // Whether this side is better off running the stock out and killing the hand
 // than letting it be played to a score (GHUB-0114). The owner's tactic: if the
 // opponents have a high score and you can run the pack dead -- no cards left in

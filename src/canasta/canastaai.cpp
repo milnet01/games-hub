@@ -165,6 +165,14 @@ double fishingWorth(int held, int packSize, int unseen)
     return (8.0 + 1.2 * double(std::min(packSize, 15))) * std::min(1.0, double(unseen) / 3.0);
 }
 
+int packWorthHoldingFor(int unseen)
+{
+    // Seven at one unseen, down to a floor of four at three or more. The pack
+    // is the prize and the cards held back are the cost, so the two move
+    // against each other. The floor is where this began as a flat figure.
+    return std::max(4, 9 - 2 * std::min(3, unseen));
+}
+
 bool runTheHandDead(int ourShowing, int theirShowing, int stockLeft, const Rules& r)
 {
     // It depends ENTIRELY on the house rule. deadHandIfNobodyGoesOut makes a
@@ -351,7 +359,12 @@ int Ai::seen(const Engine& e, int rank) const
 
 bool Ai::worthHolding(const Engine& e, int rank, int naturals) const
 {
-    if (m_level != Level::Expert)
+    // Hard as well as Expert (GHUB-0129). Without it Hard pruned its opening
+    // for the pack and then laid the same cards on the same turn, so the prune
+    // decided nothing there at all. Easy and Medium keep the play they have --
+    // Easy is meant to make real mistakes, and taking those away flattens the
+    // ladder.
+    if (m_level != Level::Hard && m_level != Level::Expert)
         return false;
 
     const Team& mine = e.team(teamOf(e.currentSeat()));
@@ -363,16 +376,17 @@ bool Ai::worthHolding(const Engine& e, int rank, int naturals) const
     // cards held back for bait are cards that stop you.
     if (mine.hasCanasta(e.rules()) && int(e.hand(e.currentSeat()).size()) <= 8)
         return false;
-    // Holding three of a rank keeps the pile takeable the moment one is thrown,
-    // and the bigger the pile the more that is worth. Below four cards it is
-    // not worth the points sitting in your hand.
-    if (int(e.pile().size()) < 4)
-        return false;
     // Bait only works if somebody can still throw one. A rank with every card
     // accounted for will never come, so those points belong on the table. How
     // many that is comes off the pack: a save may carry one deck, and against a
     // hardcoded eight this gate could never fire at all (GHUB-0149).
-    if (seen(e, rank) >= 4 * e.rules().decks)
+    const int unseen = 4 * e.rules().decks - seen(e, rank);
+    if (unseen <= 0)
+        return false;
+    // Holding a rank keeps the pile takeable the moment one is thrown, and the
+    // bigger the pile the more that is worth -- graded by how live the rank
+    // still is rather than the flat four it was (GHUB-0129).
+    if (int(e.pile().size()) < packWorthHoldingFor(unseen))
         return false;
     // Never hold so much that going out becomes impossible, and never hold a
     // rank the opponents have shown they are collecting.

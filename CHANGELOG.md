@@ -10,6 +10,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Hard and Expert keep a rank back as the key to a pile worth taking.** (GHUB-0129)
+  They used to prune their opening to hold a rank in hand and then lay the
+  same cards on the same turn. How long they wait now depends on how many of
+  that rank are still unaccounted for. Easy and Medium play as before.
+
 - **SECURITY.md now says which half of the project it is describing.**
   Its no-network and no-personal-data claims are about the desktop
   game. The phone score book talks to a hosted database, and has its

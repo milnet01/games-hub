@@ -879,22 +879,23 @@ where their stock is built.
 **`canastaLevelsDiffer()` prints its four rungs on every run, and what the
 ladder reads today is the baseline for judging tomorrow's change** — the figures
 are re-read by running the suite, never assumed from a handoff. As of
-2026-09-02: medium v easy 22/24 +2538, hard v easy 23/24 +3844, hard v medium
-66/120 +233, **expert v hard 116/240 -184**.
+2026-09-02, after GHUB-0129: medium v easy 22/24 +2538, hard v easy 22/24
++3547, hard v medium 69/120 +424, expert v hard 121/240 -1.
 
-**That last rung MOVED on 2026-09-02, from 121/240 +14, and the cause is known
-rather than suspected.** GHUB-0148 made validateTake subtract the pile's red
-threes before the no-legal-move guard, so a take that would strand the seat on
-one card is now refused -- and the AI made some of those takes. The ladder is
-deterministic here (the shuffle is seeded and hand-written), so the move is
-real and not noise: two consecutive runs give the same figures to the digit.
-Expert now sits just BELOW level against Hard, where it was just above. Do not
-read that as a regression introduced by an AI change; it is the price of a
-correctness fix, and GHUB-0110 already settled that this ladder cannot separate
-a small change from noise anyway.
-**The first three rungs are the useful reading when a change is gated to one
-level** — GHUB-0124 touched Expert alone, and those three not moving at all is
-what says so. Two things
+**Three rungs moved that day and both causes are known rather than suspected.**
+GHUB-0148 made validateTake subtract the pile's red threes before the
+no-legal-move guard, so a take that would strand the seat on one card is now
+refused -- and the AI made some of those takes. That alone took expert v hard
+from 121/240 +14 to 116/240 -183. GHUB-0129 then widened `worthHolding` to Hard
+and graded its pile floor, which put hard v medium up from 66/120 +236 and
+expert v hard back to level. The ladder is deterministic here (the shuffle is
+seeded and hand-written), so a move is real and not noise: two consecutive runs
+give the same figures to the digit. Do not read the GHUB-0148 dip as a
+regression introduced by an AI change; it was the price of a correctness fix.
+**A rung that does NOT move is the useful reading when a change is gated to
+some levels** — GHUB-0124 touched Expert alone, so the first three not moving is
+what said so, and GHUB-0129 touched Hard and Expert, so medium v easy standing
+unchanged to the digit is what says that. Two things
 that reading does NOT mean. The absolute numbers are not a target — GHUB-0110
 settled that the ladder cannot separate a small change from noise, so a check
 against a hand-built position is the judge and this is context. And **the ladder
