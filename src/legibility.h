@@ -22,6 +22,11 @@ public:
     // Stores the new value and emits changed(). A no-op if unchanged, so a
     // caller cannot count on an emission it did not actually cause.
     void setEnabled(bool on);
+    // The same, without storing it. --shot --legible turns large play on to
+    // take one picture: answering a question about the app must not change what
+    // the player chose, and turning it on and back off again is two writes with
+    // a window between them where a crash leaves it on for good.
+    void setEnabledForSession(bool on);
 
 Q_SIGNALS:
     void changed(bool enabled);

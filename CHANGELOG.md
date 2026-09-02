@@ -17,6 +17,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **A mistyped option prints an error and exits instead of opening a dialog on Windows.** (GHUB-0158)
+  --help and any bad option went through Qt's own reporting, which on
+  Windows is a message box -- so the app waited for someone to close
+  a dialog rather than exiting. --size is also bounded now, instead of
+  attempting an enormous image for a silly number.
+
+- **Taking a screenshot no longer changes your settings.** (GHUB-0136)
+  --shot wrote the large-play setting and the remembered window size
+  as a side effect of photographing a game, so answering a question
+  about the app changed what you had chosen. It now stores nothing.
+
 - **The toolbar's large-play button follows the switch however it was moved.** (GHUB-0157)
   Turning large play on any other way -- the --legible option does it
   before the window exists -- left the button reading "Normal" and

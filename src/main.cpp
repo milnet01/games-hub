@@ -26,7 +26,12 @@ QSize parseSize(const QString& text)
     bool tallOk = false;
     const int wide = text.left(cross).toInt(&wideOk);
     const int tall = text.mid(cross + 1).toInt(&tallOk);
-    if (!wideOk || !tallOk || wide <= 0 || tall <= 0)
+    // Bounded as well as positive. --size 999999x999999 parsed cleanly and then
+    // asked for a pixmap of about four terabytes; what comes back is an
+    // allocation failure rather than the refusal the strictness above promises.
+    // 8192 is past any screen this would be photographed for.
+    constexpr int kMaxSide = 8192;
+    if (!wideOk || !tallOk || wide <= 0 || tall <= 0 || wide > kMaxSide || tall > kMaxSide)
         return {};
     return { wide, tall };
 }
@@ -53,13 +58,14 @@ int takeShot(HubWindow& window, const QString& path, const QString& size, bool l
     // answering it should not change what the player chose.
     const bool wasLegible = Legibility::instance().enabled();
     if (legible)
-        Legibility::instance().setEnabled(true);
+        Legibility::instance().setEnabledForSession(true);
 
     const QSize wanted = size.isEmpty() ? window.sizeHint() : parseSize(size);
     if (!wanted.isValid()) {
-        std::fprintf(stderr, "--size wants WxH, for example 1400x620. Got \"%s\".\n",
+        std::fprintf(stderr, "--size wants WxH up to 8192 a side, for example 1400x620."
+                             " Got \"%s\".\n",
                      qPrintable(size));
-        Legibility::instance().setEnabled(wasLegible);
+        Legibility::instance().setEnabledForSession(wasLegible);
         return 2;
     }
 
@@ -73,7 +79,7 @@ int takeShot(HubWindow& window, const QString& path, const QString& size, bool l
 
     const QPixmap shot = window.grab();
     const bool saved = shot.save(path);
-    Legibility::instance().setEnabled(wasLegible);
+    Legibility::instance().setEnabledForSession(wasLegible);
 
     if (!saved) {
         std::fprintf(stderr, "Could not write \"%s\".\n", qPrintable(path));
@@ -151,7 +157,35 @@ int main(int argc, char* argv[])
     parser.addOption(shotOption);
     parser.addOption(sizeOption);
     parser.addOption(legibleOption);
-    parser.process(app);
+
+    // parse() rather than process(), and the reason is the one --version is
+    // answered from argv above: qt_add_executable sets WIN32_EXECUTABLE, so
+    // process() reports a bad option and prints --help through a MESSAGE BOX on
+    // Windows. `gameshub.exe --gaem spider` opened a modal dialog and waited
+    // where it should have printed a line and exited 1 -- and on a runner
+    // nobody dismisses it. Writing to stdout on a GUI-subsystem binary reaches
+    // nobody when there is no console attached, but it never blocks.
+    if (!parser.parse(QCoreApplication::arguments())) {
+        std::fprintf(stderr, "%s\n", qPrintable(parser.errorText()));
+        std::fprintf(stderr, "Try --help.\n");
+        return 1;
+    }
+    if (parser.isSet(QStringLiteral("help"))) {
+        std::printf("%s", qPrintable(parser.helpText()));
+        return 0;
+    }
+    // No --version branch: the argv scan at the top of main() answers it before
+    // Qt exists and returns, so one here could never be reached. The option is
+    // still registered so that it appears in the help text above.
+
+    // Before the game is opened, because opening one goes through
+    // rememberPage(): a shot -- even one that is about to be REFUSED for naming
+    // a game that does not exist -- used to write window/geometry over what the
+    // player had left. This is what CLAUDE.md's shot recipe needed a scratch
+    // XDG_CONFIG_HOME for.
+    const bool photographing = parser.isSet(shotOption);
+    if (photographing)
+        window.setRemembering(false);
 
     const bool named = parser.isSet(gameOption);
     const bool found = named && window.openGameNamed(parser.value(gameOption));
@@ -164,7 +198,7 @@ int main(int argc, char* argv[])
     // Before the launch is counted, for the reason --help and --version are:
     // taking a picture is not playing, and it should not walk anybody towards
     // a prompt they did not earn.
-    if (parser.isSet(shotOption)) {
+    if (photographing) {
         return takeShot(window, parser.value(shotOption), parser.value(sizeOption),
                         parser.isSet(legibleOption), named, found);
     }

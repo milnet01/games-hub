@@ -569,6 +569,12 @@ void HubWindow::buildChrome()
 
 namespace {
 
+// Both keys are built from the name the tile shows, and Scores does the same
+// with its own. So RENAMING A GAME ORPHANS its saved position, its remembered
+// window size and its records, silently and with no migration -- the player
+// just finds a game that has forgotten them. Nothing renames one today, and a
+// stable id per game is the fix if anything ever needs to; changing a
+// registered name meanwhile is a decision, not a tidy-up. GHUB-0158.
 QString geometryKey(const QString& page)
 {
     return QStringLiteral("window/geometry/") + (page.isEmpty() ? QStringLiteral("menu") : page);
@@ -594,7 +600,7 @@ void HubWindow::rememberPage()
     // Nothing to remember until a page has actually been on screen: the first
     // call comes from the constructor, before the window has a size worth
     // keeping, and it would overwrite the one being restored.
-    if (!m_geometryReady)
+    if (!m_geometryReady || !m_remembering)
         return;
 
     // saveGeometry() carries the position, the size and whether the window was
@@ -644,7 +650,7 @@ void HubWindow::applyPageGeometry(const QString& page)
 
 void HubWindow::storeSave(const Entry& e)
 {
-    if (e.view == nullptr)
+    if (e.view == nullptr || !m_remembering)
         return;
     const QByteArray state = e.view->saveState();
     QSettings s;

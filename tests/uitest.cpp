@@ -1834,6 +1834,69 @@ int main(int argc, char* argv[])
         Legibility::instance().setEnabled(false);
     }
 
+    // ---- Answering a question about the app does not change what was chosen ----
+    //
+    // --shot photographs a game and exits. It used to leave the player's stored
+    // legibility setting and their remembered window size rewritten behind it,
+    // which is why CLAUDE.md's shot recipe needed a scratch XDG_CONFIG_HOME.
+    // Each absence below is paired with the positive case, so neither can pass
+    // by the mechanism simply never running.
+    {
+        const QString key = QStringLiteral("display/legibility");
+        Legibility& legibility = Legibility::instance();
+        legibility.setEnabledForSession(false);
+
+        bool heard = false;
+        const QMetaObject::Connection listening =
+            QObject::connect(&legibility, &Legibility::changed, [&heard](bool) { heard = true; });
+
+        QSettings().remove(key);
+        QSettings().sync();
+        legibility.setEnabledForSession(true);
+        check(legibility.enabled(), "the session setter turns large play on");
+        check(heard, "and still tells every built game about it");
+        check(!QSettings().contains(key), "but stores nothing");
+
+        legibility.setEnabledForSession(false);
+        QSettings().remove(key);
+        QSettings().sync();
+        legibility.setEnabled(true);
+        check(QSettings().contains(key), "while the ordinary setter does store it");
+        legibility.setEnabled(false);
+        QObject::disconnect(listening);
+    }
+
+    {
+        // The hub writes the window size when a page is left, and opening a
+        // game to photograph it goes through that path -- so even a shot that
+        // is about to be refused for a bad --size had already overwritten it.
+        const QString sizeKey = QStringLiteral("window/geometry/menu");
+        QSettings().remove(sizeKey);
+        QSettings().sync();
+
+        {
+            HubWindow quiet;
+            quiet.setRemembering(false);
+            quiet.resize(1000, 700);
+            quiet.openGameNamed(QStringLiteral("Hearts"));
+            pump(150);
+        }
+        check(!QSettings().contains(sizeKey),
+              "a hub told not to remember writes no window size");
+
+        {
+            HubWindow ordinary;
+            ordinary.resize(1000, 700);
+            ordinary.openGameNamed(QStringLiteral("Hearts"));
+            pump(150);
+        }
+        check(QSettings().contains(sizeKey),
+              "while an ordinary hub still remembers where you were");
+
+        QSettings().remove(sizeKey);
+        QSettings().sync();
+    }
+
     // ---- The sound effects are compiled into the binary ----
     {
         const QStringList effects = { QStringLiteral("ui_click"), QStringLiteral("ui_back"),

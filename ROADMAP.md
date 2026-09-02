@@ -1722,7 +1722,7 @@ progress.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0136] **--shot and --legible write to the player's stored settings.**
+- ✅ [GHUB-0136] **--shot and --legible write to the player's stored settings.**
   takeShot's own comment says answering a question about the app
   should not change what the player chose. But openGameNamed reaches
   rememberPage with m_geometryReady already true, so even a REFUSED
@@ -1731,6 +1731,25 @@ progress.
   writes leaves large play on for good. An ephemeral flag on
   HubWindow and a non-persisting setter would remove the reason
   CLAUDE.md's shot recipe needs XDG_CONFIG_HOME.
+  Resolved (2026-09-02): HubWindow::setRemembering(false), set before
+  the game is opened, and Legibility::setEnabledForSession(), which
+  broadcasts without storing. Measured with a scratch XDG_CONFIG_HOME,
+  fix reverted: a successful shot wrote BOTH display/legibility and
+  window/geometry\menu; with the fix, a successful shot, a shot
+  refused for a bad --size and a shot refused for an unknown game all
+  leave the store empty.
+
+  One correction to the finding. The refused shot that writes is the
+  one refused AFTER the game opened -- a bad --size. An unknown game
+  makes openGameNamed return false without ever reaching openGame, so
+  rememberPage is not called and nothing is written. Both were run
+  both ways.
+
+  Six checks in uitest rather than a settings-file check, because
+  QSettings has no file on Windows. Each absence is paired with the
+  positive case -- the ordinary setter still stores, an ordinary hub
+  still remembers -- so neither can pass by the mechanism never
+  running.
   **Layman:** Taking a screenshot changes what the app remembers, which is why the recipe needs a scratch settings directory.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
@@ -1817,7 +1836,7 @@ progress.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0158] **--help and a mistyped flag open a message box on Windows instead of exiting.**
+- ✅ [GHUB-0158] **--help and a mistyped flag open a message box on Windows instead of exiting.**
   main.cpp routes --version around QCommandLineParser via an argv scan
   for exactly this reason -- qt_add_executable sets WIN32_EXECUTABLE, so
   showVersion() puts its output in a message box. --help and every
@@ -1828,6 +1847,25 @@ progress.
   999999x999999 attempts an enormous pixmap; and geometryKey/saveKey
   are built from the registered display name, so renaming a tile
   orphans its save, its geometry and its scores with no migration.
+  Resolved (2026-09-02): all three parts.
+
+  parse() replaces process(), with errorText() to stderr and exit 1,
+  and helpText() printed to stdout. Verified by running the binary:
+  --help prints and exits 0, --gaem spider prints "Unknown option
+  'gaem'" and exits 1, neither hangs. No --version branch was added --
+  the argv scan at the top of main() answers it before Qt exists, so
+  one there could never be reached; the option stays registered so it
+  appears in the help.
+
+  parseSize now bounds each side at 8192 as well as requiring it
+  positive; --size 999999x999999 is refused with the bound named
+  instead of asking for a four-terabyte pixmap.
+
+  The display-name coupling is recorded as a comment at geometryKey
+  and saveKey rather than rebuilt. Nothing renames a game today, a
+  stable id per game is the fix if anything ever needs to, and the
+  value now is that the next person renaming one reads why they
+  should not. Called out here rather than left implied.
   **Layman:** On Windows a typo in a command-line option pops a dialog and hangs rather than printing an error.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

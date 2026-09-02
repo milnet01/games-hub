@@ -27,7 +27,14 @@ void Legibility::setEnabled(bool on)
 {
     if (on == m_enabled)
         return;
-    m_enabled = on;
     QSettings().setValue(kKey, on);
+    setEnabledForSession(on);
+}
+
+void Legibility::setEnabledForSession(bool on)
+{
+    if (on == m_enabled)
+        return;
+    m_enabled = on;
     Q_EMIT changed(on);
 }

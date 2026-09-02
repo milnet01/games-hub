@@ -39,6 +39,12 @@ public:
     // Returns false if no game matches, leaving the menu on screen.
     bool openGameNamed(const QString& name);
 
+    // Off while the app is answering a question about itself rather than being
+    // played -- --shot. Nothing is then written to the settings store: opening
+    // a game to photograph it goes through rememberPage(), so even a REFUSED
+    // shot used to leave the player's remembered window size overwritten.
+    void setRemembering(bool on) { m_remembering = on; }
+
     QStringList gameNames() const;
 
 private:
@@ -94,6 +100,7 @@ private:
     // for the tile menu.
     QString m_page;
     bool m_geometryReady = false;
+    bool m_remembering = true;
     // Said once per session: repeating it on every page switch would bury the
     // status line the player is actually reading.
     bool m_settingsTroubleReported = false;
