@@ -32,6 +32,9 @@ public:
     // A game to 5000 is several sittings, so the whole table is kept and put
     // back. Nothing in the air is saved — a restored game shows the position as
     // it settles, which is where the cards were going anyway.
+    // Plays every seat, seat 0 included -- there is no player at a screenshot.
+    // See GameView::advanceForShot for what the flag is for.
+    bool advanceForShot(int turns) override;
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 

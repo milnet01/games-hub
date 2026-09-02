@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dealseed.h"
+
 #include "cards/card.h"
 
 #include <array>
@@ -101,7 +103,7 @@ private:
     int m_heldFrom = -1;
 
     std::deque<Snapshot> m_history;
-    std::mt19937 m_rng { std::random_device {}() };
+    std::mt19937 m_rng { dealSeed() };
     int m_suits = 1;
     int m_completed = 0;
     int m_moves = 0;

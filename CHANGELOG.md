@@ -8,6 +8,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Added
+
+- **--turns plays a game forward before the screenshot is taken.** (GHUB-0166)
+  Reaches anything that only exists once a hand has been played, such as a
+  frozen pack or a finished canasta. A game that has no notion of a turn
+  refuses rather than photographing the deal.
+
+- **--seed pins the shuffle, so two screenshots of one card game can be compared.** (GHUB-0093)
+  Reaches every deal, board and computer seat. Without it the deal is random
+  per launch, so a before-and-after pixel count measured the shuffle.
+
 ### Changed
 
 - **Hard and Expert keep a rank back as the key to a pile worth taking.** (GHUB-0129)

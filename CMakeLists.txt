@@ -81,6 +81,10 @@ configure_file(src/funding.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/funding.h
 # are listed separately so the headless self-test can link them without Qt
 # Widgets.
 set(GAME_CORE_SOURCES
+    # Where a deal, a board or a computer seat gets its randomness, so --seed
+    # can pin the lot from one place (GHUB-0093). QtCore-only and it reads no
+    # stored state, which is what keeps it on this side of the split.
+    src/dealseed.cpp
     src/reversi/board.cpp
     src/reversi/ai.cpp
     src/minesweeper/minefield.cpp
@@ -183,9 +187,23 @@ add_test(NAME shot COMMAND gameshub --shot ${CMAKE_CURRENT_BINARY_DIR}/shot-test
 add_test(NAME shot_refuses_a_bad_size
          COMMAND gameshub --shot ${CMAKE_CURRENT_BINARY_DIR}/shot-never.png
                           --game hearts --size not-a-size)
-set_tests_properties(shot shot_refuses_a_bad_size
+# --turns is what reaches a layout that only exists once a hand has been played,
+# and --seed is what makes two shots of one card game comparable (GHUB-0093,
+# GHUB-0166). The pair is run together because that is how they are used. A turn
+# count aimed at a game that cannot play itself must be REFUSED rather than
+# quietly photographed at the deal, which is the same failure --size guards
+# against: the picture still gets written and still looks like an answer.
+add_test(NAME shot_plays_forward
+         COMMAND gameshub --shot ${CMAKE_CURRENT_BINARY_DIR}/shot-played.png
+                          --game canasta --size 1200x700 --seed 3 --turns 30)
+add_test(NAME shot_refuses_turns_it_cannot_play
+         COMMAND gameshub --shot ${CMAKE_CURRENT_BINARY_DIR}/shot-never.png
+                          --game sudoku --turns 5)
+set_tests_properties(shot shot_refuses_a_bad_size shot_plays_forward
+                     shot_refuses_turns_it_cannot_play
                      PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-set_tests_properties(shot_refuses_a_bad_size PROPERTIES WILL_FAIL TRUE)
+set_tests_properties(shot_refuses_a_bad_size shot_refuses_turns_it_cannot_play
+                     PROPERTIES WILL_FAIL TRUE)
 
 # The pre-push hook decides between the linters and the full pipeline, and a
 # wrong decision is silent — the push succeeds either way. Unix only: the hook

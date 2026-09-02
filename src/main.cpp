@@ -1,5 +1,7 @@
 #include "donate.h"
 #include "donatedialog.h"
+#include "dealseed.h"
+#include "gameview.h"
 #include "hubwindow.h"
 #include "legibility.h"
 
@@ -44,7 +46,7 @@ QSize parseSize(const QString& text)
 // line, and Qt's logging can be turned off by an environment variable nobody
 // here set deliberately. A failure that exits 2 in silence is worse than none.
 int takeShot(HubWindow& window, const QString& path, const QString& size, bool legible,
-             bool gameNamed, bool gameFound)
+             bool gameNamed, bool gameFound, int turns)
 {
     // A shot of the wrong thing is the failure mode this whole flag exists to
     // avoid: the picture still gets written, and still looks like an answer.
@@ -69,6 +71,18 @@ int takeShot(HubWindow& window, const QString& path, const QString& size, bool l
         return 2;
     }
 
+    // Before the window is shown, so the layout is built once, around the
+    // position that will actually be photographed.
+    if (turns > 0) {
+        GameView* view = window.findChild<GameView*>();
+        if (view == nullptr || !view->advanceForShot(turns)) {
+            std::fprintf(stderr,
+                         "--turns needs a game that can play itself, and this one cannot.\n");
+            Legibility::instance().setEnabledForSession(wasLegible);
+            return 2;
+        }
+    }
+
     window.resize(wanted);
     window.show();
     // Twice, and not for luck: the first pass builds and activates the layouts
@@ -85,8 +99,10 @@ int takeShot(HubWindow& window, const QString& path, const QString& size, bool l
         std::fprintf(stderr, "Could not write \"%s\".\n", qPrintable(path));
         return 1;
     }
-    std::printf("%s %dx%d%s\n", qPrintable(path), shot.width(), shot.height(),
-                legible ? " (large play)" : "");
+    std::printf("%s %dx%d%s%s\n", qPrintable(path), shot.width(), shot.height(),
+                legible ? " (large play)" : "",
+                turns > 0 ? qPrintable(QStringLiteral(" (%1 turns played)").arg(turns))
+                          : "");
     return 0;
 }
 
@@ -154,9 +170,19 @@ int main(int argc, char* argv[])
     const QCommandLineOption legibleOption(
         QStringLiteral("legible"),
         QStringLiteral("Turn large play on for --shot only, leaving the stored setting alone."));
+    const QCommandLineOption turnsOption(
+        QStringLiteral("turns"),
+        QStringLiteral("Let the computers play this many turns before --shot takes the picture."),
+        QStringLiteral("n"));
+    const QCommandLineOption seedOption(
+        QStringLiteral("seed"),
+        QStringLiteral("Pin the shuffle so two runs deal the same cards."),
+        QStringLiteral("n"));
     parser.addOption(shotOption);
     parser.addOption(sizeOption);
     parser.addOption(legibleOption);
+    parser.addOption(turnsOption);
+    parser.addOption(seedOption);
 
     // parse() rather than process(), and the reason is the one --version is
     // answered from argv above: qt_add_executable sets WIN32_EXECUTABLE, so
@@ -183,7 +209,37 @@ int main(int argc, char* argv[])
     // a game that does not exist -- used to write window/geometry over what the
     // player had left. This is what CLAUDE.md's shot recipe needed a scratch
     // XDG_CONFIG_HOME for.
+    // Before any game is constructed: the seeds are member initialisers, so a
+    // game already built has taken its own and this would come too late.
+    if (parser.isSet(seedOption)) {
+        bool ok = false;
+        const uint seed = parser.value(seedOption).toUInt(&ok);
+        if (!ok) {
+            std::fprintf(stderr, "--seed wants a whole number. Got \"%s\".\n",
+                         qPrintable(parser.value(seedOption)));
+            return 1;
+        }
+        pinDealSeed(seed);
+    }
+
+    // Bounded as well as positive, for the reason --size is: a turn count in the
+    // millions is a hang rather than a picture, and it would look like one.
+    int turns = 0;
+    if (parser.isSet(turnsOption)) {
+        bool ok = false;
+        turns = parser.value(turnsOption).toInt(&ok);
+        if (!ok || turns < 1 || turns > 10000) {
+            std::fprintf(stderr, "--turns wants a whole number from 1 to 10000. Got \"%s\".\n",
+                         qPrintable(parser.value(turnsOption)));
+            return 1;
+        }
+    }
+
     const bool photographing = parser.isSet(shotOption);
+    if (turns > 0 && !photographing) {
+        std::fprintf(stderr, "--turns only means anything with --shot.\n");
+        return 1;
+    }
     if (photographing)
         window.setRemembering(false);
 
@@ -200,7 +256,7 @@ int main(int argc, char* argv[])
     // a prompt they did not earn.
     if (photographing) {
         return takeShot(window, parser.value(shotOption), parser.value(sizeOption),
-                        parser.isSet(legibleOption), named, found);
+                        parser.isSet(legibleOption), named, found, turns);
     }
 
     // Counted here rather than before the parser, so `--help` and `--version`

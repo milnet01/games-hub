@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dealseed.h"
+
 #include "cards/card.h"
 
 #include <QDataStream>
@@ -471,7 +473,7 @@ private:
     bool m_frozen = false;
 
     mutable QString m_error;
-    std::mt19937 m_rng { std::random_device {}() };
+    std::mt19937 m_rng { dealSeed() };
 };
 
 } // namespace canasta

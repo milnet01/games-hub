@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dealseed.h"
+
 #include <array>
 #include <random>
 
@@ -74,5 +76,5 @@ private:
     bool m_canUndo = false;
     bool m_reachedTarget = false;
 
-    std::mt19937 m_rng { std::random_device {}() };
+    std::mt19937 m_rng { dealSeed() };
 };

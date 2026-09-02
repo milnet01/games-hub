@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dealseed.h"
+
 #include <QPoint>
 
 #include <deque>
@@ -71,7 +73,7 @@ private:
     std::deque<QPoint> m_turns;
     QPoint m_food;
 
-    std::mt19937 m_rng { std::random_device {}() };
+    std::mt19937 m_rng { dealSeed() };
     int m_score = 0;
     bool m_dead = false;
 };

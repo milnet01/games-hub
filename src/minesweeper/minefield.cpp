@@ -1,3 +1,5 @@
+#include "dealseed.h"
+
 #include "minefield.h"
 
 #include <algorithm>
@@ -7,7 +9,7 @@ Minefield::Minefield(int width, int height, int mines)
     : m_width(width)
     , m_height(height)
     , m_mines(std::min(mines, width * height - 9)) // leave room for a safe opening
-    , m_seed(std::random_device {}())
+    , m_seed(dealSeed())
 {
     m_squares.resize(std::size_t(width) * height);
 }

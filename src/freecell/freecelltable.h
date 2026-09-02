@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dealseed.h"
+
 #include "cards/card.h"
 
 #include <array>
@@ -110,6 +112,6 @@ private:
     int m_liftedColumn = -1;
 
     std::deque<Snapshot> m_history;
-    std::mt19937 m_rng { std::random_device {}() };
+    std::mt19937 m_rng { dealSeed() };
     int m_moves = 0;
 };

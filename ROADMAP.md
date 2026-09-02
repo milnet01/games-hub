@@ -6151,7 +6151,7 @@ open.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0166] **Three Canasta house-rule promises have never been seen rendered.**
+- ✅ [GHUB-0166] **Three Canasta house-rule promises have never been seen rendered.**
   verify-delivery ran over 0.5.0 and found no promise untrue, but three
   came back unverified rather than delivered, all for one reason:
   --shot photographs a game the MOMENT it opens, and a frozen pack, a
@@ -6165,6 +6165,38 @@ open.
   and notes it found two defects no arithmetic in the project had
   flagged. GHUB-0093's --seed, or a --turns flag, would retire that
   harness and make these checkable for good.
+  Resolved (2026-09-02) as far as looking can settle it. Two of the
+  three promises are now SEEN; the third produced a finding of its own.
+
+  `--turns <n>` plays a game forward before the picture is taken, with
+  every seat played by its computer, seat 0 included -- the board
+  otherwise stops dead on your turn, which reads as the flag not
+  working. GameView::advanceForShot is the hook and returns false by
+  default, so a game with no notion of a turn REFUSES rather than
+  photographing the deal. Canasta overrides it, straight through the
+  engine rather than the presentation path, so nothing is in the air when
+  the shot is taken.
+
+  SEEN, at --seed 11 --turns 26 under the House set: finished canastas
+  squared up on the red threes and turned about, alternating across and
+  upright (GHUB-0096), and each stack showing the colour of its top card
+  (GHUB-0097). Both correct.
+
+  NOT seen, and the reason is now known rather than suspected: at --seed
+  5 --turns 44 the pack was frozen, the badge said so, and no card lay
+  across the pile. The painter draws the top six cards and turns the
+  freezing card sideways at its own depth, so once six discards have
+  landed on it the T is not drawn at all. Filed as GHUB-0172 for the
+  owner to decide, because whether it is wrong is a judgement about a
+  real table rather than about the code.
+
+  The throwaway harness is retired. It was five source edits, rebuilt and
+  reverted each time; what is left is a scratch XDG_CONFIG_HOME holding a
+  hand-written Games.conf, which touches no source and is how any
+  stored-setting question is asked. CLAUDE.md's recipe is replaced with
+  the flags, and records that the config keys are the ones canastaview
+  writes -- teeFreeze, not freezeCardMakesATee -- which cost a wrong turn
+  here.
   **Layman:** Three things the release promised about how Canasta looks cannot be photographed, so nobody has checked them by eye.
   Kind: test.
   Source: verify-delivery 0.5.0, 2026-08-31.
@@ -6199,6 +6231,33 @@ open.
   **Layman:** A draughts game that neither side can win never ends; it just goes on.
   Kind: feature.
   Source: review-code sweep 2026-08-31, split from GHUB-0131.
+
+- 📋 [GHUB-0172] **A frozen pack stops showing its T once six cards have landed on top of it.**
+  Found by looking, on the first shot --turns made possible, which is what
+  GHUB-0166 asked for. A mid-hand Canasta position came back with the pack
+  frozen -- the badge said FROZEN and so did the status line -- and no card
+  lying across the pile.
+
+  The cause is in the pile painter, and is not a bug in the freeze itself.
+  It draws the top six cards (depth 0 to 5) and turns the freezing card
+  sideways AT ITS OWN DEPTH, which is GHUB-0094's fix for it appearing
+  twice. A card deeper than six from the top is never drawn at all, so the
+  T goes with it while the pack stays frozen.
+
+  Whether that is wrong is the owner's call, which is why this is filed
+  rather than fixed. Against fixing it: a real pile buries the card too,
+  and the FROZEN badge is on the play surface where he reads it. For
+  fixing it: GHUB-0095's promise is that the freezing card lies as a T,
+  and it is only true for six discards.
+
+  Options, if it is wrong. Draw the T at the deepest visible position
+  rather than its own, which reads as a lie about where the card is. Or
+  keep the pile's drawn depth but let the freeze card be drawn on top of
+  the stack it belongs to. Both need to be looked at rather than reasoned
+  about, and now can be.
+  **Layman:** The sideways card that marks a frozen pack disappears once enough cards are thrown on it, even though the pack is still frozen.
+  Kind: investigate.
+  Source: in-session-2026-09-02, first --turns shot.
 
 ## The score book on a phone
 
@@ -6819,7 +6878,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: test.
   Source: user-request-2026-08-22.
 
-- 📋 [GHUB-0093] **Two pictures of the same card game are never the same picture, so nothing can be compared.**
+- ✅ [GHUB-0093] **Two pictures of the same card game are never the same picture, so nothing can be compared.**
   GHUB-0090's `--shot` lets a layout be LOOKED at, which is most of the
   value. It does not let one be COMPARED, and the difference was measured
   while fixing GHUB-0092: a before-and-after pixel count came back at 10633
@@ -6841,6 +6900,29 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Not needed for looking at a layout, which is what the flag is for today.
   Needed the moment anyone wants to prove a visual change is confined to
   the thing it was aimed at.
+  Resolved (2026-09-02). `--seed <n>` pins the shuffle.
+
+  Every deal, board and computer seat now takes its seed from
+  src/dealseed.h rather than its own std::random_device -- eleven member
+  initialisers and Canasta's four AI seats. Pinned, successive calls walk
+  a fixed sequence rather than returning one number, so the four seats
+  still differ from one another and two runs still match; seeding them
+  alike would make one computer of four.
+
+  Process-wide, deliberately: a command-line flag is process-wide, and
+  the alternative is threading a seed through eleven constructors with no
+  other reason to know about one. It must be set before a game is built,
+  since the seeds are member initialisers, and main pins it before the
+  first game is opened.
+
+  The three static thread_local rngs -- chess, draughts and reversi AI
+  tie-breakers -- are left alone. They decide no deal, and those three
+  games open on a fixed position.
+
+  Measured, which is the whole point of the item. Two shots of Solitaire
+  at --seed 7 are byte-identical; at 7 against 8 they differ; with no
+  seed two runs still differ, so nothing changed for anyone playing. A
+  ctest run takes a seeded shot so the flag cannot rot.
   **Layman:** Every launch deals a different hand, so two screenshots of the same game cannot be put side by side to see what a change did.
   Kind: enhancement.
   Source: in-session-2026-08-22 GHUB-0092 fix.

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dealseed.h"
+
 #include "cards/card.h"
 
 #include <QDataStream>
@@ -105,5 +107,5 @@ private:
     int m_lastWinner = -1;
     int m_tricksPlayed = 0;
     bool m_heartsBroken = false;
-    std::mt19937 m_rng { std::random_device {}() };
+    std::mt19937 m_rng { dealSeed() };
 };

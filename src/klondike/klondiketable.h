@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dealseed.h"
+
 #include "cards/card.h"
 
 #include <array>
@@ -118,7 +120,7 @@ private:
     int m_heldPile = 0;
 
     std::deque<Snapshot> m_history;
-    std::mt19937 m_rng { std::random_device {}() };
+    std::mt19937 m_rng { dealSeed() };
     int m_drawCount = 1;
     int m_score = 0;
 };

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dealseed.h"
+
 #include "cards/card.h"
 
 #include <QDataStream>
@@ -99,7 +101,7 @@ private:
     std::vector<Card> m_waste;
     std::vector<Snapshot> m_history;
 
-    std::mt19937 m_rng { std::random_device {}() };
+    std::mt19937 m_rng { dealSeed() };
     int m_pairs = 0;
     int m_redeals = 0;
 };

@@ -28,6 +28,27 @@ public:
     // construction: a game reads Legibility::instance().enabled() itself when
     // it builds. The default repaints, which is enough for a game that reads
     // the setting inside paintEvent; a game that caches geometry overrides it.
+    // Play the game forward by `turns` of its OWN turns, for --shot, and
+    // return false where the game has no notion of one. Anything a card game
+    // only shows once a hand has been played -- a frozen pack, a finished
+    // canasta and the badge that names it -- does not exist at the deal, so a
+    // picture taken the moment a game opens cannot reach it (GHUB-0166).
+    // Getting one used to take a throwaway harness of five source edits.
+    //
+    // Synchronous, unanimated and silent by contract: the shot is taken the
+    // moment this returns, so a card still in the air would be photographed
+    // half-way to somewhere. A game that overrides this settles itself.
+    //
+    // Refusing is a real answer rather than a failure. --shot refuses a turn
+    // count aimed at a game that cannot play itself, for the same reason it
+    // refuses an unknown game: a picture of the wrong thing still gets written
+    // and still looks like an answer.
+    virtual bool advanceForShot(int turns)
+    {
+        Q_UNUSED(turns);
+        return false;
+    }
+
     virtual void applyLegibility(bool enabled)
     {
         Q_UNUSED(enabled);

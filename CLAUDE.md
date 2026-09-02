@@ -28,50 +28,59 @@ cmake --build build                     # build everything
 # Photograph a game instead of playing it. Needs no display, no compositor and
 # no injection tool, so it works here under Wayland, over plain SSH, and on a
 # CI runner. --legible turns large play on for the shot without writing it to
-# settings. Use it before reasoning about a layout: this is the only thing in
-# the project that can SEE one.
+# settings; --seed pins the deal so two shots can be compared; --turns plays the
+# game forward first. Use it before reasoning about a layout: this is the only
+# thing in the project that can SEE one.
 QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/hearts.png \
       --game hearts --size 1400x620 --legible
 
 # Unlike playing, an unknown --game REFUSES rather than falling back to the
-# grid, and a malformed --size refuses rather than picking another size. A
-# picture of the wrong thing is the one failure a screenshot cannot survive:
-# it still gets written, and it still looks like an answer.
+# grid; a malformed --size refuses rather than picking another size; and --turns
+# refuses a game that cannot play itself. A picture of the wrong thing is the
+# one failure a screenshot cannot survive: it still gets written, and it still
+# looks like an answer.
 
-cd build && ctest --output-on-failure   # both test binaries, the two --shot
-                                        # runs and the hook test
+cd build && ctest --output-on-failure   # both test binaries, the --shot runs
+                                        # and the hook test
 cmake --install build                   # refresh the installed copy
 ```
 
-**`--shot` photographs a game the moment it opens, which for a card game is a
-deal and nothing else.** Any layout that only appears once a hand has been
-played — Canasta's melds, its canasta stack, a frozen pack — is invisible to
-it. Getting one on screen took a **throwaway harness**, and the recipe is
-written down here because rebuilding it is half an hour and every piece of it
-is non-obvious:
+**A shot is taken the moment a game opens, which for a card game is a deal and
+nothing else — so `--turns` plays it forward first.** Anything that only exists
+once a hand has been played (Canasta's melds, its canasta stack, a frozen pack)
+is otherwise invisible.
 
-1. `kAiPause` to `0.0` in `canastaview.cpp`, or the computers move once a
-   second and nine seconds buys nine moves.
-2. The `else if (m_engine.currentSeat() != 0)` guard in `CanastaView::tick()`
-   to `else if (true)`, so seat 0 plays itself. Without it the game stops dead
-   on your turn and waits, which looks like the fast-forward not working.
-3. A spin in `takeShot()` before `window.grab()` — `QElapsedTimer` plus
-   `processEvents` for ~9 seconds.
-4. `XDG_CONFIG_HOME` pointed at a scratch directory holding a hand-written
-   `GamesHub/Games.conf`, so **the owner's real settings are never touched**.
-   It needs `useHouse=true` as well as the `house\...` keys — the rule set in
-   force is a separate setting, and with it missing the toolbar comes up
-   Classic and a house-rule layout never appears at all.
-5. `house\canastaSize=4` to make canastas form in one hand instead of five.
+```bash
+# A frozen pack, mid-hand, with the House rules in force.
+XDG_CONFIG_HOME=/tmp/shot QT_QPA_PLATFORM=offscreen ./build/gameshub \
+      --shot /tmp/canasta.png --game canasta --size 1400x760 --seed 5 --turns 44
+```
 
-Then revert all of it. **`git diff` is the check** — the harness must not
-survive into a commit.
+`--turns` runs the game's own turns with every seat played by its computer,
+**seat 0 included** — the board otherwise stops dead on your turn, which reads
+as the flag not working. It is synchronous and silent: nothing is in the air
+when the picture is taken. A game that has no notion of a turn REFUSES rather
+than photographing the deal, for the same reason an unknown `--game` does.
+`GameView::advanceForShot` is the hook; Canasta is the only game that overrides
+it so far.
 
-**Two things this found that no arithmetic in the project had flagged**: a
-four-canasta stack whose name badges landed on top of one another, and the
-right-hand end of that stack hanging over the edge of the band. GHUB-0093
-(a `--seed` flag) would make the shots comparable; a `--turns` flag would
-retire steps 1 to 3 and has not been asked for.
+`--seed` pins the shuffle, so two runs deal the same cards and a before-and-after
+pixel count measures the change rather than the deal. It reaches every deal,
+board and computer seat through `src/dealseed.h`, and must be set before a game
+is built — the seeds are member initialisers.
+
+**Point `XDG_CONFIG_HOME` at a scratch directory holding a hand-written
+`GamesHub/Games.conf` for anything that depends on a stored setting**, so the
+owner's real settings are never touched. Canasta's House set needs `useHouse=true`
+as well as the `house\...` keys: the rule set in force is a separate setting, and
+without it the toolbar comes up Classic and a house-rule layout never appears.
+The keys are the ones `canastaview.cpp` writes, not the `Rules` field names —
+`teeFreeze`, not `freezeCardMakesATee`.
+
+This replaced a throwaway harness of five source edits that had to be rebuilt and
+reverted each time. It found a four-canasta stack whose badges landed on top of
+one another, and that stack hanging over the edge of its band — neither flagged
+by any arithmetic in the project.
 
 Run a test binary directly for its per-check output — `ctest` only reports
 pass/fail:
@@ -453,12 +462,13 @@ antialiases differently. And **a rotated FACE is never cached** — resampling
 softens it, and this game is read by pip pattern. Rotated backs are cached
 because there is nothing on a back to read.
 
-**`--shot` cannot compare two card games.** The deal is random, so two runs of
-one build differ in about 101,000 of 740,000 pixels. That is GHUB-0093, and it
-produced two confident wrong readings before it was spotted. To compare a
-drawing change, build a scratch probe that draws the shape at a fixed rect
-against both trees — or use a deterministic surface like the tile grid, which
-matches itself exactly.
+**Comparing two shots of a card game needs `--seed`, and without it the number
+you get is the shuffle.** The deal is random per launch, so two runs of one
+build differed in about 101,000 of 740,000 pixels — which produced two confident
+wrong readings before it was spotted (GHUB-0093). With the same seed two runs
+are byte-identical, which is what makes a pixel diff mean anything. A
+deterministic surface like the tile grid still matches itself with no seed at
+all.
 
 **A widget that resizes its own window after lowering its minimum must let the
 layout catch up first.** `setMinimumSize()` lowers *that widget's* floor, but

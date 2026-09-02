@@ -158,7 +158,7 @@ bool Engine::fail(const QString& why) const
 
 void Engine::newGame()
 {
-    newGame(std::random_device {}());
+    newGame(dealSeed());
 }
 
 void Engine::newGame(unsigned seed)

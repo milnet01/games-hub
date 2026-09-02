@@ -1,5 +1,7 @@
 #include "canastaview.h"
 
+#include "dealseed.h"
+
 #include "cards/cardart.h"
 #include "legibility.h"
 #include "scores.h"
@@ -676,11 +678,12 @@ void CanastaView::newGame()
     m_engine.newGame();
 
     // Fresh seeds each game, so the same three opponents do not replay the same
-    // decisions every time you press New Game.
-    std::random_device rd;
+    // decisions every time you press New Game -- unless --seed pinned the
+    // sequence, in which case the four seats still differ from one another and
+    // two runs still match (GHUB-0093).
     applyLevels();
     for (ca::Ai& ai : m_ai)
-        ai.seed(rd());
+        ai.seed(dealSeed());
 
     m_flights.clear();
     m_selected.clear();
@@ -699,6 +702,52 @@ void CanastaView::newGame()
     flyTheDeal();
     m_timer->start();
     refresh();
+}
+
+bool CanastaView::advanceForShot(int turns)
+{
+    // Straight through the engine rather than aiHalfTurn(), which is the
+    // presentation path: it flies cards, makes noise and sets a pause. None of
+    // that survives to a still picture, and a flight left in the air would be
+    // drawn part-way to its destination.
+    //
+    // Seat 0 is played by its own computer here. Without that the board stops
+    // dead on your turn and waits, which reads as the flag not working.
+    for (int i = 0; i < turns; ++i) {
+        if (m_engine.phase() == ca::Engine::Phase::GameOver)
+            break;
+        if (m_engine.phase() == ca::Engine::Phase::HandOver) {
+            m_engine.nextHand();
+            continue;
+        }
+        ca::Ai& ai = m_ai[std::size_t(m_engine.currentSeat())];
+        if (m_engine.phase() == ca::Engine::Phase::Draw)
+            ai.draw(m_engine);
+        // Re-read: draw() may have ended the hand by emptying the stock.
+        if (m_engine.phase() == ca::Engine::Phase::Play)
+            ai.playAndDiscard(m_engine);
+    }
+
+    // Settled, not merely stopped. The same tidy-up a restored game does, and
+    // for the same reason: what is on screen has to be the position the engine
+    // is actually in.
+    m_flights.clear();
+    m_selected.clear();
+    m_hover = -1;
+    m_hoverMeld = -1;
+    m_pressIndex = -1;
+    m_dragging = false;
+    m_pause = kAiPause;
+    m_celebrate = 0.0;
+    m_lastThrownBy = -1;
+    m_message.clear();
+    m_canastaOrder = {};
+    trackCanastas();
+    m_canastasShown = canastaCount(m_engine.team(0), m_engine.rules());
+    m_awaitingContinue = m_engine.phase() == ca::Engine::Phase::HandOver;
+    sortHand();
+    refresh();
+    return true;
 }
 
 QByteArray CanastaView::saveState() const

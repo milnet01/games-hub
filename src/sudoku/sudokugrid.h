@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dealseed.h"
+
 #include <QDataStream>
 
 #include <array>
@@ -65,5 +67,5 @@ private:
     std::array<int, kCells> m_puzzle {};
     std::array<int, kCells> m_working {};
     std::array<std::uint16_t, kCells> m_marks {};
-    std::mt19937 m_rng { std::random_device {}() };
+    std::mt19937 m_rng { dealSeed() };
 };
