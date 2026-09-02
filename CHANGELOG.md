@@ -17,6 +17,18 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **A Canasta hand-size change now applies at the next hand, as the game says.** (GHUB-0150)
+  Changing the pack size, the jokers or the hand size mid-game waited
+  for a whole new game rather than the next hand, so correcting a house
+  rule meant abandoning the game you were in.
+
+- **A Canasta take can no longer leave you with nothing you are allowed to do.** (GHUB-0148)
+  Where the deal had turned a red three into the pack, taking it could
+  leave you on one card with no canasta -- unable to go out, and so
+  unable to throw your last card either. The turn simply could not be
+  finished. The same miscount could also let a side go out without the
+  canasta the rules require.
+
 - **The game tiles tell a screen reader which game they open.** (GHUB-0132)
   Each tile paints a picture and carries no text, so a screen reader
   found fourteen unnamed buttons on the first page of the app. They

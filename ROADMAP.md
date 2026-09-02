@@ -5579,7 +5579,7 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0150] **Canasta: pending rule changes take effect at the next game, not the next hand.**
+- ✅ [GHUB-0150] **Canasta: pending rule changes take effect at the next game, not the next hand.**
   canastaengine.h documents pack size, jokers and hand size as taking
   effect "from the next hand". applyRules pins those three on m_rules
   and leaves the new values in m_pendingRules, which is consumed by
@@ -5587,6 +5587,22 @@ open.
   calls deal(), which reads m_rules. Given the stated intent (nobody
   should have to abandon a game to correct a house rule) the code is
   the likely wrong side; if not, the comment is.
+  Resolved (2026-09-02): the CODE was the wrong side, as the finding
+  suspected. nextHand() now takes m_rules from m_pendingRules before
+  dealing, which is what the header has always promised and why it
+  promises it -- nobody should have to abandon a game to correct a
+  house rule.
+
+  The whole assignment rather than the three fields by name, and it
+  mirrors newGame(). applyRules already applies everything except pack
+  size, jokers and hand size at once, so m_rules and m_pendingRules
+  differ in exactly those three: assigning the lot is the same edit
+  with one fewer place to forget a field when a fourth is added.
+
+  Six checks in the selftest. HandOver is reached by dealing with
+  nothing under the turn-up, which ends the hand immediately -- the
+  cheapest route there, borrowed from canastaDeadHand. The last two
+  were proven red.
   **Layman:** Change the hand size mid-game and it does not apply until you start a whole new game, with nothing saying so.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

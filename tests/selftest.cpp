@@ -2848,6 +2848,38 @@ void canastaCaughtAMinus()
 // finds an empty stock and a pile nobody can take. Classic scores that where it
 // stands; the house rule voids it and the next hand is dealt from the same
 // totals.
+void canastaPendingSizesTakeEffectOnTheNextHand()
+{
+    // The header promises the three numbers that shaped the deal -- pack size,
+    // jokers and hand size -- carry on as dealt and take effect "from the next
+    // hand", and says why: nobody should have to abandon a game to correct a
+    // house rule. nextHand() dealt straight off m_rules and only newGame()
+    // consumed m_pendingRules, so in practice they waited for a new GAME.
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(4);
+    hands[1] = filler(5);
+    hands[2] = filler(6);
+    hands[3] = filler(7);
+
+    // Nothing under the turn-up ends the hand at once, which is the cheapest
+    // way to reach HandOver.
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, {}, cd(Suit::Spades, 9)), 0);
+    check(e.phase() == ca::Engine::Phase::HandOver, "canasta: the hand is over");
+    check(e.rules().handSize == 11, "canasta: dealt at the standard eleven");
+
+    ca::Rules bigger = ca::Rules::classic();
+    bigger.handSize = 13;
+    e.applyRules(bigger);
+    check(e.rules().handSize == 11,
+          "canasta: a hand size changed mid-game leaves the cards already dealt alone");
+    check(e.pendingRules().handSize == 13, "canasta: and is held as pending");
+
+    e.nextHand();
+    check(e.rules().handSize == 13, "canasta: it takes effect on the very next hand");
+    check(int(e.hand(0).size()) == 13, "canasta: which is dealt at the new size");
+}
+
 void canastaDeadHand()
 {
     std::array<std::vector<Card>, 4> hands;
@@ -5259,6 +5291,7 @@ int main()
     canastaFullGames();
     canastaLevelsDiffer();
     canastaHouseRules();
+    canastaPendingSizesTakeEffectOnTheNextHand();
     canastaDeadHand();
     canastaWinningIsReachingTheTarget();
     canastaFrozenPileDepth();

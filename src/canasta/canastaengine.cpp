@@ -191,6 +191,16 @@ void Engine::nextHand()
 {
     if (m_phase != Phase::HandOver)
         return;
+    // THIS is the next hand, so this is where the three numbers applyRules had
+    // to pin -- pack size, jokers and hand size -- finally take effect. They
+    // cannot change under cards already dealt, which is why applyRules carries
+    // them on as dealt; but only newGame() consumed m_pendingRules, so in
+    // practice they waited for a whole new GAME. The header promises the next
+    // hand, and promises it so that nobody has to abandon a game to correct a
+    // house rule. m_rules differs from m_pendingRules in those three alone,
+    // applyRules having already applied everything else at once, so the whole
+    // assignment is the same edit and mirrors newGame().
+    m_rules = m_pendingRules;
     m_dealer = (m_dealer + 1) % kSeats;
     deal();
 }
