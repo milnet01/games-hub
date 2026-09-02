@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -208,38 +207,47 @@ def check_contrast() -> int:
 # definition line itself; the last drops comment lines, two of which
 # legitimately discuss the number in canastaview.cpp.
 #
-# It deliberately does NOT filter with `grep -v 0x`, which drops the WHOLE line
-# and so hides `if (w < 46.0 && c == 0xff)` — a test a violation can hide from
-# is not a test.
-THRESHOLD_GREP = (
-    r"grep -rnE '(^|[^0-9A-Fa-fx.])46(\.0)?([^0-9A-Fa-f]|$)' src "
-    r"--include=*.cpp --include=*.h "
-    r"| grep -v kFaceMinWidth "
-    r"| grep -vE '^[^:]+:[0-9]+: *//'"
-)
+# It deliberately does NOT drop a line merely for containing `0x`, which would
+# hide `if (w < 46.0 && c == 0xff)` -- a test a violation can hide from is not
+# a test.
+#
+# Scanned in Python rather than shelled out to grep. It was a `grep | grep |
+# grep` pipeline under shell=True, which on Windows is cmd.exe: no grep, and
+# the pattern's `$)` read as a command. The guard below caught that and failed
+# rather than reporting an unearned pass, which is what it is for -- but the
+# check had never once run on that platform.
+THRESHOLD_RE = re.compile(r"(^|[^0-9A-Fa-fx.])46(\.0)?([^0-9A-Fa-f]|$)")
+COMMENT_RE = re.compile(r"\s*//")
 
 
 def check_thresholds() -> int:
-    result = subprocess.run(THRESHOLD_GREP, shell=True, cwd=ROOT,
-                            capture_output=True, text=True)
-    # grep exits 1 for "no matches", which is the pass. Anything else means the
-    # pipeline could not run -- no grep on PATH, src/ renamed, a bad -E pattern
-    # -- and that produces empty stdout, exactly like a clean tree. INV-4 is the
-    # only thing that catches a second hardcoded 46, so a pass it did not earn
-    # is a dead invariant announcing itself as green.
-    if result.returncode not in (0, 1) or result.stderr.strip():
-        print("FAIL  the threshold grep could not run:")
-        for line in result.stderr.splitlines() or [f"exit status {result.returncode}"]:
-            print(f"      {line}")
+    hits = []
+    scanned = 0
+    for path in sorted(SRC.rglob("*")):
+        if path.suffix not in (".cpp", ".h"):
+            continue
+        scanned += 1
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in enumerate(path.read_text(encoding="utf-8",
+                                                     errors="replace").splitlines(), 1):
+            if not THRESHOLD_RE.search(line):
+                continue
+            if "kFaceMinWidth" in line or COMMENT_RE.match(line):
+                continue
+            hits.append(f"{rel}:{number}: {line.strip()}")
+    # INV-4 is the only thing that catches a second hardcoded 46, so a pass it
+    # did not earn is a dead invariant announcing itself as green. A renamed or
+    # empty src/ produces no hits, exactly like a clean tree.
+    if not scanned:
+        print("FAIL  the threshold scan found no sources under src/")
         return 1
-    hits = [line for line in result.stdout.splitlines() if line.strip()]
     if hits:
         print("FAIL  the 46-pixel threshold is stated outside cardart.h:")
         for line in hits:
             print(f"      {line}")
         return 1
-    print("pass  kFaceMinWidth in src/cards/cardart.h is the only "
-          "statement of the 46-pixel threshold")
+    print(f"pass  kFaceMinWidth in src/cards/cardart.h is the only "
+          f"statement of the 46-pixel threshold ({scanned} sources scanned)")
     return 0
 
 

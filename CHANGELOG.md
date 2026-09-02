@@ -17,6 +17,10 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **The legibility threshold check could never run on Windows, and reddened master.** (GHUB-0171)
+  The check shelled out to a grep pipeline, which cmd.exe cannot run.
+  It is a Python scan now, so it behaves the same on both platforms.
+
 - **The Hearts sentence no longer sits on top of the card you just played.** (GHUB-0147)
   With large play on, the plate carrying what the game is telling you
   grew upward out of the gap it was given and covered your own card in

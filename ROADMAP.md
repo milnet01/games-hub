@@ -7073,6 +7073,39 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: fix.
   Source: GHUB-0139, measured 2026-09-02.
 
+- ✅ [GHUB-0171] **The legibility threshold check could never run on Windows, and reddened master.**
+  scripts/legibility-check.py --thresholds ran a three-stage `grep`
+  pipeline through subprocess with shell=True. On Windows that shell is
+  cmd.exe, which has no grep and read the pattern's `$)` as a command,
+  so the check failed on every Windows CI run. Six consecutive pushes to
+  master went red on that leg alone; Linux and the sanitiser job passed
+  each time.
+
+  Its own guard is why this was visible rather than silent: the runner
+  refuses any exit status other than grep's 0 or 1, and refuses a
+  non-empty stderr, precisely so a pipeline that could not run cannot
+  report an unearned pass. It did exactly that, for six runs.
+
+  Resolved (2026-09-02): the scan is Python now -- pathlib over
+  src/**/*.{cpp,h} and one compiled regex per line -- so there is no
+  shell, no grep and no quoting to differ between platforms. The three
+  exclusions are unchanged in meaning: the leading character class still
+  rejects 0x46 and 0.46, the kFaceMinWidth line is still dropped, and a
+  line whose content starts with // is still a comment. Verified two
+  ways: the new scan and the old grep agree on the current tree (both
+  clean), and a probe adding kProbe = 46.0 alongside 0x46 and 0.46 to a
+  source file was caught, with only the real violation reported.
+
+  The "could not run" guard is kept in the form the new shape allows: a
+  scan that finds no sources under src/ fails rather than reporting a
+  clean tree.
+
+  Not covered by scripts/wintest-ci.sh, which runs a subset of the
+  ctest set.
+  **Layman:** One of the automatic checks was written in a way only Linux could run, so every push to GitHub failed.
+  Kind: fix.
+  Source: in-session-2026-09-02.
+
 ### 🎨 More games, if wanted
 
 - 💭 [GHUB-0021] **More card games, none of which need a new asset.**
