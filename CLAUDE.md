@@ -40,8 +40,12 @@ QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/hearts.png \
 # one failure a screenshot cannot survive: it still gets written, and it still
 # looks like an answer.
 
-cd build && ctest --output-on-failure   # both test binaries, the --shot runs
-                                        # and the hook test
+cd build && ctest --output-on-failure   # both test binaries, the --shot runs,
+                                        # the hook test, and two Python checks
+                                        # -- scorepad (the phone score book's
+                                        # numbers against the game's) and
+                                        # legibility (the kFaceMinWidth
+                                        # threshold)
 cmake --install build                   # refresh the installed copy
 ```
 
@@ -58,24 +62,35 @@ XDG_CONFIG_HOME=/tmp/shot QT_QPA_PLATFORM=offscreen ./build/gameshub \
 
 `--turns` runs the game's own turns with every seat played by its computer,
 **seat 0 included** — the board otherwise stops dead on your turn, which reads
-as the flag not working. It is synchronous and silent: nothing is in the air
-when the picture is taken. A game that has no notion of a turn REFUSES rather
+as the flag not working. A game that has no notion of a turn REFUSES rather
 than photographing the deal, for the same reason an unknown `--game` does.
-`GameView::advanceForShot` is the hook; Canasta is the only game that overrides
-it so far.
+
+`GameView::advanceForShot` is the hook, and Canasta is the only game that
+overrides it so far. **A game that overrides it must SETTLE itself before
+returning** — clear pending flights, selection, pauses and any celebration, and
+re-sort — because the picture is taken the moment it returns and a card still in
+the air is photographed half-way to somewhere. Nothing catches a breach: the
+ctest case photographs Canasta only, and a wrong picture still looks like an
+answer.
 
 `--seed` pins the shuffle, so two runs deal the same cards and a before-and-after
 pixel count measures the change rather than the deal. It reaches every deal,
 board and computer seat through `src/dealseed.h`, and must be set before a game
 is built — the seeds are member initialisers.
 
+**So a new game takes its randomness from `dealSeed()`, as a member
+initialiser**, and a game that reaches for `std::random_device` or
+`QRandomGenerator` instead drops silently out of `--seed`'s reach. Nothing
+catches that: the seeded ctest case never compares two shots, so it passes
+either way.
+
 **Point `XDG_CONFIG_HOME` at a scratch directory holding a hand-written
 `GamesHub/Games.conf` for anything that depends on a stored setting**, so the
 owner's real settings are never touched. Canasta's House set needs `useHouse=true`
-as well as the `house\...` keys: the rule set in force is a separate setting, and
-without it the toolbar comes up Classic and a house-rule layout never appears.
-The keys are the ones `canastaview.cpp` writes, not the `Rules` field names —
-`teeFreeze`, not `freezeCardMakesATee`.
+as well as the `house\...` keys, **both under a `[canasta]` group**: the rule set
+in force is a separate setting, and without it the toolbar comes up Classic and a
+house-rule layout never appears. The keys are the ones `canastaview.cpp` writes,
+not the `Rules` field names — `teeFreeze`, not `freezeCardMakesATee`.
 
 This replaced a throwaway harness of five source edits that had to be rebuilt and
 reverted each time. It found a four-canasta stack whose badges landed on top of
@@ -90,7 +105,14 @@ pass/fail:
 QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest     # widgets and hub
 QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest --bench   # frame cost alone
 tests/pre-push-test.sh                                # which arm the hook takes
+python3 scripts/scorepad-check.py                     # score book vs the game
+python3 scripts/legibility-check.py --thresholds      # kFaceMinWidth is unique
 ```
+
+The last two are pure Python and run as ctest cases, so a check skipped here is
+caught there. They register only where CMake finds an interpreter it will use:
+a Windows box with the Store stub `python.exe` registers seven tests where the
+GitHub runner registers nine, and the configure step says so.
 
 **`--bench` is the only thing here that can time a frame**, and it is what
 makes a painting change provable. It prints ms/frame for Canasta mid-deal and
@@ -167,9 +189,11 @@ before believing an ID never shipped.
 ## Releasing
 
 Two workflows in `.github/workflows/`, contract in
-`docs/specs/GHUB-0025-downloadable-builds.md`. `ci.yml` builds and runs both
-test binaries on `ubuntu-24.04` and `windows-2022` for every push **to
-`master`** and every pull request. A push to any other branch runs nothing, so
+`docs/specs/GHUB-0025-downloadable-builds.md`. `ci.yml` builds and runs
+`ctest` -- every registered case, not just the two binaries -- on `ubuntu-24.04`
+and `windows-2022` for every push **to `master`** and every pull request. That
+includes the Python checks, which is how a Linux-only `grep` pipeline in one of
+them reddened the Windows leg six times (GHUB-0171). A push to any other branch runs nothing, so
 the Windows leg — the only place MSVC is exercised — does not run on branch
 work until a pull request opens. `release.yml`
 turns a tag into a Linux AppImage and a Windows zip on the releases page.
@@ -425,9 +449,11 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   house variation should be a new field there, not a branch in the engine.
   `canasta/canastaai.*` is judgement rather than search, so unlike Chess it
   needs no work budget. **Its four levels are checked against each other, not
-  just described** — `canastaLevelsDiffer()` plays each rung against the one
-  below it, which is how Hard was caught being weaker than Medium. Any change
-  to one level has to be re-measured against its neighbours.
+  just described** — `canastaLevelsDiffer()` plays four rungs -- each level
+  against the one below it, plus **hard against easy**, which is not adjacent --
+  and that is how Hard was caught being weaker than Medium. Any change to one
+  level has to be re-measured against **every rung it appears in**, which for
+  Hard is three of the four.
   `canasta/canastaview.*` is presentation and timing.
 - **Pinball** — `pinball/pinballtable.*` is the simulation in fixed table units
   (400×720), scaled to the widget so resizing never changes the physics.
@@ -464,9 +490,11 @@ because there is nothing on a back to read.
 
 **Comparing two shots of a card game needs `--seed`, and without it the number
 you get is the shuffle.** The deal is random per launch, so two runs of one
-build differed in about 101,000 of 740,000 pixels — which produced two confident
-wrong readings before it was spotted (GHUB-0093). With the same seed two runs
-are byte-identical, which is what makes a pixel diff mean anything. A
+build differ substantially — two confident wrong readings came of that before it
+was spotted (GHUB-0093), and both figures that item records are UNSEEDED, so
+neither is a noise floor for a seeded run. With the same seed two runs are
+byte-identical, measured with `cmp`, which is what makes a pixel diff mean
+anything: any difference at all is the change. A
 deterministic surface like the tile grid still matches itself with no seed at
 all.
 
@@ -527,7 +555,7 @@ the same. Canasta's meld layout hit this.
 only the corner index, because pips are unreadable smaller than that. That
 constant in `cardart.h` is the number's only definition, and
 `scripts/legibility-check.py --thresholds` fails if any other source states it
-as a literal. A game holding the threshold must hold it at the **smallest scale
+as a literal. It runs as the `legibility` ctest case rather than by hand. A game holding the threshold must hold it at the **smallest scale
 it draws a card at**, not at 1.0 — Canasta's melds at 0.74 need `cardWidth()`
 ≥ 62.2, not 46. Anything
 drawing cards at reduced scale — Canasta's melds are `kMeldScale` = 0.74, its
@@ -685,8 +713,8 @@ restores a full hand into the endgame. Without that check a corrupt blob
 restores into a deal that cannot be won, and the player finds out an hour later.
 Minesweeper, Reversi, Draughts, Sudoku and 2048 have no pack at all, so what
 stands in is the check their `restore()`/`load()` makes, refusing a board the
-game could not have reached (in a core for the first four, and in the view for
-2048, which has none): the mine count must match the level and
+game could not have reached, in a core in all five cases since GHUB-0066 split
+the last of them out: the mine count must match the level and
 the numbers are recomputed rather than read, a Reversi board must hold at least
 the opening four discs, a draughts piece may not stand on a light square, a
 Sudoku solution must be a completed grid that every clue agrees with, and

@@ -7,7 +7,8 @@
 // one card game comparable: the deal is otherwise random per launch, and a
 // before-and-after pixel count then measures the shuffle rather than the change
 // (GHUB-0093 -- measured at 10633 changed pixels against a same-binary control
-// of 6416).
+// of 6416, BOTH unseeded, so neither is a noise floor for a seeded run: two
+// runs at one seed are byte-identical).
 //
 // Pinned, successive calls walk a fixed sequence rather than returning one
 // number over and over. Four computer seats still differ from one another, and
