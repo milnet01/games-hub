@@ -209,13 +209,22 @@ static void drawFace(QPainter& p, const QRectF& r, const Card& c)
         // A narrow column: wide enough for "10", narrow enough to leave the
         // middle of the card free for the pips.
         const QRectF box(r.left() + pad, r.top() + pad * 0.4, r.width() * 0.24, r.height() * 0.20);
-        p.drawText(box, Qt::AlignLeft | Qt::AlignTop, rank);
+        // TextDontClip, for the reason SudokuView::markFont() gives: drawText
+        // CLIPS to its rect, so a font is bounded by its LINE box rather than
+        // by its ink. Two digits at this size want roughly 0.25 to 0.27 of the
+        // card's width against the 0.24 here, so "10" was already tight -- and
+        // on an offscreen platform with no fonts, where digits measure the full
+        // em box, it wants about 0.45 and lost half of itself. Below
+        // kFaceMinWidth this index IS the card, which is where it matters most.
+        // With AlignLeft|AlignTop the origin does not move, so nothing else
+        // about the layout changes.
+        p.drawText(box, Qt::AlignLeft | Qt::AlignTop | Qt::TextDontClip, rank);
 
         f.setBold(false);
         f.setPointSizeF(indexSize * 0.88);
         p.setFont(f);
         p.drawText(QRectF(box.left(), box.top() + r.height() * 0.125, box.width(), r.height() * 0.18),
-                   Qt::AlignLeft | Qt::AlignTop, suit);
+                   Qt::AlignLeft | Qt::AlignTop | Qt::TextDontClip, suit);
         p.restore();
     }
 
@@ -445,15 +454,18 @@ static bool blitCached(QPainter& p, const QRectF& r, std::unordered_map<uint64_t
 
 void paintBack(QPainter& p, const QRectF& r, int deck)
 {
+    p.save();
     // Two colourways and a handful of sizes, so the bound is generous.
     static std::unordered_map<uint64_t, QPixmap> cache;
     if (!blitCached(p, r, cache, 64, deck, true,
                     [deck](QPainter& into, const QRectF& at) { drawBack(into, at, deck); }))
         drawBack(p, r, deck);
+    p.restore();
 }
 
 void paintFace(QPainter& p, const QRectF& r, const Card& c)
 {
+    p.save();
     // FreeCell puts all fifty-two on the table at once and Pyramid twenty-eight,
     // so this one holds a whole pack at two sizes rather than a handful.
     static std::unordered_map<uint64_t, QPixmap> cache;
@@ -463,10 +475,12 @@ void paintFace(QPainter& p, const QRectF& r, const Card& c)
     if (!blitCached(p, r, cache, 160, identity, false,
                     [&c](QPainter& into, const QRectF& at) { drawFace(into, at, c); }))
         drawFace(p, r, c);
+    p.restore();
 }
 
 void paintSlot(QPainter& p, const QRectF& r, const QString& glyph)
 {
+    p.save();
     QPainterPath path;
     path.addRoundedRect(r, corner(r), corner(r));
     p.fillPath(path, QColor(0, 0, 0, 40));
@@ -481,15 +495,18 @@ void paintSlot(QPainter& p, const QRectF& r, const QString& glyph)
         p.setPen(QColor(255, 255, 255, 70));
         p.drawText(r, Qt::AlignCenter, glyph);
     }
+    p.restore();
 }
 
 void paintHighlight(QPainter& p, const QRectF& r, const QColor& colour)
 {
+    p.save();
     QPainterPath path;
     path.addRoundedRect(r.adjusted(-1.5, -1.5, 1.5, 1.5), corner(r), corner(r));
     p.setBrush(Qt::NoBrush);
     p.setPen(QPen(colour, 2.5));
     p.drawPath(path);
+    p.restore();
 }
 
 } // namespace CardArt

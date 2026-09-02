@@ -14,6 +14,7 @@
 #include "cards/cardart.h"
 #include "cards/cardcodec.h"
 #include "cards/cardflight.h"
+#include "chess/chessart.h"
 #include "chess/chessboard.h"
 #include "chess/chessview.h"
 #include "draughts/draughtsview.h"
@@ -46,12 +47,14 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QElapsedTimer>
+#include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
 #include <QStatusBar>
 #include <QToolBar>
 
 #include <algorithm>
+#include <functional>
 #include <cstdlib>
 #include <random>
 #include <cstdio>
@@ -1951,6 +1954,60 @@ int main(int argc, char* argv[])
               "hub: canasta really does ask for more room than chess");
         check(after == alone,
               "hub: and going back to chess gives its own floor back");
+    }
+
+    // ---- Card art hands the painter back as it found it ----
+    //
+    // paintSlot and paintHighlight set pen, brush and font on the CALLER's
+    // painter and never put them back, and the two paths through paintFace left
+    // it in different states: a cached blit touches nothing, while the live
+    // fallback -- taken on any non-translate transform, or a card over 4096
+    // device pixels -- draws directly and leaks the last font and ink pen. So a
+    // caller that worked today broke as soon as a card was rotated or the window
+    // grew. Only CanastaView wrapped its own calls; spiderview calls
+    // paintHighlight bare inside a paint loop.
+    {
+        QPixmap canvas(240, 240);
+        canvas.fill(Qt::black);
+        QPainter p(&canvas);
+
+        const QPen pen(QColor(0x11, 0x22, 0x33), 3.0);
+        const QBrush brush(QColor(0x44, 0x55, 0x66));
+        QFont font = p.font();
+        font.setPointSizeF(17.5);
+        font.setBold(true);
+
+        const auto handsItBack = [&](const char* what, const std::function<void()>& draw) {
+            p.resetTransform();
+            p.setPen(pen);
+            p.setBrush(brush);
+            p.setFont(font);
+            draw();
+            check(p.pen() == pen && p.brush() == brush && p.font() == font, what);
+        };
+
+        const Card queen { Suit::Hearts, kQueen, true, 0 };
+        const QRectF where(20, 20, 90, 126);
+
+        handsItBack("cardart: paintFace leaves the painter as it found it",
+                    [&] { CardArt::paintFace(p, where, queen); });
+        handsItBack("cardart: paintBack too", [&] { CardArt::paintBack(p, where, 0); });
+        handsItBack("cardart: and paintSlot", [&] { CardArt::paintSlot(p, where, QStringLiteral("K")); });
+        handsItBack("cardart: and paintHighlight",
+                    [&] { CardArt::paintHighlight(p, where, QColor(0x8f, 0xd0, 0xa8)); });
+        handsItBack("chessart: paintPiece as well, which the hub tile shares",
+                    [&] { ChessArt::paintPiece(p, where, chess::PieceType::Knight,
+                                               chess::Colour::White); });
+
+        // And again ROTATED, which is what forces paintFace down its live
+        // fallback rather than the cached blit -- the path that actually leaked.
+        // Checked separately because the cached path passes either way, so
+        // testing only that would prove nothing about the defect.
+        handsItBack("cardart: paintFace on a rotated painter, which is the path that leaked",
+                    [&] {
+                        p.rotate(30);
+                        CardArt::paintFace(p, where, queen);
+                    });
     }
 
     // ---- The sound effects are compiled into the binary ----

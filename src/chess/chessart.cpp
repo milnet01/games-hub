@@ -181,7 +181,12 @@ void paintPiece(QPainter& p, const QRectF& box, chess::PieceType type, chess::Co
     case chess::PieceType::None:   return;
     }
 
+    // Hand the painter back as we found it. This one is shared with the hub
+    // tile, so a leaked pen or brush lands on two surfaces -- and the tile draws
+    // several pieces in a row. Taken HERE rather than at the top, because both
+    // early returns above happen before the painter is touched at all.
     const bool white = colour == chess::Colour::White;
+    p.save();
     Theme::paintContactShadow(p, QPointF(box.center().x(), box.y() + box.height() * 0.87),
                               box.width() * 0.30);
 
@@ -208,6 +213,7 @@ void paintPiece(QPainter& p, const QRectF& box, chess::PieceType type, chess::Co
         p.setPen(QPen(edge.color(), edge.widthF(), Qt::SolidLine, Qt::RoundCap));
         p.drawPath(detail);
     }
+    p.restore();
 }
 
 } // namespace ChessArt

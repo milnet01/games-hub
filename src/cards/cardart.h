@@ -22,6 +22,12 @@ constexpr double kAspect = 1.4;
 // --thresholds fails if any other source states it as a literal.
 inline constexpr double kFaceMinWidth = 46.0;
 
+// Every function here hands the painter back exactly as it found it: pen,
+// brush, font and transform. That is a POSTCONDITION callers may rely on, and
+// it was not always true -- paintFace has two paths, and a cached blit touched
+// nothing while the live fallback leaked the last font and ink pen, so a caller
+// that worked broke as soon as a card was rotated or the window grew past the
+// cache's size limit.
 void paintFace(QPainter& p, const QRectF& r, const Card& c);
 
 // `deck` picks the colourway: 0 is blue, 1 is red. Games dealt from a single

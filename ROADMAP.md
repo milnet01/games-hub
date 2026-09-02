@@ -2300,7 +2300,7 @@ draws, whether or not it has had one.
   Kind: feature.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0151] **The card's corner index can clip, and it is all that is left at small sizes.**
+- ✅ [GHUB-0151] **The card's corner index can clip, and it is all that is left at small sizes.**
   cardart.cpp: paintFace draws the corner index into a box 0.24 of the
   card's width, and drawText(rect, flags, text) CLIPS. Two digits at
   the index font need roughly 0.25 to 0.27 of the width, so "10" is
@@ -2311,11 +2311,23 @@ draws, whether or not it has had one.
   Qt::TextDontClip on both drawText calls is the fix the project
   already uses for this class in Sudoku's pencil marks; with
   AlignLeft|AlignTop the origin does not move.
+  Resolved (2026-09-02): Qt::TextDontClip on both corner-index
+  drawText calls, which is the fix this project already uses for the
+  same class in Sudoku's pencil marks. With AlignLeft|AlignTop the
+  origin does not move, so nothing else about the face changes.
+
+  No test, and that is deliberate rather than an omission. Any check
+  would have to measure ink against a box, and ink is a property of the
+  platform's font -- exactly what CLAUDE.md's rule was written for after
+  three red Windows runs: a test may ASSERT what the code does and must
+  only REPORT what the platform provides. The change is one documented
+  flag on a call whose clipping behaviour Qt specifies, following a
+  precedent already in the tree.
   **Layman:** The number in a card's corner can be cut off, exactly where it is the only thing identifying the card.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0152] **CardArt leaves the caller's painter in a state it did not set.**
+- ✅ [GHUB-0152] **CardArt leaves the caller's painter in a state it did not set.**
   cardart.cpp: paintSlot and paintHighlight set pen, brush and font on
   the caller's QPainter and never restore them. Worse, the two paths
   through paintFace leave it in DIFFERENT states -- a cached blit
@@ -2327,6 +2339,25 @@ draws, whether or not it has had one.
   loop. Same shape in chessart.cpp's paintPiece, which is shared with
   the hub tile, so it leaks onto two surfaces. Wrap each public entry
   point and document the postcondition.
+  Resolved (2026-09-02): paintFace, paintBack, paintSlot,
+  paintHighlight and ChessArt::paintPiece all hand the painter back as
+  they found it, and both headers now state that as a postcondition
+  callers may rely on.
+
+  paintPiece takes its save() AFTER its two early returns rather than at
+  the top -- both happen before the painter is touched, and a save above
+  them would leave the state unbalanced on the way out.
+
+  Six checks in uitest, and the shape of them is the point. Four went
+  red; the two that stayed green are paintFace and paintBack through
+  their CACHED path, which blits and touches no state either way. That
+  is why the block draws paintFace a second time on a ROTATED painter:
+  that forces the live fallback, which is the path that actually leaked,
+  and it is the one that failed. Testing only the cached call would have
+  proved nothing about the defect.
+
+  QPainterStateGuard was tried first and is Qt 6.9; plain save/restore
+  is what these functions take.
   **Layman:** Drawing a card can change the colours used by whatever is drawn next.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

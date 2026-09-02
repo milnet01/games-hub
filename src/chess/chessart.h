@@ -15,6 +15,8 @@ namespace ChessArt {
 // Draws one piece inside `box`, which should be roughly square. The silhouette
 // is built in unit coordinates and scaled, so it is legible from a 24-pixel
 // hub tile up to a full-window board.
+// Hands the painter back as it found it, like CardArt. This one is shared with
+// the hub tile, so a leaked pen or brush would land on two surfaces.
 void paintPiece(QPainter& p, const QRectF& box, chess::PieceType type, chess::Colour colour);
 
 // Board colours, shared with the hub tile so the miniature matches the game.
