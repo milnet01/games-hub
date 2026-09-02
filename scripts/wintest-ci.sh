@@ -25,6 +25,22 @@ set -euo pipefail
 
 HOST=${WINTEST_HOST:-wintest}
 DEST=${WINTEST_DIR:-C:/gameshub}
+
+# Validated, because the remote prep below does a RECURSIVE DELETE inside it.
+# Unset is safe by construction; a mistyped or hostile value was not checked at
+# all, and a drive ROOT here would take the whole disk with it. The pattern
+# insists on a drive letter plus at least one directory, and refuses quotes and
+# shell metacharacters, which would otherwise close the PowerShell string this
+# is pasted into.
+case "$DEST" in
+  *\'*|*\"*|*'$'*|*'`'*|*';'*|*'&'*|*'|'*)
+      echo "WINTEST_DIR must not contain quotes or shell metacharacters: '$DEST'" >&2
+      exit 2 ;;
+esac
+if ! printf '%s' "$DEST" | grep -qE '^[A-Za-z]:/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$'; then
+    echo "WINTEST_DIR must look like C:/some/directory, and never a drive root: '$DEST'" >&2
+    exit 2
+fi
 REF=${1:-HEAD}
 
 say() { printf '\033[1m%s\033[0m\n' "$*"; }

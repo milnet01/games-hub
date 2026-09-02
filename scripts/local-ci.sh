@@ -210,6 +210,18 @@ while IFS= read -r -d '' REC; do
     esac
 
     # A RUN step.
+    #
+    # Fail CLOSED on a body that provisions. STEP_RULES is keyed on a step's
+    # free-text NAME, so renaming a step in ci.yml drops its rule silently and
+    # promotes it from guarded to EXECUTED -- and the step this matters for
+    # installs packages, so a rename would run `sudo apt-get` from inside a
+    # pre-push hook. The body is what decides here, and a rename cannot change
+    # a body.
+    if [ "$RULE_KIND" != "provision" ] \
+       && printf '%s' "$BODY" | grep -qE '(^|[^[:alnum:]_])(sudo|apt-get|apt|dnf|zypper|pacman)([^[:alnum:]_]|$)'; then
+        bad "step '$NAME' installs packages and carries no 'provision' rule — the step was probably renamed in $WORKFLOW; update STEP_RULES in $0"
+        continue
+    fi
     if [ "$RULE_KIND" = "provision" ]; then
         if eval "$RULE_CHECK" >/dev/null 2>&1; then
             ok "$NAME — already provisioned here ($RULE_CHECK)"

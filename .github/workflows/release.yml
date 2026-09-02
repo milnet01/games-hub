@@ -42,6 +42,18 @@ jobs:
             echo "CHANGELOG.md has no '## [$tag]' section" >&2
             exit 1
           fi
+          # And that the section SAYS something. The heading alone was the whole
+          # test, so closing [Unreleased] with nothing under it published a
+          # release whose notes were blank -- which is the forgotten step this
+          # check exists to catch, one line further on.
+          notes=$(awk -v want="## [$tag]" '
+            /^## \[/ { inside = (index($0, want) == 1); next }
+            inside { print }
+          ' CHANGELOG.md | tr -d '[:space:]')
+          if [ -z "$notes" ]; then
+            echo "CHANGELOG.md's '## [$tag]' section is empty" >&2
+            exit 1
+          fi
           echo "version=$tag" >> "$GITHUB_OUTPUT"
 
   linux:
@@ -74,6 +86,16 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/usr
           cmake --build build
+
+      # The suite, on the very commit being packaged. ci.yml cannot trigger on
+      # a tag -- it runs on pushes to master and on pull requests -- so without
+      # this a tag placed on any other commit publishes binaries whose tests
+      # never ran on either platform. `cmake --build` above already builds both
+      # test binaries, so this costs only the run.
+      - name: Test what is about to be packaged
+        run: ctest --test-dir build --output-on-failure
+        env:
+          QT_QPA_PLATFORM: offscreen
 
       # linuxdeploy and its Qt plugin live in two different repositories;
       # --plugin qt finds the second by name on PATH. The runner has no
@@ -241,6 +263,12 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build
+
+      # The same, on the platform this half is for. See the Linux job.
+      - name: Test what is about to be packaged
+        run: ctest --test-dir build --output-on-failure
+        env:
+          QT_QPA_PLATFORM: offscreen
 
       # Deliberately not cmake --install: that puts the executable under
       # bin/, and a portable zip wants it at the top level.

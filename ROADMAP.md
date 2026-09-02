@@ -1354,7 +1354,7 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0128] **Close the release pipeline's remaining supply-chain gaps.**
+- ✅ [GHUB-0128] **Close the release pipeline's remaining supply-chain gaps.**
   The unpinned linuxdeploy fetch and the writable smoke-test mount are
   fixed. Still open: neither release build job runs ctest and ci.yml
   cannot trigger on a tag, so a release can publish from a commit whose
@@ -1364,6 +1364,42 @@ than any amount of hardening applied to an app with no sockets.
   local-ci.sh keys STEP_RULES on a step's free-text name, so renaming a
   step in ci.yml silently promotes it from guarded to executed -- which
   would run apt-get from inside a pre-push hook.
+  Resolved (2026-09-02), all four.
+
+  local-ci.sh fails CLOSED on a body that provisions. STEP_RULES is
+  keyed on a step's free-text NAME, so renaming a step in ci.yml dropped
+  its rule silently and promoted it from guarded to EXECUTED -- and the
+  step this matters for installs packages, so a rename would run `sudo
+  apt-get` from inside a pre-push hook. The guard reads the BODY, which
+  a rename cannot change. Proven by renaming that step in ci.yml: the
+  run refuses, names the likely cause and the remedy, and fails; ci.yml
+  restored afterwards.
+
+  wintest-ci.sh validates WINTEST_DIR before the remote prep does a
+  recursive delete inside it. Unset was always safe; a mistyped value
+  was not checked at all, and a drive root would have taken the whole
+  disk. The pattern insists on a drive letter plus at least one
+  directory and refuses quotes and shell metacharacters, which would
+  otherwise close the PowerShell string it is pasted into. Both
+  refusals tested, and the default still accepted.
+
+  Both release build jobs run ctest on the very commit being packaged.
+  ci.yml triggers on pushes to master and on pull requests and CANNOT
+  trigger on a tag, so a tag placed on any other commit published
+  binaries whose tests had never run on either platform. cmake --build
+  already builds both test binaries there, so this costs only the run.
+  Chosen over adding a tag trigger to ci.yml because it tests the exact
+  tree being packaged rather than a commit that merely shares its sha.
+
+  The changelog check requires the section to SAY something. The heading
+  alone was the whole test, so closing [Unreleased] with nothing under
+  it published a release with blank notes -- the forgotten step the
+  check exists to catch, one line further on. Verified against a
+  synthetic empty section and against the real 0.5.0 one.
+
+  actionlint and zizmor clean; yamllint clean under the project's own
+  settings, which local-ci.sh passes it (max 100, truthy off) rather
+  than the bare defaults.
   **Layman:** A few smaller risks in the machinery that publishes the downloads.
   Kind: security.
   Source: review-code sweep 2026-08-31.
