@@ -17,7 +17,10 @@ public:
     static constexpr int kTarget = 2048;
     // A tile cannot exceed this, and a save claiming one did is refused. 2^20
     // is far beyond any reachable board and still leaves the check cheap.
-    static constexpr int kMaxTile = 1 << 20;
+    // 2^17 is the largest tile a four-by-four board can reach, and it takes
+    // perfect play to get there. 1 << 20 admitted four values beyond anything
+    // reachable, which a hand-edited save could then put on the board.
+    static constexpr int kMaxTile = 1 << 17;
 
     enum class Direction { Left, Right, Up, Down };
 

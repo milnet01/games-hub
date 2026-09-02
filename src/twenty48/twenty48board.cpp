@@ -129,12 +129,28 @@ bool Twenty48Board::restore(const std::array<int, kCells>& cells, int score, boo
         return false;
 
     int tiles = 0;
+    // The largest score these tiles could have earned. A tile of value v is
+    // built by merges worth v * (log2(v) - 1) altogether, so summing that over
+    // the board bounds the score from above -- and it over-counts a 4 that was
+    // spawned rather than merged, which keeps it an upper bound rather than an
+    // exact one. Derived from the position being restored rather than picked as
+    // a round number, and it is what stops a save claiming a score near INT_MAX
+    // that the very next merge would overflow.
+    long long earned = 0;
     for (int value : cells) {
         if (!isTile(value))
             return false;
-        if (value != 0)
-            ++tiles;
+        if (value == 0)
+            continue;
+        ++tiles;
+        int steps = 0;
+        for (int v = value; v > 1; v /= 2)
+            ++steps;
+        if (steps >= 2)
+            earned += 1LL * value * (steps - 1);
     }
+    if (score > earned)
+        return false;
     // An empty board is not a game in progress, and restoring one would leave
     // the player staring at nothing with no way to move.
     if (tiles == 0)

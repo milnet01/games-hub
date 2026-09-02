@@ -467,7 +467,14 @@ bool MinesweeperView::restoreState(const QByteArray& blob)
     in >> version >> level >> elapsed >> paused >> count;
     if (version != 1 || in.status() != QDataStream::Ok)
         return false;
-    if (level < 0 || level >= int(std::size(kLevels)) || elapsed < 0)
+    // Bounded above as well as below. elapsedMs() is narrowed to int before it
+    // is shown and before it is offered to Scores::recordLow, so an unbounded
+    // figure could come back NEGATIVE from that conversion -- and a negative
+    // best time is one nothing can ever beat. A hundred hours is past any real
+    // game and leaves the arithmetic room to spare.
+    constexpr qint64 kMaxPlayedMs = qint64(100) * 60 * 60 * 1000;
+    if (level < 0 || level >= int(std::size(kLevels)) || elapsed < 0
+        || elapsed > kMaxPlayedMs)
         return false;
 
     const Level& l = kLevels[level];

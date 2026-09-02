@@ -216,6 +216,22 @@ bool SpiderTable::restore(const std::array<std::vector<Card>, kColumns>& columns
         || !cardcodec::fitsPack(all, 2, suits))
         return false;
 
+    // Once a column turns face up it stays face up to the end of the column.
+    // canLift() says as much in as many words -- "everything under it in the
+    // column is face up by construction" -- and Spider's movableRunLength()
+    // walks from the top assuming the same. Nothing checked it, so a save could
+    // bury a face-down card above a face-up one and let a run be lifted through
+    // cards nobody has turned over.
+    for (const std::vector<Card>& column : columns) {
+        bool seenFaceUp = false;
+        for (const Card& c : column) {
+            if (c.faceUp)
+                seenFaceUp = true;
+            else if (seenFaceUp)
+                return false;
+        }
+    }
+
     m_columns = columns;
     m_stock = stock;
     m_suits = suits;

@@ -282,6 +282,32 @@ bool KlondikeTable::restore(const std::vector<Card>& stock, const std::vector<Ca
     if (!cardcodec::matchesPack(all, 1, 4))
         return false;
 
+    // Once a column turns face up it stays face up to the end of the column.
+    // canLift() says as much in as many words -- "everything under it in the
+    // column is face up by construction" -- and nothing checked it, so a save
+    // could bury a face-down card above a face-up one and let a run be lifted
+    // through cards nobody has turned over.
+    for (const std::vector<Card>& column : tableau) {
+        bool seenFaceUp = false;
+        for (const Card& c : column) {
+            if (c.faceUp)
+                seenFaceUp = true;
+            else if (seenFaceUp)
+                return false;
+        }
+    }
+
+    // The stock is face down and the waste face up, which every hit test and
+    // every draw assumes.
+    for (const Card& c : stock) {
+        if (c.faceUp)
+            return false;
+    }
+    for (const Card& c : waste) {
+        if (!c.faceUp)
+            return false;
+    }
+
     m_stock = stock;
     m_waste = waste;
     m_foundations = foundations;

@@ -256,6 +256,17 @@ bool FreeCellTable::restore(const std::array<std::vector<Card>, kColumns>& colum
     if (!cardcodec::matchesPack(all, 1, 4))
         return false;
 
+    // A foundation is an Ace upward in one suit with no gaps. Nothing checked
+    // these at all, so a save could stand a King alone on one -- and the game
+    // then goes on accepting cards by rank against a pile the rules could never
+    // have built.
+    for (const std::vector<Card>& f : foundations) {
+        for (std::size_t i = 0; i < f.size(); ++i) {
+            if (f[i].rank != int(i) + kAce || f[i].suit != f.front().suit)
+                return false;
+        }
+    }
+
     m_columns = columns;
     m_cells = cells;
     m_foundations = foundations;

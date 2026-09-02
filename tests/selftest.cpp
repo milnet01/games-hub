@@ -2121,6 +2121,80 @@ void klondikeStackingRules()
     check(!table.canPlaceOnFoundation(king, 0), "klondike: and on nothing else");
 }
 
+void savedGamesRefuseTheImpossible()
+{
+    section("Saved games");
+
+    // Each of these is a position the RULES cannot produce, reaching a core
+    // restore() directly rather than through a forged blob -- no byte offsets to
+    // go stale, and the check says which invariant it is about.
+
+    // 2048: a score the tiles on the board could never have earned. Bounded
+    // below only, a save could claim a score near INT_MAX and the next merge
+    // would overflow it.
+    {
+        std::array<int, Twenty48Board::kCells> cells {};
+        cells[0] = 4;
+        Twenty48Board board;
+        check(board.restore(cells, 4, false), "2048: a four earns four");
+        check(!board.restore(cells, 5, false), "2048: and never five");
+        check(!board.restore(cells, 2000000000, false),
+              "2048: a score no board could have earned is refused");
+        check(!board.restore(cells, -1, false), "2048: nor a negative one");
+
+        std::array<int, Twenty48Board::kCells> beyond {};
+        beyond[0] = 1 << 18;
+        check(!board.restore(beyond, 0, false),
+              "2048: nor a tile past anything a four-by-four can reach");
+    }
+
+    // FreeCell: a foundation that is not an Ace upward in one suit. Nothing
+    // validated these at all.
+    {
+        std::array<std::vector<Card>, FreeCellTable::kColumns> columns;
+        std::array<std::vector<Card>, FreeCellTable::kCells> cells;
+        std::array<std::vector<Card>, FreeCellTable::kFoundations> foundations;
+        std::vector<Card> pack = makeDeck(1, 4);
+        for (Card& c : pack)
+            c.faceUp = true;
+
+        // A King standing alone where an Ace belongs. The pack is still whole,
+        // so the existing check passes it.
+        const auto it = std::find_if(pack.begin(), pack.end(), [](const Card& c) {
+            return c.suit == Suit::Spades && c.rank == kKing;
+        });
+        foundations[0] = { *it };
+        pack.erase(it);
+        for (std::size_t i = 0; i < pack.size(); ++i)
+            columns[i % FreeCellTable::kColumns].push_back(pack[i]);
+
+        FreeCellTable table;
+        check(!table.restore(columns, cells, foundations, 0),
+              "freecell: a foundation that does not start on an Ace is refused");
+    }
+
+    // Klondike and Spider: a face-down card sitting ABOVE a face-up one. Both
+    // canLift() and movableRunLength() walk from the top assuming that cannot
+    // happen -- canLift says so in as many words.
+    {
+        std::array<std::vector<Card>, KT::kColumns> tableau;
+        std::array<std::vector<Card>, KT::kFoundations> foundations;
+        std::vector<Card> pack = makeDeck(1, 4);
+        for (std::size_t i = 0; i < pack.size(); ++i) {
+            pack[i].faceUp = true;
+            tableau[i % KT::kColumns].push_back(pack[i]);
+        }
+        KT good;
+        check(good.restore({}, {}, foundations, tableau, 1, 0),
+              "klondike: an all-face-up table is one the rules could reach");
+
+        tableau[0].back().faceUp = false;   // buried under the face-up cards above it
+        KT bad;
+        check(!bad.restore({}, {}, foundations, tableau, 1, 0),
+              "klondike: a face-down card above a face-up one is refused");
+    }
+}
+
 void klondikeRefusesMovesThatChangeNothing()
 {
     // Three moves that change nothing and used to be accepted anyway. Each
@@ -5435,6 +5509,7 @@ int main()
 
     klondikeDealsAWholePack();
     klondikeStackingRules();
+    savedGamesRefuseTheImpossible();
     klondikeRefusesMovesThatChangeNothing();
     klondikeFaceDownCardsAreOutOfReach();
     klondikeTurningUncoversTheCardBelow();

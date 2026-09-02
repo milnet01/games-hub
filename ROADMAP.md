@@ -1293,7 +1293,7 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0127] **Bound the remaining values a saved game supplies.**
+- ✅ [GHUB-0127] **Bound the remaining values a saved game supplies.**
   The CRITICAL and HIGH save defects are fixed. This is the MEDIUM
   remainder, each verified against source by its lane. Hearts adopts
   totals and handPoints with no range check, and its restore count is
@@ -1306,6 +1306,50 @@ than any amount of hardening applied to an app with no sockets.
   FreeCell's restore never validates the foundations. Klondike and
   Spider check the pack but not the column invariants their own
   canLift and movableRunLength assume.
+  Resolved (2026-09-02), all seven, each bound derived rather than
+  picked as a round number.
+
+  HEARTS. Scores were adopted with no range check at all: handPoints is
+  now 0..26 and a total 0..26 a hand, which is what a hand is worth
+  however it falls -- thirteen hearts and the queen, or the same 26
+  handed to everyone else on a moon shot. And the card count is checked
+  PER SEAT, not only in aggregate: the old sum let one seat come back
+  holding nothing while another held twice its share, and a seat with no
+  card to play is a turn that never ends. Away from the table every seat
+  holds the same number, and the only ones short are those that have
+  played into the trick on the table -- so there must be exactly as many
+  short seats as cards on it.
+
+  2048. kMaxTile was 1 << 20, four doublings past the 1 << 17 a
+  four-by-four board can reach. And the score is bounded ABOVE by what
+  the tiles could have earned: a tile of value v is built by merges
+  worth v * (log2(v) - 1) altogether, so summing that over the board is
+  a true upper bound. Derived from the position being restored, and it
+  over-counts a spawned 4, which keeps it an upper bound rather than an
+  exact one.
+
+  MINESWEEPER and SUDOKU. Both clocks are bounded at a hundred hours.
+  Minesweeper had no upper bound at all; Sudoku had one at a HUNDRED
+  YEARS, which is too loose to matter -- that many milliseconds still
+  divides to more seconds than an int holds, and elapsedMs() is narrowed
+  to int before it is shown or offered to Scores::recordLow. A negative
+  best time is one nothing can ever beat.
+
+  FREECELL. Foundations are an Ace upward in one suit with no gaps.
+  Nothing checked them, so a King could stand alone on one and the game
+  would go on accepting cards by rank against a pile the rules could
+  never have built.
+
+  KLONDIKE and SPIDER. Once a column turns face up it stays face up --
+  canLift() says so in as many words and movableRunLength() assumes the
+  same, and neither checked it. Klondike also checks the stock is face
+  down and the waste face up, which every hit test and every draw
+  assumes.
+
+  Eight checks in the selftest, against the core restore() functions
+  directly rather than through a forged blob: no byte offsets to go
+  stale, and each check names the invariant it is about. The ASan/UBSan
+  saved-game fuzz passes.
   **Layman:** A hand-edited save file can still put silly numbers into a few games.
   Kind: security.
   Source: review-code sweep 2026-08-31.
@@ -2975,6 +3019,17 @@ inventing one.
   would break that sync with no compile error and no crash -- just ticks
   that stop matching. Whichever way this goes, that comparison should
   stop matching on text first.
+  Owner's decision (2026-09-02): the app IS to be translatable -- "I
+  would like to offer this in multiple languages in the future" -- and
+  the retrofit comes AFTER the five items that gate 1.0, as its own
+  piece of work rather than inside this review sweep. It is large,
+  mechanical and touches every game file, and nothing else waits on it.
+
+  The order inside it is already settled by the finding: canastaview's
+  toolbar sync compares QAction::text() against untranslated literals,
+  so that comparison has to stop matching on text BEFORE any tr() lands
+  near it, or the restore path breaks with no compile error and no
+  crash.
   **Layman:** Every visible word in the app is written in a way that cannot be translated, and no note says whether that is on purpose.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.
@@ -5543,6 +5598,19 @@ open.
   asserts exactly that: with the pile open the sevens go down, and
   they are held only while it is frozen. Both are yours. A fix was
   written and REVERTED rather than edit either side to fit the other.
+  Owner's decision (2026-09-02), which re-scopes this from a choice
+  between two sides into a piece of work: ADD the judgement rather
+  than pick a side. Weigh what has been thrown away, whether the pack
+  is frozen, and whether a meld helps the partner.
+
+  HARD AND EXPERT only. Easy and Medium keep the play they have -- Easy
+  is meant to make real mistakes, and taking those away flattens the
+  ladder.
+
+  The whole ladder is to be re-measured afterwards: canastaLevelsDiffer
+  prints four rungs and hard-vs-medium is already the closest of them,
+  so a change to Hard is the one most likely to collapse a rung. The
+  reading as of 2026-08-25 is in CLAUDE.md and is the baseline.
   **Layman:** Two parts of the Canasta AI disagree about whether to hold a rank back, and only you can say which is right.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.
@@ -5770,6 +5838,11 @@ open.
   Black had just moved into check. The rook is on d2 now.
 
   Six checks in the selftest, five proven red.
+  Owner's decision (2026-09-02): KEEP THE SAVING AS SPEED. The node
+  budget stays where it is, so Hard answers in about a third of a
+  second instead of over a second and plays exactly as it did. Not to
+  be revisited as an oversight -- raising it was offered with the
+  measurement behind it and declined.
   **Layman:** The chess engine does the same job in two places, and throws away most of the thinking it pays for.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
@@ -5861,6 +5934,12 @@ open.
 
   The rules core is where the counter belongs, per CLAUDE.md's split:
   draw detection is a rule, not presentation.
+  Owner's decision (2026-09-02): FORTY MOVES WITHOUT PROGRESS -- no
+  capture and no man moved by either side. The usual English draughts
+  rule, and the one that can be explained on the board. Threefold
+  repetition was offered alongside it and declined, so the counter is a
+  single integer rather than a position history, which is also the
+  cheaper thing to carry through the save format.
   **Layman:** A draughts game that neither side can win never ends; it just goes on.
   Kind: feature.
   Source: review-code sweep 2026-08-31, split from GHUB-0131.

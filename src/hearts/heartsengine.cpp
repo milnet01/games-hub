@@ -503,6 +503,41 @@ bool HeartsEngine::load(QDataStream& in)
     if (int(present.size()) != kPlayers * kCardsPerHand - kPlayers * int(tricksPlayed))
         return false;
 
+    // Per SEAT as well, because the count above is an AGGREGATE: one seat could
+    // come back holding nothing while another held twice its share and the sum
+    // still balanced. A seat with no card to play is a turn that never ends,
+    // and New Game is then the only way out of it.
+    //
+    // Away from the table every seat holds the same number. The only ones
+    // holding one fewer are those that have already played into the trick on
+    // the table, so there must be exactly as many of those as there are cards
+    // on it.
+    const int remaining = kCardsPerHand - int(tricksPlayed);
+    int shortSeats = 0;
+    for (int p = 0; p < kPlayers; ++p) {
+        const int held = int(hands[std::size_t(p)].size());
+        if (held == remaining)
+            continue;
+        if (held == remaining - 1) {
+            ++shortSeats;
+            continue;
+        }
+        return false;
+    }
+    if (shortSeats != int(trick.size()))
+        return false;
+
+    // Scores, which were adopted with no range check at all. A hand is worth 26
+    // points however it falls -- thirteen hearts and the queen, or the same 26
+    // handed to everyone else on a moon shot -- so a total cannot exceed 26 a
+    // hand, and `hand` is already bounded above.
+    for (int p = 0; p < kPlayers; ++p) {
+        if (handPoints[std::size_t(p)] < 0 || handPoints[std::size_t(p)] > 26)
+            return false;
+        if (totals[std::size_t(p)] < 0 || totals[std::size_t(p)] > 26 * (hand + 1))
+            return false;
+    }
+
     // A pass is three cards or none, and while they are still being chosen they
     // are cards the player actually holds.
     for (int p = 0; p < kPlayers; ++p) {

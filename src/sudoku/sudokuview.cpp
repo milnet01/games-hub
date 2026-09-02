@@ -70,6 +70,11 @@ double markInkHeight(const QFont& f)
     return QFontMetricsF(f).tightBoundingRect(QStringLiteral("0123456789")).height();
 }
 
+// Longer than anyone plays one puzzle, and short enough that dividing it by a
+// thousand still fits in an int -- which is what the clock is narrowed to
+// before it is shown or offered to Scores.
+constexpr qint64 kMaxPlayedMs = qint64(100) * 60 * 60 * 1000;
+
 QString levelKey(SudokuGrid::Level level)
 {
     switch (level) {
@@ -568,9 +573,12 @@ bool SudokuView::restoreState(const QByteArray& blob)
         if (flag != 0 && flag != 1)
             return false;
     }
-    // A negative time is not a time, and a puzzle nobody has spent a century on
-    // is not one this game produced.
-    if (elapsed < 0 || elapsed > qint64(100) * 365 * 24 * 60 * 60 * 1000)
+    // A negative time is not a time, and the upper bound has to be tight enough
+    // to matter: a century of milliseconds still divides to more seconds than an
+    // int holds, and elapsedMs() is narrowed to int before it is shown or
+    // recorded. A hundred hours is past any real puzzle and leaves that
+    // arithmetic with room to spare.
+    if (elapsed < 0 || elapsed > kMaxPlayedMs)
         return false;
     // A solved grid would have been saved as "nothing worth keeping", so a blob
     // holding one did not come from saveState().
