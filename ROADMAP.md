@@ -6480,7 +6480,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: investigate.
   Source: in-session-2026-08-24 GHUB-0101 and GHUB-0104 attempts.
 
-- 📋 [GHUB-0138] **Wire legibility-check.py into ctest, and fail loudly when a checker is absent.**
+- ✅ [GHUB-0138] **Wire legibility-check.py into ctest, and fail loudly when a checker is absent.**
   scripts/legibility-check.py has no add_test and no CI step, though
   GHUB-0017 names --thresholds as INV-4's test; it passes today only
   when run by hand. And CMakeLists registers the prepush and scorepad
@@ -6489,6 +6489,26 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   ctest reports 100% passed over a smaller suite -- against
   local-ci.sh's own stated principle that an absent linter must be
   called out.
+  Resolved (2026-09-02), both halves.
+
+  scripts/legibility-check.py --thresholds is now ctest test 7. GHUB-0017
+  names it as INV-4's test and nothing ran it, so it passed only when
+  somebody thought to run it by hand.
+
+  An absent checker registers a FAILING test rather than no test. A
+  configure without bash or python dropped the test silently and ctest
+  then reported 100% over a smaller suite, which is the silently
+  skipped step local-ci.sh refuses by name.
+
+  One judgement inside that, worth stating because it is a deliberate
+  narrowing of the finding. The python guard fires on UNIX only. Both
+  python checks are platform-independent, so they have to run SOMEWHERE
+  rather than everywhere, and Linux is where the pipeline runs them.
+  Applied unconditionally it reddened the Windows leg, which has no
+  python and had never run them -- an alarm with nothing behind it,
+  over a check the Linux leg had just run. Verified both ways: 7/7 on
+  Linux, and the Windows box still 4/4 with no new failing test
+  registered.
   **Layman:** Two checks can silently not run, and a green test report looks the same either way.
   Kind: test.
   Source: review-code sweep 2026-08-31.

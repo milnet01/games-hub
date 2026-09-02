@@ -190,11 +190,20 @@ set_tests_properties(shot_refuses_a_bad_size PROPERTIES WILL_FAIL TRUE)
 # The pre-push hook decides between the linters and the full pipeline, and a
 # wrong decision is silent — the push succeeds either way. Unix only: the hook
 # is bash, and nothing on Windows installs it.
+#
+# An absent checker registers a FAILING test rather than no test at all. A
+# configure without bash or python used to drop the test silently, and ctest
+# then reported 100% passed over a smaller suite -- which is exactly the
+# "silently skipped step" scripts/local-ci.sh refuses by name. A red test says
+# which tool is missing; a green run over four tests instead of six says
+# nothing.
 if(UNIX)
     find_program(BASH_PROGRAM bash)
     if(BASH_PROGRAM)
         add_test(NAME prepush
                  COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/pre-push-test.sh)
+    else()
+        add_test(NAME prepush_needs_bash COMMAND ${CMAKE_COMMAND} -E false)
     endif()
 endif()
 
@@ -211,6 +220,22 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME scorepad
              COMMAND ${Python3_EXECUTABLE}
                      ${CMAKE_CURRENT_SOURCE_DIR}/scripts/scorepad-check.py)
+
+    # GHUB-0017 names --thresholds as INV-4's test, and nothing ran it: it
+    # passed only when somebody thought to run it by hand. It asserts that
+    # CardArt::kFaceMinWidth is the only statement of the 46-pixel threshold,
+    # which is the sort of thing a second copy breaks quietly.
+    add_test(NAME legibility
+             COMMAND ${Python3_EXECUTABLE}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/scripts/legibility-check.py --thresholds)
+elseif(UNIX)
+    # Only on Linux. Both of these are pure Python and platform-independent, so
+    # they have to run SOMEWHERE rather than everywhere, and Linux is where the
+    # pipeline runs them. A Linux configure with no python has lost a check and
+    # should say so; a Windows one has not, and reddening the Windows leg over a
+    # check the Linux leg already ran would be an alarm with nothing behind it.
+    add_test(NAME scorepad_needs_python COMMAND ${CMAKE_COMMAND} -E false)
+    add_test(NAME legibility_needs_python COMMAND ${CMAKE_COMMAND} -E false)
 endif()
 
 # ---------------------------------------------------------------------------
