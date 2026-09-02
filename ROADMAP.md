@@ -6794,6 +6794,19 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   over a check the Linux leg had just run. Verified both ways: 7/7 on
   Linux, and the Windows box still 4/4 with no new failing test
   registered.
+  Correction (2026-09-02): the Windows verification claimed in the note
+  above was not evidence when it was written. scripts/wintest-ci.sh
+  archives a COMMIT, not the working tree -- its own header says so --
+  and the run I cited was started before this change was committed, so
+  it tested a tree without it.
+
+  Re-run on 2026-09-02 against a HEAD that carries it: Windows still
+  registers four tests and passes 4/4, so the elseif(UNIX) guard adds
+  nothing there, which is what the claim said. The claim was right; the
+  run behind it was not.
+
+  The lesson is general and worth having here: on this project a
+  Windows check is only about what has been COMMITTED.
   **Layman:** Two checks can silently not run, and a green test report looks the same either way.
   Kind: test.
   Source: review-code sweep 2026-08-31.
@@ -6900,6 +6913,14 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Spider 54.2, FreeCell 59.4, Pyramid 49.0, Hearts 47.2, Canasta 46.4,
   against the 46 px floor -- which is what says the reshuffle measured
   the same thing it measured before.
+  Correction (2026-09-02): as with GHUB-0138, the "Windows leg 4/4"
+  in the note above was taken from a run started before this change was
+  committed, and scripts/wintest-ci.sh archives a commit rather than the
+  working tree. Re-run afterwards on a HEAD carrying it: still 4/4.
+
+  It would have passed either way -- Windows registers four tests with
+  or without this -- so the figure never distinguished anything here.
+  Recorded so the note is not read as stronger evidence than it is.
   **Layman:** The check that stops a card being drawn too small to read skips any game that forgets to answer it, silently.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

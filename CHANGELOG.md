@@ -17,6 +17,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **The Hearts sentence no longer sits on top of the card you just played.** (GHUB-0147)
+  With large play on, the plate carrying what the game is telling you
+  grew upward out of the gap it was given and covered your own card in
+  the trick. It now moves into the empty felt beside the trick when
+  that gap is too small, so the sentence is still there and the card is
+  still visible.
+
 - **The score book's instructions now describe a setup that works.** (GHUB-0143)
   It said to open the page as a file, which cannot install the offline
   shell or the home-screen icon -- both need the folder to be served.
