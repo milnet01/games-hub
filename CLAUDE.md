@@ -66,12 +66,21 @@ as the flag not working. A game that has no notion of a turn REFUSES rather
 than photographing the deal, for the same reason an unknown `--game` does.
 
 `GameView::advanceForShot` is the hook, and Canasta is the only game that
-overrides it so far. **A game that overrides it must SETTLE itself before
-returning** — clear pending flights, selection, pauses and any celebration, and
-re-sort — because the picture is taken the moment it returns and a card still in
-the air is photographed half-way to somewhere. Nothing catches a breach: the
-ctest case photographs Canasta only, and a wrong picture still looks like an
-answer.
+overrides it so far. Its contract is **synchronous, unanimated and silent**, and
+that is a rule about how the turns are DRIVEN rather than about tidying up
+afterwards.
+
+**Drive them through the rules core, never through the game's own presentation
+path.** That path exists to fly cards, make noise and set a pause between
+turns — and it hands the rest to a `QTimer`, which cannot fire inside a
+synchronous call. So an override built by calling it N times returns having
+advanced nothing, and photographs the deal. **Then settle before returning** —
+clear pending flights, selection, pauses and any celebration, and re-sort —
+because the picture is taken the moment it returns and a card still in the air
+is photographed half-way to somewhere.
+
+Nothing catches either breach: the ctest case photographs Canasta only, and a
+wrong picture still looks like an answer.
 
 `--seed` pins the shuffle, so two runs deal the same cards and a before-and-after
 pixel count measures the change rather than the deal. It reaches every deal,
@@ -110,9 +119,15 @@ python3 scripts/legibility-check.py --thresholds      # kFaceMinWidth is unique
 ```
 
 The last two are pure Python and run as ctest cases, so a check skipped here is
-caught there. They register only where CMake finds an interpreter it will use:
-a Windows box with the Store stub `python.exe` registers seven tests where the
-GitHub runner registers nine, and the configure step says so.
+caught there. **The registered count differs by platform, and three cases
+separate the extremes** — the two Python ones, which need an interpreter CMake
+will use, and the hook test, which is bash and Unix-only. Linux registers all
+of them; a Windows runner registers every one but the hook test; a Windows box
+whose only `python.exe` is the Store stub registers neither Python case either.
+The configure step says when it drops the Python pair. **Count them with `ctest
+-N` rather than against a figure here** — the number moves whenever a case is
+added, and a stale one sends you hunting for a case that was never registered
+on that platform.
 
 **`--bench` is the only thing here that can time a frame**, and it is what
 makes a painting change provable. It prints ms/frame for Canasta mid-deal and
