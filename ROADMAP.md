@@ -5483,13 +5483,34 @@ open.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0130] **Klondike accepts a drop back onto the column a run came from.**
+- ✅ [GHUB-0130] **Klondike accepts a drop back onto the column a run came from.**
   Spider refuses a same-column drop; Klondike does not, so the move
   scores and banks a no-op undo snapshot. Repeated, it inflates the
   persisted top score and evicts real states from the 200-deep
   history. Same shape: sendToFoundation will bounce an Ace between two
   empty foundations, and dealFromStock snapshots before checking the
   stock and waste are both empty.
+  Resolved (2026-09-02), all three shapes.
+
+  dropOnTableau refuses a drop back onto the column the run came from,
+  which sends the view down its existing putBack() path -- that both
+  restores the cards and drops the snapshot lift() banked, so it is the
+  route already there for changing your mind.
+
+  sendToFoundation refuses a FOUNDATION source outright, which is the
+  rules statement rather than a patch on the one caller. The bounce was
+  reachable: mouseDoubleClickEvent excludes Stock and not Foundation, so
+  a lone Ace on a foundation is legal on any other empty one and could
+  be walked from pile to pile, scoring every time.
+
+  dealFromStock checks that the stock and waste are not both empty
+  BEFORE banking a snapshot, instead of after.
+
+  Eleven checks in the selftest against a hand-built position with an
+  empty stock and waste; seven of them behavioural, all seven proven
+  red. One label was renamed after the run because it collided with
+  klondikeStackingRules' -- a failure log that names two checks the
+  same is not a failure log.
   **Layman:** Lifting a card and putting it straight back counts as a move and eats your undo history.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

@@ -164,6 +164,14 @@ bool KlondikeTable::dropOnFoundation(int foundation)
 
 bool KlondikeTable::dropOnTableau(int column)
 {
+    // A run put straight back where it came from is not a move. Spider refuses
+    // this and Klondike did not: the drop scored kScoreTableauMove and kept the
+    // undo snapshot lift() had banked, so repeating it inflated the stored top
+    // score and pushed real states out of the 200-deep history. Refusing sends
+    // the view down its putBack() path, which restores the cards AND drops the
+    // snapshot -- the route already there for changing your mind.
+    if (m_heldFrom == PileKind::Tableau && m_heldPile == column)
+        return false;
     if (m_held.empty() || !canStackOnTableau(m_held.front(), column))
         return false;
     for (const Card& c : m_held)
@@ -176,6 +184,12 @@ bool KlondikeTable::dropOnTableau(int column)
 
 bool KlondikeTable::sendToFoundation(PileKind kind, int index)
 {
+    // Never FROM a foundation. A lone Ace is legal on any empty foundation, so
+    // without this a double-click on one moved it to the next empty pile,
+    // scored kScoreToFoundation, and could be repeated for as long as you liked.
+    if (kind == PileKind::Foundation)
+        return false;
+
     std::vector<Card>& source = pileAt(kind, index);
     if (source.empty() || !source.back().faceUp)
         return false;
@@ -207,6 +221,13 @@ bool KlondikeTable::autoFinishStep()
 
 void KlondikeTable::dealFromStock()
 {
+    // Nothing to turn and nothing to recycle, so nothing to undo. The snapshot
+    // was banked before this was known, so clicking an exhausted stock over an
+    // empty waste filled the history with states identical to the one before
+    // them and pushed the real ones out.
+    if (m_stock.empty() && m_waste.empty())
+        return;
+
     pushUndo();
     if (m_stock.empty()) {
         // Recycle: the waste goes back under the stock, face down, in order.

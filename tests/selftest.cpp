@@ -2042,6 +2042,64 @@ void klondikeStackingRules()
     check(!table.canPlaceOnFoundation(king, 0), "klondike: and on nothing else");
 }
 
+void klondikeRefusesMovesThatChangeNothing()
+{
+    // Three moves that change nothing and used to be accepted anyway. Each
+    // scored, and two banked an undo snapshot as well -- so repeating one
+    // inflated the stored top score and pushed real positions out of the
+    // 200-deep history. Spider already refused the first of them.
+    std::array<std::vector<Card>, KT::kColumns> tableau;
+    std::array<std::vector<Card>, KT::kFoundations> foundations;
+    std::vector<Card> pack = makeDeck(1, 4);
+    auto take = [&pack](Suit suit, int rank) {
+        const auto it = std::find_if(pack.begin(), pack.end(), [&](const Card& c) {
+            return c.suit == suit && c.rank == rank;
+        });
+        Card c = *it;
+        pack.erase(it);
+        c.faceUp = true;
+        return c;
+    };
+
+    // A black Jack on a red Queen: once the Jack is lifted, the column it came
+    // from will legally take it back, which is what made the no-op reachable.
+    tableau[0] = { take(Suit::Hearts, kQueen), take(Suit::Spades, kJack) };
+    foundations[0] = { take(Suit::Clubs, kAce) };
+
+    // The rest parked out of the way, with the stock and waste left EMPTY --
+    // which is the state the third check is about. The whole pack has to come
+    // back or restore() refuses the position.
+    int col = 1;
+    for (Card& c : pack) {
+        c.faceUp = true;
+        tableau[std::size_t(col)].push_back(c);
+        col = 1 + (col % (KT::kColumns - 1));
+    }
+
+    KT table;
+    check(table.restore({}, {}, foundations, tableau, 1, 0),
+          "klondike: the exhausted-stock position is one the rules could reach");
+    const int scoreBefore = table.score();
+    check(!table.canUndo(), "klondike: and nothing to undo yet");
+
+    check(!table.lift(KT::PileKind::Tableau, 0, 1).empty(), "klondike: the Jack lifts off");
+    check(!table.dropOnTableau(0),
+          "klondike: and is refused a drop back onto the column it came from");
+    table.putBack();
+    check(table.score() == scoreBefore, "klondike: so putting it straight back scores nothing");
+    check(!table.canUndo(), "klondike: and banks no undo state");
+
+    check(!table.sendToFoundation(KT::PileKind::Foundation, 0),
+          "klondike: an Ace on a foundation does not hop to the next empty one");
+    check(table.score() == scoreBefore, "klondike: which would otherwise pay every time");
+
+    check(table.stock().empty() && table.waste().empty(),
+          "klondike: the position has nothing left to turn");
+    table.dealFromStock();
+    check(!table.canUndo(), "klondike: turning an empty stock banks no undo state");
+    check(table.score() == scoreBefore, "klondike: and scores nothing");
+}
+
 void klondikeFaceDownCardsAreOutOfReach()
 {
     KT table;
@@ -5212,6 +5270,7 @@ int main()
 
     klondikeDealsAWholePack();
     klondikeStackingRules();
+    klondikeRefusesMovesThatChangeNothing();
     klondikeFaceDownCardsAreOutOfReach();
     klondikeTurningUncoversTheCardBelow();
     klondikeUndoDoesNotLoseACard();
