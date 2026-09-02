@@ -3822,7 +3822,7 @@ open.
   Kind: fix.
   Source: in-session-2026-08-22 first --shot of a game.
 
-- 📋 [GHUB-0132] **Give the tiles an accessible name, and the board games a keyboard.**
+- ✅ [GHUB-0132] **Give the tiles an accessible name, and the board games a keyboard.**
   GameTile paints its own miniature and never calls setText, and
   setAccessibleName appears nowhere in src/ -- so QAccessibleButton
   has no name to report for any of the fourteen tiles on the page
@@ -3831,11 +3831,28 @@ open.
   keyPressEvent and no focus policy: Canasta's Space and Return
   shortcuts are gated on a selection only a mouse can make, so they
   cannot be reached at all.
+  Resolved (2026-09-02) for the tiles; the keyboard half is split out
+  as GHUB-0168 and is NOT done.
+
+  Shipped: every tile carries setAccessibleName (the game's registered
+  name) and setAccessibleDescription (its blurb), plus a tooltip, which
+  costs nothing and helps a sighted reader once the grid scrolls. Two
+  checks in uitest compare the names against the registry rather than
+  counting them, so a tile named after the wrong game fails too. Proven
+  red.
+
+  Split rather than done, and why: keyboard play is a feature with real
+  design choices in it -- what the cursor looks like, whether it answers
+  the legibility switch, whether the card games get the same model --
+  and those are the owner's to make. GHUB-0168 carries it, correctly
+  scoped at TEN games rather than the nine listed here: Hearts has no
+  keyPressEvent and no focus policy either. Measured across every view;
+  only Pinball, Snake, Sudoku and 2048 have both.
   **Layman:** Screen readers see fourteen unnamed buttons, and several games can only be played with a mouse.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0133] **Reversi's legal-move hints ignore the legibility switch.**
+- ✅ [GHUB-0133] **Reversi's legal-move hints ignore the legibility switch.**
   draughtsview.cpp raises its hint alpha under the switch and says
   why: 60 is a hint you can look past, which is the wrong thing to be
   for the player the switch is for. Reversi's is a flat alpha 70 at
@@ -3843,17 +3860,53 @@ open.
   and the hints are its primary play affordance. Its pass notice is
   also overwritten after 320ms, and a pass is the one event that
   leaves the board looking unchanged.
+  Resolved (2026-09-02): the dots answer the switch -- alpha 70 to 190,
+  radius 0.12 to 0.18 of a cell -- and the pass notice is now held in
+  m_passNotice and carried in front of the following status line until
+  a disc is actually placed, instead of being replaced 320ms later by
+  the next turn's message.
+
+  The measurement says something worse than the finding did. Isolating
+  the dots by differencing the board with hints on and off, at one
+  geometry: 772 pixels normal against 496 large BEFORE the fix. So
+  turning large play on made Reversi's only affordance SMALLER, because
+  the caption band comes off the height the board is laid out in and
+  the dot is a fraction of a cell. After the fix, 772 against 1104.
+
+  The first version of that check compared the two switch states
+  directly and PASSED with the fix reverted -- the band moves the board,
+  so every pixel differs whether or not the dots did. It was rewritten
+  rather than trusted. The counts are printed and only the relationship
+  is asserted, since the band depends on the platform's font.
   **Layman:** The dots showing where you can play stay faint when large play is on.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0134] **The donate dialog shrinks its own text on a pixel-sized font.**
+- ✅ [GHUB-0134] **The donate dialog shrinks its own text on a pixel-sized font.**
   QFont::pointSizeF() returns -1 when the size was set in pixels, and
   donatedialog.cpp adds to it. The legibility branch then produces a
   2.0pt dialog font and the heading an unconditional 3.0pt one. The
   same dialog dims its URL label with QPalette::Dark, a 3D-shadow role
   with no guaranteed contrast against the window, on the one address
   the partially sighted owner is asked to read.
+  Resolved (2026-09-02): a growByPoints() helper grows whichever unit
+  the font actually carries. QFont holds either a point size or a pixel
+  size and answers -1 for the other, so the old arithmetic produced a
+  2.0pt dialog and a 3.0pt heading on a pixel-sized font -- the heading
+  unconditionally, so that half was wrong for every such reader rather
+  than only in the large branch.
+
+  The URL is no longer dimmed at all. It was painted in QPalette::Dark,
+  a 3D-shadow role with no guaranteed contrast against the window, on
+  the one address a partially sighted reader is asked to read; the
+  button above it already carries the hierarchy that was for.
+
+  Three checks in uitest, driven with the application font set in
+  pixels and comparing in whichever unit the font carries -- so they
+  assert what the code does and borrow nothing from the platform's font
+  metrics. Two proven red; the third correctly does not fire with the
+  bug present, because the non-large path never reached the broken
+  arithmetic, and it is kept as the guard for that path.
   **Layman:** On some systems the Support dialog would come up microscopic, worst of all in the large-text branch.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
@@ -3863,6 +3916,40 @@ open.
   **Layman:** At wide, short windows the sentence on the table can cover your own card, and the obvious fix broke Windows twice.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0168] **Ten games can only be played with a mouse.**
+  Split out of GHUB-0132, whose accessible-name half shipped. This is
+  a feature with design choices in it, not a sweep fix, and pretending
+  otherwise is how it would get built badly.
+
+  TEN, not the nine the sweep listed -- Hearts has no keyPressEvent and
+  no focus policy either. Measured across every view: only Pinball,
+  Snake, Sudoku and 2048 have both. Canasta, Chess, Draughts, FreeCell,
+  Hearts, Klondike, Minesweeper, Pyramid, Reversi and Spider have
+  neither, and HubWindow::openGame calls setFocus() on them, which does
+  nothing under the default NoFocus policy.
+
+  Two groups, and they are not the same problem.
+
+  The four board games -- Chess, Reversi, Draughts, Minesweeper -- share
+  one shape: a cell cursor, arrow keys, Space or Return to act. Sudoku
+  already does exactly this and is the pattern to copy rather than
+  invent. Tractable, and the bigger win per line.
+
+  The card games -- Klondike, Spider, FreeCell, Pyramid, Canasta -- and
+  Hearts are harder, because their input is drag-and-drop and a keyboard
+  equivalent needs a source-then-target model that does not exist yet.
+  Canasta is the sharpest case: its Space and Return shortcuts are
+  already written and are gated on a selection only a mouse can make, so
+  they cannot be reached at all today.
+
+  Open for the owner, and worth deciding before any of it is built:
+  what the cursor looks like, whether it answers the legibility switch,
+  and whether the card games get the same treatment or a different one.
+  Doing the four board games first would be a sensible first slice.
+  **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
+  Kind: accessibility.
+  Source: review-code sweep 2026-08-31, split from GHUB-0132.
 
 ### 🎨 Play
 

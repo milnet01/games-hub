@@ -1,5 +1,6 @@
 #include "reversiview.h"
 
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
@@ -120,6 +121,7 @@ void ReversiView::newGame()
     m_resumed = false;
     abandonSearch();
     m_board.reset();
+    m_passNotice.clear();
     m_toMove = Player::Black;
     m_human = Player::Black;
     m_lastMove.reset();
@@ -175,7 +177,11 @@ void ReversiView::advance()
         const QString who = (m_toMove == m_human) ? QStringLiteral("You have")
                                                   : QStringLiteral("The computer has");
         m_toMove = opponent(m_toMove);
-        refresh(who + QStringLiteral(" no legal move — turn passes."));
+        // Kept rather than emitted once: advance() runs again on the timer below
+        // and its refresh() replaced this sentence after 320ms, which is not
+        // long enough to read and is the only sign a pass happened at all.
+        m_passNotice = who + QStringLiteral(" no legal move — turn passes.");
+        refresh();
         QTimer::singleShot(kThinkDelayMs, this, &ReversiView::advance);
         return;
     }
@@ -250,6 +256,7 @@ void ReversiView::engineMoveReady(const SearchResult& result)
         return;
     }
 
+    m_passNotice.clear();
     m_board.play(m_toMove, *m);
     Sound::instance().play(Sound::kDiscPlace);
     m_lastMove = m;
@@ -276,6 +283,11 @@ void ReversiView::refresh(const QString& message)
         state = QStringLiteral("Your turn (%1).").arg(playerName(m_human));
     else
         state = QStringLiteral("Computer thinking…");
+
+    // In front of whatever comes next, so it survives until a disc is actually
+    // placed rather than being replaced by the following turn's line.
+    if (!m_passNotice.isEmpty())
+        state = m_passNotice + QStringLiteral("   ") + state;
 
     Q_EMIT statusChanged(state + QStringLiteral("   ") + score);
 }
@@ -387,9 +399,17 @@ void ReversiView::paintEvent(QPaintEvent*)
                 const bool isHint = m_showHints && humanTurn
                     && std::find(m_hints.begin(), m_hints.end(), Move { row, col }) != m_hints.end();
                 if (isHint) {
+                    // These are the whole affordance in Reversi -- where you may
+                    // play is not otherwise visible on the board -- and they
+                    // ignored the switch. Draughts already rejected an alpha of
+                    // 60 as "a hint you can look past, which is the wrong thing
+                    // to be for the player the switch is for"; 70 was no better,
+                    // and a dot of 0.12 of a square is small on top of that.
+                    const bool large = Legibility::instance().enabled();
                     p.setPen(Qt::NoPen);
-                    p.setBrush(QColor(255, 255, 255, 70));
-                    p.drawEllipse(centre, cell * 0.12, cell * 0.12);
+                    p.setBrush(QColor(255, 255, 255, large ? 190 : 70));
+                    const double r = cell * (large ? 0.18 : 0.12);
+                    p.drawEllipse(centre, r, r);
                 }
                 continue;
             }
@@ -436,6 +456,7 @@ void ReversiView::mousePressEvent(QMouseEvent* event)
 
     m_history.push_back({ m_board, m_toMove, m_lastMove });
     m_undoAction->setEnabled(true);
+    m_passNotice.clear();
 
     const int flipped = m_board.play(m_human, *m);
     Sound::instance().play(Sound::kDiscPlace);

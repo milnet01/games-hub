@@ -2250,6 +2250,61 @@ int main(int argc, char* argv[])
                   "reversi: a corrupt save is refused");
             check(renderOf(&resumed) == played, "reversi: and refusing one changes nothing");
 
+            {
+                // Reversi's legal-move dots are the whole affordance -- where
+                // you may play is not otherwise marked on the board -- and they
+                // ignored the legibility switch, while Draughts had already
+                // rejected a faint hint as "the wrong thing to be for the player
+                // the switch is for".
+                //
+                // everyGameAnswersTheSwitch cannot catch this, because Reversi
+                // answers the switch with a caption and the picture changed
+                // either way. Nor can comparing the two switch states directly:
+                // the caption band comes off the height the board is laid out
+                // in, so the board MOVES and every pixel differs whether or not
+                // the dots did. That version of this check passed with the fix
+                // reverted.
+                //
+                // So the dots are isolated by differencing the same board with
+                // them turned on and off, at one geometry. Whatever changes is
+                // the dots. The counts are printed and the RELATIONSHIP is what
+                // is asserted -- the counts themselves depend on the platform's
+                // font, which decides the band and so the board's size.
+                ReversiView hints;
+                hints.resize(520, 520);
+                QAction* hintToggle = nullptr;
+                for (QAction* a : hints.gameActions())
+                    if (a->text().contains(QStringLiteral("Hints")))
+                        hintToggle = a;
+                check(hintToggle != nullptr, "reversi: the board offers a Hints switch");
+
+                const auto dotPixels = [&](bool large) {
+                    Legibility::instance().setEnabled(large);
+                    hintToggle->setChecked(true);
+                    const QImage shown = renderOf(&hints);
+                    hintToggle->setChecked(false);
+                    const QImage hidden = renderOf(&hints);
+                    hintToggle->setChecked(true);
+                    int differing = 0;
+                    for (int y = 0; y < shown.height(); ++y)
+                        for (int x = 0; x < shown.width(); ++x)
+                            if (shown.pixel(x, y) != hidden.pixel(x, y))
+                                ++differing;
+                    return differing;
+                };
+
+                if (hintToggle != nullptr) {
+                    const int plainDots = dotPixels(false);
+                    const int largeDots = dotPixels(true);
+                    Legibility::instance().setEnabled(false);
+                    std::printf("      reversi hint dots: %d pixels normal, %d large\n",
+                                plainDots, largeDots);
+                    check(plainDots > 0, "reversi: the board marks where you may play");
+                    check(largeDots > plainDots,
+                          "reversi: and large play makes those marks bigger, not just the caption");
+                }
+            }
+
             DraughtsView draughts;
             draughts.resize(560, 560);
             check(draughts.saveState().isEmpty(), "draughts: an unplayed game saves nothing");
@@ -2608,6 +2663,28 @@ int main(int argc, char* argv[])
     std::printf("      hub registers %d games\n", expected);
     check(tiles.size() == expected, "the hub shows a tile for every game");
 
+    // A tile paints its own miniature and carries no text, so without an
+    // accessible name QAccessibleButton has nothing to report and a screen
+    // reader meets fourteen unnamed buttons on the first page of the app.
+    // Checked against the registered names rather than a count, so a tile that
+    // is named after the wrong game fails too.
+    {
+        QStringList named;
+        for (QPushButton* tile : tiles)
+            if (!tile->accessibleName().isEmpty())
+                named << tile->accessibleName();
+        named.sort();
+        QStringList wanted = hub.gameNames();
+        wanted.sort();
+        check(named == wanted, "every tile carries the accessible name of the game it opens");
+
+        bool described = true;
+        for (QPushButton* tile : tiles)
+            if (tile->accessibleDescription().isEmpty())
+                described = false;
+        check(described, "and a description a screen reader can read after it");
+    }
+
     int opened = 0;
     for (QPushButton* tile : tiles) {
         tile->click();
@@ -2933,6 +3010,47 @@ int main(int argc, char* argv[])
             const double big = large.font().pointSizeF();
             Legibility::instance().setEnabled(false);
             check(big > small, "donate: large play makes the dialog's text bigger too");
+        }
+
+        // The same, on a font whose size is set in PIXELS. QFont carries either
+        // a point size or a pixel size and answers -1 for the other, so adding
+        // points to a pixel-sized font used to produce a 2.0pt dialog -- and
+        // the large-play branch, the one meant to make things bigger, was the
+        // worst affected. Compared in whichever unit the font carries, so this
+        // asserts what the code does and borrows nothing from the platform's
+        // font metrics.
+        {
+            const QFont wasAppFont = QApplication::font();
+            QFont pixels = wasAppFont;
+            pixels.setPixelSize(13);
+            QApplication::setFont(pixels);
+
+            const auto sizeOf = [](const QFont& f) {
+                return f.pointSizeF() > 0.0 ? f.pointSizeF() : double(f.pixelSize());
+            };
+            const double appSize = sizeOf(pixels);
+
+            Legibility::instance().setEnabled(false);
+            DonateDialog plain(false, nullptr);
+            Legibility::instance().setEnabled(true);
+            DonateDialog grown(false, nullptr);
+            Legibility::instance().setEnabled(false);
+
+            check(sizeOf(plain.font()) >= appSize,
+                  "donate: a pixel-sized font is never shrunk by the dialog");
+            check(sizeOf(grown.font()) > appSize,
+                  "donate: and large play still grows it");
+
+            // The heading grows unconditionally, so on a pixel-sized font it
+            // was wrong for every reader rather than only in the large branch.
+            auto* heading = plain.findChild<QLabel*>(QStringLiteral("donateHeading"));
+            check(heading != nullptr, "donate: the dialog has a heading");
+            if (heading != nullptr) {
+                check(sizeOf(heading->font()) > appSize,
+                      "donate: and the heading is larger than the body, not smaller");
+            }
+
+            QApplication::setFont(wasAppFont);
         }
 
         settings.remove(QStringLiteral("donate"));

@@ -62,6 +62,11 @@ private:
     Difficulty m_difficulty = Difficulty::Medium;
     std::optional<Move> m_lastMove;
     std::vector<Move> m_hints;
+    // A pass leaves the board looking exactly as it did, so the sentence is the
+    // only sign it happened. Held here and carried into the next status rather
+    // than emitted once, because the message after it used to arrive 320ms
+    // later and wipe it.
+    QString m_passNotice;
     std::vector<Snapshot> m_history;
     bool m_showHints = true;
     bool m_thinking = false;

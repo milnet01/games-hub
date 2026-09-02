@@ -58,6 +58,17 @@ public:
         setMinimumSize(190, 190);
         setCursor(Qt::PointingHandCursor);
         setFlat(true);
+
+        // The tile paints its own miniature and never calls setText, so
+        // QAccessibleButton had nothing at all to report: a screen reader met
+        // fourteen unnamed buttons on the page every player lands on first.
+        // The name is what is read out; the description is the same sentence
+        // the tile prints under it.
+        setAccessibleName(name);
+        setAccessibleDescription(blurb);
+        // Sighted readers get the same sentence on hover, which costs nothing
+        // and is useful once the grid scrolls.
+        setToolTip(blurb);
     }
 
 protected:

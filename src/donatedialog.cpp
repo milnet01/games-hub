@@ -13,6 +13,29 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <cmath>
+
+namespace {
+
+// QFont carries EITHER a point size or a pixel size, and answers -1 for the one
+// it is not using. Adding points to a pixel-sized font therefore produced a
+// 2.0pt dialog -- microscopic, and worst of all in the very branch meant to
+// make the text bigger. Grow whichever unit is actually in force.
+void growByPoints(QFont& f, double points)
+{
+    if (f.pointSizeF() > 0.0) {
+        f.setPointSizeF(f.pointSizeF() + points);
+        return;
+    }
+    if (f.pixelSize() > 0) {
+        // A point is 1/72 inch against Qt's 96 logical DPI, so roughly 4/3 of a
+        // pixel. Exactness does not matter here; not shrinking the text does.
+        f.setPixelSize(f.pixelSize() + int(std::lround(points * 4.0 / 3.0)));
+    }
+}
+
+} // namespace
+
 DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
     : QDialog(parent)
 {
@@ -26,7 +49,7 @@ DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
     const bool large = Legibility::instance().enabled();
     if (large) {
         QFont f = font();
-        f.setPointSizeF(f.pointSizeF() + 3.0);
+        growByPoints(f, 3.0);
         setFont(f);
     }
 
@@ -36,8 +59,9 @@ DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
 
     // What it is, before what it wants.
     auto* heading = new QLabel(QStringLiteral("Games is free, and stays free"), this);
+    heading->setObjectName(QStringLiteral("donateHeading"));
     QFont hf = heading->font();
-    hf.setPointSizeF(hf.pointSizeF() + 4);
+    growByPoints(hf, 4.0);
     hf.setBold(true);
     heading->setFont(hf);
     outer->addWidget(heading);
@@ -68,9 +92,10 @@ DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
         auto* address = new QLabel(url, this);
         address->setTextInteractionFlags(Qt::TextSelectableByMouse);
         address->setWordWrap(true);
-        QPalette pal = address->palette();
-        pal.setColor(QPalette::WindowText, pal.color(QPalette::Dark));
-        address->setPalette(pal);
+        // Not dimmed. It used to be painted in QPalette::Dark, which is a
+        // 3D-shadow role with no guaranteed contrast against the window -- on
+        // the one address a partially sighted reader is being asked to read.
+        // The button above it already carries the hierarchy this was for.
         outer->addWidget(address);
     }
 

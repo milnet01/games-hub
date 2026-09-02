@@ -17,6 +17,25 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **The game tiles tell a screen reader which game they open.** (GHUB-0132)
+  Each tile paints a picture and carries no text, so a screen reader
+  found fourteen unnamed buttons on the first page of the app. They
+  now carry a name and a description, and show their blurb on hover.
+
+- **The Support dialog no longer comes up microscopic on some systems.** (GHUB-0134)
+  Where the system font size is set in pixels rather than points, the
+  dialog shrank its own text to about 2pt -- worst of all with large
+  play turned on, the setting meant to make it bigger. The web
+  addresses in it are also no longer greyed down.
+
+- **Large play now makes Reversi's move dots bigger and brighter.** (GHUB-0133)
+  They ignored the switch, and because the caption takes height off
+  the board they actually came out SMALLER with large play on -- on
+  the only marks that show where you may put a disc. Reversi also
+  keeps the "turn passes" sentence on screen until a disc is actually
+  played; it used to vanish after a third of a second, and a pass is
+  the one move that leaves the board looking unchanged.
+
 - **Closing the window stops the game you were on.** (GHUB-0164)
   Every other way of leaving a game stopped its clock and closing the
   window did not, so a pinball could still drain -- and take a score
