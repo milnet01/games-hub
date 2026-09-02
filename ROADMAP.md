@@ -1805,6 +1805,32 @@ progress.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
+- 📋 [GHUB-0167] **Filter the tile grid, including a favourites filter.**
+  The grid lists every game and nothing narrows it; it already
+  scrolls, and the roadmap queue adds more.
+
+  Filter by a category the game itself declares at registration, not
+  by a list held in the filter bar -- a list is a second copy that
+  goes stale the day a game is added, and the grid is built from the
+  registry. Proposed categories, one per game: Board (Chess, Reversi,
+  Draughts), Cards (Solitaire, Spider, FreeCell, Pyramid, Hearts,
+  Canasta), Puzzle (Minesweeper, Sudoku, 2048) and Arcade (Snake,
+  Pinball). A game names exactly one, so the filters partition the
+  grid rather than overlapping.
+
+  Favourites is the second filter and is per player, so it is stored
+  state rather than a registry property -- a starred-name list beside
+  the other app-wide settings, toggled from the tile. Note the reset
+  sweep in CLAUDE.md: a new app-wide settings family has to be added
+  to whatever clears stored state, or a reset leaves it standing.
+
+  Open for the owner: whether the filters are toggle buttons above
+  the grid or a combo box, and whether "All" is a filter or the
+  absence of one.
+  **Layman:** The game list gets buttons to show only one kind of game, and a star to keep your favourites together.
+  Kind: feature.
+  Source: user-request-2026-09-02.
+
 ### ✨ Look and feel
 
 Not decoration. Every item here is a piece of information the game currently
