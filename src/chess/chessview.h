@@ -17,6 +17,10 @@ public:
     explicit ChessView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    // No cards on this board. Said out loud because the base now answers
+    // -1 for "nobody answered", so a game that simply forgot is no longer
+    // indistinguishable from one with nothing to measure.
+    double smallestCardWidth() const override { return 0.0; }
     // The state sentence alone. The status line adds material and a win count
     // after it, which are worth a glance but not worth a line of the board.
     QString captionText() const override { return m_caption; }

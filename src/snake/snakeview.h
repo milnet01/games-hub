@@ -16,6 +16,10 @@ public:
     explicit SnakeView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    // No cards on this board. Said out loud because the base now answers
+    // -1 for "nobody answered", so a game that simply forgot is no longer
+    // indistinguishable from one with nothing to measure.
+    double smallestCardWidth() const override { return 0.0; }
     void activate() override;
     // A pause, not a stop: activate() picks the game back up. Without it the
     // snake keeps moving on a board nobody is watching and runs into a wall

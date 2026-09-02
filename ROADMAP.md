@@ -6541,7 +6541,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: test.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0163] **smallestCardWidth cannot tell a game with no cards from a game that forgot.**
+- ✅ [GHUB-0163] **smallestCardWidth cannot tell a game with no cards from a game that forgot.**
   gameview.h: the base returns 0.0 and the header documents 0 as "a
   game that draws no cards" -- so the inherited value and a forgotten
   override are the same value, and cardsKeepTheirFaces skips that game
@@ -6553,6 +6553,21 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   nothing could see that either. Return -1.0 from the base meaning "not
   answered", have a genuinely cardless game say 0.0 explicitly, and let
   the check fail on -1.
+  Resolved (2026-09-02) exactly as prescribed. GameView's base answers
+  -1.0 for "nobody answered"; the eight games that draw no cards say
+  0.0 themselves; cardsKeepTheirFaces collects the -1s and fails naming
+  them, instead of skipping past.
+
+  The two values used to be the same, so a card game that forgot to
+  override it was skipped in silence -- and the checked >= 6 floor was
+  already met by the six that do, so nothing would have caught a
+  fifteenth. Proven red by deleting one cardless game's override: the
+  check fails and prints "unanswered: Snake".
+
+  The six published floors are unchanged by this -- Solitaire 67.9,
+  Spider 54.2, FreeCell 59.4, Pyramid 49.0, Hearts 47.2, Canasta 46.4,
+  against the 46 px floor -- which is what says the reshuffle measured
+  the same thing it measured before.
   **Layman:** The check that stops a card being drawn too small to read skips any game that forgets to answer it, silently.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

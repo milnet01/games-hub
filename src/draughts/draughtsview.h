@@ -18,6 +18,10 @@ public:
     explicit DraughtsView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    // No cards on this board. Said out loud because the base now answers
+    // -1 for "nobody answered", so a game that simply forgot is no longer
+    // indistinguishable from one with nothing to measure.
+    double smallestCardWidth() const override { return 0.0; }
     QString captionText() const override { return m_caption; }
     void activate() override;
     // Not a QTimer, but the same duty: an answer arriving for a board the hub

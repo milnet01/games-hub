@@ -19,6 +19,10 @@ public:
     explicit PinballView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    // No cards on this board. Said out loud because the base now answers
+    // -1 for "nobody answered", so a game that simply forgot is no longer
+    // indistinguishable from one with nothing to measure.
+    double smallestCardWidth() const override { return 0.0; }
     void activate() override;
     // The base class asks every game with a clock or an animation to stop it
     // here, and Pinball had no override at all: leaving the table for another

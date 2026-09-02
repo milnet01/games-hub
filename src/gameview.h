@@ -91,7 +91,13 @@ public:
     // pips") because cardWidth() is private on all six card views and no test
     // could reach it. This is that access, and it is one line per game rather
     // than six headers opened up.
-    virtual double smallestCardWidth() const { return 0.0; }
+    //
+    // -1 is "nobody answered", and 0 is "this game draws no cards" -- said by
+    // the game, not inherited. They used to be the same value, so a card game
+    // that forgot to override this was skipped by cardsKeepTheirFaces in
+    // silence and shipped drawing faces too small to read. Every game answers
+    // it now, and the check fails on a -1 rather than passing over it.
+    virtual double smallestCardWidth() const { return -1.0; }
 
     // What this game says ON its own play surface while the legibility switch
     // is on. The hub has a status bar and it is not read during play, so a

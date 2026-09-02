@@ -1275,6 +1275,7 @@ int main(int argc, char* argv[])
         Legibility::instance().setEnabled(true);
         HubWindow probe;
         QStringList tooSmall;
+        QStringList unanswered;
         int checked = 0;
         for (const QString& name : probe.gameNames()) {
             HubWindow one;
@@ -1286,9 +1287,18 @@ int main(int argc, char* argv[])
                 continue;
             one.resize(one.minimumSizeHint());
             pump(20);
+            // -1 is "nobody answered". A game that forgot to override this used
+            // to answer the base's 0 and be skipped in silence, which is the
+            // whole hole: the six that DO answer already satisfy the floor
+            // below, so a fifteenth card game that forgot was caught by
+            // nothing and would ship drawing faces too small to read.
             const double smallest = view->smallestCardWidth();
-            if (smallest <= 0.0)
+            if (smallest < 0.0) {
+                unanswered << name;
                 continue;
+            }
+            if (smallest == 0.0)
+                continue;   // said by the game: it draws no cards
             ++checked;
             std::printf("      %-12s smallest card %.1f px against a %.0f px floor\n",
                         qPrintable(name), smallest, CardArt::kFaceMinWidth);
@@ -1296,6 +1306,10 @@ int main(int argc, char* argv[])
                 tooSmall << name;
         }
         Legibility::instance().setEnabled(false);
+        check(unanswered.isEmpty(),
+              "every game says whether it draws cards, so none is skipped in silence");
+        if (!unanswered.isEmpty())
+            std::printf("      unanswered: %s\n", qPrintable(unanswered.join(QStringLiteral(", "))));
         check(checked >= 6, "six games draw cards and every one of them was measured");
         check(tooSmall.isEmpty(),
               "no card game is driven below the width that still shows a face");
