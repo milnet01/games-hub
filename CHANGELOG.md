@@ -17,6 +17,27 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **The score book's instructions now describe a setup that works.** (GHUB-0143)
+  It said to open the page as a file, which cannot install the offline
+  shell or the home-screen icon -- both need the folder to be served.
+  It also now says to bump the cache name after an edit, and is honest
+  about which numbers the drift check compares.
+
+- **Sharing the score book is safer to join and to leave.** (GHUB-0141)
+  A shared book whose names arrived in an unexpected form could freeze
+  a watching phone. Sharing now checks a code is free before claiming
+  it, instead of possibly landing on a game already in progress.
+  Taking over scoring stands the previous scorer down rather than
+  leaving two. And a connection that fails says so instead of leaving
+  the button looking like it did nothing.
+
+- **The score book's offline cache no longer swallows the live database traffic.** (GHUB-0142)
+  On a network that will not carry a live connection, the database
+  falls back to ordinary web requests -- and those were being cached
+  and replayed for ever, so sharing stopped working on that phone with
+  no way back short of clearing its site data. Only the score book's
+  own files and the pinned Firebase library are cached now.
+
 - **Draughts asks which way you meant to jump when two routes finish in the same place.** (GHUB-0131)
   Where a piece can reach one square by two different jump routes,
   taking different men, the board used to play whichever it happened to

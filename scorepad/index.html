@@ -268,7 +268,11 @@ async function connect() {
    rather than letting undefined leak into the arithmetic. */
 function sanitise(book) {
   const b = Object.assign(blank(), book || {});
-  b.players = [0, 1, 2, 3].map((i) => (b.players && b.players[i]) || "");
+  // String(), not just a whitelist. The fields were checked and the TYPES were
+  // not, so a room whose players came back as numbers reached nameOf(), which
+  // calls .trim() -- a TypeError inside render(), which freezes the phone of
+  // anyone watching. Reachable by anybody who guesses a four-letter code.
+  b.players = [0, 1, 2, 3].map((i) => String((b.players && b.players[i]) || ""));
   b.hands = (b.hands || []).filter(Boolean).map((h) => ({
     a: Number(h.a || 0), b: Number(h.b || 0),
     outSeat: (h.outSeat === undefined || h.outSeat === null) ? null : Number(h.outSeat),
@@ -280,7 +284,7 @@ function sanitise(book) {
   b.started = !!b.started;
   b.history = (b.history || []).filter(Boolean).map((g) => ({
     finishedAt: Number(g.finishedAt || 0),
-    players: [0, 1, 2, 3].map((i) => (g.players && g.players[i]) || "?"),
+    players: [0, 1, 2, 3].map((i) => String((g.players && g.players[i]) || "?")),
     target: Number(g.target || DEFAULT_TARGET),
     hands: (g.hands || []).filter(Boolean).map((h) => ({
       a: Number(h.a || 0), b: Number(h.b || 0),
@@ -299,7 +303,17 @@ function listen() {
     const v = snap.val();
     sync = "live";
     if (!v) { if (room.scorer) pushBook(); else render(); return; }
-    scorerHere = v.scorerName || "";
+    scorerHere = String(v.scorerName || "");
+
+    // Somebody else has taken over scoring. scorerId was written on every push
+    // and read nowhere, so "take over" made a SECOND scorer without demoting
+    // the first: both then wrote, and the book flipped between two phones.
+    // Reading it is what makes the hand-over real.
+    if (room.scorer && v.scorerId && v.scorerId !== myId()) {
+      room.scorer = false;
+      save();
+    }
+
     // The scorer is the source of truth; it must never be overwritten by the
     // echo of its own write, which would fight whatever is being typed.
     if (!room.scorer) { S = sanitise(v.book); gotBook = true; saveLocal(); }
@@ -323,7 +337,26 @@ function pushBook() {
 async function startSharing() {
   sync = "connecting"; render();       // paint the indicator before we go away to connect
   if (!(await connect())) { render(); return; }
-  room = { code: newCode(), scorer: true };
+
+  // Nothing ever deletes a room, so the code space only fills up -- and the
+  // code was claimed without ever looking, so a new share could land on a game
+  // in progress and overwrite somebody else's book with this phone's. Look
+  // first, and try again if it is taken.
+  let code = "";
+  for (let attempt = 0; attempt < 5 && !code; attempt++) {
+    const candidate = newCode();
+    try {
+      const snap = await fb.get(fb.ref(db, "rooms/" + candidate));
+      if (!snap.exists()) code = candidate;
+    } catch (e) {
+      // Cannot read to check. Claiming it is what this did before, every time,
+      // so falling back to that is no worse than the behaviour being replaced.
+      code = candidate;
+    }
+  }
+  if (!code) { sync = "error"; render(); return; }
+
+  room = { code, scorer: true };
   save(); listen(); pushBook(); render();
 }
 async function joinRoom(code) {
@@ -684,7 +717,11 @@ function sharePanel() {
       <p role="status">Connecting&hellip;</p></div>`;
 
   if (!room)
+    // `state` carries the error text and this branch used to drop it on the
+    // floor: a failed connection left the share panel looking untouched, so the
+    // button simply appeared to do nothing.
     return `<div class="panel stack"><h2>The table</h2>
+      ${sync === "error" ? `<p class="note" role="status">${state}</p>` : ""}
       <p class="note">Put the same book on everyone's phone. One person keeps score;
          the rest follow along.</p>
       <div class="actions">

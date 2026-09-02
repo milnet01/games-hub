@@ -6097,7 +6097,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: chore.
   Source: user-request-2026-08-24.
 
-- 📋 [GHUB-0141] **Make the shared room safe to join and to leave.**
+- ✅ [GHUB-0141] **Make the shared room safe to join and to leave.**
   The book-destroying join and the stranded Connecting panel are
   fixed. Still open: sanitise() whitelists fields but does not coerce
   types, so a room written with numeric names throws inside render()
@@ -6107,11 +6107,35 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Take over scoring makes a second scorer without demoting the first,
   and scorerId is written and read nowhere. A failed connection
   reports nothing at all.
+  Resolved (2026-09-02), all four.
+
+  sanitise() coerces player names with String(). The whitelist checked
+  which FIELDS came back and never their types, so a room written with
+  numeric names reached nameOf(), which calls .trim() -- a TypeError
+  inside render(), which freezes the phone of anyone watching, reachable
+  by anybody who guesses a four-letter code. The history's names are
+  coerced the same way, and so is scorerName.
+
+  startSharing looks before it claims a code, and tries again up to five
+  times. Nothing ever deletes a room, so the space only fills up, and
+  the old code claimed blind -- a new share could land on a game in
+  progress and overwrite it. Where the existence read itself fails it
+  falls back to claiming, which is exactly what it did before every
+  time, so that path is no worse than what it replaces.
+
+  listen() reads scorerId. It was written on every push and read
+  nowhere, so "take over scoring" made a SECOND scorer without demoting
+  the first and both then wrote, flipping the book between two phones. A
+  scorer that sees another id in the room now stands down.
+
+  sharePanel shows the error. It composed the message into `state` and
+  the !room branch dropped it, so a failed connection left the panel
+  looking untouched and the button appeared to do nothing at all.
   **Layman:** Sharing a game has a few ways to go wrong that nobody would spot at the table.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0142] **The service worker caches every successful GET, cross-origin included.**
+- ✅ [GHUB-0142] **The service worker caches every successful GET, cross-origin included.**
   sw.js has no URL filter: the fetch handler caches any ok response
   and then serves cache-first forever. If the database client falls
   back to HTTP long-polling -- its normal behaviour on a restrictive
@@ -6120,11 +6144,25 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   invalidation short of clearing site data. Cache same-origin plus the
   pinned SDK prefix only, skip the database origin, and pass the put
   promise to waitUntil.
+  Resolved (2026-09-02): the fetch handler is a whitelist -- this
+  app's own origin plus the pinned gstatic SDK prefix -- and anything
+  else goes straight to the network and is never stored. The put is
+  passed to waitUntil, so it is no longer cut short when respondWith
+  settles, which made caching depend on timing.
+
+  CACHE bumped to v3, which the file's own comment requires whenever
+  anything in it changes.
+
+  Why it mattered: the database client falls back to HTTP long-polling
+  whenever the network will not carry a WebSocket, which is the
+  restrictive-network case this file exists for. Those are ordinary
+  GETs returning 200, so they were cached and then replayed cache-first
+  for ever, and syncing never recovered short of clearing site data.
   **Layman:** The offline cache can swallow the live database traffic and break syncing for good on that phone.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0143] **The score book README describes a setup that cannot work.**
+- ✅ [GHUB-0143] **The score book README describes a setup that cannot work.**
   It says to open index.html in a phone browser and add it to the home
   screen. Neither the service worker nor the manifest installs from
   file:// -- both need a secure origin -- so the headline offline
@@ -6135,6 +6173,26 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   scorepad-check.py compares the phone against the Rules struct
   defaults, while the opening minimums are editable in the House
   dialog and stored in QSettings.
+  Resolved (2026-09-02), all three claims.
+
+  The README said to open index.html in a phone browser. A service
+  worker and a manifest both need a secure origin, so from file:// you
+  get no offline shell and no add-to-home-screen -- the whole feature.
+  It now says the directory has to be SERVED, names localhost for
+  testing, and points out that GitHub Pages already serves this
+  repository.
+
+  Bumping CACHE in sw.js is now in the setup rather than only in that
+  file's own comment.
+
+  And the drift claim is corrected rather than softened. scorepad-check
+  reads the Rules struct DEFAULTS out of canastaengine.h -- its own
+  docstring says so -- while the opening minimums players actually
+  change live in the House dialog and are stored per machine in
+  QSettings. So a house rule changed in the GAME cannot be caught by it,
+  and the phone would show the shipped figure with the check still
+  green. The README now says which of the two it catches, and says
+  outright that it used to claim otherwise.
   **Layman:** Following the instructions as written would not give you a working offline score book.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.

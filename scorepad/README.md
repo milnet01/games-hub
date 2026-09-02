@@ -3,8 +3,18 @@
 A phone replacement for the paper score book kept at the table. Four people
 play with real cards; this keeps the book.
 
-It is **not** part of the desktop game and does not play Canasta. Open
-`index.html` in a phone browser and add it to the home screen.
+It is **not** part of the desktop game and does not play Canasta.
+
+**It has to be SERVED, not opened as a file.** A service worker and a web app
+manifest both need a secure origin, so `file:///.../index.html` gives you a
+page with no offline shell and no "add to home screen" — which is the whole
+feature. Put the `scorepad/` directory behind any `https://` host, or
+`http://localhost` while you are testing, and open that on the phone. GitHub
+Pages serves this repository already.
+
+**Changed a file in here? Bump `CACHE` in `sw.js`.** Its own comment says so:
+the old copy is served for ever otherwise, and a phone that has already
+installed the book will never see the edit.
 
 ## What it does
 
@@ -95,9 +105,15 @@ pre-push hook and on both CI legs.
 
 The opening bands, the target and the going-out default exist here **and** in
 `src/canasta/canastaengine.{h,cpp}`. The script holds no copy of its own: it
-reads both and fails when they disagree, so a house rule changed in the game
-cannot quietly leave the phone telling the table a stale figure. Same reasoning
-as the donate URLs being generated from `.github/FUNDING.yml`.
+reads both and fails when they disagree. Same reasoning as the donate URLs
+being generated from `.github/FUNDING.yml`.
+
+**What it compares is the `Rules` struct DEFAULTS in the header.** So it
+catches an edit to the shipped numbers, and it does not catch — and cannot —
+a rule the players change in the game's own House dialog, which is stored per
+machine in QSettings and never reaches this file. If your table plays a house
+opening minimum, the phone shows the shipped one and the check stays green.
+This paragraph used to claim otherwise.
 
 `tools/make_scorepad_icon.py` draws the home-screen icon. Generated rather than
 drawn by hand, like the sound effects: re-running it is byte-identical and no
