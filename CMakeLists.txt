@@ -213,8 +213,10 @@ set_tests_properties(shot_refuses_a_bad_size shot_refuses_turns_it_cannot_play
 # configure without bash or python used to drop the test silently, and ctest
 # then reported 100% passed over a smaller suite -- which is exactly the
 # "silently skipped step" scripts/local-ci.sh refuses by name. A red test says
-# which tool is missing; a green run over four tests instead of six says
-# nothing.
+# which tool is missing; a green run over a shorter suite says nothing at all.
+# Deliberately no figures here: the count moves every time a case is added, and
+# a stale one sends somebody hunting for a case that was never registered on
+# their platform. `ctest -N` is how you count them.
 if(UNIX)
     find_program(BASH_PROGRAM bash)
     if(BASH_PROGRAM)
@@ -257,9 +259,9 @@ elseif(UNIX)
 else()
     # Windows with no interpreter CMake will use. Said out loud, because the
     # alternative is a silent one: the owner's Windows box has only the Store
-    # stub python.exe, so it registers four tests where the GitHub runner
-    # registers six, and a green run there was read as full coverage while the
-    # runner was failing on one of the two missing checks.
+    # stub python.exe, so it registers strictly fewer cases than the GitHub
+    # runner -- and a green run there was read as full coverage while the runner
+    # was failing on one of the two checks this branch drops.
     message(STATUS
             "gameshub: no Python3 interpreter -- the scorepad and legibility "
             "checks are NOT registered; ctest here runs fewer tests than CI")

@@ -76,8 +76,13 @@ int takeShot(HubWindow& window, const QString& path, const QString& size, bool l
     if (turns > 0) {
         GameView* view = window.findChild<GameView*>();
         if (view == nullptr || !view->advanceForShot(turns)) {
+            // Named by the mechanism, not by the game: every game here has
+            // turns, and what decides this is whether it overrides
+            // GameView::advanceForShot. "Cannot play itself" reads as a claim
+            // about Hearts or Chess and sends the reader hunting for a bug.
             std::fprintf(stderr,
-                         "--turns needs a game that can play itself, and this one cannot.\n");
+                         "That game does not support --turns: it has no "
+                         "advanceForShot override.\n");
             Legibility::instance().setEnabledForSession(wasLegible);
             return 2;
         }

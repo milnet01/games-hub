@@ -36,7 +36,8 @@ QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/hearts.png \
 
 # Unlike playing, an unknown --game REFUSES rather than falling back to the
 # grid; a malformed --size refuses rather than picking another size; and --turns
-# refuses a game that cannot play itself. A picture of the wrong thing is the
+# refuses any game that does not override the hook, which today is all but
+# Canasta. A picture of the wrong thing is the
 # one failure a screenshot cannot survive: it still gets written, and it still
 # looks like an answer.
 
@@ -62,22 +63,25 @@ XDG_CONFIG_HOME=/tmp/shot QT_QPA_PLATFORM=offscreen ./build/gameshub \
 
 `--turns` runs the game's own turns with every seat played by its computer,
 **seat 0 included** — the board otherwise stops dead on your turn, which reads
-as the flag not working. A game that has no notion of a turn REFUSES rather
-than photographing the deal, for the same reason an unknown `--game` does.
+as the flag not working.
 
-`GameView::advanceForShot` is the hook, and Canasta is the only game that
-overrides it so far. Its contract is **synchronous, unanimated and silent**, and
-that is a rule about how the turns are DRIVEN rather than about tidying up
-afterwards.
+`GameView::advanceForShot` is the hook, it returns false by default, and
+**that default is the refusal**: a game refuses because it has not overridden
+the hook, never because it has no turns. Chess, Hearts and Snake all have turns
+and computer opponents and all refuse today, because Canasta is still the only
+override. Making a game photographable mid-play IS writing one.
+
+Its contract is **synchronous, unanimated and silent**, which is a rule about
+how the turns are DRIVEN rather than about tidying up afterwards.
 
 **Drive them through the rules core, never through the game's own presentation
-path.** That path exists to fly cards, make noise and set a pause between
-turns — and it hands the rest to a `QTimer`, which cannot fire inside a
-synchronous call. So an override built by calling it N times returns having
-advanced nothing, and photographs the deal. **Then settle before returning** —
-clear pending flights, selection, pauses and any celebration, and re-sort —
-because the picture is taken the moment it returns and a card still in the air
-is photographed half-way to somewhere.
+path.** That path advances the engine right enough — it is the animation it
+adds that cannot survive: it launches flights, plays sounds and sets a pause
+between turns, and those finish under a `QTimer` that cannot fire inside a
+synchronous call. An override built on it therefore returns with cards still in
+the air, and photographs them half-way to somewhere. **Then settle before
+returning** — clear pending flights, selection, pauses and any celebration, and
+re-sort.
 
 Nothing catches either breach: the ctest case photographs Canasta only, and a
 wrong picture still looks like an answer.
@@ -215,10 +219,12 @@ turns a tag into a Linux AppImage and a Windows zip on the releases page.
 
 **`ci.yml` has a THIRD job** — `Saved-game fuzz (ASan/UBSan)`, on the same
 triggers, and it is not one of the two test binaries. `scripts/local-ci.sh`
-skips it unless given `--with-sanitizers`, and prints that it skipped it. So a
-plain local run is green against two of `ci.yml`'s three jobs, and the Windows
-leg is uncovered on top of that: `scripts/wintest-ci.sh` is the only local
-route to it, and it exits without running anything when the box is off.
+skips it unless given `--with-sanitizers`, and prints that it skipped it. Two
+job definitions, `build` and `sanitizers`, but `build` is a matrix, so GitHub
+reports **three**: the Linux build, the Windows build and the fuzz. **A plain
+local run is green against the first of those three and no more** — it drives
+no MSVC and no sanitizer. `scripts/wintest-ci.sh` is the only local route to
+the Windows leg, and it exits without running anything when the box is off.
 
 Cutting a release is three edits, a check and a tag, **in this order**:
 
@@ -264,11 +270,12 @@ inside the widget until GHUB-0066 closed on 2026-08-25 (Klondike, Spider,
 FreeCell, Pyramid, Snake and 2048); the split found two shipped bugs that
 nothing could have caught while it did not hold, GHUB-0125 and GHUB-0126.
 
-**Three of those cores hold a lifted run themselves rather than handing it to
-the view**, and that is deliberate. Klondike and Spider turn over whatever a run
-was covering when it lands, so the drop has to know where the cards came from;
-keeping the run in the table means the view cannot tell it wrong. FreeCell hands
-the run back because it uncovers nothing. **In all three the undo snapshot is
+**Three of those cores own the LIFT, and two of them keep the run**, which is
+deliberate. Klondike and Spider turn over whatever a run was covering when it
+lands, so the drop has to know where the cards came from; keeping the run in the
+table (`m_held`, and `held()` to read it) means the view cannot tell it wrong.
+FreeCell hands the run back because it uncovers nothing, and keeps only the
+column it came from. **In all three the undo snapshot is
 banked when the run is LIFTED, never when it is dropped** — the drop happens
 after the cards have left their pile, so a snapshot taken there is of a table
 they were never on. That is GHUB-0126, and it lost the card in two of the three.
@@ -307,9 +314,9 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   that because the switch is read **live**, at the point it is used — in the
   game's own `paintEvent`, font accessor or `minimumSizeHint`, or on its behalf
   by the inherited `paintStatusCaption()` and `captionBand()`, which read it
-  live inside `gameview.cpp`. **Seven games never name `Legibility` at all**
-  and are correct as they stand; inheriting the read is compliance, not a gap
-  to paper over with a redundant call.
+  live inside `gameview.cpp`. **Three games never name `Legibility` at all** —
+  Hearts, Pyramid and Snake — and are correct as they stand; inheriting the read
+  is compliance, not a gap to paper over with a redundant call.
   **That is the rule, not an accident.** A game that instead caches anything
   derived from the switch must read it in its own constructor as well, and no
   test catches the omission — `everyGameAnswersTheSwitch` builds every game
@@ -941,9 +948,12 @@ no-legal-move guard, so a take that would strand the seat on one card is now
 refused -- and the AI made some of those takes. That alone took expert v hard
 from 121/240 +14 to 116/240 -183. GHUB-0129 then widened `worthHolding` to Hard
 and graded its pile floor, which put hard v medium up from 66/120 +236 and
-expert v hard back to level. The ladder is deterministic here (the shuffle is
-seeded and hand-written), so a move is real and not noise: two consecutive runs
-give the same figures to the digit. Do not read the GHUB-0148 dip as a
+expert v hard back to level. **Two different things get called noise here, and
+they pull opposite ways.** Run to run there is none: the shuffle is seeded and
+hand-written, so two consecutive runs give the same figures to the digit and a
+rung that moved really did move. Across DEALS there is plenty — 24 or 120 games
+is a small sample — which is what GHUB-0110 settled and why a moved rung is not
+by itself evidence that a level got stronger. Do not read the GHUB-0148 dip as a
 regression introduced by an AI change; it was the price of a correctness fix.
 **A rung that does NOT move is the useful reading when a change is gated to
 some levels** — GHUB-0124 touched Expert alone, so the first three not moving is
