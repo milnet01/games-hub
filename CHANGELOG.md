@@ -17,6 +17,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Draughts asks which way you meant to jump when two routes finish in the same place.** (GHUB-0131)
+  Where a piece can reach one square by two different jump routes,
+  taking different men, the board used to play whichever it happened to
+  find first -- and drew the same dot twice, so nothing told you a
+  choice existed. That square is now ringed, and clicking it moves the
+  dots to the squares the two routes differ at so you can say which you
+  meant.
+
 - **A Canasta hand-size change now applies at the next hand, as the game says.** (GHUB-0150)
   Changing the pack size, the jokers or the hand size mid-game waited
   for a whole new game rather than the next hand, so correcting a house

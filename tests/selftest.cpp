@@ -550,6 +550,49 @@ void draughtsCaptures()
     check(sawMultiJump, "draughts: multi-jump chains are generated");
 }
 
+void draughtsTwoChainsCanEndOnOneSquare()
+{
+    // The position GHUB-0131 is about, proved real before anything is asserted
+    // about how the board offers it. A red MAN on (5,2) can take the two white
+    // men to its left -- (4,1) then (2,1) -- or the two to its right -- (4,3)
+    // then (2,3) -- and either way it finishes on (1,2). English draughts lets
+    // you play either, and they take DIFFERENT men, so the choice changes the
+    // position.
+    //
+    // A MAN, not a king, and that is the whole reason the case exists. A king
+    // at (1,2) could carry on capturing backwards, so the chain would have to
+    // be played to its end and the two routes would finish on different
+    // squares. A man captures forwards only, so both stop there. Found by
+    // fuzzing 276,598 random positions, in which this shape turned up once.
+    std::vector<Piece> cells(kBoardCells, Piece::Empty);
+    const auto put = [&cells](int row, int col, Piece p) {
+        cells[std::size_t(row * kBoardSize + col)] = p;
+    };
+    put(5, 2, Piece::RedMan);
+    put(4, 1, Piece::WhiteMan);
+    put(2, 1, Piece::WhiteMan);
+    put(4, 3, Piece::WhiteMan);
+    put(2, 3, Piece::WhiteMan);
+
+    DraughtsBoard b;
+    check(b.restore(cells), "draughts: the crafted position is one the rules could reach");
+
+    const std::vector<DraughtsMove> moves = b.legalMoves(Side::Red);
+    std::vector<DraughtsMove> converging;
+    for (const DraughtsMove& m : moves)
+        if (m.destination() == Square { 1, 2 })
+            converging.push_back(m);
+
+    check(converging.size() == 2, "draughts: two chains finish on the very same square");
+    if (converging.size() == 2) {
+        check(converging[0].captured.size() == 2 && converging[1].captured.size() == 2,
+              "draughts: each of them takes two men");
+        const bool sameMen = converging[0].captured[0] == converging[1].captured[0]
+            && converging[0].captured[1] == converging[1].captured[1];
+        check(!sameMen, "draughts: and they take different men, so the choice matters");
+    }
+}
+
 void draughtsEngine()
 {
     // The engine should beat random play convincingly.
@@ -5246,6 +5289,7 @@ int main()
     section("Draughts");
     draughtsRules();
     draughtsCaptures();
+    draughtsTwoChainsCanEndOnOneSquare();
     draughtsEngine();
 
     section("Saved boards");

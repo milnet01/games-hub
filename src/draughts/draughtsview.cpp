@@ -87,6 +87,8 @@ void DraughtsView::newGame()
     m_human = Side::Red;
     m_selected.reset();
     m_selectedMoves.clear();
+    m_choices.clear();
+    m_chooseStep = -1;
     m_lastMove.reset();
     m_history.clear();
     m_thinking = false;
@@ -113,6 +115,8 @@ void DraughtsView::undo()
     }
     m_selected.reset();
     m_selectedMoves.clear();
+    m_choices.clear();
+    m_chooseStep = -1;
     m_finished = false;
     m_undoAction->setEnabled(!m_history.empty());
     advance();
@@ -347,12 +351,40 @@ void DraughtsView::paintEvent(QPaintEvent*)
     }
 
     // Where the selected piece can go.
+    const auto centreOf = [&](const Square& sq) {
+        return QPointF(r.x() + (sq.col + 0.5) * cell, r.y() + (sq.row + 0.5) * cell);
+    };
     p.setPen(Qt::NoPen);
-    for (const DraughtsMove& m : m_selectedMoves) {
-        const Square d = m.destination();
-        p.setBrush(QColor(0x66, 0xe0, 0x8a, m.isCapture() ? 150 : 110));
-        p.drawEllipse(QPointF(r.x() + (d.col + 0.5) * cell, r.y() + (d.row + 0.5) * cell),
-                      cell * 0.16, cell * 0.16);
+    if (m_chooseStep >= 0) {
+        // A route is being chosen, so the dots move to the squares the
+        // candidates part company at. The destination is the same either way,
+        // which is exactly why marking it again would say nothing.
+        for (const DraughtsMove& m : m_choices) {
+            if (std::size_t(m_chooseStep) >= m.steps.size())
+                continue;
+            p.setBrush(QColor(0xff, 0xd5, 0x4f, 200));
+            p.drawEllipse(centreOf(m.steps[std::size_t(m_chooseStep)]), cell * 0.20, cell * 0.20);
+        }
+    } else {
+        for (const DraughtsMove& m : m_selectedMoves) {
+            const Square d = m.destination();
+            p.setBrush(QColor(0x66, 0xe0, 0x8a, m.isCapture() ? 150 : 110));
+            p.drawEllipse(centreOf(d), cell * 0.16, cell * 0.16);
+
+            // More than one chain finishes here, taking different pieces.
+            // English draughts lets you play either, so the square is ringed:
+            // the choice is visible BEFORE it is made rather than discovered
+            // afterwards by counting what went missing.
+            const auto ways = std::count_if(
+                m_selectedMoves.begin(), m_selectedMoves.end(),
+                [&](const DraughtsMove& other) { return other.destination() == d; });
+            if (ways > 1) {
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(QColor(0xff, 0xd5, 0x4f), std::max(2.0, cell * 0.05)));
+                p.drawEllipse(centreOf(d), cell * 0.26, cell * 0.26);
+                p.setPen(Qt::NoPen);
+            }
+        }
     }
 
     if (m_selected) {
@@ -403,6 +435,54 @@ void DraughtsView::paintEvent(QPaintEvent*)
     paintStatusCaption(p, QRectF(rect()));
 }
 
+namespace {
+
+// The first step at which a set of routes parts company. Two chains that finish
+// on the same square must differ somewhere earlier, and THAT square is what the
+// player is actually choosing between -- not the destination, which is the same
+// either way. Returns -1 when there is nothing to choose.
+int firstDivergingStep(const std::vector<DraughtsMove>& moves)
+{
+    if (moves.size() < 2)
+        return -1;
+    std::size_t longest = 0;
+    for (const DraughtsMove& m : moves)
+        longest = std::max(longest, m.steps.size());
+
+    for (std::size_t i = 0; i < longest; ++i) {
+        bool seen = false;
+        Square first {};
+        for (const DraughtsMove& m : moves) {
+            if (i >= m.steps.size())
+                return int(i);   // one route stops here and another goes on
+            if (!seen) {
+                first = m.steps[i];
+                seen = true;
+            } else if (!(m.steps[i] == first)) {
+                return int(i);
+            }
+        }
+    }
+    return -1;
+}
+
+} // namespace
+
+void DraughtsView::playMove(const DraughtsMove& m)
+{
+    m_history.push_back({ m_board, m_toMove });
+    m_undoAction->setEnabled(true);
+    m_board.apply(m);
+    m_lastMove = m;
+    Sound::instance().play(m.isCapture() ? Sound::kDiscFlip : Sound::kDiscPlace);
+    m_selected.reset();
+    m_selectedMoves.clear();
+    m_choices.clear();
+    m_chooseStep = -1;
+    m_toMove = other(m_toMove);
+    advance();
+}
+
 void DraughtsView::mousePressEvent(QMouseEvent* event)
 {
     if (m_finished || m_thinking || m_toMove != m_human || event->button() != Qt::LeftButton)
@@ -412,21 +492,49 @@ void DraughtsView::mousePressEvent(QMouseEvent* event)
     if (!clicked)
         return;
 
-    // Clicking a highlighted destination plays that move.
-    if (m_selected) {
-        for (const DraughtsMove& m : m_selectedMoves) {
-            if (!(m.destination() == *clicked))
-                continue;
+    // Already being asked which route: the dots are on the squares the
+    // candidates part company at, so a click on one of them narrows the choice
+    // and plays it as soon as only one is left.
+    if (m_chooseStep >= 0) {
+        std::vector<DraughtsMove> still;
+        for (const DraughtsMove& m : m_choices) {
+            if (std::size_t(m_chooseStep) < m.steps.size()
+                && m.steps[std::size_t(m_chooseStep)] == *clicked)
+                still.push_back(m);
+        }
+        if (still.size() > 1) {
+            m_choices = std::move(still);
+            m_chooseStep = firstDivergingStep(m_choices);
+            refresh(QStringLiteral("Still more than one way — click the next square to jump to."));
+            return;
+        }
+        if (still.size() == 1) {
+            playMove(still.front());
+            return;
+        }
+        // A click anywhere else abandons the choice and is handled below as an
+        // ordinary click, rather than being swallowed.
+        m_choices.clear();
+        m_chooseStep = -1;
+    }
 
-            m_history.push_back({ m_board, m_toMove });
-            m_undoAction->setEnabled(true);
-            m_board.apply(m);
-            m_lastMove = m;
-            Sound::instance().play(m.isCapture() ? Sound::kDiscFlip : Sound::kDiscPlace);
-            m_selected.reset();
-            m_selectedMoves.clear();
-            m_toMove = other(m_toMove);
-            advance();
+    // Clicking a highlighted destination plays that move -- unless more than one
+    // chain ends there, in which case the board asks which rather than guessing.
+    if (m_selected) {
+        std::vector<DraughtsMove> ending;
+        for (const DraughtsMove& m : m_selectedMoves)
+            if (m.destination() == *clicked)
+                ending.push_back(m);
+
+        if (ending.size() > 1) {
+            m_choices = std::move(ending);
+            m_chooseStep = firstDivergingStep(m_choices);
+            refresh(QStringLiteral("Two ways to take that — click the square you want to "
+                                   "jump to first."));
+            return;
+        }
+        if (ending.size() == 1) {
+            playMove(ending.front());
             return;
         }
     }
@@ -448,6 +556,8 @@ void DraughtsView::mousePressEvent(QMouseEvent* event)
 
     m_selected.reset();
     m_selectedMoves.clear();
+    m_choices.clear();
+    m_chooseStep = -1;
     refresh();
 }
 
@@ -569,6 +679,8 @@ bool DraughtsView::restoreState(const QByteArray& blob)
     m_level = DraughtsLevel(level);
     m_selected.reset();
     m_selectedMoves.clear();
+    m_choices.clear();
+    m_chooseStep = -1;
     m_lastMove = lastMove;
     m_history.clear();
     m_thinking = false;

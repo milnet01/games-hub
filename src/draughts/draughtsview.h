@@ -41,6 +41,9 @@ private:
     void playEngineMove();
     void refresh(const QString& message = {});
     void announceResult(Side winner);
+    // The one place a human move is applied. Two click paths reach it now --
+    // an unambiguous destination, and a route chosen from several.
+    void playMove(const DraughtsMove& m);
 
     QRect boardRect() const;
     std::optional<Square> squareAt(QPointF pos) const;
@@ -63,6 +66,13 @@ private:
 
     std::optional<Square> m_selected;
     std::vector<DraughtsMove> m_selectedMoves;
+    // Two capture chains from one square can finish on the SAME square while
+    // taking different pieces -- routine for a king, and English draughts lets
+    // you play either. The board used to take the first one it found. These
+    // hold the candidates while the player says which, and the step index at
+    // which they part company: that square is what is really being chosen.
+    std::vector<DraughtsMove> m_choices;
+    int m_chooseStep = -1;
     std::optional<DraughtsMove> m_lastMove;
     std::vector<Snapshot> m_history;
     bool m_thinking = false;

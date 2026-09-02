@@ -5515,13 +5515,49 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0131] **Draughts cannot choose between two capture chains ending on one square.**
+- ✅ [GHUB-0131] **Draughts cannot choose between two capture chains ending on one square.**
   English draughts lets you take any available chain. Two chains from
   one square to one landing square that capture different pieces are
   routine for a king; the first match in m_selectedMoves wins and the
   destination dot is drawn twice in the same place with no cue. The
   same file has no draw condition at all, so two lone kings shuffle
   forever and announceResult(Side) cannot express the outcome.
+  Resolved (2026-09-02) for the capture chains. The missing draw
+  condition is split out as GHUB-0169 and is NOT done: it needs a rule
+  chosen by the owner, a save-format bump, and a wider announceResult
+  signature.
+
+  One correction to the finding, and it is the interesting part. It
+  says two converging chains are "routine for a KING". They are not
+  possible for a king at all: a king captures backwards as well, so
+  from the square where the two routes meet it can still take the men
+  the other route was for -- and a chain must be played to its end, so
+  the two routes carry on and finish somewhere else. The case needs a
+  MAN, whose forward-only capture is what makes both routes stop
+  together.
+
+  It is also rare rather than routine. Fuzzing 276,598 random legal
+  positions turned up ten pairs of moves sharing a start and a
+  destination, and ONE that took different men. That one is the
+  position both tests use: a red man on (5,2) taking (4,1) then (2,1),
+  or (4,3) then (2,3), finishing on (1,2) either way.
+
+  The board now asks. Clicking a destination that more than one chain
+  reaches moves the dots to the squares those chains part company at --
+  the destination says nothing, being the same either way -- and
+  clicking one of those plays that route, narrowing again if more than
+  one still matches. A destination reached by more than one chain is
+  RINGED before it is clicked, so the choice is visible rather than
+  discovered afterwards by noticing what went missing. The move is
+  applied in one place now, playMove(), which both click paths reach.
+
+  Four checks in the selftest and six in uitest. The uitest one
+  deliberately chooses the RIGHT-hand route: the old arbitrary pick was
+  the left, so choosing the left would have agreed with the bug and two
+  of the checks would have passed either way. Four of the five
+  behavioural checks proven red; the fifth stays green under the bug on
+  purpose, since a move was played either way, and it is kept as a
+  guard rather than counted as coverage.
   **Layman:** When two different jump paths finish in the same place, the game silently picks one.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
@@ -5692,6 +5728,31 @@ open.
   **Layman:** Three things the release promised about how Canasta looks cannot be photographed, so nobody has checked them by eye.
   Kind: test.
   Source: verify-delivery 0.5.0, 2026-08-31.
+
+- 📋 [GHUB-0169] **Draughts has no draw, so two lone kings shuffle for ever.**
+  Split out of GHUB-0131, whose capture-chain half shipped. Three
+  things have to move together, which is what makes this its own item
+  rather than a line in a sweep.
+
+  A rule has to be CHOSEN. English draughts has more than one draw
+  convention -- forty moves by each side with no capture and no man
+  moved is the usual one, and threefold repetition is the other. That
+  is the owner's call, not a reviewer's.
+
+  Wherever the counter lives it has to survive a save. DraughtsView's
+  blob is version 1 and its reader refuses anything else, so this
+  means version 2 plus a reader that still accepts 1 with the count
+  at nought. Doable, and not a one-line change.
+
+  And announceResult takes a Side, so it cannot express "nobody". Its
+  signature has to widen, and the scores and the sounds behind it have
+  to say something sensible for a drawn game.
+
+  The rules core is where the counter belongs, per CLAUDE.md's split:
+  draw detection is a rule, not presentation.
+  **Layman:** A draughts game that neither side can win never ends; it just goes on.
+  Kind: feature.
+  Source: review-code sweep 2026-08-31, split from GHUB-0131.
 
 ## The score book on a phone
 

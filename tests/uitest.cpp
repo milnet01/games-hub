@@ -2329,6 +2329,84 @@ int main(int argc, char* argv[])
                   "draughts: a corrupt save is refused");
             check(renderOf(&draughtsResumed) == moved,
                   "draughts: and refusing one changes nothing");
+
+            {
+                // Two capture chains from one square that finish on the SAME
+                // square and take DIFFERENT men. The board used to play the
+                // first one it found and drew the destination dot twice in the
+                // same place, so nothing said a choice existed and the player
+                // could not make it. The position is the one
+                // draughtsTwoChainsCanEndOnOneSquare proves is legal.
+                Legibility::instance().setEnabled(false);
+                QByteArray blob;
+                QDataStream out(&blob, QIODevice::WriteOnly);
+                out.setVersion(QDataStream::Qt_6_0);
+                out << quint32(1) << qint8(0) << qint8(0) << qint8(0) << qint8(0);
+                std::array<qint8, 64> board {};
+                const auto put = [&board](int row, int col, int piece) {
+                    board[std::size_t(row * 8 + col)] = qint8(piece);
+                };
+                put(5, 2, 1);   // RedMan
+                put(4, 1, 3);   // WhiteMan
+                put(2, 1, 3);
+                put(4, 3, 3);
+                put(2, 3, 3);
+                for (qint8 c : board)
+                    out << c;
+
+                DraughtsView choose;
+                choose.resize(560, 560);
+                QString said;
+                QObject::connect(&choose, &GameView::statusChanged,
+                                 [&said](const QString& t) { said = t; });
+                check(choose.restoreState(blob), "draughts: the two-route position loads");
+
+                const QByteArray settled = choose.saveState();
+                clickAt(&choose, cellCentre(&choose, 5, 2), Qt::LeftButton);
+                clickAt(&choose, cellCentre(&choose, 1, 2), Qt::LeftButton);
+                check(choose.saveState() == settled,
+                      "draughts: clicking a square two chains reach plays neither of them");
+                check(said.contains(QStringLiteral("Two ways")),
+                      "draughts: it asks which route instead of choosing for you");
+
+                // (3,4) is the first landing square of the RIGHT-hand route.
+                // Deliberately not the left one: the board's old arbitrary pick
+                // was the left, so choosing that would agree with the bug and
+                // the two checks below would pass either way.
+                clickAt(&choose, cellCentre(&choose, 3, 4), Qt::LeftButton);
+                const QByteArray after = choose.saveState();
+                check(after != settled, "draughts: naming the route plays it");
+
+                // And it played THAT route: the two men on the right are still
+                // standing, which is the whole point of being asked.
+                QDataStream back(after);
+                back.setVersion(QDataStream::Qt_6_0);
+                quint32 version = 0;
+                qint8 toMove = 0;
+                qint8 human = 0;
+                qint8 level = 0;
+                qint8 hasLast = 0;
+                back >> version >> toMove >> human >> level >> hasLast;
+                if (hasLast == 1) {
+                    qint8 r = 0;
+                    qint8 c = 0;
+                    back >> r >> c;
+                    quint8 count = 0;
+                    back >> count;
+                    for (int i = 0; i < int(count) * 2; ++i)
+                        back >> r;
+                    back >> count;
+                    for (int i = 0; i < int(count) * 2; ++i)
+                        back >> r;
+                }
+                std::array<qint8, 64> now {};
+                for (qint8& c : now)
+                    back >> c;
+                check(now[std::size_t(4 * 8 + 1)] == 3 && now[std::size_t(2 * 8 + 1)] == 3,
+                      "draughts: and left standing the men the other route would have taken");
+                check(now[std::size_t(4 * 8 + 3)] == 0 && now[std::size_t(2 * 8 + 3)] == 0,
+                      "draughts: having taken the two the route you named was for");
+            }
         }
 
         {
