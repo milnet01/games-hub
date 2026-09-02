@@ -5676,7 +5676,7 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0159] **Chess moves the game on by two paths, and its search wastes most of its budget.**
+- ✅ [GHUB-0159] **Chess moves the game on by two paths, and its search wastes most of its budget.**
   chessview.cpp: engineMoveReady plays a move and then re-implements
   advance()'s over-check, refresh and announce block inline rather than
   calling it -- a second path through the function CLAUDE.md names as
@@ -5692,6 +5692,53 @@ open.
   can never be checkmate; plain char is passed to <cctype>; and the
   halfmove clock uses atoi, so an absurd value silently disables the
   fifty-move draw.
+  Resolved (2026-09-02), every part, and the search half is measured
+  rather than argued.
+
+  quiesce() generates captures only, through a new Board::legalCaptures
+  that applies the cheap noisy test BEFORE the board copy and the
+  inCheck. Measured over five positions at Hard: 2354.6 ms to 733.0 ms,
+  a 3.2x saving, and EVERY position still chooses the same move. The
+  worst case falls from 1150.7 ms to 334.5 ms, so CLAUDE.md's "Hard's
+  worst observed middlegame answer is about 1.2 s" is now about 0.33.
+
+  The node budget was deliberately NOT raised. The item's "buys several
+  times less search than it could" is now true headroom rather than
+  waste -- but the budget is what sets the difficulty ladder, and
+  spending the saving is a play-strength change the owner should choose.
+  Left as an offer with the measurement behind it.
+
+  One thing given up, and named in the code: stalemate detection at a
+  quiet leaf. With no captures we return the evaluation rather than
+  nought. Proving stalemate needs the full generation this exists to
+  avoid, and the main search still detects mate and stalemate at every
+  node above a leaf.
+
+  engineMoveReady goes through advance() instead of re-implementing its
+  over-check, refresh and announce inline. advance() takes the message
+  the engine's reply needs; every other caller lets refresh() compose
+  one. That second path is the structural reason the stale-timer
+  CRITICAL was reachable.
+
+  setFromFen now requires exactly one king a side and refuses a position
+  where the side NOT to move is in check. It validates onto a CANDIDATE
+  and assigns only on success, so a refused FEN leaves the board alone.
+  Bounded parsing replaces atoi, which cannot report failure and cannot
+  be bounded -- a negative halfmove clock walked in and could never
+  climb to the hundred the fifty-move draw needs. Every <cctype> call
+  takes an unsigned char.
+
+  Two things worth knowing. The candidate must be COPIED from *this,
+  never default-constructed: Board() calls reset() which calls
+  setFromFen, so a fresh one recurses until the stack runs out. I shipped
+  that recursion briefly and the owner's core dumps caught it.
+
+  And the new validation found an illegal position in the project's own
+  test data: chessEndings' fifty-move FEN had a rook on e2 giving check
+  up an open e-file to the king on e8 with WHITE to move, which means
+  Black had just moved into check. The rook is on d2 now.
+
+  Six checks in the selftest, five proven red.
   **Layman:** The chess engine does the same job in two places, and throws away most of the thinking it pays for.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

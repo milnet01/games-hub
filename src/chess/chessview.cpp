@@ -258,7 +258,7 @@ bool ChessView::restoreState(const QByteArray& blob)
     return true;
 }
 
-void ChessView::advance()
+void ChessView::advance(const QString& message)
 {
     if (m_game.isOver()) {
         m_finished = true;
@@ -267,7 +267,7 @@ void ChessView::advance()
         return;
     }
 
-    refresh();
+    refresh(message);
 
     if (m_game.toMove() != m_human) {
         m_thinking = true;
@@ -351,13 +351,12 @@ void ChessView::engineMoveReady(const SearchResult& result)
     m_lastMove = move;
     Sound::instance().play(capture ? Sound::kDiscFlip : Sound::kDiscPlace);
 
-    if (m_game.isOver()) {
-        m_finished = true;
-        refresh();
-        announceResult();
-        return;
-    }
-    refresh(m_game.board().inCheck() ? QStringLiteral("Computer played %1 — check!").arg(text)
+    // Through advance(), not around it. This used to re-implement advance()'s
+    // over-check, refresh and announce inline -- a second path through the
+    // function CLAUDE.md calls the single point that moves the game on. The two
+    // agreed, but that second path is the structural reason the stale-timer
+    // defect was reachable at all, and closing it is what stops the next one.
+    advance(m_game.board().inCheck() ? QStringLiteral("Computer played %1 — check!").arg(text)
                                      : QStringLiteral("Computer played %1.").arg(text));
 }
 

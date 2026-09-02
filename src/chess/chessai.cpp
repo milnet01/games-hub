@@ -193,28 +193,42 @@ private:
         if (ply >= kMaxPly || exhausted())
             return sideToMoveScore(board);
 
-        std::vector<Move> moves = board.legalMoves();
         const bool checked = board.inCheck();
-        if (moves.empty())
-            return checked ? -(kMate - ply) : 0;
 
-        if (!checked) {
+        // In check, every legal move is a candidate -- and the full list is also
+        // what tells mate from a way out of it, so it is worth generating here.
+        std::vector<Move> moves;
+        int best = 0;
+        if (checked) {
+            moves = board.legalMoves();
+            if (moves.empty())
+                return -(kMate - ply);
+            best = -kMate * 2;
+        } else {
             const int stand = sideToMoveScore(board);
             if (stand >= beta)
                 return stand;
             alpha = std::max(alpha, stand);
 
-            // Out of check, only the noisy moves are worth looking at.
-            moves.erase(std::remove_if(moves.begin(), moves.end(),
-                                       [&board](const Move& m) { return !isNoisy(board, m); }),
-                        moves.end());
+            // Out of check, only the moves that change material are worth
+            // looking at -- and they are GENERATED as such rather than filtered
+            // out of the full list afterwards. legalMoves() copies the board and
+            // runs inCheck() for every pseudo-legal move, so the old shape paid
+            // for about thirty-five moves to keep about five, at every quiet
+            // node, inside a fixed node budget.
+            //
+            // The one thing this gives up is stalemate detection at a quiet
+            // leaf: with no captures we return the evaluation rather than nought.
+            // Deliberate, and the standard trade -- proving stalemate needs the
+            // full generation this exists to avoid, and the main search still
+            // detects mate and stalemate at every node above a leaf.
+            moves = board.legalCaptures();
             if (moves.empty())
                 return stand;
+            best = stand;
         }
 
         orderMoves(board, moves);
-
-        int best = checked ? -kMate * 2 : sideToMoveScore(board);
         for (const Move& m : moves) {
             Board next = board;
             next.apply(m);

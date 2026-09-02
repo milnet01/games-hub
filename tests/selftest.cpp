@@ -767,6 +767,38 @@ void chessSpecialMoves()
           "chess: the promoted pawn becomes the piece chosen");
 }
 
+void chessFenRefusesAPositionTheRulesCannotReach()
+{
+    // setFromFen checked that the letters FIT the board and nothing about
+    // whether they made a position. A board with no black king can never be
+    // checkmate, so a game derived from one runs for ever with the engine
+    // unable to see the end of it.
+    chess::Board board;
+    const std::string opening = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    check(board.setFromFen(opening), "chess: the opening position loads");
+
+    const auto refused = [&board, &opening](const char* fen, const char* what) {
+        chess::Board fresh;
+        fresh.setFromFen(opening);
+        const bool took = fresh.setFromFen(fen);
+        check(!took, what);
+        // And refusing one leaves the position already loaded alone, which is
+        // the rule every restoreState() in this project follows.
+        return fresh.fen() == board.fen();
+    };
+
+    bool untouched = true;
+    untouched &= refused("4k3/8/8/8/8/8/8/8 w - - 0 1", "chess: a position with no white king is refused");
+    untouched &= refused("8/8/8/8/8/8/8/4K3 w - - 0 1", "chess: one with no black king is refused");
+    untouched &= refused("4k3/8/8/8/8/8/8/3KK3 w - - 0 1",
+                         "chess: and one with two white kings is refused");
+    // Black is in check from the rook up an open e-file while WHITE is to move,
+    // so Black must have moved into check on the turn before. No game reaches it.
+    untouched &= refused("4k3/8/8/8/8/8/4R3/4K3 w - - 0 1",
+                         "chess: a position where the side not to move is in check is refused");
+    check(untouched, "chess: and a refused position leaves the board alone");
+}
+
 void chessEndings()
 {
     check(fen("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 0 1").isCheckmate(),
@@ -801,7 +833,11 @@ void chessEndings()
           "chess: threefold repetition is a draw");
 
     chess::ChessGame fifty;
-    fifty.setFromFen("4k3/8/8/8/8/8/4R3/4K3 w - - 100 60");
+    // The rook stands on d2, not e2. On e2 it gives check up an open e-file to
+    // the king on e8 with WHITE to move -- which means Black had just moved
+    // into check, so the position is one the rules cannot reach. setFromFen
+    // refuses that now (GHUB-0159) and used to accept it.
+    fifty.setFromFen("4k3/8/8/8/8/8/3R4/4K3 w - - 100 60");
     check(fifty.result() == chess::Result::Draw
               && fifty.drawReason() == chess::DrawReason::FiftyMove,
           "chess: a hundred quiet plies is a draw");
@@ -5298,6 +5334,7 @@ int main()
     section("Chess");
     chessMoveGeneration();
     chessSpecialMoves();
+    chessFenRefusesAPositionTheRulesCannotReach();
     chessEndings();
     chessEngine();
 

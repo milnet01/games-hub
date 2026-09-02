@@ -100,6 +100,15 @@ public:
     std::vector<Move> legalMoves(Colour c) const;
     std::vector<Move> legalMoves() const { return legalMoves(m_toMove); }
 
+    // Legal moves that change material: captures, en passant and promotions.
+    // Quiescence wants only these, and generating them HERE rather than
+    // filtering legalMoves() afterwards is the whole saving -- that function
+    // copies the board and runs inCheck() for every pseudo-legal move, so
+    // filtering after the fact pays for about thirty-five moves to keep about
+    // five, inside a fixed node budget.
+    std::vector<Move> legalCaptures(Colour c) const;
+    std::vector<Move> legalCaptures() const { return legalCaptures(m_toMove); }
+
     void apply(const Move& m);
 
     bool squareAttacked(Square s, Colour by) const;

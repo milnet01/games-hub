@@ -44,7 +44,9 @@ private:
     void newGame();
     void undo();
     // The single point that moves the game on, as in Reversi and Draughts.
-    void advance();
+    // The single point that moves the game on. The message is what the engine's
+    // own reply needs to say; every other caller lets refresh() compose it.
+    void advance(const QString& message = {});
     void playEngineMove();
 
     // GHUB-0047. The engine used to search inside the signal handler that

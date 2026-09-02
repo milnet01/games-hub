@@ -1,7 +1,9 @@
 #include "chessboard.h"
 
 #include <algorithm>
+#include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstdlib>
 
 namespace chess {
@@ -35,12 +37,12 @@ char letterFor(Piece p)
     case PieceType::King:   c = 'k'; break;
     case PieceType::None:   return ' ';
     }
-    return p.colour == Colour::White ? char(std::toupper(c)) : c;
+    return p.colour == Colour::White ? char(std::toupper(static_cast<unsigned char>(c))) : c;
 }
 
 PieceType typeForLetter(char c)
 {
-    switch (std::tolower(c)) {
+    switch (std::tolower(static_cast<unsigned char>(c))) {
     case 'p': return PieceType::Pawn;
     case 'n': return PieceType::Knight;
     case 'b': return PieceType::Bishop;
@@ -90,6 +92,23 @@ void Board::reset()
     setFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 }
 
+namespace {
+
+// One numeric FEN field, bounded. std::atoi cannot report failure and cannot be
+// bounded, and both matter here: see the halfmove clock below.
+int numericField(const std::string& text, int low, int high, int fallback)
+{
+    int value = 0;
+    const char* const first = text.data();
+    const char* const last = first + text.size();
+    const auto [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc {} || ptr != last)
+        return fallback;
+    return std::clamp(value, low, high);
+}
+
+} // namespace
+
 bool Board::setFromFen(const std::string& fen)
 {
     const std::vector<std::string> fields = splitFields(fen);
@@ -116,31 +135,63 @@ bool Board::setFromFen(const std::string& fen)
         const PieceType type = typeForLetter(c);
         if (type == PieceType::None || row >= kRanks || col >= kFiles)
             return false;
-        cells[row * kFiles + col] = { type, std::isupper(c) ? Colour::White : Colour::Black };
+        const Colour side = std::isupper(static_cast<unsigned char>(c)) ? Colour::White
+                                                                        : Colour::Black;
+        cells[row * kFiles + col] = { type, side };
         ++col;
     }
     if (row != kRanks - 1 || col != kFiles)
         return false;
 
-    m_cells = cells;
-    m_toMove = fields[1] == "b" ? Colour::Black : Colour::White;
+    // Exactly one king a side. The geometry above says the letters fit the
+    // board; it says nothing about whether they make a POSITION, and a board
+    // with no black king can never be checkmate -- so a game derived from a bad
+    // FEN would run for ever with the engine unable to see the end of it.
+    int kings[2] = { 0, 0 };
+    for (const Piece& p : cells)
+        if (p.type == PieceType::King)
+            ++kings[int(p.colour)];
+    if (kings[0] != 1 || kings[1] != 1)
+        return false;
+
+    // Everything below lands on a CANDIDATE rather than on this board, so a FEN
+    // refused at the last test leaves the position already loaded alone -- the
+    // rule every restoreState() here follows.
+    // COPIED, never default-constructed: Board() calls reset(), and reset()
+    // calls this function. A fresh one here recurses until the stack runs out.
+    // Every field below is overwritten, so what it starts from does not matter.
+    Board candidate = *this;
+    candidate.m_cells = cells;
+    candidate.m_toMove = fields[1] == "b" ? Colour::Black : Colour::White;
 
     const std::string rights = fields.size() > 2 ? fields[2] : "-";
-    m_castle[0][0] = rights.find('K') != std::string::npos;
-    m_castle[0][1] = rights.find('Q') != std::string::npos;
-    m_castle[1][0] = rights.find('k') != std::string::npos;
-    m_castle[1][1] = rights.find('q') != std::string::npos;
+    candidate.m_castle[0][0] = rights.find('K') != std::string::npos;
+    candidate.m_castle[0][1] = rights.find('Q') != std::string::npos;
+    candidate.m_castle[1][0] = rights.find('k') != std::string::npos;
+    candidate.m_castle[1][1] = rights.find('q') != std::string::npos;
 
-    m_ep = { -1, -1 };
+    candidate.m_ep = { -1, -1 };
     if (fields.size() > 3 && fields[3].size() == 2 && fields[3][0] != '-') {
         const int epCol = fields[3][0] - 'a';
         const int epRow = kRanks - (fields[3][1] - '0');
         if (Square { epRow, epCol }.valid())
-            m_ep = { epRow, epCol };
+            candidate.m_ep = { epRow, epCol };
     }
 
-    m_halfmove = fields.size() > 4 ? std::atoi(fields[4].c_str()) : 0;
-    m_fullmove = fields.size() > 5 ? std::max(1, std::atoi(fields[5].c_str())) : 1;
+    // Bounded, and not through atoi. That answers 0 for anything it cannot read
+    // and has no bound at all, so a NEGATIVE halfmove clock walked straight in
+    // and could never climb to the hundred the fifty-move draw needs -- turning
+    // that rule off with nothing to say so.
+    candidate.m_halfmove = fields.size() > 4 ? numericField(fields[4], 0, 9999, 0) : 0;
+    candidate.m_fullmove = fields.size() > 5 ? numericField(fields[5], 1, 9999, 1) : 1;
+
+    // The side that is NOT to move must not be in check: it would mean the
+    // player who just moved had left their own king attacked, which is not a
+    // position the rules can reach.
+    if (candidate.inCheck(other(candidate.m_toMove)))
+        return false;
+
+    *this = candidate;
     return true;
 }
 
@@ -411,6 +462,23 @@ std::vector<Move> Board::legalMoves(Colour c) const
     return out;
 }
 
+std::vector<Move> Board::legalCaptures(Colour c) const
+{
+    std::vector<Move> out;
+    out.reserve(12);
+    for (const Move& m : pseudoMoves(c)) {
+        // The cheap test first. This is the same question isNoisy() asks in the
+        // search, and asking it before the board copy is the point.
+        if (at(m.to).empty() && !m.enPassant && m.promotion == PieceType::None)
+            continue;
+        Board next = *this;
+        next.apply(m);
+        if (!next.inCheck(c))
+            out.push_back(m);
+    }
+    return out;
+}
+
 void Board::apply(const Move& m)
 {
     const Piece mover = at(m.from);
@@ -523,13 +591,15 @@ std::string Board::notation(const Move& m) const
     const Piece mover = at(m.from);
     std::string out;
     if (mover.type != PieceType::Pawn)
-        out += char(std::toupper(letterFor({ mover.type, Colour::White })));
+        out += char(std::toupper(
+            static_cast<unsigned char>(letterFor({ mover.type, Colour::White }))));
     out += squareName(m.from);
     out += (!at(m.to).empty() || m.enPassant) ? 'x' : '-';
     out += squareName(m.to);
     if (m.promotion != PieceType::None) {
         out += '=';
-        out += char(std::toupper(letterFor({ m.promotion, Colour::White })));
+        out += char(std::toupper(
+            static_cast<unsigned char>(letterFor({ m.promotion, Colour::White }))));
     }
     return out;
 }
