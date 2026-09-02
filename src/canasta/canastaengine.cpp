@@ -1141,8 +1141,23 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
             return false;
         }
     }
+    // Red threes in the pile go straight down when the take is performed and
+    // earn no replacement, so the hand ends that many cards SHORTER than the
+    // raw arithmetic says. keepsADiscard is what stops a seat reaching a
+    // position with no legal move at all, and it was being handed a size the
+    // take would not produce: land on two-by-the-arithmetic and one in fact,
+    // with no canasta, and the seat is stranded -- canDiscard refuses and every
+    // meld refuses, which is the hang CLAUDE.md calls the expensive symptom.
+    // Land on nought and goOut() takes the seat out with no canasta at all.
+    //
+    // Counted over everything but the top card, because the top card goes into
+    // the melds rather than the hand and is already the -1 below. Only the deal
+    // ever puts a red three in the pile: a drawn one goes down at once, so it
+    // can never be discarded.
+    const std::size_t redThreesTaken = std::size_t(
+        std::count_if(m_pile.begin(), m_pile.end() - 1, isRedThree));
     const std::size_t after = m_hands[std::size_t(seat)].size() - layDown.size()
-        + m_pile.size() - 1;
+        + m_pile.size() - 1 - redThreesTaken;
     if (!keepsADiscard(t, after, groups, error))
         return false;
     return true;

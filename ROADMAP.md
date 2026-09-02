@@ -5526,7 +5526,7 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0148] **Canasta: red threes taken with the pile step past the no-legal-move guard.**
+- ✅ [GHUB-0148] **Canasta: red threes taken with the pile step past the no-legal-move guard.**
   canastaengine.cpp: placeRedThrees(seat, false) strips the red threes
   out of a taken pile AFTER keepsADiscard() has already sized the
   resulting hand. validateTake computes after = hand - layDown + pile
@@ -5538,6 +5538,23 @@ open.
   which goOut performs no check of its own for. Reachable only when the
   deal turned a red three into the pile. Count the pile's red threes
   inside validateTake and subtract them before calling keepsADiscard.
+  Resolved (2026-09-02): validateTake counts the pile's red threes and
+  subtracts them before calling keepsADiscard, which is what the
+  finding prescribed.
+
+  Counted over everything but the TOP card rather than the whole pile.
+  The top goes into the melds rather than the hand and is already the
+  -1 in that sum, so counting it too would subtract it twice. The deal
+  never leaves a red three on top -- its turn-up loop keeps turning
+  until a card that is neither wild nor a red three is showing -- but
+  the narrower count cannot be wrong even from a crafted save.
+
+  Six checks in the selftest against a dealt position with a red-three
+  turn-up, which is the only way one reaches the pile: a drawn red
+  three goes down at once, so it can never be discarded. Seat 1 lays
+  ten and takes a two-card pile, which is 2 by the old arithmetic and 1
+  in fact. Three of the six proven red, and red for the right reason --
+  the take was ALLOWED, so the hand and the pile both moved.
   **Layman:** A rare take can strand the hand with nothing legal to do, or let a side go out when it should not be allowed to.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

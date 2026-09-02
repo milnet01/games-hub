@@ -2655,6 +2655,56 @@ void canastaBlackThreeFinishIsHighlighted()
           "canasta: and a hand with none of them is unaffected");
 }
 
+void canastaRedThreesInThePileAreCountedBeforeTheTake()
+{
+    // Red threes taken with the pile go straight down and earn no replacement,
+    // so the hand ends shorter than validateTake's arithmetic said. Land on two
+    // by that arithmetic and one in fact, with no canasta, and the seat is
+    // stranded: it may not go out, so it may not discard its last card, and
+    // every meld refuses. Nothing legal remains and the turn cannot end -- the
+    // hang CLAUDE.md calls the expensive symptom, because it does not fail, it
+    // stops.
+    //
+    // Only the deal ever puts a red three in the pile. A drawn one goes down at
+    // once, so it can never be discarded.
+    std::array<std::vector<Card>, 4> hands;
+    hands[0] = filler(9);
+    // Ten layable cards and one spare: three sevens to match the up-card, three
+    // aces and four kings. 11 - 10 + 2 - 1 = 2 by the old sum, and one once the
+    // red three has gone down.
+    hands[1] = { cd(Suit::Spades, 7), cd(Suit::Hearts, 7), cd(Suit::Clubs, 7),
+                 cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce), cd(Suit::Clubs, kAce),
+                 cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing), cd(Suit::Clubs, kKing),
+                 cd(Suit::Diamonds, kKing), cd(Suit::Spades, 9) };
+    hands[2] = filler(10);
+    hands[3] = filler(kJack);
+
+    // The turn-up is a red three, so the deal covers it with the next card off
+    // the stock -- which is the last of `below`, and is what ends up on top.
+    std::vector<Card> below = spare();
+    below.back() = cd(Suit::Diamonds, 7);
+
+    ca::Engine e;
+    e.newGameFromStock(canastaStock(hands, 0, below, cd(Suit::Hearts, 3)), 0);
+
+    check(e.currentSeat() == 1, "canasta: the seat left of the dealer leads");
+    check(e.pile().size() == 2, "canasta: the red three turn-up was covered, not left on top");
+    check(std::count_if(e.pile().begin(), e.pile().end(), ca::isRedThree) == 1,
+          "canasta: and the red three is in the pile, which is the only way one gets there");
+
+    const std::vector<Card> layDown = { cd(Suit::Spades, 7), cd(Suit::Hearts, 7),
+                                        cd(Suit::Clubs, 7),
+                                        cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                                        cd(Suit::Clubs, kAce),
+                                        cd(Suit::Spades, kKing), cd(Suit::Hearts, kKing),
+                                        cd(Suit::Clubs, kKing), cd(Suit::Diamonds, kKing) };
+
+    check(!e.takePile(layDown),
+          "canasta: a take that would strand the seat on one card is refused");
+    check(e.hand(1).size() == 11, "canasta: and the refusal leaves the hand alone");
+    check(e.pile().size() == 2, "canasta: and the pile where it was");
+}
+
 void canastaPileRules()
 {
     // Seat 1 leads when seat 0 deals. Two sevens to match the up-card, and
@@ -5200,6 +5250,7 @@ int main()
     canastaMeldShapes();
     canastaScoringTable();
     canastaBlackThreeFinishIsHighlighted();
+    canastaRedThreesInThePileAreCountedBeforeTheTake();
     canastaPileRules();
     canastaFrozenPile();
     canastaWildCardRules();
