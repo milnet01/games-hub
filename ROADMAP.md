@@ -6147,7 +6147,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: test.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0140] **Lock the fixes that landed without a regression test.**
+- 🚧 [GHUB-0140] **Lock the fixes that landed without a regression test.**
   The audit added and proved red: the Canasta House-rule tails, the
   seat's own discards, the Pyramid save bound and Snake's turn queue.
   The rest went in without one, and these are the behavioural ones
@@ -6157,6 +6157,27 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Sudoku's toolbar sync. The stale-timer guard is the one to write
   first -- it is the run's only CRITICAL class and its symptom was a
   deadlocked board.
+  Progress (2026-09-02): the stale-timer guard is locked. Twelve
+  checks in tests/uitest.cpp, one set per engine game: the player's
+  move puts the game on the computer's clock, a move left standing is
+  answered, and a move taken back before the timer fires leaves the
+  board untouched and the turn still the player's. The wait is derived
+  from the reply the engine on that machine just took, so nothing is
+  held against a wall-clock or font-derived constant.
+
+  Proven red on the real tree at the pre-87d97c0 state: chess reported
+  "Computer played d2-d4" with White the human, reversi's discs went
+  2-2 to 3-3, and draughts came back "you must take". Six checks red
+  with expected-against-actual.
+
+  Measured, and it changes what this locks: reverting EITHER guard
+  alone leaves the test green, because either one on its own still
+  stops the engine moving. So the checks are pinned to the behaviour --
+  the engine never plays your move -- and not to a line. Removing one
+  guard leaves the app correct and the defence in depth gone, and
+  nothing would notice.
+
+  The other fixes named here are still open.
   **Layman:** Some of the audit fixes have nothing stopping them coming back.
   Kind: test.
   Source: review-code sweep 2026-08-31.

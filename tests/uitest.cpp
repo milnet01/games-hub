@@ -3259,6 +3259,172 @@ int main(int argc, char* argv[])
         pump(2500);   // let every abandoned worker finish into a dead view
     }
 
+    // ---- the engine's stale timer (GHUB-0140) ----
+    //
+    // advance() hands the turn over with QTimer::singleShot, and nothing in
+    // the three engine games can call that shot back once it is in the air.
+    // New Game, Undo, a level change and the hub leaving the page all go
+    // through abandonSearch(), which bumps a generation and clears m_thinking
+    // -- but the timer still fires, and before the fix it went straight into
+    // startSearch(). That captures the board AS IT IS NOW together with the
+    // CURRENT generation, so engineMoveReady's generation test passed and the
+    // engine played a move for the player's own side. The board was then left
+    // waiting for a side whose turn had already been taken, which is the
+    // deadlock that was reported.
+    //
+    // Four things are locked, for each of the three games:
+    //
+    //   INV-1  A move the player makes puts the game on the computer's clock.
+    //          That is what schedules the timer, so without it everything
+    //          below is asserting about a timer that was never set.
+    //   INV-2  Left standing, that move is answered. The answer is TIMED, and
+    //          the figure is what sets the wait INV-3 and INV-4 use -- a wait
+    //          shorter than a search would let a broken guard through.
+    //   INV-3  Undone before the timer fires, the board is still exactly as
+    //          Undo left it once that wait has passed: no piece was moved on
+    //          the player's behalf.
+    //   INV-4  And the game still says it is the player's to move, rather than
+    //          sitting on a clock that nobody can run down.
+    //
+    // The position is private to each view, so the observation is the public
+    // surface: the rendered board and the statusChanged line. No wall-clock
+    // constant is asserted anywhere here -- the wait is derived from what the
+    // engine on THIS machine has just been measured taking, which is the rule
+    // the three red Windows legs taught.
+    {
+        const bool wasLegible = Legibility::instance().enabled();
+        // The click points below mirror each view's boardRect with the switch
+        // OFF; with it on the board gives up a strip at the bottom and every
+        // one of them lands a row out.
+        Legibility::instance().setEnabled(false);
+
+        const auto square = [](const QWidget* w, int row, int col) {
+            const int side = ((std::min(w->width(), w->height()) - 2 * (18 + 4)) / 8) * 8;
+            const double cell = side / 8.0;
+            return QPointF((w->width() - side) / 2.0 + (col + 0.5) * cell,
+                           (w->height() - side) / 2.0 + (row + 0.5) * cell);
+        };
+        const auto cellCentre = [](const QWidget* w, int row, int col) {
+            const int available = std::min(w->width(), w->height()) - 2 * (10 + 4);
+            const int side = std::max(8, (available / 8) * 8);
+            const double cell = side / 8.0;
+            return QPointF((w->width() - side) / 2 + (col + 0.5) * cell,
+                           (w->height() - side) / 2 + (row + 0.5) * cell);
+        };
+
+        // Two views per game rather than one: the control keeps its move and
+        // the subject takes it back, and the two have to be independent for
+        // the timing off the first to mean anything about the second.
+        const auto lockStaleTimer = [&](const char* game, GameView* control, GameView* subject,
+                                        auto playAMove) {
+            const auto say = [game](const char* what) {
+                return QStringLiteral("%1: %2")
+                    .arg(QString::fromUtf8(game), QString::fromUtf8(what))
+                    .toUtf8();
+            };
+
+            // INV-2. Waited for rather than timed out: a fixed pump asserts how
+            // fast the machine is, and the sanitizer build is several times
+            // slower than this one. The cap is only there so a hang ends the
+            // run instead of the suite.
+            playAMove(control);
+            const QImage waiting = renderOf(control);
+            QElapsedTimer clock;
+            clock.start();
+            while (renderOf(control) == waiting && clock.elapsed() < 30000)
+                pump(25);
+            const qint64 replyMs = clock.elapsed();
+            check(renderOf(control) != waiting,
+                  say("the engine answers a move that is left standing").constData());
+
+            // INV-1.
+            QString status;
+            QObject::connect(subject, &GameView::statusChanged,
+                             [&status](const QString& text) { status = text; });
+            playAMove(subject);
+            check(status.contains(QStringLiteral("thinking")),
+                  say("the player's move puts the game on the computer's clock").constData());
+
+            QAction* undo = nullptr;
+            for (QAction* a : subject->gameActions()) {
+                if (a->text() == QStringLiteral("Undo"))
+                    undo = a;
+            }
+            check(undo != nullptr && undo->isEnabled(),
+                  say("the move offers an undo").constData());
+            if (undo == nullptr)
+                return;
+
+            // Taken back before the event loop has been pumped at all, so the
+            // search is still only SCHEDULED -- which is the one state
+            // abandonSearch() cannot reach into.
+            undo->trigger();
+            const QString settled = status;
+            const QImage board = renderOf(subject);
+
+            // Three times the measured reply and never under a second and a
+            // half, so a search set off by the stale timer has had ample room
+            // to land its move.
+            const int wait = int(std::max<qint64>(replyMs * 3 + 500, 1500));
+            pump(wait);
+
+            const QImage later = renderOf(subject);
+            int changed = 0;
+            for (int y = 0; y < board.height(); ++y)
+                for (int x = 0; x < board.width(); ++x)
+                    if (board.pixel(x, y) != later.pixel(x, y))
+                        ++changed;
+
+            // Printed on every run, pass or fail: the log alone then says which
+            // game moved, by how much, and what the game thought it was doing.
+            std::printf("      %s: engine reply %lldms, waited %dms after the undo; "
+                        "%d pixels changed (expected 0)\n",
+                        game, static_cast<long long>(replyMs), wait, changed);
+            std::printf("      %s: status was \"%s\", is now \"%s\"\n", game,
+                        qUtf8Printable(settled), qUtf8Printable(status));
+
+            check(changed == 0,
+                  say("the search scheduled before the undo never moves a piece").constData());
+            check(status == settled,
+                  say("and the game is still the player's to move").constData());
+        };
+
+        {
+            ChessView control;
+            ChessView subject;
+            control.resize(640, 640);
+            subject.resize(640, 640);
+            lockStaleTimer("chess", &control, &subject, [&](GameView* v) {
+                clickAt(v, square(v, 6, 4), Qt::LeftButton);   // the pawn on e2
+                clickAt(v, square(v, 4, 4), Qt::LeftButton);   // push it to e4
+            });
+        }
+
+        {
+            ReversiView control;
+            ReversiView subject;
+            control.resize(520, 520);
+            subject.resize(520, 520);
+            lockStaleTimer("reversi", &control, &subject, [&](GameView* v) {
+                clickAt(v, cellCentre(v, 2, 3), Qt::LeftButton);   // a legal opening
+            });
+        }
+
+        {
+            DraughtsView control;
+            DraughtsView subject;
+            control.resize(560, 560);
+            subject.resize(560, 560);
+            lockStaleTimer("draughts", &control, &subject, [&](GameView* v) {
+                // Red starts at the bottom and moves up.
+                clickAt(v, cellCentre(v, 5, 2), Qt::LeftButton);
+                clickAt(v, cellCentre(v, 4, 3), Qt::LeftButton);
+            });
+        }
+
+        Legibility::instance().setEnabled(wasLegible);
+    }
+
     fuzzSavedGames(150);
 
     frameCost();
