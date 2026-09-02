@@ -1709,7 +1709,7 @@ progress.
   Kind: fix.
   Source: in-session-2026-08-20 (CLAUDE.md cold gate, loop 3).
 
-- 📋 [GHUB-0135] **The per-page window size ratchets up and cannot come back down.**
+- ✅ [GHUB-0135] **The per-page window size ratchets up and cannot come back down.**
   Every view calls setMinimumSize(minimumSizeHint()), and
   QStackedLayout takes the largest minimum over every page it has
   BUILT. So once Canasta exists the window cannot go below its width
@@ -1718,6 +1718,33 @@ progress.
   stored one. Permanent, and dependent on which games were opened
   that session. Making the hidden page's size policy Ignored is the
   likely fix.
+  Resolved (2026-09-02): HubWindow::onlyTheOpenPageSetsTheFloor(),
+  called on every page change before applyPageGeometry.
+
+  The suggested fix -- an Ignored size policy on the hidden pages --
+  is half of it, and half moves nothing. Qt works a page's
+  contribution out from BOTH its policy and its explicit minimum:
+  Ignored drops the minimumSizeHint from the sum, and the explicit
+  minimum every view sets with setMinimumSize(minimumSizeHint()) is
+  then written straight back over the top. Measured with the policy
+  half alone and the figures did not budge; both halves together fix
+  it. The page's own policy is remembered rather than assumed,
+  because the tile grid is a QScrollArea and does not carry a plain
+  widget's default.
+
+  The floor is handed back from the page's own minimumSizeHint(), the
+  same expression the views use on themselves, so a game whose hint
+  moves gets its current answer rather than a stale copy. Lowering the
+  floors is followed by the layout walk CanastaView::applyLegibility
+  already makes, for the reason CLAUDE.md gives: the chain through the
+  QStackedWidget is recalculated lazily, so the resize that follows
+  would otherwise be clamped back up by the stale figure.
+
+  Measured: Chess asks 360x444 alone, 720x644 once Canasta has been
+  opened, and 360x444 again afterwards. Two checks in uitest print the
+  figures and assert the relationship, not the numbers -- those are
+  properties of this machine's fonts. Proven red. Windows leg run,
+  4/4, with no FAIL line in LastTest.log.
   **Layman:** Once you have opened Canasta, no other game's window can be made as small again -- and it is remembered that way.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

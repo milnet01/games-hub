@@ -17,6 +17,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Opening one game no longer stops every other game's window being made small.** (GHUB-0135)
+  Canasta needs a wide window, and once you had opened it no other
+  game's window could be shrunk back down for the rest of the session
+  -- and the enlarged size was then remembered. Only the game you are
+  looking at decides how small the window can be.
+
 - **A mistyped option prints an error and exits instead of opening a dialog on Windows.** (GHUB-0158)
   --help and any bad option went through Qt's own reporting, which on
   Windows is a message box -- so the app waited for someone to close

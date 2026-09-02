@@ -632,6 +632,58 @@ void HubWindow::checkSettingsWritable(QSettings& s)
         "Settings cannot be saved — games and window sizes will not be remembered."));
 }
 
+void HubWindow::onlyTheOpenPageSetsTheFloor()
+{
+    // A QStackedWidget's minimum is the largest minimum of every page it has
+    // BUILT, and every game sets its own with setMinimumSize(minimumSizeHint()).
+    // So once Canasta existed no other game's window could be made as small
+    // again -- Qt clamped the restored size up, and the next rememberPage wrote
+    // the clamped value over the stored one. Permanent, and dependent on which
+    // games happened to be opened that session. Measured before the fix: Chess
+    // asked 360x444 on its own and 720x644 once Canasta had been opened.
+    //
+    // The floor is handed back from the page's own minimumSizeHint(), which is
+    // the exact expression every view uses on itself, rather than remembered
+    // here -- so a game whose hint moves (Canasta's does, with the legibility
+    // switch) gets its current answer rather than a stale copy.
+    // Both halves are needed and neither is enough alone. Qt works a page's
+    // contribution out from its size policy AND its explicit minimum: a policy
+    // of Ignored drops the minimumSizeHint from the sum, but an explicit
+    // minimum is then written straight back over the top of that, so zeroing
+    // one while leaving the other moves nothing at all. Measured that way
+    // first, and the figures did not budge.
+    QWidget* const shown = m_stack->currentWidget();
+    for (int i = 0; i < m_stack->count(); ++i) {
+        QWidget* page = m_stack->widget(i);
+        // Remembered rather than assumed: the tile grid is a QScrollArea and
+        // does not carry a plain widget's default policy, so putting one back
+        // would quietly change how the menu page stretches.
+        if (!m_pagePolicy.contains(page))
+            m_pagePolicy.insert(page, page->sizePolicy());
+
+        if (page == shown) {
+            page->setSizePolicy(m_pagePolicy.value(page));
+            page->setMinimumSize(page->minimumSizeHint());
+        } else {
+            page->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+            page->setMinimumSize(0, 0);
+        }
+    }
+
+    // Lowering the floors is not enough on its own. The window's own minimum is
+    // computed from the central widget THROUGH the stack, and that chain is
+    // recalculated lazily -- so the resize applyPageGeometry is about to do
+    // would be clamped straight back up by the stale figure. Same walk
+    // CanastaView::applyLegibility makes, for the same reason.
+    m_stack->updateGeometry();
+    for (QWidget* w = m_stack; w != nullptr; w = w->parentWidget()) {
+        if (QLayout* l = w->layout())
+            l->activate();
+        if (w->isWindow())
+            break;
+    }
+}
+
 void HubWindow::applyPageGeometry(const QString& page)
 {
     // restoreGeometry() answers false on a blob it cannot read -- one written
@@ -682,6 +734,7 @@ void HubWindow::showMenu()
     setGameActions(nullptr);
     m_backAction->setVisible(false);
     m_stack->setCurrentWidget(m_menuHost);
+    onlyTheOpenPageSetsTheFloor();
     setWindowTitle(QStringLiteral("Games"));
     m_status->setText(QStringLiteral("%1 games. Pick one.").arg(m_entries.size()));
     applyPageGeometry(QString());
@@ -718,6 +771,7 @@ void HubWindow::openGame(int index)
     setGameActions(e.view);
     m_backAction->setVisible(true);
     m_stack->setCurrentIndex(e.pageIndex);
+    onlyTheOpenPageSetsTheFloor();
     setWindowTitle(e.name + QStringLiteral(" — Games"));
     applyPageGeometry(e.name);
     e.view->activate();

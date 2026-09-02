@@ -1897,6 +1897,48 @@ int main(int argc, char* argv[])
         QSettings().sync();
     }
 
+    // ---- A game you have opened does not raise the floor for every other ----
+    //
+    // A QStackedWidget's minimum is the largest minimum of every page it has
+    // BUILT, and each game sets its own. So opening Canasta once put its width
+    // under every other game for the rest of the session: the stored size was
+    // clamped up on restore, and the next page change wrote the clamped value
+    // back. Permanent, and dependent on which games you happened to open.
+    //
+    // Measured before the fix: Chess asked 360x444 alone and 720x644 once
+    // Canasta had been opened. The figures are printed rather than asserted --
+    // they are properties of this machine's fonts and metrics -- and what is
+    // asserted is the relationship between them, which is not.
+    {
+        HubWindow hub;
+        hub.resize(1000, 700);
+        hub.show();
+        pump(150);
+
+        hub.openGameNamed(QStringLiteral("Chess"));
+        pump(150);
+        const QSize alone = hub.minimumSizeHint();
+
+        hub.openGameNamed(QStringLiteral("Canasta"));
+        pump(150);
+        const QSize wide = hub.minimumSizeHint();
+
+        hub.openGameNamed(QStringLiteral("Chess"));
+        pump(150);
+        const QSize after = hub.minimumSizeHint();
+
+        std::printf("      hub floor: chess alone %dx%d, canasta %dx%d, chess again %dx%d\n",
+                    alone.width(), alone.height(), wide.width(), wide.height(),
+                    after.width(), after.height());
+
+        // Canasta really is the wider page, so the check below is not vacuous:
+        // without that, a hub whose floor never moved at all would pass it.
+        check(wide.width() > alone.width(),
+              "hub: canasta really does ask for more room than chess");
+        check(after == alone,
+              "hub: and going back to chess gives its own floor back");
+    }
+
     // ---- The sound effects are compiled into the binary ----
     {
         const QStringList effects = { QStringLiteral("ui_click"), QStringLiteral("ui_back"),

@@ -9,6 +9,9 @@
 class GameView;
 class QStackedWidget;
 class QToolBar;
+#include <QHash>
+#include <QSizePolicy>
+
 class QLabel;
 class QSettings;
 
@@ -68,6 +71,9 @@ private:
     // back the size you last left them.
     GameView* currentView() const;
     void rememberPage();
+    // Hidden pages stop deciding how small the window can be made. See the
+    // definition for what goes wrong without it.
+    void onlyTheOpenPageSetsTheFloor();
     void applyPageGeometry(const QString& page);
     // A game's position, kept between sessions for the games that offer one.
     void storeSave(const Entry& e);
@@ -101,6 +107,9 @@ private:
     QString m_page;
     bool m_geometryReady = false;
     bool m_remembering = true;
+    // Each page's own size policy, kept so a hidden page can be given Ignored
+    // and handed its own back when it comes forward.
+    QHash<QWidget*, QSizePolicy> m_pagePolicy;
     // Said once per session: repeating it on every page switch would bury the
     // status line the player is actually reading.
     bool m_settingsTroubleReported = false;
