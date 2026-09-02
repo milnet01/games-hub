@@ -6103,6 +6103,50 @@ open.
   constants are where to look, and CLAUDE.md's warning applies -- they
   may have been tuned by eye against the error. Take a --bench reading
   before and after any change.
+  Progress (2026-09-02). Owner's call: work it out from the maths, he
+  plays it after. Done, and the answer is that NO re-tune is warranted --
+  so nothing was re-tuned. Still open on his verdict by feel, which is
+  the half no test here can supply.
+
+  The derivation, in table units, gravity 900. A blade is 74 long,
+  pivoted at y 640, sweeping 0.94 rad at 18 rad/s -- about a twentieth
+  of a second. Surface speed at the contact point is arm length times
+  that rate: 666 at mid-blade, 1332 at the tip. The bounce term adds up
+  to 1.55 of it, so 1032 mid-blade. The assist adds 18 x 26 = 468.
+  Mid-blade total is therefore around 1500, and a tip hit clamps at
+  kMaxSpeed 1700.
+
+  Against what the table asks: rising from the flipper line to the
+  bumpers needs about 790, and to the top wall about 890. So a mid-blade
+  hit delivers roughly 1.7x what it takes to clear the table. The
+  flippers are not weak.
+
+  What actually changed is WHERE they are strong. Before the timing fix
+  the surface term was about 7.7x too large, so every contact anywhere
+  on the blade clamped at kMaxSpeed -- pivot hits included. Now the kick
+  falls off towards the pivot, which is how a real table behaves. If a
+  swing reads as dead it will be a hit near the pivot, and that is the
+  thing to describe rather than the flipper in general.
+
+  Neither multiplier was touched, and the reasoning is the point. 1.55
+  is a restitution coefficient, dimensionless, so a units fix cannot
+  have changed what it should be. The assist was in practice a flat 520
+  before, because the cap bound on every contact, and is 468 now -- a
+  10% loss, which is not what changed the feel. Re-inflating either to
+  recover the old total would put the bug back.
+
+  One real finding: the 520 cap can no longer bind. The rate is fixed at
+  18 and 18 x 26 = 468, so it reads as a live limit and is not one. Left
+  in place as a guard for a rate someone raises later, and now says so.
+
+  kFlipperRate is a named constant rather than a literal in advance(),
+  because collideFlipper's kick is read straight off it and the two have
+  to be thought about together.
+
+  pinballFlipperSweep measures the rate off the public angle rather than
+  restating the constant, so it cannot pass by agreeing with itself, and
+  checks the blade both arrives and returns. Proven red at 138 rad/s,
+  the pre-fix effective rate. It says nothing about feel, and says so.
   **Layman:** The flippers were fixed to keep proper time, and nobody has actually played them since.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.

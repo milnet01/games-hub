@@ -10,6 +10,10 @@ constexpr double kMaxSpeed = 1700.0;
 // Physics runs in small fixed slices; one big step per frame lets a fast ball
 // tunnel straight through a wall.
 constexpr double kSubStep = 1.0 / 480.0;
+// How fast a blade sweeps, in radians per second. Named because collideFlipper's
+// kick is read straight off it and the two have to be thought about together --
+// see the swing assist there (GHUB-0165).
+constexpr double kFlipperRate = 18.0;
 constexpr double kLaneCentre = 369.0;
 
 double lengthOf(QPointF v) { return std::hypot(v.x(), v.y()); }
@@ -159,7 +163,7 @@ void PinballTable::advance(double seconds)
         for (Flipper* f : { &m_left, &m_right }) {
             f->previousAngle = f->angle;
             const double target = f->pressed ? f->activeAngle : f->restAngle;
-            const double rate = 18.0 * dt;
+            const double rate = kFlipperRate * dt;
             if (std::abs(target - f->angle) <= rate)
                 f->angle = target;
             else
@@ -309,6 +313,15 @@ void PinballTable::collideFlipper(Flipper& f, double dt)
     if (along < 0)
         m_velocity -= normal * 1.55 * along;
 
+    // The assist on top of the bounce. The blade's rate is fixed, so this is
+    // the same 468 on every mid-swing contact, and the cap cannot bind at that
+    // rate -- it is a guard for a rate someone raises later, not a live limit.
+    //
+    // It bound on EVERY contact before the timing fix, when angularSpeed came
+    // through about 7.7x too large, so this term was in practice a flat 520.
+    // The 10% it lost is not what changed the feel: the SURFACE term above fell
+    // by that same 7.7x, and that one was simply wrong. Re-inflating either to
+    // recover the old total would put the bug back (GHUB-0165).
     const double swing = std::abs(angularSpeed);
     if (swing > 0.5)
         m_velocity += normal * std::min(swing * 26.0, 520.0);

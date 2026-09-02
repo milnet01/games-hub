@@ -995,6 +995,44 @@ void sudokuGeneration()
 // check that the original table failed: a weak plunger left the ball short of
 // the dome, and it fell back down an open-bottomed lane straight into the
 // drain, losing a ball before the player ever touched a flipper.
+// The flipper's sweep rate, measured rather than restated (GHUB-0165). The
+// timing fix moved the blade into the substep loop; before it, a whole frame's
+// travel was applied in ONE substep, so the blade snapped to its target almost
+// at once and collideFlipper read an angular speed about 7.7x the true one.
+//
+// This is what a return to that would break, and it is measured off the public
+// angle rather than computed from the constant, so restating the constant
+// cannot make it pass. What it does NOT check is how a swing FEELS, which no
+// test here can; that is the owner's to judge.
+void pinballFlipperSweep()
+{
+    PinballTable table;
+    table.newGame();
+
+    const double before = table.leftFlipper().angle;
+    table.setFlipper(true, true);
+    const double slice = 0.01;
+    table.advance(slice);
+    const double rate = std::abs(table.leftFlipper().angle - before) / slice;
+    std::printf("      pinball flipper sweep: %.1f rad/s\n", rate);
+    check(rate > 15.0 && rate < 21.0,
+          "pinball: the blade sweeps at its own rate rather than a frame's worth per slice");
+
+    // And it arrives, in a time a player would call a flick rather than a
+    // stretch. The travel is rest to active; at the rate above that is about a
+    // twentieth of a second.
+    table.advance(0.2);
+    check(std::abs(table.leftFlipper().angle - table.leftFlipper().activeAngle) < 1e-6,
+          "pinball: and reaches the top of its swing well inside a fifth of a second");
+
+    // Released, it comes back. A blade that only travelled one way would hold
+    // every ball it caught.
+    table.setFlipper(true, false);
+    table.advance(0.2);
+    check(std::abs(table.leftFlipper().angle - table.leftFlipper().restAngle) < 1e-6,
+          "pinball: and returns to rest when the key comes up");
+}
+
 void pinballLaunch()
 {
     for (int strength = 0; strength <= 10; ++strength) {
@@ -5456,6 +5494,7 @@ void savedBoardsAreRechecked()
             p = Piece::Empty;
     check(!DraughtsBoard().restore(wipedOut),
           "saves: a draughts board with a side already wiped out is refused");
+    pinballFlipperSweep();
 
     check(!DraughtsBoard().restore(std::vector<Piece>(32, Piece::Empty)),
           "saves: a draughts board of the wrong size is refused");
