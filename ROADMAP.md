@@ -4066,8 +4066,42 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0147] **The Hearts caption can still sit over the card you played.**
+- ✅ [GHUB-0147] **The Hearts caption can still sit over the card you played.**
   GHUB-0084 again. captionArea() clamps its own height to zero when the\ngap runs out, but Theme::layoutCaption bails on zero WIDTH and anchors\nthe plate to the bottom of whatever area it gets, growing upward -- so\na gap too small to hold the plate does not shrink it, it puts it over\nthe seat-0 card. cardWidth() caps at 92, so past a certain width the\ntrick stops moving down while the hand stays anchored: at 1900x564,\nthe widest shape the hub allows at its floor, the gap is about 28px\nagainst a plate of about 44.\n\nA trickLift() that measured the plate and raised the trick by the\nshortfall was written, and REVERTED. It reddened the Windows leg\ntwice. The uitest check only requires no overlap once the plate FITS\nthe gap, and the lift made that true at 620x480 and 900x600 where it\nhad been false -- then the plate landed on the card anyway. The\nreported numbers say the lift and trickCardRect disagree about\ngeometry they each derive separately, and none of it reproduces on\nLinux, where the lift never fires at those shapes.\n\nWhoever takes this: measure on both platforms, and do not let the fix\nrecompute seat 0's rect a second time. The wintest box has real fonts\nand is where this shows up; scripts/wintest-ci.sh runs it, but read\nbuild/Testing/Temporary/LastTest.log rather than the console, because\nctest's progress redraw destroys the FAIL line.
+  Resolved (2026-09-02), and NOT by lifting the trick. The item says
+  not to let the fix recompute seat 0's rect a second time, and this
+  does not: the whole decision is taken inside captionArea(), from the
+  trickCardRect() calls it already makes.
+
+  captionArea() now MEASURES the plate against the gap it just computed
+  and yields when it will not fit. Theme::layoutCaption bails on a zero
+  WIDTH and never on a height -- it bottom-anchors the plate inside
+  whatever area it is given and grows it UPWARD -- so a gap too small
+  does not shrink the plate, it puts it over the seat-0 card.
+
+  An empty AREA rather than a decision in paintEvent, because that is
+  what the check reads as well: captionRect() of an empty area is an
+  empty plate, which overlaps nothing. So the check asserts the rule
+  FLATLY now. Its old form excused the overlap wherever the plate did
+  not fit, which is exactly where the overlap happened.
+
+  Dropping the sentence would have broken the other promise -- the
+  switch exists to put one on the table -- and the uitest caught that
+  immediately at 1900x564. So when the gap will not hold it, the caption
+  moves into the felt BESIDE the trick, bounded by seat 1 on the left
+  and the leftmost trick card on the right. At the wide, short shapes
+  where the gap runs out that is the emptiest part of the board, because
+  the trick and the hand are both centred while the window is not.
+
+  1900x564 is in the shape list now -- the widest, shortest shape the
+  hub allows at its floor, and the one the item reports.
+
+  Both platforms, which is what the item asks for. Linux: all five
+  shapes carry a sentence and none overlaps. The Windows figures are why
+  this mattered more there -- with no font environment the same sentence
+  measures 115.7 tall against an 88.2 gap at 620x480, and 84.7 against
+  57.6 at 900x600, so the old code was drawing over the card at two of
+  four shapes and the check was excusing both.
   **Layman:** At wide, short windows the sentence on the table can cover your own card, and the obvious fix broke Windows twice.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

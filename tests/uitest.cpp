@@ -1485,7 +1485,12 @@ int main(int argc, char* argv[])
         };
 
         Legibility::instance().setEnabled(true);
-        const QList<QSize> shapes = { { 620, 480 }, { 880, 660 }, { 900, 600 }, { 1400, 620 } };
+        // 1900x564 is the widest, shortest shape the hub allows at its floor,
+        // and it is where GHUB-0147 was reported: the trick stops moving down
+        // once cardWidth() caps, while the hand stays anchored to the bottom, so
+        // the gap between them is at its narrowest there.
+        const QList<QSize> shapes = { { 620, 480 }, { 880, 660 }, { 900, 600 },
+                                      { 1400, 620 }, { 1900, 564 } };
         QStringList covered;
         for (const QSize& shape : shapes) {
             HeartsProbe hearts;
@@ -1498,17 +1503,22 @@ int main(int argc, char* argv[])
                                                     hearts.captionFont(area));
             check(!plate.isNull(), "hearts: the switch puts a sentence on the table");
 
-            // The gap only has to hold the plate where it CAN. A plate taller
-            // than the gap overlaps a little and that is the accepted outcome,
-            // the same trade the capped caption band already makes -- and it is
-            // the only thing this can be on a runner with no font environment,
-            // where the same sentence measures several times taller. The height
-            // is read off the platform and reported; the rule is asserted.
-            const bool fits = area.height() >= plate.height();
+            // Asserted FLATLY, with no "where the gap can hold it" clause. That
+            // clause is what let GHUB-0147 stand: the overlap was excused at
+            // exactly the shapes where it happened. Hearts yields instead now --
+            // captionArea() returns an empty area when the plate will not fit,
+            // and captionRect() of an empty area is an empty plate, which
+            // overlaps nothing. So a plate that IS drawn must clear every card.
+            //
+            // The heights are read off the platform and reported; only the rule
+            // is asserted. A runner with no font environment measures the same
+            // sentence several times taller, which is precisely when the gap
+            // stops holding it.
+            const bool shown = !plate.isNull();
             double worst = 0.0;
             for (int seat = 0; seat < 4; ++seat) {
                 const QRectF card = hearts.trickCardRect(seat);
-                if (fits && plate.intersects(card)) {
+                if (plate.intersects(card)) {
                     covered << QStringLiteral("%1x%2 seat %3")
                                    .arg(shape.width()).arg(shape.height()).arg(seat);
                 }
@@ -1516,7 +1526,7 @@ int main(int argc, char* argv[])
             }
             std::printf("      hearts %4dx%-4d plate %.1f tall in a %.1f gap%s, top %.1f, lowest trick card %.1f\n",
                         shape.width(), shape.height(), plate.height(), area.height(),
-                        fits ? "" : " (too small to hold it)", plate.top(), worst);
+                        shown ? "" : " (yielded: too small to hold it)", plate.top(), worst);
 
             // Choose cards to pass, which lifts them out of the hand. Clicked
             // on the left sliver of each card rather than its centre: the hand

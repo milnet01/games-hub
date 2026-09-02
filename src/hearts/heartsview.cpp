@@ -426,7 +426,57 @@ QRectF HeartsView::captionArea() const
     // Reserved whether or not a card is there, so the plate does not hop up the
     // window each time a trick is swept.
     const double top = std::min(trickCardRect(0).bottom(), bottom);
-    return { 0.0, top, double(width()), bottom - top };
+    const QRectF gap(0.0, top, double(width()), bottom - top);
+
+    // A plate that does not FIT the gap is not drawn at all, and this is where
+    // that is decided. Theme::layoutCaption bails on a zero WIDTH and never on
+    // a height: it bottom-anchors the plate inside whatever area it is handed
+    // and grows it UPWARD, so a gap too small does not shrink the plate -- it
+    // puts it over the seat-0 card, which is the one YOU just played. At
+    // 1900x564, the widest shape the hub allows at its floor, the gap is about
+    // 28px against a plate of about 44 (GHUB-0147, and GHUB-0084 before it).
+    //
+    // An empty AREA rather than a decision taken in paintEvent, because this is
+    // what the check reads too: captionRect() of an empty area is an empty
+    // plate, which overlaps nothing, so the rule can be asserted flatly instead
+    // of being excused whenever the gap happens to be small.
+    //
+    // Seat 0's rect is derived ONCE, here. The attempt before this one raised
+    // the trick by a shortfall it worked out separately; the two derivations
+    // disagreed about the same geometry and it reddened the Windows leg twice.
+    if (Theme::captionRect(gap, captionText(), captionFont(gap)).height() <= gap.height())
+        return gap;
+
+    // The gap cannot hold it. Rather than drop the sentence -- the switch
+    // exists to put one on the table, and dropping it is the one thing worse
+    // than a plate in the wrong place -- move it into the felt BESIDE the
+    // trick. At the wide, short shapes where the gap runs out that is the
+    // emptiest part of the board, because the trick and the hand are both
+    // centred while the window is not.
+    //
+    // Built from the same trickCardRect() calls the gap above uses, so there is
+    // still one source for where the trick is, and bounded on the left by
+    // seat 1, whose cards sit against that edge.
+    double leftmost = double(width());
+    double trickTop = double(height());
+    double trickBottom = 0.0;
+    for (int seat = 0; seat < 4; ++seat) {
+        const QRectF r = trickCardRect(seat);
+        leftmost = std::min(leftmost, r.left());
+        trickTop = std::min(trickTop, r.top());
+        trickBottom = std::max(trickBottom, r.bottom());
+    }
+    const double left = opponentRect(1).right() + 10.0;
+    const QRectF beside(left, trickTop, leftmost - left - 10.0, trickBottom - trickTop);
+    if (beside.width() > 140.0 && beside.height() > 0.0
+        && Theme::captionRect(beside, captionText(), captionFont(beside)).height()
+            <= beside.height())
+        return beside;
+
+    // Neither place will hold it, so nothing is drawn -- an empty area is what
+    // Theme::layoutCaption already bails on. Better a missing sentence than one
+    // over the card you just played.
+    return {};
 }
 
 QRectF HeartsView::opponentRect(int seat) const
