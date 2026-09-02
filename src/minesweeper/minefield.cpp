@@ -12,14 +12,6 @@ Minefield::Minefield(int width, int height, int mines)
     m_squares.resize(std::size_t(width) * height);
 }
 
-void Minefield::reset()
-{
-    m_squares.assign(m_squares.size(), Square {});
-    m_minesPlaced = false;
-    m_state = State::Playing;
-    m_seed = std::random_device {}();
-}
-
 bool Minefield::restore(std::vector<Square> squares)
 {
     if (squares.size() != m_squares.size())

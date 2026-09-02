@@ -212,7 +212,6 @@ public:
     // How many wild cards this seat has spent freezing the pack in the hand
     // being played. Public so a check can see the budget move without playing
     // a hand as far as the ceiling.
-    int freezesThisHand() const { return m_freezes; }
 
 private:
     // Notices a fresh deal and clears the freeze budget. Called at the top of

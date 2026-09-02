@@ -85,7 +85,6 @@ public:
 
     bool canUndo() const { return !m_history.empty(); }
     void undo();
-    void forgetHistory() { m_history.clear(); }
 
     // Adopts a position from a save. Klondike never takes a card out of play,
     // so the whole pack must come back. False leaves this object alone.

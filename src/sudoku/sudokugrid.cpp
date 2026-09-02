@@ -125,8 +125,11 @@ void SudokuGrid::set(int row, int col, int value)
     if (isClue(row, col))
         return;
     m_working[index(row, col)] = value;
+    // Through clearMarks() rather than writing the same zero a second time:
+    // entering a digit is the one thing that clears a cell's marks, and two
+    // copies of that are two places to change.
     if (value != 0)
-        m_marks[index(row, col)] = 0;
+        clearMarks(row, col);
 }
 
 void SudokuGrid::toggleMark(int row, int col, int digit)

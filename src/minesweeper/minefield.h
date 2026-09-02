@@ -42,7 +42,6 @@ public:
     // flag count matches its number — the usual middle-click shortcut.
     void chord(int row, int col);
 
-    void reset();
 
     // A game in progress, for saving: the squares in row-major order. The
     // neighbour counts are deliberately not part of that — restore() works them

@@ -1589,8 +1589,13 @@ void CanastaView::humanTakePile()
     const std::vector<Card> lay = selectedCards();
     const std::vector<Card> handBefore = m_engine.hand(0);
     const ca::Team teamBefore = m_engine.team(0);
-    if (m_engine.pile().empty())
+    // Every other refusal on this path says why, and this one did not: a click
+    // on an empty pile simply did nothing, which reads as the board being stuck
+    // rather than as a rule. The owner reads the table, not the status bar.
+    if (m_engine.pile().empty()) {
+        announce(QStringLiteral("The pack is empty — there is nothing to pick up."));
         return;
+    }
 
     if (!m_engine.takePile(lay)) {
         announce(m_engine.lastError());
@@ -1975,9 +1980,13 @@ void CanastaView::mouseReleaseEvent(QMouseEvent* event)
 void CanastaView::leaveEvent(QEvent* event)
 {
     Q_UNUSED(event);
-    if (m_hover != -1 || m_hoverMeld != -1) {
+    // m_overButton belongs here too. Left out, the Lay Down button kept its
+    // hover edge after the pointer had left the window altogether, so the board
+    // showed something under the cursor when the cursor had gone.
+    if (m_hover != -1 || m_hoverMeld != -1 || m_overButton) {
         m_hover = -1;
         m_hoverMeld = -1;
+        m_overButton = false;
         update();
     }
 }

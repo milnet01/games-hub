@@ -634,8 +634,17 @@ void Engine::dealFrom(std::vector<Card> stock)
     }
 
     // Red threes dealt into a hand go straight down, each replaced from stock.
-    for (int s = 0; s < kSeats; ++s)
-        placeRedThrees((first + s) % kSeats, true);
+    // A false answer means the stock ran dry while replacing, which is what
+    // drawFromStock reads as the hand being over -- so the deal stops here, the
+    // same way the short-stock guard above stops it. The bound above covers the
+    // hands and not the replacements, and a caller supplying its own stock
+    // (newGameFromStock, which the tests use to build exact positions) can hand
+    // over exactly enough to deal and nothing spare. A real 108-card pack has
+    // four red threes and cannot reach this.
+    for (int s = 0; s < kSeats; ++s) {
+        if (!placeRedThrees((first + s) % kSeats, true))
+            return;
+    }
 
     // The up-card starts the pile. A wild or a red three under it freezes the
     // pile, and another card is turned to cover it.
@@ -1431,6 +1440,17 @@ std::vector<int> Engine::meldableRanks(int seat) const
             ++wilds;
 
     std::vector<int> out;
+
+    // Black threes are the exception, and leaving them out entirely meant the
+    // one finish goingOutNeedsADiscard exists to permit -- all four laid
+    // together -- was never highlighted in the hand. The highlight IS the
+    // affordance, so a player who held the finish had nothing telling them so.
+    // Offered only on all four, which is the shape laysFourBlackThrees() asks
+    // for; three of them are meldable on the way out too, but highlighting
+    // those would mark cards as useful on every turn where they are not.
+    if (std::count_if(h.begin(), h.end(), isBlackThree) == 4)
+        out.push_back(3);
+
     for (int rank = kAce; rank <= kKing; ++rank) {
         if (rank == 3 || rank == 2)
             continue;

@@ -70,7 +70,6 @@ public:
 
     bool canUndo() const { return !m_history.empty(); }
     void undo();
-    void forgetHistory() { m_history.clear(); }
 
     // Adopts a position from a save. Spider takes a finished run off the table
     // for good, so it cannot ask for the whole pack back: what is left is two

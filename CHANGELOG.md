@@ -17,6 +17,21 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Closing the window stops the game you were on.** (GHUB-0164)
+  Every other way of leaving a game stopped its clock and closing the
+  window did not, so a pinball could still drain -- and take a score
+  with it -- after you had shut the app.
+
+- **Canasta says why when you click a pack that has nothing in it.** (GHUB-0164)
+  It did nothing at all, which reads as the board being stuck rather
+  than as a rule. The Lay Down button also stops keeping its highlight
+  after the pointer has left the window.
+
+- **Canasta marks all four black threes as the finish they are.** (GHUB-0164)
+  Laying all four together is the one way to finish without keeping a
+  card back to throw, and the hand never lit them up, so the move was
+  invisible unless you already knew it was there.
+
 - **Opening one game no longer stops every other game's window being made small.** (GHUB-0135)
   Canasta needs a wide window, and once you had opened it no other
   game's window could be shrunk back down for the rest of the session

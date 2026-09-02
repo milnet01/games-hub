@@ -88,9 +88,12 @@ public:
     // carry, or carries too wordily: Hearts names the suit that was led.
     virtual QString captionText() const { return m_lastStatus; }
 
+    // The raw last line, without a game's own override of captionText(). Used
+    // by the tests to read what a game actually emitted.
+    const QString& lastStatus() const { return m_lastStatus; }
+
     // The last text emitted through statusChanged, remembered by the base so
     // no game has to keep a second copy of its own status line.
-    const QString& lastStatus() const { return m_lastStatus; }
 
     // Draws captionText() on a plate inside `area`, and does nothing at all
     // while the legibility switch is off — so a game's pass is these three

@@ -720,6 +720,14 @@ void HubWindow::storeSave(const Entry& e)
 void HubWindow::closeEvent(QCloseEvent* event)
 {
     rememberPage();
+    // Every other page change deactivates the view it is leaving and this one
+    // did not, so a game with a clock went on running between here and
+    // destruction. For Pinball that is a ball that can still drain -- and
+    // record a score -- after the player has closed the window. Same order as
+    // showMenu() and openGame(): remember first, then stop it.
+    if (GameView* leaving = currentView())
+        leaving->deactivate();
+
     // Every game that has been opened this session, not just the one on screen.
     for (const Entry& e : m_entries)
         storeSave(e);
@@ -754,8 +762,12 @@ void HubWindow::openGame(int index)
         // game to it let a background game's clock overwrite the line
         // belonging to the game being played.
         GameView* view = e.view;
+        // Against the stack rather than currentView(), which walks every entry
+        // comparing page names. Pinball emits this once a frame, and the page a
+        // view sits on IS the view, so the pointer comparison answers exactly
+        // the same question without the scan.
         connect(view, &GameView::statusChanged, this, [this, view](const QString& text) {
-            if (view == currentView())
+            if (view == m_stack->currentWidget())
                 m_status->setText(text);
         });
         e.pageIndex = m_stack->addWidget(e.view);

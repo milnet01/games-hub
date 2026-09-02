@@ -2561,6 +2561,42 @@ const int kBelowCount = 63;
 std::vector<Card> spare() { return std::vector<Card>(kBelowCount, cd(Suit::Clubs, 9)); }
 
 // Taking the pile: what it costs, and the two things that stop you.
+void canastaBlackThreeFinishIsHighlighted()
+{
+    // meldableRanks() drives the green highlight on the player's own hand, and
+    // it skipped rank 3 outright -- so the one lay-down allowed to empty a hand
+    // under goingOutNeedsADiscard, all four black threes together, was never
+    // marked. The highlight IS the affordance here, and the owner reads the
+    // board rather than the status bar, so an unmarked finish is an invisible
+    // one.
+    const auto marksBlackThrees = [](std::vector<Card> seatZero) {
+        while (seatZero.size() < 11)
+            seatZero.push_back(cd(Suit::Hearts, 9));
+        std::array<std::vector<Card>, 4> hands;
+        hands[0] = seatZero;
+        hands[1] = filler(9);
+        hands[2] = filler(10);
+        hands[3] = filler(kJack);
+
+        ca::Engine e;
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 5)), 0);
+        const std::vector<int> ranks = e.meldableRanks(0);
+        return std::find(ranks.begin(), ranks.end(), 3) != ranks.end();
+    };
+
+    check(marksBlackThrees({ cd(Suit::Clubs, 3), cd(Suit::Spades, 3),
+                             cd(Suit::Clubs, 3), cd(Suit::Spades, 3) }),
+          "canasta: all four black threes are marked as the finish they are");
+    // Three of them are meldable on the way out as well, and are deliberately
+    // not marked: they would then be lit on every turn where they are not a
+    // finish, which is worse than not lighting them at all.
+    check(!marksBlackThrees({ cd(Suit::Clubs, 3), cd(Suit::Spades, 3),
+                              cd(Suit::Clubs, 3) }),
+          "canasta: three of them are not that finish and stay unmarked");
+    check(!marksBlackThrees({ cd(Suit::Hearts, 9) }),
+          "canasta: and a hand with none of them is unaffected");
+}
+
 void canastaPileRules()
 {
     // Seat 1 leads when seat 0 deals. Two sevens to match the up-card, and
@@ -5105,6 +5141,7 @@ int main()
     canastaOpeningBands();
     canastaMeldShapes();
     canastaScoringTable();
+    canastaBlackThreeFinishIsHighlighted();
     canastaPileRules();
     canastaFrozenPile();
     canastaWildCardRules();

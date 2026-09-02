@@ -2,6 +2,8 @@
 
 #include <QSettings>
 
+#include <iterator>
+
 namespace {
 // One settings object for the process. QSettings resolves its file from the
 // application and organisation names set in main(), so the test binary — which
@@ -19,18 +21,27 @@ Scores& Scores::instance()
     return scores;
 }
 
+// Both of these used to clamp an unrecognised level onto the last name, which
+// makes it SHARE that level's stored record -- so adding a fourth difficulty
+// and forgetting to add its name here would have the new level quietly
+// overwrite the third's best, with nothing to say so. An unknown level now gets
+// a key of its own: wrong in name only, and unable to corrupt a real record.
 QString Scores::reversiBest(int difficulty)
 {
     static const char* names[] = { "easy", "medium", "hard" };
-    return QStringLiteral("reversi/best_discs_%1")
-        .arg(QString::fromUtf8(names[qBound(0, difficulty, 2)]));
+    constexpr int kCount = int(std::size(names));
+    if (difficulty < 0 || difficulty >= kCount)
+        return QStringLiteral("reversi/best_discs_level_%1").arg(difficulty);
+    return QStringLiteral("reversi/best_discs_%1").arg(QString::fromUtf8(names[difficulty]));
 }
 
 QString Scores::minesweeperBestTime(int level)
 {
     static const char* names[] = { "beginner", "intermediate", "expert" };
-    return QStringLiteral("minesweeper/best_time_%1")
-        .arg(QString::fromUtf8(names[qBound(0, level, 2)]));
+    constexpr int kCount = int(std::size(names));
+    if (level < 0 || level >= kCount)
+        return QStringLiteral("minesweeper/best_time_level_%1").arg(level);
+    return QStringLiteral("minesweeper/best_time_%1").arg(QString::fromUtf8(names[level]));
 }
 
 QString Scores::spiderBestMoves(int suits)

@@ -6322,7 +6322,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0164] **The last of the small findings, so the sweep leaves nothing unrecorded.**
+- ✅ [GHUB-0164] **The last of the small findings, so the sweep leaves nothing unrecorded.**
   Everything the sweep found at LOW that no other item above carries.
   HUB: closeEvent stores state but never calls deactivate() on the
   current view, unlike showMenu and openGame; currentView() is a
@@ -6347,6 +6347,56 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   callers including tests, Minefield::reset(), SudokuGrid::clearMarks(),
   Ai::freezesThisHand(), Board::fullmoveNumber(), Sound::volume() and
   setVolume(), GameView::lastStatus().
+  Resolved (2026-09-02). Every finding has a disposition; two of them
+  are deliberately not a code change and are named below rather than
+  left looking like an oversight.
+
+  FIXED. closeEvent now deactivates the view it is leaving, as every
+  other page change does -- Pinball's ball could otherwise drain, and
+  record a score, after the window was closed. The statusChanged
+  filter compares against the stack's current widget instead of
+  walking every entry comparing page names, which Pinball was driving
+  once a frame. Scores' two key builders stop clamping an unknown
+  level onto the last name, which made it SHARE that level's record; an
+  unrecognised level gets a key of its own, wrong in name only and
+  unable to corrupt a real one. dealFrom stops discarding
+  placeRedThrees' return -- the existing short-stock guard covers the
+  hands but not the replacements, and newGameFromStock can hand over
+  exactly enough to deal and nothing spare. meldableRanks now offers
+  rank 3 when the hand holds all four black threes, so the one finish
+  goingOutNeedsADiscard exists to permit is marked; three checks in the
+  selftest, the first proven red. A click on an empty pile during Draw
+  says why instead of doing nothing. leaveEvent clears m_overButton,
+  so the Lay Down button stops keeping its hover edge after the pointer
+  has left the window.
+
+  DEAD SYMBOLS. forgetHistory in four tables, Minefield::reset and
+  Ai::freezesThisHand removed -- none had a caller anywhere, tests
+  included. GameView::lastStatus() was listed as dead and IS NOT: the
+  uitest reads it in six places. My first grep said otherwise because I
+  truncated it with head; recounted without the pipe. SudokuGrid::
+  clearMarks() was kept and given the caller that was duplicating it --
+  set() wrote the same zero inline, so entering a digit now clears the
+  marks through the one method that names the operation.
+
+  KEPT ON PURPOSE, both now carrying a comment saying so.
+  Sound::volume/setVolume are not dead: GHUB-0068's Preferences dialog
+  names volume among the app-wide switches it will hold, so removing
+  them would delete the API queued work needs.
+  Board::fullmoveNumber() sits in a block of five position accessors,
+  the other four of which are used, and is one of the six fields of the
+  FEN this board reads; removing it alone leaves the position
+  half-describable.
+
+  NOT DONE, and why. freezeCardIndex can answer -1 while pileFrozen()
+  is true after a restore -- the consumer degrades gracefully (no index
+  matches, so no card is turned sideways) and the real fix is to stop
+  the blob claiming it, which is GHUB-0127's job. meldCardCentre
+  recomputing meldOrder per call was left alone: it is a hit-test and
+  paint helper with no measured symptom, --bench cannot see it because
+  a fresh deal has no melds, and CLAUDE.md's rule is to measure before
+  and after rather than take one reading. Speculative surgery on it
+  would be an orthogonal edit.
   **Layman:** The remaining minor items, written down so the list is complete.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

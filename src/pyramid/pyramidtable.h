@@ -74,7 +74,6 @@ public:
     void undo();
     // Dropped when a game is restored: there is no earlier position to go back
     // to, and offering one would step into a game that was never played.
-    void forgetHistory() { m_history.clear(); }
 
     // Adopts a position from a save. Pyramid takes matched pairs out of play,
     // so the pack cannot come back whole — what this checks is that nothing

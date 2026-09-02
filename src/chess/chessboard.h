@@ -87,6 +87,10 @@ public:
 
     Colour toMove() const { return m_toMove; }
     int halfmoveClock() const { return m_halfmove; }
+    // Unused today, and kept: it is a field of the position like the four
+    // accessors around it, all of which ARE used, and it is one of the six
+    // fields of the FEN this board reads. Removing it alone would leave the
+    // position half-describable.
     int fullmoveNumber() const { return m_fullmove; }
     Square enPassantTarget() const { return m_ep; }
     bool canCastle(Colour c, bool kingSide) const { return m_castle[int(c)][kingSide ? 0 : 1]; }
