@@ -879,8 +879,19 @@ where their stock is built.
 **`canastaLevelsDiffer()` prints its four rungs on every run, and what the
 ladder reads today is the baseline for judging tomorrow's change** — the figures
 are re-read by running the suite, never assumed from a handoff. As of
-2026-08-25, after the Canasta AI pass and GHUB-0124: medium v easy 22/24 +2538,
-hard v easy 23/24 +3844, hard v medium 66/120 +233, expert v hard 121/240 +14.
+2026-09-02: medium v easy 22/24 +2538, hard v easy 23/24 +3844, hard v medium
+66/120 +233, **expert v hard 116/240 -184**.
+
+**That last rung MOVED on 2026-09-02, from 121/240 +14, and the cause is known
+rather than suspected.** GHUB-0148 made validateTake subtract the pile's red
+threes before the no-legal-move guard, so a take that would strand the seat on
+one card is now refused -- and the AI made some of those takes. The ladder is
+deterministic here (the shuffle is seeded and hand-written), so the move is
+real and not noise: two consecutive runs give the same figures to the digit.
+Expert now sits just BELOW level against Hard, where it was just above. Do not
+read that as a regression introduced by an AI change; it is the price of a
+correctness fix, and GHUB-0110 already settled that this ladder cannot separate
+a small change from noise anyway.
 **The first three rungs are the useful reading when a change is gated to one
 level** — GHUB-0124 touched Expert alone, and those three not moving at all is
 what says so. Two things

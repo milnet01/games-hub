@@ -5813,6 +5813,40 @@ open.
   under comments claiming a difference, and kEndgameStock has a diverged
   copy (< 8 against <= 8). The per-hand freeze budget is not persisted,
   so a save reloads with the ceiling refilled.
+  Diagnosis (2026-09-02), each claim checked against source. No code
+  changed yet. Line numbers are as of this date and will drift; the
+  names will not.
+
+  CONFIRMED, with where to look.
+  - chooseDiscard's pack count is `8 - seen(e, c.rank)` where
+    4 * r.decks is meant. plausiblePack admits decks 1..8.
+  - worthHolding's bait gate is `seen(e, rank) >= 8`. Under one deck
+    only four of a rank exist, so the gate can never fire and is dead
+    code; same 4 * r.decks fix.
+  - chooseDiscard takes `Card best = h.front()` with no empty guard.
+  - wantsPile returns a BYTE-IDENTICAL expression for Hard and Expert
+    (`!mine.opened || v >= 15 || n >= 3`) under two comments that
+    describe a difference between them. Either the comment or the
+    threshold is wrong, and the ladder cannot see which.
+  - killingTheHand calls handShowing(mine, e.hand(seat), r) against
+    handShowing(theirs, {}, r). Our side is docked the value of the
+    cards in our own hand and theirs is not, because we cannot see
+    theirs -- so our showing is systematically the lower of the two and
+    runTheHandDead's `theirShowing > ourShowing + goingOutBonus` margin
+    is eaten by an ordinary hand. Compare like with like.
+  - The freeze budget m_freezes is reset in noteHand and never
+    persisted, so a save reloads with the ceiling refilled.
+
+  CORRECTED. The item says kEndgameStock has a diverged copy, "< 8
+  against <= 8". The two kEndgameStock USES are consistent -- one is
+  `stockLeft > kEndgameStock` and the other `stockCount() <=
+  kEndgameStock`, which agree. The real divergence is a bare literal at
+  the tail of chooseDiscard, `if (e.stockCount() < 8)`, which is off by
+  one against the constant AND does not follow it. That is the line to
+  change, not either of the two the item points at.
+
+  NOT YET CHECKED: the GHUB-0122 pair-keeping opening said to conflate
+  "cards still needed" with "wilds this meld may take".
   **Layman:** A handful of the computer's decisions are built on numbers that are wrong in ways the strength ladder cannot see.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
