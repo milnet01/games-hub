@@ -1686,7 +1686,7 @@ progress.
   Kind: ux.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0067] **A saved game survives a clean exit and nothing else, and two copies of the app quietly overwrite each other.**
+- ✅ [GHUB-0067] **A saved game survives a clean exit and nothing else, and two copies of the app quietly overwrite each other.**
   Two halves of one question: when is progress actually written to disk?
 
   **Only on the way out.** `rememberPage()` stores the current page's game when
@@ -1720,6 +1720,43 @@ progress.
   process saw a live owner and quietly exited. GHUB-0043 introduces exactly that
   relaunch. The two items should be built with each other in mind rather than in
   either order by accident.
+  Resolved (2026-09-03). One mechanism answers both halves, and no
+  single-instance guard was built. The open game and its window geometry are
+  banked on a one-second tick in HubWindow, started when a game page opens
+  and stopped when the tile grid comes back or the window closes.
+
+  That bounds a crash, a kill or a power cut to a second of play, and it
+  retires the two-copies problem for saved state: neither process is sitting
+  on a stale whole-file picture to dump at exit, so the most recent move
+  wins rather than the last exit. No socket, so nothing to release, and
+  nothing to build in step with GHUB-0043's relaunch.
+
+  The item's worry about Canasta being too dear to serialise per move does
+  not survive measurement: Canasta is the dearest at 0.008 ms and 953 bytes,
+  and every other saving game is under that. writeIfChanged skips an
+  unchanged value, so a quiet tick costs a comparison and no write; a failed
+  write clears that cache, or a store that becomes writable again would
+  never be caught up.
+
+  The tick only ever writes, never clears -- a game can be momentarily empty
+  mid-play, and clearing there would discard a live position. Only the exit
+  paths clear.
+
+  Two things the item claims that turned out not to hold. Best scores were
+  never at risk: scores.cpp writes and syncs on every change already. And
+  the donate counter's race is real but negligible -- two launches within
+  microseconds of each other advance donate/launches by one instead of two,
+  on a counter that prompts every 150 launches. Not fixed, and not filed.
+
+  Not done, deliberately: nothing stops two windows being open. That is a
+  convenience question once saves are write-through, not a data one, and
+  gameshub --game spider alongside the hub is a documented way to start.
+  Filed separately as GHUB-0174.
+
+  aGameIsBankedWhileItIsBeingPlayed in the UI test opens Sudoku, waits past
+  the interval with nothing closed and nothing left, and reads the key back
+  from a fresh QSettings: 0 bytes without the tick, 424 with it. It also
+  asserts the timer runs on a game page and stops on the tile grid.
   **Layman:** If the app crashes, the game you were in is lost — and opening it twice means whichever copy you close last wipes the other's saves.
   Kind: fix.
   Source: in-session-2026-08-20.
@@ -6312,6 +6349,26 @@ open.
   **Layman:** The ball can get wedged next to the left flipper and bounce in one spot without ever stopping.
   Kind: fix.
   Source: owner-report-2026-09-03, screenshot of a stuck ball.
+
+- 💭 [GHUB-0174] **A second copy of the app opens its own window rather than handing over to the one already running.**
+  Split out of GHUB-0067, which closed the DATA half: saves are now
+  write-through, so two copies no longer overwrite each other and nothing is
+  lost. What is left is convenience -- a second panel click, or `gameshub
+  --game spider` while the hub is open, gives a second window instead of
+  raising the first and switching it to Spider.
+
+  Considered rather than planned because it is not clearly wanted.
+  `--game <name>` starting a standalone window is documented and encouraged,
+  and a guard would change that.
+
+  If it is ever built, read finbreak's FIBR-0189 first: its guard held a
+  socket the update relaunch had to release explicitly, or the replacement
+  process saw a live owner and quietly exited. GHUB-0043 introduces exactly
+  that relaunch here, so the two belong together rather than in whichever
+  order they happen to be picked up.
+  **Layman:** Clicking the launcher twice gives you two Games windows instead of bringing the one you have to the front.
+  Kind: feature.
+  Source: in-session-2026-09-03, split out of GHUB-0067.
 
 ## The score book on a phone
 

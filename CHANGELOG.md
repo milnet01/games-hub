@@ -33,6 +33,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **A crash no longer loses the game you were in, and two copies of the app stop overwriting each other.** (GHUB-0067)
+  Progress reached the disk only on the way out, so a crash, a kill or a
+  power cut lost the one game being played -- and two copies settled by
+  whichever exited last rather than whichever moved last. The open game and
+  its window size are now banked on a one-second tick, so at most a second
+  of play is at risk and the most recent move wins.
+
 - **A frozen Canasta pack keeps showing its sideways card however deep it is buried.** (GHUB-0172)
   The pile draws only its top few cards, so the card lying across it
   vanished once that many discards landed on top -- while the pack stayed

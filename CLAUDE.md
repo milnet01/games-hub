@@ -404,10 +404,23 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   miniature; `openGameNamed()` backs the `--game` flag. It also owns two things
   every game inherits: window size and position, kept **per page** so each game
   reopens the size it was left, and saved games — a game that overrides
-  `GameView::saveState()`/`restoreState()` is stored on close and restored the
-  next time it is opened, with no save dialog anywhere. An empty state means
+  `GameView::saveState()`/`restoreState()` is stored and restored the next time
+  it is opened, with no save dialog anywhere. An empty state means
   "nothing worth keeping" and clears the stored one, which is how a finished
   game avoids resuming onto its own final scores.
+
+  **`saveState()` is called on a one-second tick while the game is on screen,
+  not only on the way out**, so it has to stay cheap — the dearest today is
+  Canasta at 0.008 ms. That tick is what bounds a crash, a kill or a power cut
+  to a second of play, and what stops two copies of the app settling by
+  whichever exits last. **The tick only ever writes; it never clears.** A game
+  can be momentarily empty mid-play — a deal still arriving, a hand finished
+  and not yet re-dealt — and clearing there would throw away a position still
+  being played, so only the exit paths clear. `writeIfChanged()` is what makes
+  the tick nearly free: an unchanged value costs a comparison and no write.
+
+  Best scores are not part of this and never were: `scores.cpp` writes and
+  syncs on every change already.
 - `CMakeLists.txt` splits `GAME_CORE_SOURCES` from `GAME_VIEW_SOURCES`, and
   `gameshub_selftest` links only the cores. **Two things put a file in the view
   half, not one.** Pulling in QtWidgets is the obvious one. The other is being

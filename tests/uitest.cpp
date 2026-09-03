@@ -332,6 +332,44 @@ void frameCost()
 
 // ---- fuzzSavedGames (GHUB-0052) ----
 //
+// Progress must reach the disk while the game is being played, not only on the
+// way out. Everything that banks a game used to sit on a clean-exit path, so a
+// crash, an out-of-memory kill or a pkill lost the one game you were actually
+// in -- and two copies of the app settled by whichever exited last rather than
+// by whichever moved last (GHUB-0067).
+void aGameIsBankedWhileItIsBeingPlayed()
+{
+    const QString key = QStringLiteral("saved/Sudoku");
+    QSettings().remove(key);
+
+    HubWindow hub;
+    hub.show();
+    hub.openGameNamed(QStringLiteral("Sudoku"));
+    pump(60);
+
+    // Nothing closed, nothing left the page: exactly the state a kill would
+    // interrupt. Sudoku is the subject because its board is worth keeping the
+    // moment it is dealt, so the check does not depend on driving a move.
+    check(QSettings().value(key).toByteArray().isEmpty(),
+          "a game is not banked the instant it opens");
+    pump(1400); // past the autosave interval
+    const QByteArray banked = QSettings().value(key).toByteArray();
+    std::printf("      banked without an exit: %lld bytes\n", qint64(banked.size()));
+    check(!banked.isEmpty(), "a game reaches the disk while it is still being played");
+
+    QTimer* autosave = hub.findChild<QTimer*>(QStringLiteral("autosave"));
+    check(autosave != nullptr && autosave->isActive(),
+          "the autosave runs while a game is on screen");
+    for (QAction* a : hub.findChildren<QAction*>())
+        if (a->text().contains(QStringLiteral("All Games")))
+            a->trigger();
+    pump(40);
+    check(autosave != nullptr && !autosave->isActive(),
+          "and stops when the tile grid comes back, so it belongs to the open page");
+
+    QSettings().remove(key);
+}
+
 // restoreState() is the app's entire untrusted input surface: SECURITY.md names
 // it as the one thing parsed that the app did not write. Every bound in those
 // parsers was put there by a person thinking about it, and until this block
@@ -3947,6 +3985,8 @@ int main(int argc, char* argv[])
 
         Legibility::instance().setEnabled(wasLegible);
     }
+
+    aGameIsBankedWhileItIsBeingPlayed();
 
     fuzzSavedGames(150);
 

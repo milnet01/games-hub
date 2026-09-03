@@ -30,6 +30,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSettings>
+#include <QTimer>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -409,6 +410,18 @@ HubWindow::HubWindow(QWidget* parent)
     setWindowTitle(QStringLiteral("Games"));
     buildEntries();
     buildChrome();
+
+    // Progress used to reach the disk only on the way out, so a crash, an
+    // out-of-memory kill or a pkill lost the game you were actually in -- and
+    // two copies of the app settled by whichever exited last rather than by
+    // whichever moved last. Serialising is cheap enough to do on a short tick:
+    // the dearest game to save is Canasta, at 0.008 ms and under a kilobyte,
+    // and an unchanged value costs a comparison and no write at all.
+    m_autosave = new QTimer(this);
+    m_autosave->setObjectName(QStringLiteral("autosave")); // found by name in the tests
+    m_autosave->setInterval(1000);
+    connect(m_autosave, &QTimer::timeout, this, &HubWindow::autosaveTick);
+
     showMenu();
 }
 
@@ -617,8 +630,8 @@ void HubWindow::rememberPage()
     // saveGeometry() carries the position, the size and whether the window was
     // maximised, which is why it is used rather than pos() and size().
     QSettings s;
-    s.setValue(geometryKey(m_page), saveGeometry());
-    checkSettingsWritable(s);
+    if (writeIfChanged(s, geometryKey(m_page), saveGeometry()))
+        checkSettingsWritable(s);
 
     for (const Entry& e : m_entries)
         if (e.view != nullptr && e.name == m_page)
@@ -633,7 +646,14 @@ void HubWindow::checkSettingsWritable(QSettings& s)
     // that closing mid-game brings it back. status() is the only place the
     // failure is reported, and nothing was reading it.
     s.sync();
-    if (s.status() == QSettings::NoError || m_settingsTroubleReported)
+    if (s.status() == QSettings::NoError)
+        return;
+
+    // A failed write never landed, so forget what this process believes is on
+    // disk. Otherwise writeIfChanged skips that value for ever after, and a
+    // store that becomes writable again is never caught up.
+    m_written.clear();
+    if (m_settingsTroubleReported)
         return;
 
     // Said once. The status bar is where it can still be acted on; by the close
@@ -641,6 +661,45 @@ void HubWindow::checkSettingsWritable(QSettings& s)
     m_settingsTroubleReported = true;
     m_status->setText(QStringLiteral(
         "Settings cannot be saved — games and window sizes will not be remembered."));
+}
+
+bool HubWindow::writeIfChanged(QSettings& s, const QString& key, const QByteArray& value)
+{
+    const auto seen = m_written.constFind(key);
+    if (seen != m_written.constEnd() && *seen == value)
+        return false;
+    // An empty value means the game has nothing worth coming back to -- a
+    // finished hand, or a game that does not offer saving at all. Clearing
+    // rather than keeping stops a stale position outliving the game it came
+    // from.
+    if (value.isEmpty())
+        s.remove(key);
+    else
+        s.setValue(key, value);
+    m_written.insert(key, value);
+    return true;
+}
+
+void HubWindow::autosaveTick()
+{
+    if (!m_geometryReady || !m_remembering)
+        return;
+
+    QSettings s;
+    bool wrote = writeIfChanged(s, geometryKey(m_page), saveGeometry());
+    for (const Entry& e : m_entries) {
+        if (e.view == nullptr || e.name != m_page)
+            continue;
+        // Never CLEAR from the tick, only write. By the time an exit path runs
+        // the game is settled, but mid-play it can be momentarily empty -- a
+        // deal still arriving, a hand just finished and not yet re-dealt --
+        // and clearing there would throw away a position still being played.
+        const QByteArray state = e.view->saveState();
+        if (!state.isEmpty())
+            wrote = writeIfChanged(s, saveKey(e.name), state) || wrote;
+    }
+    if (wrote)
+        checkSettingsWritable(s);
 }
 
 void HubWindow::onlyTheOpenPageSetsTheFloor()
@@ -715,21 +774,14 @@ void HubWindow::storeSave(const Entry& e)
 {
     if (e.view == nullptr || !m_remembering)
         return;
-    const QByteArray state = e.view->saveState();
     QSettings s;
-    // An empty state means the game has nothing worth coming back to — a
-    // finished hand, or a game that does not offer saving at all. Clearing
-    // rather than keeping stops a stale position outliving the game it came
-    // from.
-    if (state.isEmpty())
-        s.remove(saveKey(e.name));
-    else
-        s.setValue(saveKey(e.name), state);
-    checkSettingsWritable(s);
+    if (writeIfChanged(s, saveKey(e.name), e.view->saveState()))
+        checkSettingsWritable(s);
 }
 
 void HubWindow::closeEvent(QCloseEvent* event)
 {
+    m_autosave->stop();
     rememberPage();
     // Every other page change deactivates the view it is leaving and this one
     // did not, so a game with a clock went on running between here and
@@ -752,6 +804,7 @@ void HubWindow::showMenu()
         leaving->deactivate();
     setGameActions(nullptr);
     m_backAction->setVisible(false);
+    m_autosave->stop(); // nothing to bank on the tile grid
     m_stack->setCurrentWidget(m_menuHost);
     onlyTheOpenPageSetsTheFloor();
     setWindowTitle(QStringLiteral("Games"));
@@ -799,6 +852,7 @@ void HubWindow::openGame(int index)
     applyPageGeometry(e.name);
     e.view->activate();
     e.view->setFocus();
+    m_autosave->start();
     if (resumed)
         m_status->setText(QStringLiteral("Carried on from where you left off."));
 }

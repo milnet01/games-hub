@@ -13,6 +13,7 @@ class QToolBar;
 #include <QSizePolicy>
 
 class QLabel;
+class QTimer;
 class QSettings;
 
 // The hub: a grid of game tiles, plus one page per game. Games are built the
@@ -80,6 +81,13 @@ private:
     // Reads back whether a settings write actually landed, and says so once if
     // it did not. QSettings reports that nowhere else.
     void checkSettingsWritable(QSettings& s);
+    // Writes one key only when its value has actually moved, and reports
+    // whether it wrote. Everything worth keeping goes through here, so the
+    // autosave tick costs a comparison rather than a disk write.
+    bool writeIfChanged(QSettings& s, const QString& key, const QByteArray& value);
+    // Banks the open game where it stands. Runs on the autosave timer, so it
+    // only ever writes -- see the definition for why it must not clear.
+    void autosaveTick();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -113,4 +121,12 @@ private:
     // Said once per session: repeating it on every page switch would bury the
     // status line the player is actually reading.
     bool m_settingsTroubleReported = false;
+    // What this process has already put on disk, per settings key, so an
+    // unchanged value is not rewritten.
+    QHash<QString, QByteArray> m_written;
+    // Banks the open game while it is being played rather than on the way out,
+    // so a crash, a kill or a power cut loses at most this interval -- and so
+    // two copies of the app settle by most recent move rather than by whichever
+    // happens to exit last.
+    QTimer* m_autosave = nullptr;
 };
