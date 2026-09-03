@@ -6508,6 +6508,30 @@ open.
   Kind: perf.
   Source: in-session-2026-09-03, split out of GHUB-0160.
 
+- 💭 [GHUB-0176] **Three CLAUDE.md edits changed direction without the cold review that normally gates one.**
+  Recorded so it is findable. The three edits landed in commits
+  beea5c9, 0d19293 and b2edb81, and each commit body says "No gate" with
+  the reason. A commit body is not somewhere anyone looks.
+
+  What changed, and why each one changes what a conformer writes.
+  saveState() is now called on a one-second tick rather than only on the
+  way out, so a new game's must stay cheap and the tick must never clear.
+  tests/saves/ must not be regenerated to make a check pass. And Hearts'
+  Queen-breaks-hearts variant is now stated, with winnerIsShared() to be
+  asked before announcing a win.
+
+  Not run because the session handoff said not to re-run review-contract on
+  CLAUDE.md; that instruction names the review, which is what stops the
+  gate. Considered rather than planned because the owner may be content
+  with it -- the file finished its own review run at the cap (3 loops for a
+  standard) on 2026-08-25 and these are additions to it, not rewrites of
+  what that run settled.
+
+  If it is wanted: review-contract CLAUDE.md --genre standard.
+  **Layman:** Some notes that tell future sessions how to work here were changed without the usual independent check.
+  Kind: doc.
+  Source: in-session-2026-09-03, recorded rather than performed.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on
