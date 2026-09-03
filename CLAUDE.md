@@ -117,6 +117,7 @@ pass/fail:
 ./build/gameshub_selftest                             # all game rules
 QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest     # widgets and hub
 QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest --bench   # frame cost alone
+QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest --write-saves  # see below
 tests/pre-push-test.sh                                # which arm the hook takes
 python3 scripts/scorepad-check.py                     # score book vs the game
 python3 scripts/legibility-check.py --thresholds      # kFaceMinWidth is unique
@@ -938,6 +939,22 @@ Anything needing real pointer input has to be verified by eye instead.
 The self-test is where game logic gets proven — it plays 200 random Reversi
 games, 20 full AI Hearts games, 18 full AI Canasta games at three strengths,
 and flies pinballs. Prefer adding a check there over a UI test.
+
+**`tests/saves/` is a committed corpus of real saves, one per saving game, and
+the UI test restores every one of them.** A save-format change that refuses the
+old format is not a crash — the hub keeps the fresh deal it just made, the app
+runs, nothing looks broken, and the player's half-finished game is gone without
+being told. `docs/standards/versioning.md` § 3 calls that a breaking change and
+requires a MAJOR; this corpus is what enforces it. **When it reddens, the choice
+is bump the MAJOR or write a migration — never regenerate the corpus**, which
+deletes the only evidence the format moved. `--write-saves` rewrites it and is
+for adding a game, not for making the check pass.
+
+The corpus is written by `startedSave()`, which is also what the mutation fuzz
+seeds from: most games answer "nothing worth keeping" for a board nobody has
+moved in, so it pokes at the surface until something is worth saving, and
+freezes the clock first because Minesweeper and Sudoku save a running elapsed
+figure. Snake and Pinball offer no save and are absent by design.
 
 **A test that builds a position with a WILD or a red three as the up-card gets
 one fewer card in the stock than it looks.** `Engine::dealFrom` covers such a

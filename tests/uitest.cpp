@@ -38,6 +38,8 @@
 #include <QDataStream>
 #include <QDeadlineTimer>
 #include <QFile>
+#include <QDir>
+#include <QFileInfo>
 #include <QSettings>
 #include <QLabel>
 #include <QMenuBar>
@@ -547,6 +549,125 @@ void nudgeIntoPlay(GameView* view)
     }
 }
 
+// A position worth saving, from a game just opened. Empty means the game
+// offers no save at all.
+//
+// Freezing the clock first is load bearing: Minesweeper and Sudoku save a
+// RUNNING elapsed figure, so two saves a millisecond apart differ. deactivate()
+// suspends it and is idempotent.
+QByteArray startedSave(GameView* view)
+{
+    // Most games answer "nothing worth keeping" for a position nobody has moved
+    // in, so a freshly opened one has nothing to save. Poke at the board until
+    // something is. It is crude on purpose -- no game-specific knowledge to go
+    // stale, and any game it cannot start is named by the caller rather than
+    // passing quietly.
+    if (view->saveState().isEmpty())
+        nudgeIntoPlay(view);
+    view->deactivate();
+    return view->saveState();
+}
+
+// Where the committed corpus of old saves lives. One blob per saving game,
+// written by the build of the day; see savesFromOlderBuildsStillLoad.
+QString corpusDir()
+{
+    return QStringLiteral(GAMESHUB_SOURCE_DIR "/tests/saves");
+}
+
+// A save-format change that refuses the old format is not a crash: the hub
+// keeps the fresh deal it already made, the app runs, nothing looks broken, and
+// the player's half-finished game is gone without being told.
+// docs/standards/versioning.md § 3 calls that a breaking change and requires a
+// MAJOR, and until this block existed nothing enforced it (GHUB-0075).
+//
+// So a corpus of real saves, written by the build of the day and committed,
+// is restored here. A format change reddens this and the author has to choose:
+// bump the MAJOR, or write a migration. Regenerate deliberately, never to make
+// this pass:  QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest --write-saves
+void savesFromOlderBuildsStillLoad()
+{
+    std::printf("\n      saves written by earlier builds (GHUB-0075)\n");
+
+    QDir dir(corpusDir());
+    const QStringList files = dir.entryList({ QStringLiteral("*.bin") }, QDir::Files, QDir::Name);
+    if (files.isEmpty()) {
+        check(false, "the corpus of older saves exists — run --write-saves to create it");
+        return;
+    }
+
+    HubWindow probe;
+    const QStringList games = probe.gameNames();
+    QStringList refused;
+    QStringList unknown;
+    for (const QString& file : files) {
+        const QString name = QFileInfo(file).completeBaseName();
+        if (!games.contains(name)) {
+            // A renamed or removed game leaves its blob behind, and a corpus
+            // nothing reads is worse than none: it looks like coverage.
+            unknown << name;
+            continue;
+        }
+        QFile blob(dir.filePath(file));
+        if (!blob.open(QIODevice::ReadOnly)) {
+            refused << name;
+            continue;
+        }
+        const QByteArray stored = blob.readAll();
+
+        HubWindow one;
+        one.openGameNamed(name);
+        one.show();
+        pump(40);
+        GameView* view = one.findChild<GameView*>();
+        if (view == nullptr || !view->restoreState(stored))
+            refused << name;
+    }
+
+    std::printf("      %lld stored saves, %lld refused\n",
+                qint64(files.size()), qint64(refused.size()));
+    if (!refused.isEmpty())
+        std::printf("      refused: %s\n", qPrintable(refused.join(QStringLiteral(", "))));
+    check(refused.isEmpty(),
+          "every save written by an earlier build still loads — or the MAJOR is owed");
+    if (!unknown.isEmpty())
+        std::printf("      no such game any more: %s\n", qPrintable(unknown.join(QStringLiteral(", "))));
+    check(unknown.isEmpty(), "every stored save belongs to a game that still exists");
+}
+
+// Writes the corpus above. Run deliberately, and commit what it produces.
+int writeSaveCorpus()
+{
+    QDir().mkpath(corpusDir());
+    HubWindow probe;
+    int written = 0;
+    QStringList without;
+    for (const QString& name : probe.gameNames()) {
+        HubWindow one;
+        one.openGameNamed(name);
+        one.show();
+        pump(40);
+        GameView* view = one.findChild<GameView*>();
+        const QByteArray state = view == nullptr ? QByteArray() : startedSave(view);
+        if (state.isEmpty()) {
+            without << name; // Pinball and Snake keep nothing
+            continue;
+        }
+        QFile out(QDir(corpusDir()).filePath(name + QStringLiteral(".bin")));
+        if (!out.open(QIODevice::WriteOnly)) {
+            std::printf("  could not write %s\n", qPrintable(out.fileName()));
+            return 1;
+        }
+        out.write(state);
+        std::printf("  %-12s %lld bytes\n", qPrintable(name), qint64(state.size()));
+        ++written;
+    }
+    std::printf("\n  %d saves written to %s\n", written, qPrintable(corpusDir()));
+    if (!without.isEmpty())
+        std::printf("  no save offered by: %s\n", qPrintable(without.join(QStringLiteral(", "))));
+    return 0;
+}
+
 void fuzzSavedGames(int rounds)
 {
     std::printf("\n      saved-game parsers under mutation (GHUB-0052)\n");
@@ -570,28 +691,11 @@ void fuzzSavedGames(int rounds)
         if (view == nullptr)
             continue;
 
-        // Freezes any clock or animation for the duration. Minesweeper and
-        // Sudoku save elapsedMs(), which is a RUNNING figure — two saves a
-        // millisecond apart differ, and the unchanged-on-refusal check below
-        // would then fail for reasons that have nothing to do with parsing.
-        // deactivate() suspends the clock and is idempotent, so re-calling it
-        // after each attempt keeps every comparison stable.
-        QByteArray seed = view->saveState();
-        if (seed.isEmpty()) {
-            // Most games answer "nothing worth keeping" for a position nobody
-            // has moved in, so a freshly opened one has no save to mutate. The
-            // first run of this block fuzzed three games and skipped eleven,
-            // which looked like coverage and was not. Poke at the board until
-            // something is worth saving: clicks across the surface for the card
-            // games and Minesweeper, arrows and typing for the rest. It is
-            // crude on purpose -- no game-specific knowledge to go stale, and
-            // any game it cannot start is named in the output rather than
-            // passing quietly.
-            nudgeIntoPlay(view);
-            seed = view->saveState();
-        }
-        view->deactivate();
-        seed = view->saveState();
+        // The clock stays frozen for the whole block, so the unchanged-on-
+        // refusal check below cannot fail for reasons that have nothing to do
+        // with parsing. The first run of this block fuzzed three games and
+        // skipped eleven, which looked like coverage and was not.
+        QByteArray seed = startedSave(view);
         if (seed.isEmpty()) {
             ++gamesWithoutASave;
             unplayable << name;
@@ -682,6 +786,11 @@ int main(int argc, char* argv[])
     // without this the measurement costs more than the change it is judging,
     // and stops being taken.
     for (int i = 1; i < argc; ++i) {
+        // `--write-saves` regenerates the committed corpus of old saves. It is
+        // never run to make the check pass -- that is the failure the corpus
+        // exists to report. See savesFromOlderBuildsStillLoad.
+        if (std::strcmp(argv[i], "--write-saves") == 0)
+            return writeSaveCorpus();
         if (std::strcmp(argv[i], "--bench") == 0) {
             frameCost();
             std::printf("\n%s\n", g_failures == 0 ? "Bench complete." : "FAILURES PRESENT.");
@@ -3987,6 +4096,8 @@ int main(int argc, char* argv[])
     }
 
     aGameIsBankedWhileItIsBeingPlayed();
+
+    savesFromOlderBuildsStillLoad();
 
     fuzzSavedGames(150);
 

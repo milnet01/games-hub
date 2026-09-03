@@ -10,6 +10,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **A change that would make older saved games unreadable now fails the tests instead of reaching a player.** (GHUB-0075)
+  A save each game wrote is committed under tests/saves/ and restored by
+  the suite. A refused old save is not a crash -- the app runs and the
+  half-finished game is simply gone -- so nothing used to catch it.
+
 - **--turns plays a game forward before the screenshot is taken.** (GHUB-0166)
   Reaches anything that only exists once a hand has been played, such as a
   frozen pack or a finished canasta. A game that has no notion of a turn

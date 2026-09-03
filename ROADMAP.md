@@ -6846,7 +6846,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: refactor.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0075] **Nothing checks that a save written by an older build still loads.**
+- ✅ [GHUB-0075] **Nothing checks that a save written by an older build still loads.**
   Ten of the fourteen games save, and each stamps its own
   save-format version and refuses anything else —
   KlondikeView::restoreState returns false unless the quint32 it
@@ -6870,6 +6870,31 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   generated once per game and the test is a loop. The judgement is
   whether a refused old save should ever be acceptable, and § 3 says
   it is not without a MAJOR.
+  Resolved (2026-09-03). tests/saves/ holds one committed blob per saving
+  game, and savesFromOlderBuildsStillLoad restores every one of them,
+  naming any game that refuses. Regenerate with gameshub_uitest
+  --write-saves -- deliberately, for a new game, never to make the check
+  pass, and CLAUDE.md says so where the flag is documented.
+
+  Proved by bumping Klondike's save version from 1 to 2 in both directions:
+  the check went to "12 stored saves, 1 refused -- refused: Solitaire" and
+  back to zero when reverted. It also fails on a blob whose game no longer
+  exists, because a corpus nothing reads looks like coverage.
+
+  The item says ten of the fourteen games save. It is twelve: Snake and
+  Pinball are the only two that keep nothing, and the writer names them on
+  every run rather than skipping them quietly.
+
+  startedSave() is now shared with the mutation fuzz instead of copied --
+  the same subtle routine (poke the board until a position is worth saving,
+  freeze the clock first because Minesweeper and Sudoku save a running
+  elapsed figure) was about to exist twice. The same twelve games are
+  fuzzed after the extraction as before.
+
+  Worth knowing for anyone reading fuzz output: it is NOT deterministic run
+  to run, for that same clock reason -- two consecutive runs gave Pyramid
+  111 then 118 mutants refused. Judge it on which games are covered, not on
+  the counts.
   **Layman:** If a change quietly makes old saved games unreadable, the game you left half-finished just disappears and nobody is told.
   Kind: test.
   Source: in-session-2026-08-20 (docs/standards/versioning.md § 3).
