@@ -636,6 +636,35 @@ void anInterruptedDragPutsTheRunBack(const QString& game)
           qPrintable(game + QStringLiteral(": leaving the game mid-drag puts the run back")));
 }
 
+// Pyramid's stock is the only place the game says a redeal is available, and
+// it said it with a symbol. A glyph the platform has no font for draws as
+// nothing at all, so the cue disappeared and the surface said the stock was
+// simply empty (GHUB-0160). A word cannot vanish that way -- but drawText
+// clips to the slot, so it has to be shown to fit at the narrowest slot the
+// game ever draws.
+void theRedealCueFitsItsSlot()
+{
+    HubWindow hub;
+    hub.openGameNamed(QStringLiteral("Pyramid"));
+    hub.show();
+    pump(40);
+    GameView* view = hub.findChild<GameView*>();
+    if (view == nullptr) {
+        check(false, "pyramid: the view exists");
+        return;
+    }
+    view->resize(1, 1); // its own floor, where the slot is narrowest
+
+    const double w = view->smallestCardWidth();
+    const QRectF slot(0, 0, w, w * CardArt::kAspect);
+    const QString label = QStringLiteral("Redeal");
+    const double drawn = CardArt::slotLabelWidth(view->font(), slot, label);
+    const double pt = CardArt::slotLabelPointSize(view->font(), slot, label);
+    std::printf("      redeal cue: %.1f px of a %.1f px slot at %.1f pt\n", drawn, w, pt);
+    check(drawn <= w, "pyramid: the redeal cue fits the slot it is drawn in");
+    check(label.size() > 1, "pyramid: and it is a word rather than a symbol a font may not carry");
+}
+
 // Spider's card size is solved from a height budget, and that budget has to be
 // what a column REALLY reaches rather than a guess. Its deal leaves five
 // face-down cards under one face-up, and each of the five dealt rows adds a
@@ -4192,6 +4221,8 @@ int main(int argc, char* argv[])
 
     anInterruptedDragPutsTheRunBack<KlondikeView>(QStringLiteral("Solitaire"));
     anInterruptedDragPutsTheRunBack<SpiderView>(QStringLiteral("Spider"));
+
+    theRedealCueFitsItsSlot();
 
     aFullSpiderTableStaysOnTheSurface();
 

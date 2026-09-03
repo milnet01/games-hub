@@ -26,6 +26,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Pyramid says "Redeal" on the stock instead of a symbol.** (GHUB-0160)
+  The symbol was the only place on the table that said a redeal was left,
+  and a symbol the computer has no font for draws as nothing at all -- so
+  the cue could simply disappear. The word is sized to fit the slot.
+
 - **Hard and Expert keep a rank back as the key to a pile worth taking.** (GHUB-0129)
   They used to prune their opening to hold a rank in hand and then lay the
   same cards on the same turn. How long they wait now depends on how many of
@@ -37,6 +42,10 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   own section and its own reporting advice.
 
 ### Fixed
+
+- **Putting a FreeCell run back where it came from no longer costs you a move.** (GHUB-0160)
+  Moves are the score in FreeCell, so picking a run up and setting it
+  straight back down was spending it for nothing.
 
 - **Hearts no longer plays a card sound when no card was played.** (GHUB-0160)
   A computer play that the rules refused still made the noise, so the table

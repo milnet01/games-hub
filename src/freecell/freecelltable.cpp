@@ -182,6 +182,13 @@ bool FreeCellTable::dropOnFoundation(const std::vector<Card>& run, int foundatio
 
 bool FreeCellTable::dropOnColumn(const std::vector<Card>& run, int column, int* limit)
 {
+    // Setting a run back down on the column it came from is not a move, and
+    // moves ARE the score here -- so counting it let a player spend their score
+    // picking a run up and putting it straight back (GHUB-0160). Refusing sends
+    // the view down its existing put-back path, which also drops the undo
+    // snapshot the lift banked, so nothing is recorded either.
+    if (column == m_liftedColumn)
+        return false;
     if (run.empty() || !canStack(run.front(), column))
         return false;
 

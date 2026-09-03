@@ -385,7 +385,7 @@ void PyramidView::paintEvent(QPaintEvent*)
 
     if (m_table.stock().empty())
         CardArt::paintSlot(p, stockRect(),
-                           m_table.redealsLeft() ? QStringLiteral("↻") : QString());
+                           m_table.redealsLeft() ? QStringLiteral("Redeal") : QString());
     else
         CardArt::paintBack(p, stockRect());
 

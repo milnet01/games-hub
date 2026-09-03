@@ -3,6 +3,7 @@
 #include "card.h"
 
 #include <QPainter>
+#include <QFont>
 #include <QRectF>
 
 // Shared card drawing for Klondike, Spider and Hearts, so the three games look
@@ -37,6 +38,14 @@ void paintBack(QPainter& p, const QRectF& r, int deck = 0);
 
 // Dashed outline for an empty pile.
 void paintSlot(QPainter& p, const QRectF& r, const QString& glyph = {});
+
+// The point size paintSlot will draw `label` at inside `r`, and the width that
+// label then takes. Exposed so a test can ask whether a word still fits the
+// narrowest slot a game draws -- drawText clips to the rect, so a label that
+// does not fit is a stroke of a word and looks like a rendering fault rather
+// than a label that is too long.
+double slotLabelPointSize(const QFont& base, const QRectF& r, const QString& label);
+double slotLabelWidth(const QFont& base, const QRectF& r, const QString& label);
 
 // Ring drawn around a selected or highlighted card.
 void paintHighlight(QPainter& p, const QRectF& r, const QColor& colour);

@@ -6182,6 +6182,31 @@ open.
   heartsTieIsNotAWin locks both: a fresh engine has every seat on nothing,
   which is the cleanest shared low there is, and winner() still names seat
   0 there.
+  Progress (2026-09-03): the FREECELL/PYRAMID block is closed. Two blocks
+  remain -- REVERSI/DRAUGHTS and MINESWEEPER/SUDOKU + 2048.
+
+  One of its three entries was already fixed and the item is stale on it:
+  FreeCellTable::restore DOES validate the foundations -- Ace upward, one
+  suit, no gaps -- and the code carries the comment saying nothing used to.
+  Nothing was done for it.
+
+  A no-op drop no longer counts. dropOnColumn refuses when the target is
+  the column the run was lifted from, which sends the view down its
+  existing put-back path, so no move is counted and the undo snapshot the
+  lift banked is dropped too. Moves ARE the score here, so this was a
+  player spending their score picking a run up and putting it back.
+
+  Pyramid's stock says "Redeal" rather than the rotate symbol. The symbol
+  was the only cue on the surface and a platform with no font for it draws
+  nothing, so the cue could vanish and leave the stock looking merely
+  empty. paintSlot now SOLVES the label size by measurement instead of
+  scaling by a ratio -- drawText clips to the slot, and a ratio tuned on one
+  machine's font leaves a stroke of a word on another, which is the lesson
+  SudokuView::markFont cost two red Windows legs to learn.
+
+  theRedealCueFitsItsSlot asks the new slotLabelWidth/slotLabelPointSize
+  whether the word still fits the narrowest slot Pyramid draws: 54.1 px of
+  a 64.2 px slot at 12.9 pt.
   **Layman:** A list of smaller game bugs, kept so none of them is lost.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

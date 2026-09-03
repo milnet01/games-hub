@@ -2,6 +2,7 @@
 
 #include "theme.h"
 
+#include <QFontMetricsF>
 #include <QLinearGradient>
 #include <QPaintDevice>
 #include <QPainterPath>
@@ -478,6 +479,31 @@ void paintFace(QPainter& p, const QRectF& r, const Card& c)
     p.restore();
 }
 
+double slotLabelPointSize(const QFont& base, const QRectF& r, const QString& label)
+{
+    // SOLVE the size rather than scale it. A single character fits at any
+    // sensible ratio; a word does not, and drawText clips to the rect, so a
+    // ratio tuned on one machine's font leaves a stroke of a word on another
+    // (SudokuView::markFont is the same lesson). Callers pass words on
+    // purpose: a symbol the platform has no font for draws as nothing at all,
+    // and on Pyramid's stock it was the only cue on the surface (GHUB-0160).
+    QFont f = base;
+    double pt = std::max(8.0, r.width() * 0.38);
+    f.setPointSizeF(pt);
+    while (pt > 7.0 && QFontMetricsF(f).horizontalAdvance(label) > r.width() * 0.86) {
+        pt -= 0.5;
+        f.setPointSizeF(pt);
+    }
+    return pt;
+}
+
+double slotLabelWidth(const QFont& base, const QRectF& r, const QString& label)
+{
+    QFont f = base;
+    f.setPointSizeF(slotLabelPointSize(base, r, label));
+    return QFontMetricsF(f).horizontalAdvance(label);
+}
+
 void paintSlot(QPainter& p, const QRectF& r, const QString& glyph)
 {
     p.save();
@@ -490,7 +516,7 @@ void paintSlot(QPainter& p, const QRectF& r, const QString& glyph)
 
     if (!glyph.isEmpty()) {
         QFont f = p.font();
-        f.setPointSizeF(std::max(8.0, r.width() * 0.38));
+        f.setPointSizeF(slotLabelPointSize(p.font(), r, glyph));
         p.setFont(f);
         p.setPen(QColor(255, 255, 255, 70));
         p.drawText(r, Qt::AlignCenter, glyph);
