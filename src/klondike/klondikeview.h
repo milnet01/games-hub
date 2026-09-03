@@ -39,6 +39,12 @@ public:
     // it is about ends up asserting something weaker and calling it coverage.
     int flightsInTheAir() const { return int(m_flights.size()); }
 
+    // Whether a run is still off the table. Exists because no picture and no
+    // save answers it: saveState() patches a lifted run back onto its pile, so
+    // the save looks complete whether or not the table is. See
+    // settleForChange().
+    bool holdingARun() const { return m_dragging || m_table.holding(); }
+
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
@@ -52,6 +58,10 @@ protected:
     QSize minimumSizeHint() const override { return { 560, 420 }; }
 
 private:
+    // Lands any card in flight and returns a run held in mid-drag, so a change
+    // to the table underneath never strands either. See the definition.
+    void settleForChange();
+
     using PileKind = KlondikeTable::PileKind;
 
     struct Spot {

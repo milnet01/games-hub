@@ -38,6 +38,21 @@ public:
     // it is about ends up asserting something weaker and calling it coverage.
     int flightsInTheAir() const { return int(m_flights.size()); }
 
+    // Whether a run is still off the table. Exists because no picture and no
+    // save answers it: saveState() patches a lifted run back onto its pile, so
+    // the save looks complete whether or not the table is. See
+    // settleForChange().
+    bool holdingARun() const { return m_dragging || m_table.holding(); }
+
+    // The bottom edge of the longest column, and the height it must stay
+    // inside. Exists so a test can ask whether a fully dealt table still fits,
+    // which no rendered picture answers -- same reasoning as flightsInTheAir().
+    double deepestColumnBottom() const;
+    double roomForColumns() const;
+    // Deals a row, as clicking the stock does. A test cannot reach the private
+    // handler, and driving it by synthetic click would be testing the hit test.
+    bool dealARowForTest() { if (!m_table.canDealRow()) return false; dealRow(); return true; }
+
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
@@ -54,6 +69,10 @@ protected:
     QSize minimumSizeHint() const override { return { 620, 440 }; }
 
 private:
+    // Lands any card in flight and returns a run held in mid-drag, so a change
+    // to the table underneath never strands either. See the definition.
+    void settleForChange();
+
     void buildActions();
     void newGame();
     void undo();

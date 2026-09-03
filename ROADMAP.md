@@ -6123,6 +6123,38 @@ open.
   remembered and Sudoku's is not.
   2048: undo does not restore m_reachedTarget; trailing bytes past the
   sixteenth cell are accepted.
+  Progress (2026-09-03): the KLONDIKE/SPIDER block is closed, all five of
+  it. The other four blocks are untouched.
+
+  settleForChange() in both views lands any flight AND returns a run held
+  in mid-drag, via the table's own putBack(). It is called from
+  deactivate(), applyLegibility(), newGame() and undo() -- the last two
+  BEFORE the table changes, since putting a run back onto a table it never
+  left is worse than not putting it back at all. That closes both the
+  lifted-run lock and the flights that undo and newGame left standing.
+
+  Klondike's double-click now refuses a click that did not land on the
+  pile's top card. sendToFoundation moves the top card, so a click on a
+  buried one played a card the player never pointed at.
+
+  Spider's press tests the columns before the stock, which sits at the
+  bottom right over the last column's tail -- Klondike's hitTest already
+  ordered it that way.
+
+  Spider's height budget is 2.85 rather than 2.2, which is what a column
+  reaches rather than a guess: 5 face-down at 0.11, 5 dealt rows at 0.26,
+  plus the card itself. Measured red at 550.9 against 428.0 of room -- a
+  third of the surface -- and exactly equal after, which is the budget
+  being right rather than generous. It costs nothing at the smallest
+  window, where Spider is width-bound: the floor stays 54.2.
+
+  Three checks, each proven red first. anInterruptedDragPutsTheRunBack
+  needed a new holdingARun() accessor, because neither a picture nor the
+  save answers it -- saveState() patches a lifted run back onto its pile,
+  so the save looks complete whether or not the table is.
+  aFullSpiderTableStaysOnTheSurface has to use a WIDE, short window: at the
+  smallest window the budget decides nothing, so a check taken there passes
+  on any budget at all, which is how the wrong one survived.
   **Layman:** A list of smaller game bugs, kept so none of them is lost.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

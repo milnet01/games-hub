@@ -84,6 +84,9 @@ void SpiderView::buildActions()
 
 void SpiderView::newGame()
 {
+    // Before the deal, not after: settling puts a held run back on the table
+    // it came from, and after a deal that is a fresh table it never left.
+    settleForChange();
     m_resumed = false;
     m_table.deal(m_table.suits());
     Sound::instance().play(Sound::kShuffle);
@@ -106,9 +109,8 @@ void SpiderView::undo()
 {
     if (!m_table.canUndo())
         return;
+    settleForChange();
     m_table.undo();
-    m_drag.clear();
-    m_dragging = false;
     m_won = false;
     m_undoAction->setEnabled(m_table.canUndo());
     update();
@@ -190,8 +192,13 @@ double SpiderView::cardWidth() const
     // The caption's strip comes off the height before the card is sized: the
     // piles are anchored to the top, so a smaller card is what keeps the tail
     // of a long column clear of the sentence under it.
+    // 2.85 card heights is what a column actually reaches, not a guess: the
+    // deal leaves five face-down cards under one face-up, and the five dealt
+    // rows add a face-up card each. 5 x 0.11 + 5 x 0.26 + 1 = 2.85. The budget
+    // read 2.2, so a column that had taken every row ran a third of the
+    // surface past the bottom, under the caption (GHUB-0160).
     const double byHeight =
-        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * 2.2);
+        (height() - 2 * kMargin - captionBand(QRectF(rect()))) / (1.4 * 2.85);
     return std::max(30.0, std::min(byWidth, byHeight));
 }
 
@@ -216,6 +223,22 @@ QRectF SpiderView::cardRect(int column, int index) const
         y += fanStep(col, i);
     r.moveTop(y);
     return r;
+}
+
+double SpiderView::deepestColumnBottom() const
+{
+    double deepest = 0.0;
+    for (int col = 0; col < kColumns; ++col) {
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
+        if (!column.empty())
+            deepest = std::max(deepest, cardRect(col, int(column.size()) - 1).bottom());
+    }
+    return deepest;
+}
+
+double SpiderView::roomForColumns() const
+{
+    return height() - kMargin - captionBand(QRectF(rect()));
 }
 
 QRectF SpiderView::stockRect() const
@@ -349,11 +372,10 @@ void SpiderView::mousePressEvent(QMouseEvent* event)
     m_pressPos = event->position();
     m_pressValid = false;
 
-    if (stockRect().contains(event->position())) {
-        dealRow();
-        return;
-    }
-
+    // Columns first. The stock sits at the bottom right, over the tail of the
+    // last column, so testing it first deals a row when the player meant to
+    // pick up a card they can see (GHUB-0160). Klondike's hitTest already
+    // orders it this way.
     for (int col = 0; col < kColumns; ++col) {
         const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
         const int movable = movableRunLength(col);
@@ -371,6 +393,9 @@ void SpiderView::mousePressEvent(QMouseEvent* event)
             return;
         }
     }
+
+    if (stockRect().contains(event->position()))
+        dealRow();
 }
 
 void SpiderView::mouseMoveEvent(QMouseEvent* event)
@@ -507,21 +532,35 @@ void SpiderView::launchCompletedRun(const std::vector<Card>& run,
     m_flightTimer->start();
 }
 
-void SpiderView::deactivate()
+void SpiderView::settleForChange()
 {
-    // A flight carries a destination captured when the card left, and the hub
-    // may resize this page while it is away.
+    // Two halves, and both bite. A card in the air carries a destination
+    // captured when it left, so it would land at an address that no longer
+    // means anything. And a run in mid-drag has been LIFTED off its pile:
+    // leaving it in m_drag strands those cards, because the table no longer
+    // holds them while m_dragging stays true -- which stops the next press
+    // lifting anything ever again (GHUB-0160). putBack() is the table's own
+    // answer to the second, and it drops the snapshot the lift banked, since
+    // nothing actually happened.
     m_flights.clear();
     if (m_flightTimer != nullptr)
         m_flightTimer->stop();
+    if (m_table.holding())
+        m_table.putBack();
+    m_drag.clear();
+    m_dragging = false;
+    m_pressValid = false;
+}
+
+void SpiderView::deactivate()
+{
+    settleForChange();
 }
 
 void SpiderView::applyLegibility(bool enabled)
 {
-    // Land them where the model already believes they are, then let the base
-    // re-lay-out. Keeping them would put a card down at its old destination.
-    m_flights.clear();
-    if (m_flightTimer != nullptr)
-        m_flightTimer->stop();
+    // The band comes off the height this view solves its card size from, so
+    // every rect on the surface moves.
+    settleForChange();
     GameView::applyLegibility(enabled);
 }

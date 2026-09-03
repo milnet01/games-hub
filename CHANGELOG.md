@@ -38,6 +38,22 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **A Spider column that has taken every dealt row now stays on the table.** (GHUB-0160)
+  Cards were sized for a shorter column than the game actually deals, so a
+  full one ran off the bottom and under the caption.
+
+- **Clicking the bottom of Spider's last column no longer deals a row.** (GHUB-0160)
+  The stock sits over that column's tail and was being tested first.
+
+- **Double-clicking a buried Solitaire card no longer plays a different card.** (GHUB-0160)
+  It sent the top of that column instead, which is a move you did not ask
+  for. A click that does not land on the top card now does nothing.
+
+- **Solitaire and Spider no longer lock up if you leave mid-drag.** (GHUB-0160)
+  A run picked up and not put down had been lifted off its pile. Leaving
+  the game, dealing again or undoing left those cards nowhere, and no card
+  could be picked up afterwards.
+
 - **A crash no longer loses the game you were in, and two copies of the app stop overwriting each other.** (GHUB-0067)
   Progress reached the disk only on the way out, so a crash, a kill or a
   power cut lost the one game being played -- and two copies settled by

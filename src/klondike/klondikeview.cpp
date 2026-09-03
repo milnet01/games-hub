@@ -70,6 +70,9 @@ void KlondikeView::buildActions()
 
 void KlondikeView::newGame()
 {
+    // Before the deal, not after: settling puts a held run back on the table
+    // it came from, and after a deal that is a fresh table it never left.
+    settleForChange();
     m_resumed = false;
     m_table.deal();
     Sound::instance().play(Sound::kShuffle);
@@ -91,9 +94,8 @@ void KlondikeView::undo()
 {
     if (!m_table.canUndo())
         return;
+    settleForChange();
     m_table.undo();
-    m_drag.clear();
-    m_dragging = false;
     m_won = false;
     m_undoAction->setEnabled(m_table.canUndo());
     update();
@@ -545,6 +547,11 @@ void KlondikeView::mouseDoubleClickEvent(QMouseEvent* event)
     const std::vector<Card>& source = pileFor(s.kind, s.pile);
     if (source.empty())
         return;
+    // sendToFoundation moves the pile's TOP card, so acting on a click that
+    // landed anywhere else plays a card the player did not point at
+    // (GHUB-0160). A buried card is not a move; it is a miss.
+    if (s.index != int(source.size()) - 1)
+        return;
     const Card moving = source.back();
     const QRectF fromRect = cardRect(s.kind, s.pile, int(source.size()) - 1);
     std::array<std::size_t, 4> before {};
@@ -594,22 +601,35 @@ void KlondikeView::launchToFoundation(const Card& card, QRectF fromRect, int fou
     m_flightTimer->start();
 }
 
-void KlondikeView::deactivate()
+void KlondikeView::settleForChange()
 {
-    // A card in the air carries a destination captured when it left, and the
-    // hub may resize this page while it is away. Landing them now is both
-    // correct and what the model already believes.
+    // Two halves, and both bite. A card in the air carries a destination
+    // captured when it left, so it would land at an address that no longer
+    // means anything. And a run in mid-drag has been LIFTED off its pile:
+    // leaving it in m_drag strands those cards, because the table no longer
+    // holds them while m_dragging stays true -- which stops the next press
+    // lifting anything ever again (GHUB-0160). putBack() is the table's own
+    // answer to the second, and it drops the snapshot the lift banked, since
+    // nothing actually happened.
     m_flights.clear();
     if (m_flightTimer != nullptr)
         m_flightTimer->stop();
+    if (m_table.holding())
+        m_table.putBack();
+    m_drag.clear();
+    m_dragging = false;
+    m_pressValid = false;
+}
+
+void KlondikeView::deactivate()
+{
+    settleForChange();
 }
 
 void KlondikeView::applyLegibility(bool enabled)
 {
-    // Land them where the model already believes they are, then let the base
-    // re-lay-out. Keeping them would put a card down at its old destination.
-    m_flights.clear();
-    if (m_flightTimer != nullptr)
-        m_flightTimer->stop();
+    // The band comes off the height this view solves its card size from, so
+    // every rect on the surface moves.
+    settleForChange();
     GameView::applyLegibility(enabled);
 }

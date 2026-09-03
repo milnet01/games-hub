@@ -585,6 +585,99 @@ QString corpusDir()
 // is restored here. A format change reddens this and the author has to choose:
 // bump the MAJOR, or write a migration. Regenerate deliberately, never to make
 // this pass:  QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest --write-saves
+// A run in mid-drag has been LIFTED off its pile and lives in the view. If
+// anything takes the table away underneath -- leaving for the tile grid, a new
+// deal, an undo, the legibility switch -- and the run is not put back, those
+// cards are stranded: the table no longer holds them while the view still
+// thinks a drag is in progress, so the next press can never lift anything
+// again. The board is locked and nothing says so (GHUB-0160).
+template <typename V>
+void anInterruptedDragPutsTheRunBack(const QString& game)
+{
+    HubWindow hub;
+    hub.openGameNamed(game);
+    hub.show();
+    pump(40);
+    V* view = hub.findChild<V*>();
+    if (view == nullptr) {
+        check(false, qPrintable(game + QStringLiteral(": the view exists")));
+        return;
+    }
+
+    // Hunt for a card that will lift, the same way nudgeIntoPlay does: press,
+    // then drag far enough to count as a drag. Deliberately ignorant of the
+    // layout, so nothing here goes stale when one moves.
+    const QSize size = view->size();
+    bool lifted = false;
+    for (int c = 0; c < 10 && !lifted; ++c) {
+        for (int r = 6; r >= 0 && !lifted; --r) {
+            const QPointF p(size.width() * (c + 0.5) / 10.0, size.height() * (r + 0.5) / 7.0);
+            const QPointF q = p + QPointF(0, 40);
+            QMouseEvent press(QEvent::MouseButtonPress, p, view->mapToGlobal(p),
+                              Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(view, &press);
+            QMouseEvent move(QEvent::MouseMove, q, view->mapToGlobal(q),
+                             Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(view, &move);
+            lifted = view->holdingARun();
+            if (!lifted) {
+                QMouseEvent release(QEvent::MouseButtonRelease, q, view->mapToGlobal(q),
+                                    Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QApplication::sendEvent(view, &release);
+            }
+        }
+    }
+    check(lifted, qPrintable(game + QStringLiteral(": a run can be picked up at all")));
+    if (!lifted)
+        return;
+
+    view->deactivate();
+    check(!view->holdingARun(),
+          qPrintable(game + QStringLiteral(": leaving the game mid-drag puts the run back")));
+}
+
+// Spider's card size is solved from a height budget, and that budget has to be
+// what a column REALLY reaches rather than a guess. Its deal leaves five
+// face-down cards under one face-up, and each of the five dealt rows adds a
+// face-up card: 5 x 0.11 + 5 x 0.26 + 1 = 2.85 card heights. The budget read
+// 2.2, so a column that had taken every row ran off the bottom and under the
+// caption (GHUB-0160).
+void aFullSpiderTableStaysOnTheSurface()
+{
+    HubWindow hub;
+    hub.openGameNamed(QStringLiteral("Spider"));
+    hub.show();
+    pump(40);
+    auto* view = hub.findChild<SpiderView*>();
+    if (view == nullptr) {
+        check(false, "spider: the view exists");
+        return;
+    }
+    // WIDE and as short as the view allows, which is the shape that makes the
+    // height budget bite. At its smallest window Spider is width-bound and the
+    // budget decides nothing -- a check taken there passes on any budget at
+    // all, which is how the wrong one survived.
+    view->resize(1600, 1);
+    pump(20);
+
+    int rows = 0;
+    while (view->dealARowForTest())
+        ++rows;
+    pump(20);
+
+    const double bottom = view->deepestColumnBottom();
+    const double room = view->roomForColumns();
+    std::printf("      spider after %d dealt rows: deepest column %.1f, room %.1f\n",
+                rows, bottom, room);
+    check(rows >= 5, "spider: every row can be dealt onto a full table");
+    // Equal by construction when the budget is right: the column starts at
+    // kMargin and is sized to fill exactly what is left, so this is a
+    // floating-point tolerance and not slack. A wrong budget misses by a
+    // third of the surface, not by a pixel.
+    check(bottom <= room + 1.0,
+          "spider: a column that has taken every dealt row still fits above the caption");
+}
+
 void savesFromOlderBuildsStillLoad()
 {
     std::printf("\n      saves written by earlier builds (GHUB-0075)\n");
@@ -4096,6 +4189,11 @@ int main(int argc, char* argv[])
     }
 
     aGameIsBankedWhileItIsBeingPlayed();
+
+    anInterruptedDragPutsTheRunBack<KlondikeView>(QStringLiteral("Solitaire"));
+    anInterruptedDragPutsTheRunBack<SpiderView>(QStringLiteral("Spider"));
+
+    aFullSpiderTableStaysOnTheSurface();
 
     savesFromOlderBuildsStillLoad();
 
