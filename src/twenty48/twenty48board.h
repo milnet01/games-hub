@@ -75,6 +75,10 @@ private:
     int m_previousScore = 0;
     bool m_canUndo = false;
     bool m_reachedTarget = false;
+    // Banked with the position. Undo restored the cells and the score and left
+    // this set, so taking back the move that reached 2048 left the game still
+    // believing it had been reached (GHUB-0160).
+    bool m_previousReachedTarget = false;
 
     std::mt19937 m_rng { dealSeed() };
 };

@@ -665,6 +665,60 @@ void theRedealCueFitsItsSlot()
     check(label.size() > 1, "pyramid: and it is a word rather than a symbol a font may not carry");
 }
 
+// Minesweeper remembered its difficulty and Sudoku did not, so the choice was
+// lost every session (GHUB-0160). A setting that is chosen and then forgotten
+// is a defect here, not a nicety.
+void sudokuRemembersItsDifficulty()
+{
+    const QString key = QStringLiteral("sudoku/level");
+    QSettings().remove(key);
+
+    const auto pick = [](HubWindow& hub, const QString& level) {
+        GameView* view = hub.findChild<GameView*>();
+        if (view == nullptr)
+            return false;
+        for (QAction* a : view->gameActions()) {
+            if (a->text() == level) {
+                a->trigger();
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto chosen = [](HubWindow& hub) {
+        GameView* view = hub.findChild<GameView*>();
+        if (view == nullptr)
+            return QString();
+        for (QAction* a : view->gameActions())
+            if (a->isCheckable() && a->isChecked() && a->actionGroup() != nullptr)
+                return a->text();
+        return QString();
+    };
+
+    {
+        HubWindow hub;
+        hub.openGameNamed(QStringLiteral("Sudoku"));
+        hub.show();
+        pump(40);
+        check(pick(hub, QStringLiteral("Hard")), "sudoku: the level can be chosen");
+        pump(40);
+    }
+    // Read back from a freshly opened store rather than the view's own copy --
+    // the same persistence check the score block uses, and the same one on
+    // both platforms, since Windows keeps this in the registry and has no file.
+    check(QSettings().value(key).toInt() == 2, "sudoku: choosing a level writes it down");
+
+    HubWindow again;
+    again.openGameNamed(QStringLiteral("Sudoku"));
+    again.show();
+    pump(40);
+    const QString back = chosen(again);
+    std::printf("      sudoku reopened on: %s\n", qPrintable(back));
+    check(back == QStringLiteral("Hard"), "sudoku: and it comes back on that level");
+
+    QSettings().remove(key);
+}
+
 // Spider's card size is solved from a height budget, and that budget has to be
 // what a column REALLY reaches rather than a guess. Its deal leaves five
 // face-down cards under one face-up, and each of the five dealt rows adds a
@@ -4221,6 +4275,8 @@ int main(int argc, char* argv[])
 
     anInterruptedDragPutsTheRunBack<KlondikeView>(QStringLiteral("Solitaire"));
     anInterruptedDragPutsTheRunBack<SpiderView>(QStringLiteral("Spider"));
+
+    sudokuRemembersItsDifficulty();
 
     theRedealCueFitsItsSlot();
 

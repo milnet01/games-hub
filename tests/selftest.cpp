@@ -1431,6 +1431,25 @@ void twenty48ReachesItsTarget()
     check(board.reachedTarget(), "2048: which is not forgotten on the next push");
 }
 
+// Undo restored the cells and the score and left m_reachedTarget alone, so
+// taking back the very move that reached 2048 left the game still believing it
+// had been reached -- on a board with no 2048 tile on it (GHUB-0160).
+void twenty48UndoTakesBackTheTarget()
+{
+    Twenty48Board board = boardFrom({ 1024, 1024, 0, 0,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0,
+                                      0, 0, 0, 0 });
+    check(!board.reachedTarget(), "2048: two 1024s is not yet the target");
+    board.slide(Twenty48Board::Direction::Left);
+    check(board.reachedTarget(), "2048: merging them reaches it");
+    board.undo();
+    check(!board.reachedTarget(),
+          "2048: and taking that move back takes the target back with it");
+    check(board.at(0, 0) == 1024 && board.at(0, 1) == 1024,
+          "2048: leaving the two tiles that were there before");
+}
+
 void twenty48DeadPushCostsNothing()
 {
     // A push that moves nothing must not spawn, must not score and must not
@@ -5684,6 +5703,7 @@ int main()
 
     twenty48MergesOnce();
     twenty48ReachesItsTarget();
+    twenty48UndoTakesBackTheTarget();
     twenty48DeadPushCostsNothing();
     twenty48UndoStepsBack();
     twenty48RefusesABoardItCouldNotReach();

@@ -18,6 +18,7 @@ bool Twenty48Board::slide(Direction direction)
 {
     const std::array<int, kCells> before = m_cells;
     const int beforeScore = m_score;
+    const bool beforeReachedTarget = m_reachedTarget;
 
     // Every direction is the same operation over a line; only the traversal
     // order changes, so the merge logic is written once.
@@ -70,11 +71,13 @@ bool Twenty48Board::slide(Direction direction)
 
     if (m_cells == before) {
         m_score = beforeScore;
+        m_reachedTarget = beforeReachedTarget;
         return false;
     }
 
     m_previous = before;
     m_previousScore = beforeScore;
+    m_previousReachedTarget = beforeReachedTarget;
     m_canUndo = true;
     return true;
 }
@@ -120,6 +123,7 @@ void Twenty48Board::undo()
         return;
     m_cells = m_previous;
     m_score = m_previousScore;
+    m_reachedTarget = m_previousReachedTarget;
     m_canUndo = false;
 }
 
@@ -161,6 +165,7 @@ bool Twenty48Board::restore(const std::array<int, kCells>& cells, int score, boo
     m_score = score;
     m_previousScore = score;
     m_reachedTarget = reachedTarget;
+    m_previousReachedTarget = reachedTarget;
     m_canUndo = false;
     return true;
 }

@@ -347,6 +347,11 @@ bool Twenty48View::restoreState(const QByteArray& blob)
     }
     if (in.status() != QDataStream::Ok)
         return false;
+    // Anything left after the sixteenth cell is not this format. Accepting it
+    // means a blob that happens to start correctly is taken as a save, and
+    // whatever follows is silently ignored (GHUB-0160).
+    if (!in.atEnd())
+        return false;
     if (!m_board.restore(cells, score, reachedTarget))
         return false;
 

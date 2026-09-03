@@ -6096,7 +6096,7 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0160] **The remaining per-game defects the sweep found and this pass did not fix.**
+- ✅ [GHUB-0160] **The remaining per-game defects the sweep found and this pass did not fix.**
   One place for the MEDIUM and LOW remainder, by game.
   HEARTS: the queen breaking hearts is a variant no document states;
   winner() breaks a tie by lowest seat, which is the human; playCard's
@@ -6207,6 +6207,36 @@ open.
   theRedealCueFitsItsSlot asks the new slotLabelWidth/slotLabelPointSize
   whether the word still fits the narrowest slot Pyramid draws: 54.1 px of
   a 64.2 px slot at 12.9 pt.
+  Resolved (2026-09-03). Every block closed. One entry was moved out rather
+  than done and one was already fixed; both are named below, so nothing is
+  being called finished that is not.
+
+  REVERSI/DRAUGHTS. Snapshot carries lastMove, so undo no longer leaves the
+  gold marker on a move that was taken back -- the surface pointing at
+  something that did not happen, which for a player who reads the board
+  rather than the status line is worse than pointing at nothing. The
+  heap-allocated board is NOT done: it is a performance question with no
+  measurement behind it and it is not a one-line swap, so it is GHUB-0175.
+
+  MINESWEEPER/SUDOKU, all four. Sudoku remembers its level, as Minesweeper
+  already did. Delete in pencil mode clears the cell's marks -- it fell
+  through to set(row, col, 0), which deliberately does not clear them, so it
+  did nothing while still making a noise; clearMarks now has the caller the
+  item said it lacked, though it was never callerless, set() has always used
+  it. Restart starts the tick, so restarting a SOLVED puzzle no longer
+  leaves the clock frozen at zero. And SudokuGrid's default constructor no
+  longer generates: every user generates or loads immediately after, so it
+  built two puzzles to open the game and three to restore a save.
+
+  2048, both. Undo banks reachedTarget with the position, so taking back the
+  move that reached 2048 takes the win back with it rather than leaving the
+  game believing it had won on a board with no 2048 tile. And restore
+  refuses a blob with anything after the sixteenth cell.
+
+  Checks: twenty48UndoTakesBackTheTarget (proven red) and
+  sudokuRemembersItsDifficulty, which reads the level back from a freshly
+  opened store rather than the view's own copy -- the same persistence shape
+  the score block uses, and the same on Windows, where there is no file.
   **Layman:** A list of smaller game bugs, kept so none of them is lost.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
@@ -6453,6 +6483,30 @@ open.
   **Layman:** Clicking the launcher twice gives you two Games windows instead of bringing the one you have to the front.
   Kind: feature.
   Source: in-session-2026-09-03, split out of GHUB-0067.
+
+- 💭 [GHUB-0175] **DraughtsBoard copies a heap allocation per search node where Reversi copies a std::array.**
+  Split out of GHUB-0160, whose other entries are all closed. It is the one
+  that is not a defect: nothing is wrong on screen, and no measurement says
+  the search is slow.
+
+  m_cells is a std::vector<Piece> of a FIXED 64, so every copied search node
+  is a heap allocation. Reversi's Board is a std::array and copies free,
+  which the Reversi item calls out as the reason its search can copy per
+  node at all.
+
+  Considered rather than planned because there is no evidence it matters.
+  --bench times painting, not the draughts search, so the honest first step
+  is a measurement rather than a change.
+
+  Not a one-line swap either. cells() returns the vector by reference and
+  restore() takes one, and the self-test deliberately passes a 32-element
+  vector to prove a wrong size is refused -- an array signature turns that
+  check into a compile error and the untrusted-input surface stops being
+  tested for length at all. So restore() keeps its vector parameter
+  whatever happens to the storage.
+  **Layman:** The draughts computer may be doing avoidable work while it thinks. Nobody has measured whether it is slow enough to notice.
+  Kind: perf.
+  Source: in-session-2026-09-03, split out of GHUB-0160.
 
 ## The score book on a phone
 

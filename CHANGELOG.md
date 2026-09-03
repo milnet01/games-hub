@@ -26,6 +26,10 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Sudoku opens faster, and resuming a saved puzzle much faster.** (GHUB-0160)
+  It was building a whole puzzle it then threw away -- two to open the game
+  and three to restore a save.
+
 - **Pyramid says "Redeal" on the stock instead of a symbol.** (GHUB-0160)
   The symbol was the only place on the table that said a redeal was left,
   and a symbol the computer has no font for draws as nothing at all -- so
@@ -42,6 +46,25 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   own section and its own reporting advice.
 
 ### Fixed
+
+- **Taking back the move that reached 2048 takes the win back with it.** (GHUB-0160)
+  The game went on believing the target had been reached, on a board with no
+  2048 tile on it.
+
+- **Restarting a solved Sudoku puts the clock back on.** (GHUB-0160)
+  The clock had been stopped when the puzzle was solved and Restart never
+  started it again, so it sat at zero while the board played on.
+
+- **Delete in Sudoku's pencil mode now clears that cell's marks.** (GHUB-0160)
+  It did nothing at all, while still making the sound of something happening.
+
+- **Sudoku remembers the difficulty you chose.** (GHUB-0160)
+  Minesweeper already did. Sudoku started every session on Easy whatever you
+  had been playing.
+
+- **Taking back a Draughts move no longer leaves the gold marker on it.** (GHUB-0160)
+  Undo restored the board but left the highlight pointing at a move that had
+  just been taken back.
 
 - **Putting a FreeCell run back where it came from no longer costs you a move.** (GHUB-0160)
   Moves are the score in FreeCell, so picking a run up and setting it

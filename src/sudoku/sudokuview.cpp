@@ -13,6 +13,7 @@
 #include <QDataStream>
 #include <QPainter>
 #include <QPushButton>
+#include <QSettings>
 #include <QTimer>
 
 #include <algorithm>
@@ -96,6 +97,12 @@ SudokuView::SudokuView(QWidget* parent)
     m_tick->setInterval(500);
     connect(m_tick, &QTimer::timeout, this, [this] { refresh(); });
 
+    // Before buildActions(), so the level group comes up ticked on the level
+    // actually being played.
+    m_level = SudokuGrid::Level(std::clamp(
+        QSettings().value(QStringLiteral("sudoku/level"), int(m_level)).toInt(),
+        int(SudokuGrid::Level::Easy), int(SudokuGrid::Level::Hard)));
+
     buildActions();
     newGame(m_level);
 }
@@ -113,7 +120,15 @@ void SudokuView::buildActions()
         m_solved = false;
         m_announced = false;
         m_elapsedMs = 0;
+        m_paused = false;
+        m_suspended = false;
+        if (m_pauseAction != nullptr)
+            m_pauseAction->setChecked(false);
         m_clock.restart();
+        // newGame starts the tick and this did not, so restarting a SOLVED
+        // puzzle -- where the tick had been stopped -- left the clock frozen
+        // at zero while the board played on (GHUB-0160).
+        m_tick->start();
         update();
         refresh();
     });
@@ -183,6 +198,9 @@ qint64 SudokuView::elapsedMs() const
 void SudokuView::newGame(SudokuGrid::Level level)
 {
     m_level = level;
+    // Minesweeper remembered its difficulty and this did not, so the choice
+    // was lost every session (GHUB-0160). Same key shape as that game's.
+    QSettings().setValue(QStringLiteral("sudoku/level"), int(level));
     m_grid.generate(level);
     m_solved = false;
     m_announced = false;
@@ -299,9 +317,16 @@ void SudokuView::enter(int digit)
     if (m_solved || m_grid.isClue(m_row, m_col))
         return;
 
-    if (m_pencil && digit != 0) {
-        m_grid.toggleMark(m_row, m_col, digit);
-        Sound::instance().play(Sound::kDig);
+    if (m_pencil) {
+        // Delete in pencil mode clears this cell's marks. It used to fall
+        // through to set(row, col, 0), which writes a zero already there and
+        // deliberately does NOT clear marks -- a visible no-op that still made
+        // a noise, so the board said something had happened (GHUB-0160).
+        if (digit == 0)
+            m_grid.clearMarks(m_row, m_col);
+        else
+            m_grid.toggleMark(m_row, m_col, digit);
+        Sound::instance().play(digit == 0 ? Sound::kBack : Sound::kDig);
     } else {
         m_grid.set(m_row, m_col, digit);
         Sound::instance().play(digit == 0 ? Sound::kBack : Sound::kDiscPlace);

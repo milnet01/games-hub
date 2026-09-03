@@ -57,6 +57,11 @@ private:
     struct Snapshot {
         DraughtsBoard board;
         Side toMove;
+        // The gold highlight is painted from m_lastMove. Without it here, undo
+        // restored the board and left the highlight on a move that had been
+        // taken back -- the surface pointing at something that did not happen,
+        // which is worse than pointing at nothing (GHUB-0160).
+        std::optional<DraughtsMove> lastMove;
     };
 
     QList<QAction*> m_actions;

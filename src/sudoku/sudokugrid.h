@@ -19,7 +19,11 @@ public:
 
     enum class Level { Easy, Medium, Hard };
 
-    SudokuGrid() { generate(Level::Easy); }
+    // Deliberately does NOT generate. Every user either calls generate() or
+    // load()s a save immediately after, so generating here was thrown away
+    // every time: two puzzles built to open the game and three to restore one
+    // save (GHUB-0160). An empty grid is what the callers overwrite.
+    SudokuGrid() = default;
 
     void generate(Level level);
 

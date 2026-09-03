@@ -110,6 +110,7 @@ void DraughtsView::undo()
         m_history.pop_back();
         m_board = s.board;
         m_toMove = s.toMove;
+        m_lastMove = s.lastMove;
         if (m_toMove == m_human)
             break;
     }
@@ -470,7 +471,7 @@ int firstDivergingStep(const std::vector<DraughtsMove>& moves)
 
 void DraughtsView::playMove(const DraughtsMove& m)
 {
-    m_history.push_back({ m_board, m_toMove });
+    m_history.push_back({ m_board, m_toMove, m_lastMove });
     m_undoAction->setEnabled(true);
     m_board.apply(m);
     m_lastMove = m;
