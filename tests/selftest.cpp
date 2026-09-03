@@ -1085,6 +1085,63 @@ void pinballContainment()
     check(worstX < 20.0 && worstY < 20.0, "pinball: the ball never escapes the table");
 }
 
+// A slingshot carries its rubber on the playfield-facing side; its back is
+// plain wood. Behind a sling the ball is in the inlane, where the sling's
+// outward normal points into the outer wall and the wall's points back at the
+// sling -- so a kick fired from that side pumps the ball between the two for
+// ever rather than letting it fall to the flipper (GHUB-0173).
+void pinballNoPumpBehindSling()
+{
+    // Sweep the pocket behind each sling: every start must leave it.
+    auto sweep = [](int x0, int x1, bool left) {
+        int stuck = 0, tried = 0;
+        for (int x = x0; x <= x1; x += 5) {
+            for (int y = 500; y <= 590; y += 5) {
+                for (int d = 0; d < 9; ++d) {
+                    const double a = d * 0.7854;
+                    const QPointF v = d == 8 ? QPointF(0, 0)
+                                             : QPointF(200 * std::cos(a), 200 * std::sin(a));
+                    PinballTable t;
+                    t.placeBall({ double(x), double(y) }, v);
+                    bool out = false;
+                    for (int frame = 0; frame < 600 && !out; ++frame) { // ten seconds
+                        t.advance(1.0 / 60.0);
+                        const QPointF b = t.ball();
+                        out = b.y() > 600.0 || (left ? b.x() > 120.0 : b.x() < 280.0);
+                    }
+                    ++tried;
+                    if (!out)
+                        ++stuck;
+                }
+            }
+        }
+        std::printf("      %s pocket: %d of %d starts never leave in 10s\n",
+                    left ? "left " : "right", stuck, tried);
+        return stuck;
+    };
+    const int trapped = sweep(30, 90, true) + sweep(310, 370, false);
+    check(trapped == 0,
+          "pinball: a ball behind a slingshot falls away instead of bouncing there for ever");
+
+    // And the face still kicks, or the fix above has quietly removed the
+    // slingshots rather than aiming them.
+    auto face = [](QPointF from, QPointF into) {
+        PinballTable t;
+        t.placeBall(from, into);
+        const double before = std::hypot(into.x(), into.y());
+        double best = 0;
+        for (int frame = 0; frame < 60; ++frame) {
+            t.advance(1.0 / 60.0);
+            best = std::max(best, std::hypot(t.velocity().x(), t.velocity().y()));
+        }
+        const int hits = t.takeSlingHits();
+        std::printf("      sling face: %d hits, %.0f in, %.0f out\n", hits, before, best);
+        return hits > 0 && best > before;
+    };
+    check(face({ 112, 516 }, { -177, 93 }), "pinball: the left slingshot still kicks off its face");
+    check(face({ 286, 517 }, { 180, 86 }), "pinball: the right slingshot still kicks off its face");
+}
+
 // Bumpers must score, or the table is scenery.
 void pinballScoring()
 {
@@ -5536,6 +5593,7 @@ int main()
     pinballLaunch();
     pinballContainment();
     pinballScoring();
+    pinballNoPumpBehindSling();
 
     section("Cards");
     deckRules();

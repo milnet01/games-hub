@@ -31,6 +31,10 @@ public:
         int score = 0;
         double flash = 0.0;
         bool oneWayUp = false; // a gate the ball passes upward but cannot fall back through
+        // Which way a kicking wall faces. A slingshot's rubber is on its
+        // playfield side and its back is plain wood, so the kick fires only
+        // where this normal points. Unset on a wall that does not kick.
+        QPointF kickFace;
     };
 
     struct Bumper {
@@ -59,6 +63,10 @@ public:
     void advance(double seconds);
 
     void setFlipper(bool left, bool pressed);
+    // Places the ball outright, in play. The same idea as Canasta's
+    // newGameFromStock: a check builds the exact position it wants to reason
+    // about rather than hunting for a launch that happens to produce it.
+    void placeBall(QPointF at, QPointF velocity);
     void chargePlunger(double seconds);
     // Fires the plunger. Does nothing unless the ball is waiting in the lane.
     void launch();

@@ -33,6 +33,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **A ball wedged beside a flipper no longer bounces there for ever.** (GHUB-0173)
+  A slingshot was kicking from its back as readily as its face, so a ball
+  in the inlane was fired at the wall opposite and returned, endlessly. The
+  kick now fires on the playfield-facing side only, as a real sling's rubber
+  does, and gravity takes the ball down to the flipper.
+
 - **Canasta AI: several judgement terms rest on figures that are not what they claim.** (GHUB-0149)
   The pack count follows the deck count, the run-it-dead judgement measures
   both sides the same way, the pair-keeping open works on more than one hand

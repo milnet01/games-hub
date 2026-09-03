@@ -6090,7 +6090,7 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0165] **Play-test the pinball flippers after the timing fix, and re-tune if they feel dead.**
+- ✅ [GHUB-0165] **Play-test the pinball flippers after the timing fix, and re-tune if they feel dead.**
   The units fix moved the flipper integration into the substep loop, so
   the measured angular speed falls from about 138 to 18 -- the true
   rate. The kick constants in collideFlipper were NOT re-tuned: 1.55 on
@@ -6147,6 +6147,11 @@ open.
   restating the constant, so it cannot pass by agreeing with itself, and
   checks the blade both arrives and returns. Proven red at 138 rad/s,
   the pre-fix effective rate. It says nothing about feel, and says so.
+  Resolved (2026-09-03). Owner played it: the flippers feel fine, so no
+  re-tune. The three constants stay as they are -- 1.55 on the
+  reflection and min(swing * 26.0, 520.0) -- and the maths above is the
+  record of why. Re-inflating either to recover the pre-fix total would
+  put the timing bug back.
   **Layman:** The flippers were fixed to keep proper time, and nobody has actually played them since.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.
@@ -6258,6 +6263,41 @@ open.
   **Layman:** The sideways card that marks a frozen pack disappears once enough cards are thrown on it, even though the pack is still frozen.
   Kind: investigate.
   Source: in-session-2026-09-02, first --turns shot.
+
+- ✅ [GHUB-0173] **A ball behind a slingshot bounces there for ever, because the sling kicks from both sides.**
+  Reported by the owner with a screenshot: the ball sits in the left inlane,
+  between the outer wall and the left slingshot, and never leaves.
+
+  It is not missing damping. collideWall adds w.kick along whatever normal
+  the contact produced, so a sling kicks from its BACK as readily as its
+  face. In the inlane the sling's outward normal is about (-0.887, 0.464) --
+  left and down, into the wall (14,540)-(104,636), whose own normal is
+  (0.729, -0.686). The two are within a few degrees of opposite, so each
+  surface returns the ball to the other.
+
+  That pumps rather than decays. Solving v = 0.62 * (0.7v + 240) for the
+  round trip gives a stable v of about 263: the sling puts in exactly what
+  the two restitutions take out, so the bounce is a limit cycle and no
+  amount of waiting ends it.
+
+  A real slingshot carries its rubber on the playfield-facing side only; its
+  back is plain wood. The fix is to give the wall that facing and fire the
+  kick only on it. On the inlane side the sling then behaves as a wall, and
+  gravity takes the ball down to the flipper as it should.
+
+  Not touched: the bumpers, which kick in every direction and are round, so
+  they are correct as they stand.
+  Resolved (2026-09-03). Wall gained a kickFace, and collideWall fires the
+  kick only where that normal points; buildTable derives each sling's face
+  from its own segment, so moving the geometry cannot leave the aim behind.
+  pinballNoPumpBehindSling sweeps both pockets -- 2223 start states each,
+  nine directions, ten seconds -- and was red at 89 left and 7 right before
+  the gate, zero after. It also fires a ball at each face and asserts the
+  kick survives: 200 in, 634 and 661 out. Nothing else was touched; the
+  bumpers kick in every direction and are round, so they have no back.
+  **Layman:** The ball can get wedged next to the left flipper and bounce in one spot without ever stopping.
+  Kind: fix.
+  Source: owner-report-2026-09-03, screenshot of a stuck ball.
 
 ## The score book on a phone
 

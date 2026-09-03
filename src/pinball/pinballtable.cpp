@@ -87,9 +87,19 @@ void PinballTable::buildTable()
     wall({ 14, 540 }, { 104, 636 });
     wall({ kLaneX, 540 }, { 296, 636 });
 
-    // Slingshots: the angled kickers just above each flipper.
-    m_walls.push_back(Wall { { 62, 486 }, { 108, 574 }, 5.0, 0.7, 240.0, 50, 0.0, false });
-    m_walls.push_back(Wall { { 334, 486 }, { 292, 574 }, 5.0, 0.7, 240.0, 50, 0.0, false });
+    // Slingshots: the angled kickers just above each flipper. `towards` says
+    // which way the play field lies, and the kick is aimed that way and fires
+    // on that side alone -- see collideWall.
+    auto sling = [this](QPointF a, QPointF b, double towards) {
+        const QPointF d = b - a;
+        const double len = lengthOf(d);
+        QPointF face(d.y() / len, -d.x() / len);
+        if ((face.x() < 0.0) != (towards < 0.0))
+            face = -face;
+        m_walls.push_back(Wall { a, b, 5.0, 0.7, 240.0, 50, 0.0, false, face });
+    };
+    sling({ 62, 486 }, { 108, 574 }, 1.0);
+    sling({ 334, 486 }, { 292, 574 }, -1.0);
 
     m_bumpers.push_back(Bumper { { 142, 292 }, 26.0, 200.0, 100, 0.0 });
     m_bumpers.push_back(Bumper { { 258, 292 }, 26.0, 200.0, 100, 0.0 });
@@ -97,6 +107,13 @@ void PinballTable::buildTable()
 
     m_left = Flipper { { 108, 640 }, 74.0, 0.52, -0.42, 0.52, 0.52, false, true };
     m_right = Flipper { { 292, 640 }, 74.0, 0.52, -0.42, 0.52, 0.52, false, false };
+}
+
+void PinballTable::placeBall(QPointF at, QPointF velocity)
+{
+    m_ball = at;
+    m_velocity = velocity;
+    m_inLane = false;
 }
 
 void PinballTable::newGame()
@@ -247,7 +264,12 @@ void PinballTable::collideWall(Wall& w)
     if (along < 0)
         m_velocity -= normal * (1.0 + w.bounce) * along;
 
-    if (w.kick > 0.0) {
+    // The kick fires on the wall's own face only. Firing from the back too
+    // traps a ball behind a slingshot: there the sling's outward normal and
+    // the inlane wall's are within a few degrees of opposite, and the kick
+    // replaces exactly what the two restitutions take, so the bounce settles
+    // into a limit cycle instead of dying away (GHUB-0173).
+    if (w.kick > 0.0 && dot(normal, w.kickFace) > 0.0) {
         m_velocity += normal * w.kick;
         w.flash = 1.0;
         m_score += w.score;
