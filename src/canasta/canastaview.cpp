@@ -2381,7 +2381,18 @@ void CanastaView::paintCentre(QPainter& p)
         // (GHUB-0094).
         const int last = int(cards.size()) - 1;
         const int frozen = m_engine.freezeCardIndex();
-        for (int depth = std::min(5, last); depth >= 0; --depth) {
+        const int deepest = std::min(5, last);
+        // The pack stays frozen until somebody takes it, so the T has to
+        // outlast the handful of discards the pile draws. One buried deeper
+        // than that is laid at the deepest position still drawn, before the
+        // loop, so the pile's own cards cover its middle and only its arm
+        // shows -- the mark stays on the table for as long as the freeze does
+        // (GHUB-0172).
+        if (frozen >= 0 && frozen < last - deepest) {
+            const QPointF at(pile.x() + deepest * 1.1, pile.y() + deepest * 1.1);
+            paintCard(p, cards[std::size_t(frozen)], freezeCardCentre(at), 90.0, true);
+        }
+        for (int depth = deepest; depth >= 0; --depth) {
             const int index = last - depth;
             const Card& c = cards[std::size_t(index)];
             // Only the top card can be in the air, and while it is, the pile

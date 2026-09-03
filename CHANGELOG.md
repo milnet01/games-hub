@@ -33,6 +33,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **A frozen Canasta pack keeps showing its sideways card however deep it is buried.** (GHUB-0172)
+  The pile draws only its top few cards, so the card lying across it
+  vanished once that many discards landed on top -- while the pack stayed
+  frozen. It is now laid at the deepest position still drawn, under the
+  stack, so its arm shows for as long as the freeze lasts.
+
 - **A ball wedged beside a flipper no longer bounces there for ever.** (GHUB-0173)
   A slingshot was kicking from its back as readily as its face, so a ball
   in the inlane was fired at the wall opposite and returned, endlessly. The

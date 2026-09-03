@@ -6237,7 +6237,7 @@ open.
   Kind: feature.
   Source: review-code sweep 2026-08-31, split from GHUB-0131.
 
-- 📋 [GHUB-0172] **A frozen pack stops showing its T once six cards have landed on top of it.**
+- ✅ [GHUB-0172] **A frozen pack stops showing its T once six cards have landed on top of it.**
   Found by looking, on the first shot --turns made possible, which is what
   GHUB-0166 asked for. A mid-hand Canasta position came back with the pack
   frozen -- the badge said FROZEN and so did the status line -- and no card
@@ -6260,6 +6260,20 @@ open.
   keep the pile's drawn depth but let the freeze card be drawn on top of
   the stack it belongs to. Both need to be looked at rather than reasoned
   about, and now can be.
+  Resolved (2026-09-03). Owner's call: keep it visible, at the bottom. A
+  freeze card deeper than the pile's drawn depth is now laid at the deepest
+  position still drawn, painted before the loop so the pile's own cards
+  cover its middle and only its arm shows. The other branch he weighed --
+  drawing it on top of the stack -- was not taken.
+
+  Verified by eye, which is what this kind of change allows: seed 1 with 80
+  turns puts the freeze card at index 3 of 9, so the old loop never reached
+  it. Shots of that same seeded position before and after differ over 1814
+  pixels in one band beside the pile, and the after shot shows the sideways
+  red deuce under the stack next to the FROZEN badge.
+
+  No automated guard, and none is claimed. Nothing in the suite can read a
+  picture, so the reproducer above is the record: --seed 1 --turns 80.
   **Layman:** The sideways card that marks a frozen pack disappears once enough cards are thrown on it, even though the pack is still frozen.
   Kind: investigate.
   Source: in-session-2026-09-02, first --turns shot.
