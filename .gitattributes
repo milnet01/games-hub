@@ -1,0 +1,4 @@
+# The saved-game corpus is binary. Without this, a Windows checkout with
+# core.autocrlf on would rewrite CR LF pairs inside a QDataStream blob and the
+# save would no longer parse -- on that platform only.
+tests/saves/*.bin binary
