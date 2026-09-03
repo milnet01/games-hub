@@ -230,6 +230,11 @@ bool HeartsEngine::playCard(int player, const Card& c)
     shown.faceUp = true;
     m_trick.emplace_back(player, shown);
 
+    // The Queen breaking hearts as well as a heart does is a VARIANT, not the
+    // strictest rule -- it is what the widely-known Windows version plays, and
+    // it is deliberate. CLAUDE.md's Hearts bullet states it; it was in the code
+    // and in no document, which is what made it read as an accident
+    // (GHUB-0160).
     if (c.suit == Suit::Hearts || c == kQueenOfSpades)
         m_heartsBroken = true;
 
@@ -300,6 +305,12 @@ void HeartsEngine::nextHand()
 int HeartsEngine::winner() const
 {
     return int(std::min_element(m_totals.begin(), m_totals.end()) - m_totals.begin());
+}
+
+bool HeartsEngine::winnerIsShared() const
+{
+    const int lowest = *std::min_element(m_totals.begin(), m_totals.end());
+    return std::count(m_totals.begin(), m_totals.end(), lowest) > 1;
 }
 
 // ---------------------------------------------------------------------------

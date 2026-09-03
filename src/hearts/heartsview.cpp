@@ -187,8 +187,18 @@ void HeartsView::step()
         return; // the player's move
     }
 
-    m_engine.playCard(seat, m_engine.chooseAiCard(seat));
-    Sound::instance().play(Sound::kCardPlace);
+    // The sound says a card went down, so it must not play unless one did.
+    // A refused computer play would otherwise be silent-but-audible: the noise
+    // plays, the turn does not advance, and the timer restarts on a trick that
+    // never changed (GHUB-0160). Falling back to a legal card keeps the hand
+    // finishable rather than freezing the table on a bug in chooseAiCard.
+    bool played = m_engine.playCard(seat, m_engine.chooseAiCard(seat));
+    if (!played) {
+        const std::vector<Card> legal = m_engine.legalPlays(seat);
+        played = !legal.empty() && m_engine.playCard(seat, legal.front());
+    }
+    if (played)
+        Sound::instance().play(Sound::kCardPlace);
     update();
     refresh();
 
@@ -237,7 +247,10 @@ void HeartsView::announceHand()
         m_announcePending = false;
         const bool over = m_engine.phase() == HeartsEngine::Phase::GameOver;
         // A win is recorded by the total you finished on — lower is better.
-        const bool newBest = over && m_engine.winner() == 0
+        // A shared low is not a win, and recording one as a best score puts a
+        // total in the book that was never won (GHUB-0160).
+        const bool shared = m_engine.winnerIsShared();
+        const bool newBest = over && !shared && m_engine.winner() == 0
             && Scores::instance().recordLow(Scores::heartsBestScore(), m_engine.total(0));
 
         QString detail;
@@ -252,8 +265,18 @@ void HeartsView::announceHand()
         box.setWindowTitle(over ? QStringLiteral("Game over") : QStringLiteral("Hand over"));
         if (over) {
             const int w = m_engine.winner();
-            box.setText(w == 0 ? QStringLiteral("You win!")
-                               : QStringLiteral("%1 wins.").arg(QString::fromUtf8(kSeatNames[w])));
+            if (shared) {
+                QStringList tied;
+                for (int p = 0; p < HeartsEngine::kPlayers; ++p)
+                    if (m_engine.total(p) == m_engine.total(w))
+                        tied << QString::fromUtf8(kSeatNames[p]);
+                box.setText(QStringLiteral("A tie — %1 finish level on %2.")
+                                .arg(tied.join(QStringLiteral(" and ")))
+                                .arg(m_engine.total(w)));
+            } else {
+                box.setText(w == 0 ? QStringLiteral("You win!")
+                                   : QStringLiteral("%1 wins.").arg(QString::fromUtf8(kSeatNames[w])));
+            }
         } else {
             box.setText(QStringLiteral("Hand complete."));
         }

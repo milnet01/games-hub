@@ -38,15 +38,35 @@ public:
     int lastTrickWinner() const { return m_lastWinner; }
     int tricksPlayed() const { return m_tricksPlayed; }
 
-    const std::vector<Card>& hand(int player) const { return m_hands[std::size_t(player)]; }
+    // Every seat accessor guards first. They are public and the seat is
+    // supplied by the caller, so an out-of-range index is undefined behaviour
+    // rather than a wrong answer -- and the view computes some of these seats
+    // from a hit test (GHUB-0160).
+    static bool seatExists(int player) { return player >= 0 && player < kPlayers; }
+
+    const std::vector<Card>& hand(int player) const
+    {
+        static const std::vector<Card> none;
+        return seatExists(player) ? m_hands[std::size_t(player)] : none;
+    }
     const std::vector<std::pair<int, Card>>& trick() const { return m_trick; }
-    int total(int player) const { return m_totals[std::size_t(player)]; }
-    int handPoints(int player) const { return m_handPoints[std::size_t(player)]; }
+    int total(int player) const { return seatExists(player) ? m_totals[std::size_t(player)] : 0; }
+    int handPoints(int player) const
+    {
+        return seatExists(player) ? m_handPoints[std::size_t(player)] : 0;
+    }
 
     // Passing phase
     void setPass(int player, const std::vector<Card>& cards);
-    bool passReady(int player) const { return m_passes[std::size_t(player)].size() == 3; }
-    const std::vector<Card>& pass(int player) const { return m_passes[std::size_t(player)]; }
+    bool passReady(int player) const
+    {
+        return seatExists(player) && m_passes[std::size_t(player)].size() == 3;
+    }
+    const std::vector<Card>& pass(int player) const
+    {
+        static const std::vector<Card> none;
+        return seatExists(player) ? m_passes[std::size_t(player)] : none;
+    }
     // Moves every player's three cards at once and starts the play phase.
     void executePass();
 
@@ -68,8 +88,12 @@ public:
     // Starts the next hand after HandOver.
     void nextHand();
 
-    // Winner once the game is over: the lowest total.
+    // Winner once the game is over: the lowest total. On a shared low it is the
+    // FIRST such seat, which is seat 0 -- the human -- so ask winnerIsShared()
+    // before announcing one. Without that a tie was announced as a win and
+    // recorded as a best score (GHUB-0160).
     int winner() const;
+    bool winnerIsShared() const;
 
     // The whole position: hands, the cards chosen for the pass, the trick on
     // the table, both score columns and every flag that decides what is legal

@@ -38,6 +38,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Hearts no longer plays a card sound when no card was played.** (GHUB-0160)
+  A computer play that the rules refused still made the noise, so the table
+  sounded as though it had moved when it had not.
+
+- **A tied game of Hearts is no longer announced as your win.** (GHUB-0160)
+  Finishing level with a computer player was reported as "You win!" and
+  written into your best scores. It now says who tied and on what, and
+  records nothing.
+
 - **A Spider column that has taken every dealt row now stays on the table.** (GHUB-0160)
   Cards were sized for a shorter column than the game actually deals, so a
   full one ran off the bottom and under the caption.

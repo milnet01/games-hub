@@ -422,6 +422,26 @@ void heartsFullGames()
     check(true, "hearts: 20 full AI games finish with consistent scores");
 }
 
+// winner() is the lowest total, and std::min_element returns the FIRST such
+// seat -- which is seat 0, the human. So a shared low was announced as "You
+// win!" and recorded as a best score, in the player's favour and silently
+// (GHUB-0160). winnerIsShared() is what the view asks before announcing one.
+void heartsTieIsNotAWin()
+{
+    HeartsEngine e;
+    e.newGame();
+    // Everyone is on nothing before a card is played, which is the cleanest
+    // shared low there is -- and winner() still names seat 0.
+    check(e.winner() == 0, "hearts: winner() names the first seat holding the lowest total");
+    check(e.winnerIsShared(), "hearts: and says so when that total is shared");
+
+    // A seat out of range is answered rather than indexed.
+    check(e.total(-1) == 0 && e.total(99) == 0 && e.handPoints(4) == 0,
+          "hearts: a seat that does not exist reads as nothing rather than off the end");
+    check(e.hand(-1).empty() && e.pass(9).empty() && !e.passReady(7),
+          "hearts: and its hand, pass and readiness are empty rather than undefined");
+}
+
 void heartsMoonShot()
 {
     // Verify the moon rule directly: 26 to one player must become 26 to the
@@ -5604,6 +5624,7 @@ int main()
     section("Hearts");
     heartsRules();
     heartsFullGames();
+    heartsTieIsNotAWin();
     heartsMoonShot();
 
     section("Canasta");

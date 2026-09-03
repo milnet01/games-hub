@@ -6155,6 +6155,33 @@ open.
   aFullSpiderTableStaysOnTheSurface has to use a WIDE, short window: at the
   smallest window the budget decides nothing, so a check taken there passes
   on any budget at all, which is how the wrong one survived.
+  Progress (2026-09-03): the HEARTS block is closed, all four of it. Three
+  blocks remain -- FREECELL/PYRAMID, REVERSI/DRAUGHTS, MINESWEEPER/SUDOKU
+  and 2048.
+
+  The tie was the one with teeth. winner() is min_element over the totals,
+  which returns the FIRST lowest seat, and that is seat 0 -- so finishing
+  level was announced as "You win!" and written into the best-score book.
+  winnerIsShared() is new; the view now names who tied and on what, and
+  records nothing.
+
+  The Queen breaking hearts was KEPT rather than removed. It is the variant
+  the widely-known Windows version plays, so changing it would change the
+  game under the owner; what was actually wrong is that it lived in the code
+  and in no document. CLAUDE.md's Hearts bullet now states it and the line
+  carries the reason.
+
+  The AI's card sound is gated on the play having happened, with a fallback
+  to a legal card so a refusal cannot freeze the table instead.
+
+  hand, total, handPoints, pass and passReady all guard the seat now.
+  They are public, the caller supplies the seat, and the view computes some
+  of them from a hit test, so an out-of-range index was undefined behaviour
+  rather than a wrong answer.
+
+  heartsTieIsNotAWin locks both: a fresh engine has every seat on nothing,
+  which is the cleanest shared low there is, and winner() still names seat
+  0 there.
   **Layman:** A list of smaller game bugs, kept so none of them is lost.
   Kind: fix.
   Source: review-code sweep 2026-08-31.

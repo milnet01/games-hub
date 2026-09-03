@@ -475,6 +475,13 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   rotation, the forced two-of-clubs lead, following suit, no points on the
   first trick, hearts breaking, and the moon shot (26 to everyone *else*).
   `HeartsView` is presentation and timers only.
+
+  **The Queen of Spades breaks hearts here as well as a heart does.** That is a
+  variant rather than the strictest rule, and it is the one the widely-known
+  Windows version plays, so it is kept — but it was in the code and in no
+  document, which is what made it look accidental. **A tie is a tie**:
+  `winner()` returns the first seat on the lowest total, which is the human, so
+  ask `winnerIsShared()` before announcing a win or recording a best score.
 - **Canasta** — `canasta/canastaengine.*` is the rule set, in `namespace
   canasta` because `Meld`, `Team` and `Phase` are far too common to leave at
   global scope. **Every number the game plays by lives in one `Rules` struct**
