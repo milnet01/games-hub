@@ -3742,6 +3742,54 @@ int main(int argc, char* argv[])
                   faceUp ? "a card face is the same picture whichever rect filled its cache entry"
                          : "and so is a card back");
         }
+
+        // The same question at a FRACTIONAL device pixel ratio, which is what a
+        // 150% desktop scale gives and what the pass above cannot reach.
+        //
+        // The pixmap's pixel size is the padded card size put through
+        // std::ceil. With exact arithmetic that map never collides -- but the
+        // product is a double, and one landing a fraction above a whole number
+        // rounds up, so two cards a whole device pixel apart can pad out to the
+        // same pixel count and share one entry. Measured at 1.5: cards snapped
+        // to 83 and 84 device pixels wide both keyed on 99. Ratios of 1 and 2
+        // divide exactly and never show it, which is why every check written
+        // before this one passed against the defect.
+        //
+        // The key is now the SNAPPED CARD size, which is what the picture is
+        // drawn from, so no rounding stands between the two.
+        {
+            auto drawScaled = [](const Card& c, double w, double h, bool faceUp, double dpr) {
+                QImage img(int(std::ceil((w + 40.0) * dpr)), int(std::ceil((h + 40.0) * dpr)),
+                           QImage::Format_ARGB32_Premultiplied);
+                img.setDevicePixelRatio(dpr);
+                img.fill(Qt::darkGray);
+                QPainter p(&img);
+                p.setRenderHint(QPainter::Antialiasing, true);
+                p.setRenderHint(QPainter::TextAntialiasing, true);
+                p.translate(20.0, 20.0);
+                if (faceUp)
+                    CardArt::paintFace(p, QRectF(0, 0, w, h), c);
+                else
+                    CardArt::paintBack(p, QRectF(0, 0, w, h), c.deck);
+                return img;
+            };
+
+            const Card subject { .suit = Suit::Spades, .rank = 11 };
+            const double dpr = 1.5;
+            const double narrow = 83.0 / dpr;   // snaps to 83 device pixels
+            const double wide = 84.0 / dpr;     // snaps to 84
+            const double height = 78.0;         // held equal, so only width differs
+
+            empty();
+            const QImage alone = drawScaled(subject, narrow, height, true, dpr);
+
+            empty();
+            drawScaled(subject, wide, height, true, dpr);   // fills the shared entry first
+            const QImage after = drawScaled(subject, narrow, height, true, dpr);
+
+            check(alone == after,
+                  "a card face is the same picture at a fractional device pixel ratio");
+        }
     }
 
     // ---- cardsShowTheirJourney (GHUB-0065) --------------------------------

@@ -53,8 +53,13 @@ class NotFound(Exception):
     """A constant this script names is not in the source it names."""
 
 
-TRIPLE = r"\{\s*(0x[0-9A-Fa-f]{1,2}|\d{1,3})\s*,\s*(0x[0-9A-Fa-f]{1,2}|\d{1,3})\s*,\s*(0x[0-9A-Fa-f]{1,2}|\d{1,3})\s*\}"
-CALL = r"\(\s*(0x[0-9A-Fa-f]{1,2}|\d{1,3})\s*,\s*(0x[0-9A-Fa-f]{1,2}|\d{1,3})\s*,\s*(0x[0-9A-Fa-f]{1,2}|\d{1,3})\s*\)"
+# One pattern for both spellings. This tree writes `QColor k { r, g, b }` in
+# some places and `QColor(r, g, b)` in others, and a reader that knows only one
+# of them measures whatever it happens to find -- which for an ARRAY is worse
+# than finding nothing, because a mixed list still parses and every index after
+# the first missed element is off by one.
+COMPONENT = r"(0x[0-9A-Fa-f]{1,2}|\d{1,3})"
+COLOUR = rf"[({{]\s*{COMPONENT}\s*,\s*{COMPONENT}\s*,\s*{COMPONENT}\s*[)}}]"
 
 
 def _triple(match: re.Match[str]) -> tuple[int, int, int]:
@@ -71,12 +76,10 @@ def read_source(relative: str) -> str:
 def named_colour(relative: str, name: str) -> tuple[int, int, int]:
     """`constexpr QColor kName { r, g, b };` or `QColor kName(r, g, b);`."""
     text = read_source(relative)
-    for pattern in (rf"QColor\s+{re.escape(name)}\s*{TRIPLE}",
-                    rf"QColor\s+{re.escape(name)}\s*{CALL}"):
-        found = re.search(pattern, text)
-        if found:
-            return _triple(found)
-    raise NotFound(f"no definition of {name} in src/{relative}")
+    found = re.search(rf"QColor\s+{re.escape(name)}\s*{COLOUR}", text)
+    if not found:
+        raise NotFound(f"no definition of {name} in src/{relative}")
+    return _triple(found)
 
 
 def array_colour(relative: str, name: str, index: int) -> tuple[int, int, int]:
@@ -87,11 +90,13 @@ def array_colour(relative: str, name: str, index: int) -> tuple[int, int, int]:
         raise NotFound(f"no definition of {name}[] in src/{relative}")
     body = text[opening.end():]
     body = body[:body.index("};")]
-    # Every element, including the four-argument ones. Matching only the
-    # three-argument form silently SKIPS them and shifts every later index by
-    # one — kNumberColours[0] is `QColor(0, 0, 0, 0)`, so a three-only regex
-    # measured the wrong colour and still printed a plausible number.
-    elements = re.findall(r"QColor\s*\(([^)]*)\)", body)
+    # Every element, including the four-argument ones AND the brace-initialised
+    # ones. Matching only the three-argument call form silently SKIPS them and
+    # shifts every later index by one — kNumberColours[0] is `QColor(0, 0, 0,
+    # 0)`, so a three-only regex measured the wrong colour and still printed a
+    # plausible number. A brace-only element does the same thing for the same
+    # reason, and both spellings are in use in this tree.
+    elements = re.findall(r"QColor\s*[({]([^)}]*)[)}]", body)
     if index >= len(elements):
         raise NotFound(f"{name}[] in src/{relative} has no element {index}")
     parts = [p.strip() for p in elements[index].split(",")]
@@ -110,10 +115,29 @@ def tile_colour(value: int | None) -> tuple[int, int, int]:
     if not body:
         raise NotFound(f"no tileColour() in src/{TWENTY48}")
     label = "default:" if value is None else f"case {value}:"
-    found = re.search(rf"{re.escape(label)}\s*return\s+QColor{CALL}", body.group(1))
+    found = re.search(rf"{re.escape(label)}\s*return\s+QColor\s*{COLOUR}", body.group(1))
     if not found:
         raise NotFound(f"tileColour() has no `{label}` arm")
     return _triple(found)
+
+
+def tile_values() -> list[int | None]:
+    """Every arm tileColour() actually has, newest included.
+
+    Read rather than listed. A hand-written list cannot cover an arm added
+    after it was written, and the omission is invisible: the run reports a full
+    pass over the tiles it happens to know.
+    """
+    text = read_source(TWENTY48)
+    body = re.search(r"QColor tileColour\(int value\)\s*\{(.*?)\n\}", text, re.S)
+    if not body:
+        raise NotFound(f"no tileColour() in src/{TWENTY48}")
+    values: list[int | None] = [int(v) for v in re.findall(r"case\s+(\d+)\s*:", body.group(1))]
+    if not values:
+        raise NotFound("tileColour() has no `case` arms")
+    if "default:" not in body.group(1):
+        raise NotFound("tileColour() has no `default:` arm")
+    return values + [None]
 
 
 def ink_for(value: int | None) -> tuple[int, int, int]:
@@ -126,11 +150,17 @@ def ink_for(value: int | None) -> tuple[int, int, int]:
     threshold = re.search(r"kLightTileLuminance\s*=\s*([0-9.]+)", text)
     if not threshold:
         raise NotFound(f"no kLightTileLuminance in src/{TWENTY48}")
-    if "relativeLuminance(tileColour(value)) > kLightTileLuminance" not in text:
+    # Both ARMS, not just the condition. Naming the two inks here and pairing
+    # them by hand hardcodes the polarity: swap the arms in the C++ and the
+    # condition text is unchanged, so the guard still matches and this script
+    # goes on measuring the ink the product no longer uses.
+    rule = re.search(r"relativeLuminance\(tileColour\(value\)\)\s*>\s*kLightTileLuminance"
+                     r"\s*\?\s*(\w+)\s*:\s*(\w+)", text)
+    if not rule:
         raise NotFound("inkFor() is no longer a luminance test — reread §4.7")
-    dark = named_colour(TWENTY48, "kDarkInk")
-    light = named_colour(TWENTY48, "kLightInk")
-    return dark if relative_luminance(tile_colour(value)) > float(threshold.group(1)) else light
+    above, below = rule.group(1), rule.group(2)
+    bright = relative_luminance(tile_colour(value)) > float(threshold.group(1))
+    return named_colour(TWENTY48, above if bright else below)
 
 
 # The pair list and the thresholds. Everything at 3.0 is a graphical object or
@@ -166,22 +196,29 @@ PAIRS: list[tuple[str, object, object, float]] = [
      lambda: named_colour("theme.h", "kCaptionPlate"), 4.5),
 ]
 
-# Every tile 2048 can paint, its own ink against its own colour — the post-fix
-# pairs, not §2.3's pre-fix measurement. `None` is the `default:` arm, which a
-# list of the enumerated cases alone never reaches.
-for _value in [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, None]:
-    PAIRS.append((
-        f"2048 ink on tile {'default (v > 2048)' if _value is None else _value}",
-        (lambda v: lambda: ink_for(v))(_value),
-        (lambda v: lambda: tile_colour(v))(_value),
-        3.0,
-    ))
-
-
 def check_contrast() -> int:
     failures = 0
-    width = max(len(name) for name, *_ in PAIRS)
-    for name, ink, background, required in PAIRS:
+    pairs = list(PAIRS)
+
+    # Every tile 2048 can paint, its own ink against its own colour — the
+    # post-fix pairs, not §2.3's pre-fix measurement. `None` is the `default:`
+    # arm, which the enumerated cases never reach.
+    try:
+        values = tile_values()
+    except NotFound as missing:
+        print(f"MISSING  2048 tile list  {missing}")
+        failures += 1
+        values = []
+    for value in values:
+        pairs.append((
+            f"2048 ink on tile {'default (v > 2048)' if value is None else value}",
+            (lambda v: lambda: ink_for(v))(value),
+            (lambda v: lambda: tile_colour(v))(value),
+            3.0,
+        ))
+
+    width = max(len(name) for name, *_ in pairs)
+    for name, ink, background, required in pairs:
         try:
             ratio = contrast_ratio(ink(), background())
         except NotFound as missing:
@@ -194,8 +231,8 @@ def check_contrast() -> int:
         if not ok:
             failures += 1
     print()
-    print(f"{len(PAIRS)} pairs, {failures} failing." if failures
-          else f"{len(PAIRS)} pairs, all meet their threshold.")
+    print(f"{len(pairs)} pairs, {failures} failing." if failures
+          else f"{len(pairs)} pairs, all meet their threshold.")
     return 1 if failures else 0
 
 
@@ -203,13 +240,17 @@ def check_contrast() -> int:
 #
 # The three exclusions each earn their place. The leading character class
 # rejects hex digits and a decimal point, so `0x46` and `h * 0.46` do not match
-# (there are five of the latter in src/); the kFaceMinWidth filter drops the
-# definition line itself; the last drops comment lines, two of which
-# legitimately discuss the number in canastaview.cpp.
+# (there are five of the latter in src/); the second drops the DEFINITION
+# itself; the last drops comment lines, two of which legitimately discuss the
+# number in canastaview.cpp.
+#
+# The definition filter matches the assignment and not the name, for the reason
+# stated below about `0x`: excusing a whole line because it mentions
+# kFaceMinWidth anywhere gives a violation somewhere to hide, and a test a
+# violation can hide from is not a test.
 #
 # It deliberately does NOT drop a line merely for containing `0x`, which would
-# hide `if (w < 46.0 && c == 0xff)` -- a test a violation can hide from is not
-# a test.
+# hide `if (w < 46.0 && c == 0xff)`.
 #
 # Scanned in Python rather than shelled out to grep. It was a `grep | grep |
 # grep` pipeline under shell=True, which on Windows is cmd.exe: no grep, and
@@ -217,6 +258,7 @@ def check_contrast() -> int:
 # rather than reporting an unearned pass, which is what it is for -- but the
 # check had never once run on that platform.
 THRESHOLD_RE = re.compile(r"(^|[^0-9A-Fa-fx.])46(\.0)?([^0-9A-Fa-f]|$)")
+DEFINITION_RE = re.compile(r"kFaceMinWidth\s*=\s*46(\.0)?\b")
 COMMENT_RE = re.compile(r"\s*//")
 
 
@@ -232,7 +274,7 @@ def check_thresholds() -> int:
                                                      errors="replace").splitlines(), 1):
             if not THRESHOLD_RE.search(line):
                 continue
-            if "kFaceMinWidth" in line or COMMENT_RE.match(line):
+            if DEFINITION_RE.search(line) or COMMENT_RE.match(line):
                 continue
             hits.append(f"{rel}:{number}: {line.strip()}")
     # INV-4 is the only thing that catches a second hardcoded 46, so a pass it

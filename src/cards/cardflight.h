@@ -37,7 +37,6 @@ struct Flight {
     double delay = 0.0;      // seconds still to wait before setting off
     double speed = 3.0;      // progress per second
     int destination = -1;    // whatever key the game identifies a pile by
-    bool faceUp = true;
 };
 
 // How long a card should linger before setting off when several leave at once,

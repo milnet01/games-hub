@@ -83,8 +83,20 @@ DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
         auto* button = new QPushButton(
             QStringLiteral("Open %1 in your browser").arg(QString::fromLatin1(link.label)), this);
         button->setToolTip(url);
-        connect(button, &QPushButton::clicked, this,
-                [url] { QDesktopServices::openUrl(QUrl(url)); });
+        connect(button, &QPushButton::clicked, this, [url] {
+            // These are generated from FUNDING.yml at configure time, so the
+            // scheme is not in doubt today. The check is here because openUrl
+            // hands whatever it is given to the desktop, which will launch a
+            // handler for a scheme that is not a web page at all -- and the one
+            // thing this dialog promises is that a button opens a browser.
+            const QUrl target(url);
+            if (target.scheme() != QLatin1String("http")
+                && target.scheme() != QLatin1String("https")) {
+                qWarning("Refusing to open \"%s\": not a web address.", qPrintable(url));
+                return;
+            }
+            QDesktopServices::openUrl(target);
+        });
         outer->addWidget(button);
 
         // The address in full underneath, so the destination is readable before

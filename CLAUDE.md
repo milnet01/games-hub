@@ -520,13 +520,19 @@ just overlaps a little; a faceless card cannot be recovered from.
 
 **Card art is cached, and the cache key must decide the picture completely.**
 `CardArt::paintFace`/`paintBack` snap a card to whole device pixels, draw it
-once and keep it. Three things that cost real time to learn. **The key is
+once and keep it. Each of the following cost real time to learn. **The key is
 computed from the SNAPPED size and the card must be drawn at that same snapped
 size** — key on the rounded size while drawing at the exact one and two rects a
 fraction of a pixel apart share an entry, so whichever drew first decides the
 picture and a frame after an eviction differs from the same frame before one.
-`cardArtKeyDecidesThePicture` is the guard. **The shadow padding must be a whole
-pixel**, or the card sits at a fractional offset inside the pixmap and every line
+`cardArtKeyDecidesThePicture` is the guard. **Key on the card, never on the
+padded pixmap**: the padded pixel size is a `std::ceil` away, and a product
+landing a fraction above a whole number rounds up — so at a fractional device
+pixel ratio, which is what a 150% desktop scale gives, two cards a whole device
+pixel apart keyed the same. Ratios of 1 and 2 divide exactly and never show it,
+which is why every check written before that one passed against it.
+**The shadow padding must be a whole pixel**, or the card sits at a fractional
+offset inside the pixmap and every line
 antialiases differently. And **a rotated FACE is never cached** — resampling
 softens it, and this game is read by pip pattern. Rotated backs are cached
 because there is nothing on a back to read.

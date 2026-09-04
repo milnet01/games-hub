@@ -48,8 +48,18 @@ def render(name, seconds, fn, gain=0.72):
         samples.append(v)
         peak = max(peak, abs(v))
 
+    # A recipe that produces silence writes a structurally valid WAV of zeros:
+    # right length, right format, parses everywhere, and plays nothing. That is
+    # what a muted game sounds like, so nothing downstream can tell the two
+    # apart -- the uitest checks the file is present and non-trivial in size,
+    # which a full-length run of zeros satisfies. Here is the only place that
+    # still knows what the samples were meant to be.
+    if peak <= 1e-9:
+        raise SystemExit(f"{name}: the recipe produced silence, so the WAV would be "
+                         f"valid and inaudible")
+
     # Normalise so every effect sits at a comparable level.
-    scale = (gain / peak) if peak > 1e-9 else 0.0
+    scale = gain / peak
     for v in samples:
         s = int(max(-1.0, min(1.0, v * scale)) * 32767)
         frames += struct.pack("<h", s)

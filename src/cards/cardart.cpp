@@ -2,6 +2,7 @@
 
 #include "theme.h"
 
+#include <QCoreApplication>
 #include <QFontMetricsF>
 #include <QLinearGradient>
 #include <QPaintDevice>
@@ -333,6 +334,59 @@ static double shadowPad(double width)
     return std::max(1.5, width * 0.035) * 1.8 + 1.0;
 }
 
+// A bounded pixmap cache. Two bounds, because they answer different questions.
+// The entry bound keeps a resize from filling the map with the intermediate
+// widths it passes through. The byte bound is what actually caps memory: an
+// entry's size follows the card's, so the same entry count costs four times as
+// much at a device pixel ratio of 2 and more again at a large window. Without
+// it the ceiling is a count and the footprint is whatever that count happens to
+// weigh.
+struct ArtCache {
+    std::unordered_map<uint64_t, QPixmap> pixmaps;
+    std::size_t bytes = 0;
+
+    void drop()
+    {
+        pixmaps.clear();
+        bytes = 0;
+    }
+};
+
+// Generous on purpose: it is a backstop against the pathological case, not the
+// working control. A full face cache of ordinary cards sits well under this at
+// a device pixel ratio of 2, so normal play never reaches it -- and a bound
+// that binds during play would empty the cache every frame, which costs more
+// than the memory it saves.
+static constexpr std::size_t kCacheByteBound = 64u * 1024u * 1024u;
+
+static ArtCache& backCache()
+{
+    static ArtCache cache;
+    return cache;
+}
+
+static ArtCache& faceCache()
+{
+    static ArtCache cache;
+    return cache;
+}
+
+// A QPixmap may not be destroyed once QGuiApplication has gone, and a
+// function-local static is destroyed at exit -- after main has returned and
+// taken the application object with it. This empties both caches while the
+// application is still alive.
+static void ensureCachesAreEmptiedInTime()
+{
+    static const bool registered = [] {
+        qAddPostRoutine([] {
+            backCache().drop();
+            faceCache().drop();
+        });
+        return true;
+    }();
+    (void)registered;
+}
+
 // Draw one card through a pixmap cache. `identity` is what distinguishes this
 // picture from every other at the same size -- a deck colour for a back, a rank
 // and suit for a face.
@@ -347,8 +401,8 @@ static double shadowPad(double width)
 //
 // Returns false when the caller should just draw the card itself.
 template <typename Draw>
-static bool blitCached(QPainter& p, const QRectF& r, std::unordered_map<uint64_t, QPixmap>& cache,
-                       size_t bound, int identity, bool cacheRotated, Draw&& draw)
+static bool blitCached(QPainter& p, const QRectF& r, ArtCache& cache, size_t bound, int identity,
+                       bool cacheRotated, Draw&& draw)
 {
     if (r.width() <= 0.0 || r.height() <= 0.0)
         return true;   // nothing to draw, and nothing for the caller to do either
@@ -402,17 +456,26 @@ static bool blitCached(QPainter& p, const QRectF& r, std::unordered_map<uint64_t
     if (wPx <= 0 || hPx <= 0 || wPx > 4096 || hPx > 4096)
         return false;
 
-    const uint64_t key = uint64_t(wPx & 0xffff) | (uint64_t(hPx & 0xffff) << 16)
+    // Keyed on the snapped CARD size, never on the padded pixmap size. `pad`
+    // grows in whole pixels while the card grows continuously, so at a
+    // fractional device pixel ratio the padded size is not injective: at 1.5, a
+    // card snapped to 83 device pixels wide and one snapped to 84 both pad out
+    // to 99, and would share one entry holding whichever got there first --
+    // the GHUB-0048 defect again, one step further along. Ratios of 1 and 2
+    // never collide, which is why drawing at those alone cannot show it.
+    const int wCard = int(std::lround(wq * dpr));
+    const int hCard = int(std::lround(hq * dpr));
+    const uint64_t key = uint64_t(wCard & 0xffff) | (uint64_t(hCard & 0xffff) << 16)
         | (uint64_t(identity & 0xff) << 32) | (uint64_t(scaleQ & 0xffff) << 40);
 
-    auto it = cache.find(key);
-    if (it == cache.end()) {
+    auto it = cache.pixmaps.find(key);
+    if (it == cache.pixmaps.end()) {
         // A resize walks through sizes on its way to the one it stops at, so
         // the map is bounded rather than left to grow with every intermediate
         // width. Dropping the lot is fine: the next frame refills what it
         // needs, which is one entry per distinct picture on the table.
-        if (cache.size() > bound)
-            cache.clear();
+        if (cache.pixmaps.size() > bound || cache.bytes > kCacheByteBound)
+            cache.drop();
 
         QPixmap pix(wPx, hPx);
         pix.setDevicePixelRatio(dpr);
@@ -426,7 +489,8 @@ static bool blitCached(QPainter& p, const QRectF& r, std::unordered_map<uint64_t
         draw(into, QRectF(pad, pad, wq, hq));
         into.end();
 
-        it = cache.emplace(key, std::move(pix)).first;
+        cache.bytes += std::size_t(wPx) * std::size_t(hPx) * std::size_t(pix.depth() / 8);
+        it = cache.pixmaps.emplace(key, std::move(pix)).first;
     }
 
     if (plain) {
@@ -456,9 +520,9 @@ static bool blitCached(QPainter& p, const QRectF& r, std::unordered_map<uint64_t
 void paintBack(QPainter& p, const QRectF& r, int deck)
 {
     p.save();
+    ensureCachesAreEmptiedInTime();
     // Two colourways and a handful of sizes, so the bound is generous.
-    static std::unordered_map<uint64_t, QPixmap> cache;
-    if (!blitCached(p, r, cache, 64, deck, true,
+    if (!blitCached(p, r, backCache(), 64, deck, true,
                     [deck](QPainter& into, const QRectF& at) { drawBack(into, at, deck); }))
         drawBack(p, r, deck);
     p.restore();
@@ -467,13 +531,13 @@ void paintBack(QPainter& p, const QRectF& r, int deck)
 void paintFace(QPainter& p, const QRectF& r, const Card& c)
 {
     p.save();
+    ensureCachesAreEmptiedInTime();
     // FreeCell puts all fifty-two on the table at once and Pyramid twenty-eight,
     // so this one holds a whole pack at two sizes rather than a handful.
-    static std::unordered_map<uint64_t, QPixmap> cache;
     // Rank is 0..13 and suit 0..3, so one byte names the picture. A joker's
     // suit is not drawn, but keeping it in the key only costs an entry.
     const int identity = (c.rank << 2) | (int(c.suit) & 0x3);
-    if (!blitCached(p, r, cache, 160, identity, false,
+    if (!blitCached(p, r, faceCache(), 160, identity, false,
                     [&c](QPainter& into, const QRectF& at) { drawFace(into, at, c); }))
         drawFace(p, r, c);
     p.restore();

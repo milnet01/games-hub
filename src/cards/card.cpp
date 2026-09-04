@@ -42,10 +42,15 @@ std::vector<Card> makeDeck(int decks, int suitsUsed, int jokers)
     // deals the traditional all-spades pack.
     static constexpr Suit kOrder[4] = { Suit::Spades, Suit::Hearts, Suit::Diamonds, Suit::Clubs };
     const int used = std::clamp(suitsUsed, 1, 4);
+    // Clamped for the same reason the joker count is. A negative `decks` never
+    // reaches the loop below, but it reaches the reserve first -- where the
+    // cast to an unsigned size makes it enormous and the allocation throws,
+    // which is a crash rather than the empty pack the argument asks for.
+    const int packs = std::max(0, decks);
 
     std::vector<Card> cards;
-    cards.reserve(std::size_t(decks) * 52 + std::size_t(std::max(0, jokers)));
-    for (int d = 0; d < decks; ++d)
+    cards.reserve(std::size_t(packs) * 52 + std::size_t(std::max(0, jokers)));
+    for (int d = 0; d < packs; ++d)
         for (int s = 0; s < 4; ++s)
             for (int r = kAce; r <= kKing; ++r)
                 cards.push_back(Card { kOrder[s % used], r, false, d });
@@ -55,7 +60,7 @@ std::vector<Card> makeDeck(int decks, int suitsUsed, int jokers)
     // which is what a real pack carries.
     for (int j = 0; j < jokers; ++j)
         cards.push_back(Card { (j % 2 == 0) ? Suit::Hearts : Suit::Spades, kJoker, false,
-                               (j / 2) % std::max(1, decks) });
+                               (j / 2) % std::max(1, packs) });
     return cards;
 }
 

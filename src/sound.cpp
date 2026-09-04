@@ -17,8 +17,11 @@ Sound& Sound::instance()
 Sound::Sound()
 {
     // The offscreen platform has no audio device, and the test suite runs
-    // there — creating effects would only produce warnings.
-    m_available = qgetenv("QT_QPA_PLATFORM") != "offscreen";
+    // there — creating effects would only produce warnings. Matched on the
+    // PREFIX: the plugin takes arguments after a colon (`offscreen:enable_fonts`
+    // is the one used here), and an exact comparison reads those spellings as a
+    // real display and builds effects against a device that is not there.
+    m_available = !qgetenv("QT_QPA_PLATFORM").startsWith("offscreen");
     // Stored like the legibility switch beside it in the toolbar. Without this
     // the mute was discarded on every launch, while README introduces the two
     // as a pair and says the setting is remembered.
@@ -53,6 +56,18 @@ void Sound::play(const QString& name)
         voices.players.reserve(kVoices);
         for (int i = 0; i < kVoices; ++i) {
             auto* effect = new QSoundEffect;
+            // On the first voice only, or one missing file warns kVoices times.
+            // Nothing else reports this: a sound that will not load plays in
+            // silence, which is what a muted game sounds like -- so an empty
+            // resource, the one failure that takes every effect at once, is
+            // indistinguishable from working audio at runtime.
+            if (i == 0) {
+                QObject::connect(effect, &QSoundEffect::statusChanged, effect, [effect, name] {
+                    if (effect->status() == QSoundEffect::Error)
+                        qWarning("Sound \"%s\" could not be loaded; it will play silently.",
+                                 qPrintable(name));
+                });
+            }
             effect->setSource(QUrl(QStringLiteral("qrc:/sounds/%1.wav").arg(name)));
             effect->setVolume(m_volume);
             voices.players.push_back(effect);

@@ -63,6 +63,15 @@ def cpp_bands(text: str) -> list[tuple[int | None, str]] | None:
     if not bands or not tail:
         problems.append("canastaengine.cpp: openRequirementFor() did not parse into bands")
         return None
+    # What was matched against what is there. Every band returns, and so does
+    # the tail, so the two counts are fixed to each other -- and a band written
+    # in a shape the regex above does not read is otherwise SILENT: it drops
+    # out of the ladder, and the comparison below still lines the two sides up
+    # and reports agreement about a band nobody checked.
+    if len(tail) != len(bands) + 1:
+        problems.append(f"canastaengine.cpp: openRequirementFor() has {len(tail)} returns "
+                        f"but {len(bands)} bands parsed")
+        return None
     bands.append((None, tail[-1]))
     return bands
 
@@ -77,6 +86,13 @@ def js_bands(text: str) -> list[tuple[int | None, int]] | None:
         out.append((None if below == "null" else int(below), int(need)))
     if not out:
         problems.append("scorepad/index.html: OPENING_BANDS did not parse")
+        return None
+    # The same guard on this side: one entry per `{`, or an entry written in a
+    # shape this check cannot read vanishes without a word.
+    entries = m.group(1).count("{")
+    if len(out) != entries:
+        problems.append(f"scorepad/index.html: OPENING_BANDS has {entries} entries "
+                        f"but {len(out)} parsed")
         return None
     return out
 

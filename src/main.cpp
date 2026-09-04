@@ -275,7 +275,9 @@ int main(int argc, char* argv[])
     // prompt landing on someone's turn is a different thing from one at the
     // tile grid. Deferred to the event loop so the window is up and painted
     // first — a dialog over a blank frame reads as a startup error.
-    if (owesDonatePrompt && !named) {
+    // `found`, not `named`: a name nothing matches leaves the hub on the tile
+    // grid, which is the case this defers to rather than the one it avoids.
+    if (owesDonatePrompt && !found) {
         QTimer::singleShot(0, &window, [&window] {
             DonateDialog dialog(true, &window);
             dialog.exec();
