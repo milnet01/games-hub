@@ -47,6 +47,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Notes for developers that described how the project used to work.** (GHUB-0145)
+  The chess engine has not run on the drawing thread since it was moved to a
+  background one, but two comments still said so, and both used it to justify
+  a limit on how hard the computer thinks. The build spec also described the
+  release checks incompletely enough that copying them would have reproduced
+  a bug they exist to catch. Nothing a player sees changes.
+
 - **Everything the third code analyser could see is now dealt with, and it is switched on for good.** (GHUB-0170)
   Two of them mattered to a saved game: Canasta accepted a corrupted card
   after having decided to reject it, and taking a move back in Draughts or

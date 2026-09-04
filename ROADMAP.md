@@ -3036,7 +3036,7 @@ inventing one.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0145] **Correct the stale claims a lane read past in CLAUDE.md and the specs.**
+- ✅ [GHUB-0145] **Correct the stale claims a lane read past in CLAUDE.md and the specs.**
   The measured card floors and the pinned linuxdeploy fetch were
   corrected as part of the audit. Left: CLAUDE.md still says the chess
   engine searches on the GUI thread, which GHUB-0047 moved to a
@@ -3046,6 +3046,30 @@ inventing one.
   4.6 Windows snippet omits the -NoNewWindow and MainWindowHandle
   checks its own prose requires -- an implementer copying that block
   would re-ship the failure loop 6 was run to catch.
+  Resolved (2026-09-04): all three closed in ef8b7d2, plus one the item did
+  not name.
+
+  The GUI-thread claim was in TWO places, not one. chessai.cpp's own comment
+  beside planFor carried the same sentence, and that is the copy a tuner
+  reads first -- so fixing CLAUDE.md alone would have left the misleading
+  constraint exactly where it does most harm. Worth remembering as a shape:
+  this item exists because a claim went stale, and a claim stated twice goes
+  stale twice.
+
+  GHUB-0025 never mentioned the sanitizer job at all, so "one matrix job" was
+  incomplete rather than merely wrong. It now names both job definitions, why
+  the fuzz is separate, and that a plain local run is green against the Linux
+  build alone.
+
+  Verification: spec_lint over the spec returns nothing with
+  sections_checked true, and doc_integrity nothing over both files. Note
+  spec_lint's surfaces_checked came back FALSE -- it resolves a test surface
+  only from a tests/features/<name>/ directory, which this project does not
+  use, so that part of its answer is silent rather than passing.
+
+  Not done, deliberately: no sweep for OTHER stale claims. The item named
+  three, and a general audit of CLAUDE.md against the code is review-ledger's
+  job rather than a tail on this one.
   **Layman:** A few notes describe how things used to work.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.
