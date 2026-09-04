@@ -145,7 +145,7 @@ bool SpiderTable::harvest(int column)
     // A complete run is King down to Ace, one suit, all face up.
     const int start = int(col.size()) - kRunLength;
     for (int i = 0; i < kRunLength; ++i) {
-        const Card& c = col[std::size_t(start + i)];
+        const Card& c = col[std::size_t(start) + std::size_t(i)];
         if (!c.faceUp || c.rank != kKing - i || c.suit != col[std::size_t(start)].suit)
             return false;
     }

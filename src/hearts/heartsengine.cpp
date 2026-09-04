@@ -54,7 +54,8 @@ void HeartsEngine::deal()
     shuffleCards(deck, m_rng);
 
     for (int p = 0; p < kPlayers; ++p) {
-        m_hands[std::size_t(p)].assign(deck.begin() + p * 13, deck.begin() + (p + 1) * 13);
+        m_hands[std::size_t(p)].assign(deck.begin() + std::ptrdiff_t(p) * 13,
+                                       deck.begin() + std::ptrdiff_t(p + 1) * 13);
         for (Card& c : m_hands[std::size_t(p)])
             c.faceUp = (p == 0);
         sortHand(m_hands[std::size_t(p)]);

@@ -19,7 +19,10 @@
 #include <cmath>
 
 namespace {
-const QString kBestKey = QStringLiteral("twenty48/best_score");
+// A function for the reason scores.h's own key helpers are: nothing is built
+// at static-initialisation time, and QStringLiteral's data is static, so the
+// copy this returns costs nothing.
+QString bestKey() { return QStringLiteral("twenty48/best_score"); }
 
 // Above this relative luminance a tile is "light" and takes the dark ink. It
 // sits well below the darkest light tile (64, at L = 0.279) and well above the
@@ -155,7 +158,7 @@ void Twenty48View::checkEnd()
 
     m_finished = true;
     Sound::instance().play(Sound::kLose);
-    const bool newBest = Scores::instance().recordHigh(kBestKey, m_board.score());
+    const bool newBest = Scores::instance().recordHigh(bestKey(), m_board.score());
     refresh();
 
     QTimer::singleShot(200, this, [this, newBest] {
@@ -166,7 +169,7 @@ void Twenty48View::checkEnd()
                                    ? QStringLiteral("Score: %1 — a new best!").arg(m_board.score())
                                    : QStringLiteral("Score: %1.   Best: %2.")
                                          .arg(m_board.score())
-                                         .arg(Scores::instance().best(kBestKey)));
+                                         .arg(Scores::instance().best(bestKey())));
         QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
         box.exec();
@@ -189,7 +192,7 @@ void Twenty48View::refresh(const QString& message)
                           : QStringLiteral("Slide with the arrow keys"))
               .arg(m_board.score())
               .arg(highest)
-              .arg(std::max(Scores::instance().best(kBestKey), m_board.score()))
+              .arg(std::max(Scores::instance().best(bestKey()), m_board.score()))
         : message;
     Q_EMIT statusChanged(line);
 }

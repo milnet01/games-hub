@@ -5,7 +5,10 @@
 #include <QUrl>
 
 namespace {
-const QString kMutedKey = QStringLiteral("audio/muted");
+// A function for the reason scores.h's own key helpers are: nothing is built
+// at static-initialisation time, and QStringLiteral's data is static, so the
+// copy this returns costs nothing.
+QString mutedKey() { return QStringLiteral("audio/muted"); }
 }
 
 Sound& Sound::instance()
@@ -25,7 +28,7 @@ Sound::Sound()
     // Stored like the legibility switch beside it in the toolbar. Without this
     // the mute was discarded on every launch, while README introduces the two
     // as a pair and says the setting is remembered.
-    m_muted = QSettings().value(kMutedKey, false).toBool();
+    m_muted = QSettings().value(mutedKey(), false).toBool();
 }
 
 void Sound::setMuted(bool muted)
@@ -33,7 +36,7 @@ void Sound::setMuted(bool muted)
     if (m_muted == muted)
         return;
     m_muted = muted;
-    QSettings().setValue(kMutedKey, muted);
+    QSettings().setValue(mutedKey(), muted);
 }
 
 void Sound::setVolume(double volume)

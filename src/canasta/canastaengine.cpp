@@ -1518,7 +1518,7 @@ void Engine::scoreHand()
         const bool wentOut = m_outSeat >= 0 && teamOf(m_outSeat) == t;
         team.handScore = dead ? 0
                               : handScoreFor(team, m_hands[std::size_t(t)],
-                                             m_hands[std::size_t(t + 2)], wentOut,
+                                             m_hands[std::size_t(t) + 2], wentOut,
                                              m_outConcealed, m_rules);
         team.score += team.handScore;
     }

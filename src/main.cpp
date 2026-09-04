@@ -52,7 +52,7 @@ int takeShot(HubWindow& window, const QString& path, const QString& size, bool l
     // avoid: the picture still gets written, and still looks like an answer.
     // Playing on falls back to the tile grid on purpose; photographing does not.
     if (gameNamed && !gameFound) {
-        std::fprintf(stderr, "No such game, so there is nothing to photograph.\n");
+        (void)std::fprintf(stderr, "No such game, so there is nothing to photograph.\n");
         return 2;
     }
 
@@ -64,7 +64,7 @@ int takeShot(HubWindow& window, const QString& path, const QString& size, bool l
 
     const QSize wanted = size.isEmpty() ? window.sizeHint() : parseSize(size);
     if (!wanted.isValid()) {
-        std::fprintf(stderr, "--size wants WxH up to 8192 a side, for example 1400x620."
+        (void)std::fprintf(stderr, "--size wants WxH up to 8192 a side, for example 1400x620."
                              " Got \"%s\".\n",
                      qPrintable(size));
         Legibility::instance().setEnabledForSession(wasLegible);
@@ -80,7 +80,7 @@ int takeShot(HubWindow& window, const QString& path, const QString& size, bool l
             // turns, and what decides this is whether it overrides
             // GameView::advanceForShot. "Cannot play itself" reads as a claim
             // about Hearts or Chess and sends the reader hunting for a bug.
-            std::fprintf(stderr,
+            (void)std::fprintf(stderr,
                          "That game does not support --turns: it has no "
                          "advanceForShot override.\n");
             Legibility::instance().setEnabledForSession(wasLegible);
@@ -101,7 +101,7 @@ int takeShot(HubWindow& window, const QString& path, const QString& size, bool l
     Legibility::instance().setEnabledForSession(wasLegible);
 
     if (!saved) {
-        std::fprintf(stderr, "Could not write \"%s\".\n", qPrintable(path));
+        (void)std::fprintf(stderr, "Could not write \"%s\".\n", qPrintable(path));
         return 1;
     }
     std::printf("%s %dx%d%s%s\n", qPrintable(path), shot.width(), shot.height(),
@@ -197,8 +197,8 @@ int main(int argc, char* argv[])
     // nobody dismisses it. Writing to stdout on a GUI-subsystem binary reaches
     // nobody when there is no console attached, but it never blocks.
     if (!parser.parse(QCoreApplication::arguments())) {
-        std::fprintf(stderr, "%s\n", qPrintable(parser.errorText()));
-        std::fprintf(stderr, "Try --help.\n");
+        (void)std::fprintf(stderr, "%s\n", qPrintable(parser.errorText()));
+        (void)std::fprintf(stderr, "Try --help.\n");
         return 1;
     }
     if (parser.isSet(QStringLiteral("help"))) {
@@ -220,7 +220,7 @@ int main(int argc, char* argv[])
         bool ok = false;
         const uint seed = parser.value(seedOption).toUInt(&ok);
         if (!ok) {
-            std::fprintf(stderr, "--seed wants a whole number. Got \"%s\".\n",
+            (void)std::fprintf(stderr, "--seed wants a whole number. Got \"%s\".\n",
                          qPrintable(parser.value(seedOption)));
             return 1;
         }
@@ -234,7 +234,7 @@ int main(int argc, char* argv[])
         bool ok = false;
         turns = parser.value(turnsOption).toInt(&ok);
         if (!ok || turns < 1 || turns > 10000) {
-            std::fprintf(stderr, "--turns wants a whole number from 1 to 10000. Got \"%s\".\n",
+            (void)std::fprintf(stderr, "--turns wants a whole number from 1 to 10000. Got \"%s\".\n",
                          qPrintable(parser.value(turnsOption)));
             return 1;
         }
@@ -242,7 +242,7 @@ int main(int argc, char* argv[])
 
     const bool photographing = parser.isSet(shotOption);
     if (turns > 0 && !photographing) {
-        std::fprintf(stderr, "--turns only means anything with --shot.\n");
+        (void)std::fprintf(stderr, "--turns only means anything with --shot.\n");
         return 1;
     }
     if (photographing)

@@ -78,8 +78,12 @@ public:
 private:
     void set(int row, int col, Piece p) { m_cells[row * kBoardSize + col] = p; }
     // Walks every capture continuation from a square, depth first.
-    void collectJumps(Side side, Square from, Piece piece, std::vector<Square> steps,
-                      std::vector<Square> captured, DraughtsBoard working,
+    // By const reference: each branch copies what it needs into its own
+    // nextSteps / nextCaptured / next before touching it, so taking these by
+    // value copied two vectors and a whole board at every step of the search
+    // and then copied them again.
+    void collectJumps(Side side, Square from, Piece piece, const std::vector<Square>& steps,
+                      const std::vector<Square>& captured, const DraughtsBoard& working,
                       std::vector<DraughtsMove>& out) const;
 
     std::vector<Piece> m_cells;

@@ -25,7 +25,11 @@ namespace {
 constexpr int kFrameWidth = 18;
 constexpr int kThinkDelayMs = 260;
 
-const QString kWinsKey = QStringLiteral("chess/wins");
+// A function rather than a file-scope constant, which is the shape scores.h
+// already uses for its own keys. A QString built at static-initialisation time
+// can in principle throw where nothing can catch it; QStringLiteral's data is
+// static, so returning a copy costs nothing.
+QString winsKey() { return QStringLiteral("chess/wins"); }
 
 // The toolbar's name for a strength. One list, because a resumed game has to
 // tick the level it was saved at and two lists would drift.
@@ -395,10 +399,10 @@ void ChessView::announceResult()
     const bool drawn = result == Result::Draw;
     Sound::instance().play(playerWon ? Sound::kWin : Sound::kLose);
 
-    int wins = Scores::instance().best(kWinsKey);
+    int wins = Scores::instance().best(winsKey());
     if (playerWon) {
         ++wins;
-        Scores::instance().recordHigh(kWinsKey, wins);
+        Scores::instance().recordHigh(winsKey(), wins);
     }
 
     QMessageBox box(this);
@@ -443,7 +447,7 @@ void ChessView::refresh(const QString& message)
                              .arg(state)
                              .arg(m_game.board().material(m_human))
                              .arg(m_game.board().material(other(m_human)))
-                             .arg(Scores::instance().best(kWinsKey)));
+                             .arg(Scores::instance().best(winsKey())));
 }
 
 // ---------------------------------------------------------------------------

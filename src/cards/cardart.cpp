@@ -365,7 +365,7 @@ struct ArtCache {
 // a device pixel ratio of 2, so normal play never reaches it -- and a bound
 // that binds during play would empty the cache every frame, which costs more
 // than the memory it saves.
-static constexpr std::size_t kCacheByteBound = 64u * 1024u * 1024u;
+static constexpr std::size_t kCacheByteBound = std::size_t(64) * 1024 * 1024;
 
 static ArtCache& backCache()
 {

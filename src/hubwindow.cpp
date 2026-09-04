@@ -342,7 +342,7 @@ void snakeTile(QPainter& p, const QRectF& r)
     p.setPen(Qt::NoPen);
     const QPoint body[5] = { { 1, 3 }, { 1, 2 }, { 2, 2 }, { 3, 2 }, { 3, 1 } };
     for (int i = 0; i < 5; ++i) {
-        p.setBrush(QColor::fromHsvF(0.33, 0.55, 0.85 - i * 0.07));
+        p.setBrush(QColor::fromHsvF(0.33f, 0.55f, float(0.85 - i * 0.07)));
         p.drawRoundedRect(QRectF(r.left() + body[i].x() * cell + cell * 0.08,
                                  r.top() + body[i].y() * cell + cell * 0.08,
                                  cell * 0.84, cell * 0.84),

@@ -14,7 +14,10 @@
 #include <algorithm>
 
 namespace {
-const QString kBestKey = QStringLiteral("snake/best_score");
+// A function for the reason scores.h's own key helpers are: nothing is built
+// at static-initialisation time, and QStringLiteral's data is static, so the
+// copy this returns costs nothing.
+QString bestKey() { return QStringLiteral("snake/best_score"); }
 constexpr QColor kBoardDark { 0x14, 0x30, 0x22 };
 constexpr QColor kBoardLight { 0x18, 0x38, 0x28 };
 }
@@ -110,7 +113,7 @@ void SnakeView::gameOver()
     m_running = false;
     m_timer->stop();
     Sound::instance().play(Sound::kLose);
-    const bool newBest = Scores::instance().recordHigh(kBestKey, m_board.score());
+    const bool newBest = Scores::instance().recordHigh(bestKey(), m_board.score());
     update();
     refresh();
 
@@ -122,7 +125,7 @@ void SnakeView::gameOver()
                                    ? QStringLiteral("Score: %1 — a new best!").arg(m_board.score())
                                    : QStringLiteral("Score: %1.   Best: %2.")
                                          .arg(m_board.score())
-                                         .arg(Scores::instance().best(kBestKey)));
+                                         .arg(Scores::instance().best(bestKey())));
         QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
         box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
         box.exec();
@@ -147,7 +150,7 @@ void SnakeView::refresh()
                              .arg(state)
                              .arg(m_board.score())
                              .arg(m_board.snake().size())
-                             .arg(std::max(Scores::instance().best(kBestKey), m_board.score())));
+                             .arg(std::max(Scores::instance().best(bestKey()), m_board.score())));
 }
 
 double SnakeView::cellSize() const

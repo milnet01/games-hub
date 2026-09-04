@@ -25,7 +25,10 @@ constexpr QColor kWhitePiece { 0xef, 0xe9, 0xdd };
 constexpr int kFrameWidth = 10;
 constexpr int kThinkDelayMs = 340;
 
-const QString kWinsKey = QStringLiteral("draughts/wins");
+// A function for the reason scores.h's own key helpers are: nothing is built
+// at static-initialisation time, and QStringLiteral's data is static, so the
+// copy this returns costs nothing.
+QString winsKey() { return QStringLiteral("draughts/wins"); }
 }
 
 DraughtsView::DraughtsView(QWidget* parent)
@@ -231,10 +234,10 @@ void DraughtsView::announceResult(Side winner)
     const bool playerWon = winner == m_human;
     Sound::instance().play(playerWon ? Sound::kWin : Sound::kLose);
 
-    int wins = Scores::instance().best(kWinsKey);
+    int wins = Scores::instance().best(winsKey());
     if (playerWon) {
         ++wins;
-        Scores::instance().recordHigh(kWinsKey, wins);
+        Scores::instance().recordHigh(winsKey(), wins);
     }
 
     QMessageBox box(this);
@@ -278,7 +281,7 @@ void DraughtsView::refresh(const QString& message)
                              .arg(state)
                              .arg(m_board.count(m_human))
                              .arg(m_board.count(other(m_human)))
-                             .arg(Scores::instance().best(kWinsKey)));
+                             .arg(Scores::instance().best(winsKey())));
 }
 
 // ---------------------------------------------------------------------------

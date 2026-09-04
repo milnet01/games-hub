@@ -53,13 +53,48 @@ Checks: >
 # moved into an anonymous namespace at all. A checker that cannot be acted on
 # is worse than no checker, because every run has to re-triage it.
 
+CheckOptions:
+  # qint8 is Qt's `signed char`, and every use of it here is a small SIGNED
+  # number read off a save stream -- a suit, a rank, a seat, a row. Each is
+  # range-checked before it is used, and the check's own remedy would break
+  # those guards: casting to unsigned char first turns a rejected -1 into 255
+  # and walks it straight past the test above it.
+  #
+  # Narrowed rather than switched off, because the hazard the check exists for
+  # is real and is a different shape -- a signed char handed to <cctype>, where
+  # a negative value is undefined behaviour. Every such call in this codebase
+  # (chessboard.cpp's toupper, tolower and isupper) already casts to unsigned
+  # char, and this keeps the next one that forgets reported.
+  #
+  # Both spellings of the option: bugprone-signed-char-misuse and cert-str34-c
+  # are aliases that each carry their own copy, and setting one leaves the
+  # other reporting. Confirmed against `clang-tidy --dump-config`, which is
+  # also where the exact key is -- an older name for it is missing an `e` and
+  # is silently ignored rather than refused.
+  bugprone-signed-char-misuse.CharTypedefsToIgnore: 'qint8'
+  cert-str34-c.CharTypedefsToIgnore: 'qint8'
+
+  # main.cpp writes its CLI diagnostics with fprintf and discards the byte
+  # count, which is what every program does with a message to stderr. Each of
+  # those calls says so with a (void) cast rather than being excused wholesale,
+  # so the check keeps reporting a return value dropped anywhere it matters.
+  cert-err33-c.AllowCastToVoid: true
+
 # Qt's own headers are not ours to fix, and AUTOMOC's generated sources are not
 # written by anybody. Only what is in src/ is answerable here.
 HeaderFilterRegex: 'src/.*\.h$'
 ExcludeHeaderFilterRegex: '.*_autogen.*'
 
-# Reported, not enforced. Nothing in CI runs clang-tidy today, so promoting
-# these to errors would fail a build for a finding nobody had triaged. Turn this
-# on when the backlog it finds has been worked through, and not before.
-WarningsAsErrors: ''
+# Enforced from 2026-09-04 (GHUB-0170), the backlog having been worked through
+# to zero. Until then this was empty on purpose: promoting findings to errors
+# while a backlog stood would have failed a build for something nobody had
+# triaged.
+#
+# What this does and does not bind. Nothing in CI runs clang-tidy, so it binds a
+# manual `run-clang-tidy -p build $(git ls-files 'src/*.cpp')` and nothing else
+# -- it does not gate a push and cannot redden a workflow. It also means a
+# clang-tidy newer than the one this was tuned against may fail on checks that
+# did not exist here; that is the intended cost, and the answer is to triage the
+# new finding rather than to empty this line.
+WarningsAsErrors: '*'
 FormatStyle: none

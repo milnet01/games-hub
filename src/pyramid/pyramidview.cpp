@@ -26,7 +26,10 @@ constexpr int kMaxRedeals = 2;
 // were drawn over the bottom row at every window size.
 constexpr double kMargin = 16.0;
 constexpr double kFanStep = 0.46;
-const QString kBestKey = QStringLiteral("pyramid/best_pairs");
+// A function for the reason scores.h's own key helpers are: nothing is built
+// at static-initialisation time, and QStringLiteral's data is static, so the
+// copy this returns costs nothing.
+QString bestKey() { return QStringLiteral("pyramid/best_pairs"); }
 }
 
 PyramidView::PyramidView(QWidget* parent)
@@ -314,7 +317,7 @@ void PyramidView::checkEnd()
 
     m_won = true;
     Sound::instance().play(Sound::kWin);
-    const bool newBest = Scores::instance().recordHigh(kBestKey, m_table.pairs());
+    const bool newBest = Scores::instance().recordHigh(bestKey(), m_table.pairs());
     refresh();
 
     if (m_announced)

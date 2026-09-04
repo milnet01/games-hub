@@ -57,7 +57,7 @@ bool DraughtsBoard::restore(const std::vector<Piece>& cells)
     int whites = 0;
     for (int row = 0; row < kBoardSize; ++row) {
         for (int col = 0; col < kBoardSize; ++col) {
-            const Piece p = cells[std::size_t(row * kBoardSize + col)];
+            const Piece p = cells[std::size_t(row) * kBoardSize + std::size_t(col)];
             if (p < Piece::Empty || p > Piece::WhiteKing)
                 return false;
             if (p == Piece::Empty)
@@ -87,8 +87,10 @@ int DraughtsBoard::count(Side side) const
     return n;
 }
 
-void DraughtsBoard::collectJumps(Side side, Square from, Piece piece, std::vector<Square> steps,
-                                 std::vector<Square> captured, DraughtsBoard working,
+void DraughtsBoard::collectJumps(Side side, Square from, Piece piece,
+                                 const std::vector<Square>& steps,
+                                 const std::vector<Square>& captured,
+                                 const DraughtsBoard& working,
                                  std::vector<DraughtsMove>& out) const
 {
     bool extended = false;

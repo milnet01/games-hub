@@ -48,7 +48,7 @@ public:
     // Steps back to the position before the last slide that moved something.
     void undo();
 
-    int at(int row, int col) const { return m_cells[std::size_t(row * kSize + col)]; }
+    int at(int row, int col) const { return m_cells[std::size_t(row) * kSize + std::size_t(col)]; }
     const std::array<int, kCells>& cells() const { return m_cells; }
     int score() const { return m_score; }
     bool reachedTarget() const { return m_reachedTarget; }
@@ -67,7 +67,7 @@ public:
 private:
     // Named apart from the const at() above on purpose: as an overload it wins
     // on a non-const board and makes the public reader unreachable from a test.
-    int& cellAt(int row, int col) { return m_cells[std::size_t(row * kSize + col)]; }
+    int& cellAt(int row, int col) { return m_cells[std::size_t(row) * kSize + std::size_t(col)]; }
 
     std::array<int, kCells> m_cells {};
     std::array<int, kCells> m_previous {};
