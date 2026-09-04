@@ -25,8 +25,9 @@ cmake --build build                     # build everything
 # so; -DGAMESHUB_FAST_BUILD=OFF turns both off. Neither changes what is built.
 # Measured 2026-09-04: a full build after wiping the build directory falls from
 # about 85 s to about 2 s, because ccache replays compilations it has already
-# done -- and this project gives it a great deal to replay, since every core and
-# view source is compiled once PER TARGET and there are three. An incremental
+# done -- and this project gives it a great deal to replay, since every source
+# is compiled once PER TARGET: the cores three times, the views twice, which is
+# 118 objects for about 60 files. An incremental
 # rebuild of one file goes from about 2.4 s to about 2.1 s, which is mold.
 #
 # Two things worth knowing. CI has neither, so a runner builds the plain way and
@@ -81,9 +82,9 @@ as the flag not working.
 
 `GameView::advanceForShot` is the hook, it returns false by default, and
 **that default is the refusal**: a game refuses because it has not overridden
-the hook, never because it has no turns. Chess, Hearts and Snake all have turns
-and computer opponents and all refuse today, because Canasta is still the only
-override. Making a game photographable mid-play IS writing one.
+the hook, never because it has no turns. Chess and Hearts have turns and
+computer opponents, and Snake has a clock that moves the game on without you;
+all three refuse today, because Canasta is still the only override. Making a game photographable mid-play IS writing one.
 
 Its contract is **synchronous, unanimated and silent**, which is a rule about
 how the turns are DRIVEN rather than about tidying up afterwards.
@@ -143,7 +144,16 @@ separate the extremes** — the two Python ones, which need an interpreter CMake
 will use, and the hook test, which is bash and Unix-only. Linux registers all
 of them; a Windows runner registers every one but the hook test; a Windows box
 whose only `python.exe` is the Store stub registers neither Python case either.
-The configure step says when it drops the Python pair. **Count them with `ctest
+The configure step says when it drops the Python pair.
+
+**An absent checker registers a FAILING case rather than none at all, and that
+is the rule a new tool-gated case has to follow.** A configure with no bash or
+no python used to drop the test silently, and ctest then reported everything
+passing over a shorter suite — the same silent skip `scripts/local-ci.sh`
+refuses by name. So the `else()` branch is not optional: `prepush_needs_bash`,
+`scorepad_needs_python` and `legibility_needs_python` exist to be red. The one
+place a case is genuinely dropped is a platform deliberately exempted — Windows
+for the Python pair — and configure prints why. **Count them with `ctest
 -N` rather than against a figure here** — the number moves whenever a case is
 added, and a stale one sends you hunting for a case that was never registered
 on that platform.
@@ -177,10 +187,14 @@ order, and **stops on any step it has no rule for** — a new action added to
 `ci.yml` fails the local run until `STEP_RULES` in the script accounts for
 it, because a silently skipped step is exactly the drift being prevented.
 
-Two things it cannot do, and says so on every run rather than implying
-coverage. **The Windows leg does not run here** — nothing on Linux drives
-MSVC, so that half is verified by CI and nowhere else. And the `uses:` steps
-are stood in for by this machine's own Qt and Ninja rather than executed.
+Four things a plain run does not cover, and it says so every time rather than
+implying coverage. **The Windows leg does not run here** — nothing on Linux
+drives MSVC, so that half is verified by CI and nowhere else. The `uses:` steps
+are stood in for by this machine's own Qt and Ninja rather than executed. And
+the **sanitizer** and **clang-tidy** legs are off unless asked for:
+`--with-sanitizers` and `--with-tidy`. The `pre-push` hook passes neither, so
+the push gate does not touch them either — § Releasing has the whole list of
+what CI runs.
 
 The `pre-push` hook runs it automatically. A push touching only `.md` files,
 `docs/`, `.gitignore` or the licence texts runs the workflow linters and stops; anything
@@ -323,12 +337,13 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   deliberately not the height of the current sentence; under the cap a caption
   may overlap the board slightly, and that is the accepted outcome rather than
   a bug. The caption-band trap below owns both reasons. `smallestCardWidth()` is the
-  narrowest card the game draws, **at the smallest scale it draws one at**, and
-  a game with no cards returns 0. **A card game must override it.** The
-  inherited 0 makes `cardsKeepTheirFaces` skip that game in silence, and its
-  `checked >= 6` floor is already met by the six that do override it — so a
-  fifteenth card game that forgets is caught by nothing, and ships drawing
-  cards too small to show a face.
+  narrowest card the game draws, **at the smallest scale it draws one at**.
+  **Every game overrides it** — a card game with that width, a game with no
+  cards with `0.0`. The two values are different answers, not one: `0.0` is a
+  game saying it draws no cards, and the inherited `-1.0` is nobody having
+  said. `cardsKeepTheirFaces` FAILS on a `-1.0` rather than skipping past it,
+  so a fifteenth game that leaves the default reddens the suite instead of
+  vanishing from it.
 
   **`applyLegibility` is never called at construction** — `gameview.h` says so
   — and games are built lazily, so a game opened for the first time while the
@@ -356,8 +371,14 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   owned a timer and neither overrode `deactivate()`, so leaving Snake mid-game
   drove the snake into a wall and leaving Hearts finished the hand without you.
   Both were fixed. **The rule to apply is structural, not observed: a game that
-  owns a `QTimer` overrides `deactivate()`**, whether or not a test can see it
-  running.
+  schedules ANY timer work overrides `deactivate()`** — a member `QTimer` or a
+  bare `QTimer::singleShot` — whether or not a test can see it running.
+
+  **The single-shot is the easier half to miss, and it cannot be stopped once
+  posted.** So what it needs is not a timer to stop but a guard the callback
+  reads when it arrives: Reversi's `m_generation` is the pattern, and the three
+  engine games' `m_thinking` is the same idea. Pyramid and 2048 both post one
+  to open a dialog and override neither — GHUB-0179.
 
   **`deactivate()` freezes a game; it does not settle it, and the two are
   different.** A board frozen mid-deal is static and will pass any stillness
@@ -999,7 +1020,7 @@ and flies pinballs. Prefer adding a check there over a UI test.
 the UI test restores every one of them.** A save-format change that refuses the
 old format is not a crash — the hub keeps the fresh deal it just made, the app
 runs, nothing looks broken, and the player's half-finished game is gone without
-being told. `docs/standards/versioning.md` § 3 calls that a breaking change and
+being told. `docs/standards/versioning-overrides.md` § 1 calls that a breaking change and
 requires a MAJOR; this corpus is what enforces it. **When it reddens, the choice
 is bump the MAJOR or write a migration — never regenerate the corpus**, which
 deletes the only evidence the format moved. `--write-saves` rewrites it and is
@@ -1027,7 +1048,8 @@ are re-read by running the suite, never assumed from a handoff. As of
 2026-09-02, after GHUB-0129: medium v easy 22/24 +2538, hard v easy 22/24
 +3547, hard v medium 69/120 +424, expert v hard 121/240 -1.
 
-**Three rungs moved that day and both causes are known rather than suspected.**
+**Two rungs moved that day — hard v medium and expert v hard — and both causes
+are known rather than suspected.**
 GHUB-0148 made validateTake subtract the pile's red threes before the
 no-legal-move guard, so a take that would strand the seat on one card is now
 refused -- and the AI made some of those takes. That alone took expert v hard

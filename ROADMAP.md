@@ -6642,6 +6642,33 @@ open.
   Kind: fix.
   Source: GHUB-0140, found by the regression test written for it, 2026-09-04.
 
+- 📋 [GHUB-0179] **Pyramid and 2048 can open a dialog over a game you have already left.**
+  Both post `QTimer::singleShot(200, this, ...)` to open a QMessageBox --
+  pyramidview.cpp's "Cleared" and twenty48view.cpp's "No moves left" -- and
+  neither overrides `deactivate()`. Leave the page inside those 200 ms and the
+  box opens over the game the hub moved to.
+
+  This is the SAME shape as the Hearts hand-over box the 2026-08-31 audit
+  fixed, and its commit describes the symptom exactly: "leaving Hearts within
+  300 ms of the last trick opened a modal box over another game".
+
+  Found by a cold review lane reading CLAUDE.md, not by a test. The rule in
+  that document said "a game that owns a QTimer overrides deactivate()",
+  which does not reach a bare singleShot -- so both games conform to the rule
+  as written and are still wrong. The wording is fixed; this is the code half.
+
+  A singleShot cannot be cancelled once posted, so the fix is not a timer to
+  stop but a guard the callback reads on arrival -- Reversi's `m_generation`
+  and the three engine games' `m_thinking` are the patterns already here.
+
+  Not reachable by the current tests: `tests/uitest.cpp` asserts no game is
+  still MOVING when the hub leaves, and a posted single-shot with no running
+  timer passes that. Whatever fixes this should also say what would have
+  caught it.
+  **Layman:** Finish a game, leave it quickly, and its congratulations box can appear on top of whatever you opened next.
+  Kind: fix.
+  Source: review-contract on CLAUDE.md, 2026-09-04.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on
@@ -7127,7 +7154,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
 
   Which is exactly what makes this dangerous. The app still runs,
   nothing looks broken, and the player's half-finished game is gone
-  without being told. docs/standards/versioning.md § 3 calls that a
+  without being told. docs/standards/versioning-overrides.md § 1 calls that a
   breaking change and requires a MAJOR for it — and § What checks this
   records, honestly, that nothing enforces it.
 
