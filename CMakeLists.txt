@@ -8,6 +8,39 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # AUTORCC compiles sounds.qrc into whichever target lists it as a source.
 set(CMAKE_AUTORCC ON)
 
+# Build accelerators, used when the machine has them and silently skipped when
+# it does not -- so a CI runner, a Windows box and a fresh clone all configure
+# exactly as before. Neither changes a byte of output: ccache replays a
+# compilation it has already done, and mold emits the same program GNU ld does.
+#
+# ccache earns most of its keep here for a reason peculiar to this project:
+# every core and view source is compiled once PER TARGET, and there are three
+# targets. Measured 2026-09-04 on this tree: 118 objects for about 60 distinct
+# sources, so roughly half of a full build is the same work done twice. The
+# second and third compilations are cache hits.
+#
+# Turn either off with -DGAMESHUB_FAST_BUILD=OFF, which is the switch to reach
+# for when a build behaves oddly and you want the plainest possible toolchain.
+option(GAMESHUB_FAST_BUILD "Use ccache and mold when they are installed" ON)
+if(GAMESHUB_FAST_BUILD)
+    find_program(GAMESHUB_CCACHE ccache)
+    if(GAMESHUB_CCACHE AND NOT CMAKE_CXX_COMPILER_LAUNCHER)
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${GAMESHUB_CCACHE}")
+        message(STATUS "gameshub: compiling through ccache (${GAMESHUB_CCACHE})")
+    endif()
+
+    # -fuse-ld= rather than CMAKE_LINKER_TYPE, which arrived in CMake 3.29 and
+    # this project asks for 3.20. GCC and Clang only: MSVC has no such flag and
+    # would fail obscurely rather than ignoring it.
+    if(NOT MSVC)
+        find_program(GAMESHUB_MOLD mold)
+        if(GAMESHUB_MOLD)
+            add_link_options(-fuse-ld=mold)
+            message(STATUS "gameshub: linking with mold (${GAMESHUB_MOLD})")
+        endif()
+    endif()
+endif()
+
 # GHUB-0052. The saved-game fuzzer proves very little without these: an
 # out-of-bounds read that happens to land in owned memory returns a wrong
 # answer quietly and the harness scores it a pass, where ASan aborts on the

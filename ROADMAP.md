@@ -1009,6 +1009,44 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   Kind: test.
   Source: in-session-2026-08-20.
 
+- ✅ [GHUB-0178] **The build uses ccache and mold when the machine has them.**
+  Both were already installed on this machine and neither was wired in.
+  Detected at configure time and skipped silently when absent, so a CI
+  runner, a Windows box and a fresh clone configure exactly as before.
+  -DGAMESHUB_FAST_BUILD=OFF turns both off.
+
+  Measured 2026-09-04, 12 cores, -j12, interleaved to cancel machine load:
+
+    full build, no accelerators      84.7 s
+    full build, mold only            73.5 s
+    full build after wiping build/   ~2.1 s   (ccache replaying)
+    one file changed, GNU ld          2.42 s
+    one file changed, mold            2.08 s
+
+  ccache is the large win, and for a reason peculiar to this project rather
+  than a general one: every core and view source is compiled once PER TARGET
+  and there are three targets -- 118 objects for about 60 distinct sources.
+  Roughly half a full build is the same work done twice, and the repeats are
+  cache hits.
+
+  The structural alternative, an OBJECT library per source set so each file
+  compiles once, was considered and NOT taken. It would save the same work
+  without a cache, but ccache already collapses it, and the refactor touches
+  AUTOMOC, the resource embedding and WIN32_EXECUTABLE -- real risk against a
+  benefit that only appears on a cold cache. Filed here rather than done.
+
+  Two costs, both accepted rather than unnoticed. CI has neither tool, so a
+  local green build and a red runner now differ by toolchain as well as
+  platform, and the shipped artifacts are still linked by GNU ld. And the
+  peak is one compiler process at about 660 MB, so a high -j on a machine
+  short of memory is worth setting by hand; ninja defaults to cores plus two.
+
+  Verified: ctest 9/9 and the ASan/UBSan fuzz job both pass against the
+  mold-linked build.
+  **Layman:** Rebuilding after a clean went from about a minute and a half to about two seconds.
+  Kind: perf.
+  Source: user-request-2026-09-04.
+
 ### 🔒 Security
 
 Start with what is already right, because it decides which of these matter.

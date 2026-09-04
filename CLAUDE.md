@@ -21,6 +21,20 @@ cmake --build build                     # build everything
 ./build/gameshub                        # the hub
 ./build/gameshub --game spider          # straight into one game
 
+# The configure step picks up ccache and mold when they are installed and says
+# so; -DGAMESHUB_FAST_BUILD=OFF turns both off. Neither changes what is built.
+# Measured 2026-09-04: a full build after wiping the build directory falls from
+# about 85 s to about 2 s, because ccache replays compilations it has already
+# done -- and this project gives it a great deal to replay, since every core and
+# view source is compiled once PER TARGET and there are three. An incremental
+# rebuild of one file goes from about 2.4 s to about 2.1 s, which is mold.
+#
+# Two things worth knowing. CI has neither, so a runner builds the plain way and
+# the shipped artifacts are linked by GNU ld -- if a local build is green and CI
+# is not, the toolchain is one of the differences. And the peak is a single
+# compiler process at roughly 660 MB, so -j on a machine short of memory is
+# worth setting by hand: ninja defaults to cores plus two.
+
 # --game takes the REGISTERED name, which is what the tile shows. Klondike is
 # registered as "Solitaire" (Klondike is its blurb), and an unknown name warns
 # and opens the tile grid rather than failing.

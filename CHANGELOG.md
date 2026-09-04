@@ -33,6 +33,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **The build uses two tools already on this machine and gets much faster.** (GHUB-0178)
+  Rebuilding from scratch drops from about a minute and a half to about
+  two seconds. Nothing about the program changes -- it is the same build,
+  just not repeating work it has already done. Turn it off with
+  -DGAMESHUB_FAST_BUILD=OFF if a build ever looks odd.
+
 - **Sudoku opens faster, and resuming a saved puzzle much faster.** (GHUB-0160)
   It was building a whole puzzle it then threw away -- two to open the game
   and three to restore a save.
@@ -53,6 +59,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   own section and its own reporting advice.
 
 ### Fixed
+
+- **Piling cards onto one column in Klondike or Spider no longer pushes the bottom of it off the screen.** (GHUB-0089)
+  The cards are sized for the board you are dealt, and a column you build
+  up in play can grow longer than that. Rather than making every card
+  smaller on every deal, an over-long column now packs its own cards
+  closer together. FreeCell already did this; the other two now match.
 
 - **Coming back to a 2048 game you had not scored in yet, then leaving, threw it away.** (GHUB-0177)
   The same fault six other games had fixed a few days earlier. 2048 was
