@@ -78,7 +78,7 @@ QColor inkFor(int value)
 Twenty48View::Twenty48View(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(Twenty48View::minimumSizeHint());
     setFocusPolicy(Qt::StrongFocus);
     buildActions();
     newGame();

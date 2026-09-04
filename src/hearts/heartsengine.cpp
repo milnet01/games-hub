@@ -103,12 +103,12 @@ void HeartsEngine::executePass()
     std::array<std::vector<Card>, kPlayers> incoming;
 
     for (int p = 0; p < kPlayers; ++p) {
-        int target = p;
+        int target = p;   // Hold, and the one arm below that keeps it
         switch (dir) {
         case PassDirection::Left:   target = (p + 1) % kPlayers; break;
         case PassDirection::Right:  target = (p + kPlayers - 1) % kPlayers; break;
         case PassDirection::Across: target = (p + 2) % kPlayers; break;
-        case PassDirection::Hold:   target = p; break;
+        case PassDirection::Hold:   break;
         }
         for (const Card& c : m_passes[std::size_t(p)]) {
             removeCard(p, c);

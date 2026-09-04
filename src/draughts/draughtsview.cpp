@@ -31,7 +31,7 @@ const QString kWinsKey = QStringLiteral("draughts/wins");
 DraughtsView::DraughtsView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(DraughtsView::minimumSizeHint());
     buildActions();
     newGame();
 }

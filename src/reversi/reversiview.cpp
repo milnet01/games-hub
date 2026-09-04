@@ -42,7 +42,7 @@ QString playerName(Player p)
 ReversiView::ReversiView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(ReversiView::minimumSizeHint());
     buildActions();
     newGame();
 }

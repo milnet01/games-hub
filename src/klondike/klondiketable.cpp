@@ -33,7 +33,7 @@ void KlondikeTable::deal()
             m_tableau[std::size_t(col)].push_back(c);
         }
     }
-    m_stock.assign(deck.begin() + next, deck.end());
+    m_stock.assign(deck.begin() + std::ptrdiff_t(next), deck.end());
     for (Card& c : m_stock)
         c.faceUp = false;
 }

@@ -90,7 +90,7 @@ QString levelKey(SudokuGrid::Level level)
 SudokuView::SudokuView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(SudokuView::minimumSizeHint());
     setFocusPolicy(Qt::StrongFocus);
 
     m_tick = new QTimer(this);

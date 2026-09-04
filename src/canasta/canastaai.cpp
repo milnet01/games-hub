@@ -676,7 +676,9 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
                 // No early exit on an empty wild pile: a group big enough to
                 // spare its pair and still be legal needs no wild at all, and
                 // the want check below is what says so.
-                std::vector<Card> cand(g.begin(), g.end() - std::min<std::size_t>(2, g.size()));
+                std::vector<Card> cand(
+                    g.begin(),
+                    g.end() - std::min<std::ptrdiff_t>(2, std::ptrdiff_t(g.size())));
                 if (int(cand.size()) < r.minNaturalsPerMeld)
                     continue; // cannot spare a pair and still be a meld
                 // Two different figures, and conflating them was GHUB-0149: how
@@ -692,7 +694,8 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
                 cand.insert(cand.end(), wilds.begin(), wilds.begin() + want);
                 if (total - valueOf(g) + valueOf(cand) < need)
                     continue; // the pair cannot be spared and the bar still met
-                total += valueOf(cand) - valueOf(g);
+                // `total` is not updated: the break below ends the loop, so
+                // nothing reads it again. One rank only, as the note above says.
                 g = cand;
                 break;
             }
@@ -810,6 +813,7 @@ std::vector<std::pair<std::vector<Card>, int>> Ai::chooseMelds(const Engine& e) 
     // natural canasta being spent.
     if (m_level != Level::Easy) {
         std::vector<const Meld*> order;
+        order.reserve(mine.melds.size());
         for (const Meld& m : mine.melds)
             order.push_back(&m);
         if (caughtAMinus(mine, r))

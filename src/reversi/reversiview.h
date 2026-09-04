@@ -52,7 +52,10 @@ private:
 
     struct Snapshot {
         Board board;
-        Player toMove;
+        // Defaulted for the reason draughts' is: a default-constructed snapshot
+        // must hold a player rather than whatever was on the stack. Black is
+        // the opening side.
+        Player toMove = Player::Black;
         std::optional<Move> lastMove;
     };
 

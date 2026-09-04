@@ -28,7 +28,7 @@ constexpr double kDragThreshold = 4.0;
 SpiderView::SpiderView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(SpiderView::minimumSizeHint());
     buildActions();
     newGame();
 }

@@ -475,7 +475,7 @@ CanastaView::CanastaView(QWidget* parent)
     , m_target(loadTarget())
 {
     setMouseTracking(true);
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(CanastaView::minimumSizeHint());
 
     m_timer = new QTimer(this);
     m_timer->setInterval(16);

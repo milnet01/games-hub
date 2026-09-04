@@ -41,7 +41,7 @@ void Sound::setVolume(double volume)
     m_volume = qBound(0.0, volume, 1.0);
     for (Voices& voices : m_effects)
         for (QSoundEffect* effect : voices.players)
-            effect->setVolume(m_volume);
+            effect->setVolume(float(m_volume));
 }
 
 void Sound::play(const QString& name)
@@ -69,7 +69,7 @@ void Sound::play(const QString& name)
                 });
             }
             effect->setSource(QUrl(QStringLiteral("qrc:/sounds/%1.wav").arg(name)));
-            effect->setVolume(m_volume);
+            effect->setVolume(float(m_volume));
             voices.players.push_back(effect);
         }
         it = m_effects.insert(name, voices);

@@ -29,7 +29,7 @@ constexpr QColor kAccent { 0x4f, 0xc3, 0xf7 };
 PinballView::PinballView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(PinballView::minimumSizeHint());
     setFocusPolicy(Qt::StrongFocus);
 
     m_timer = new QTimer(this);
@@ -310,7 +310,7 @@ void PinballView::paintLamps(QPainter& p) const
         if (level > 0.35) {
             QRadialGradient halo(c, r * 3.4);
             QColor glow = lamp.colour;
-            glow.setAlphaF(std::min(0.55, (level - 0.35) * 0.9));
+            glow.setAlphaF(float(std::min(0.55, (level - 0.35) * 0.9)));
             halo.setColorAt(0.0, glow);
             glow.setAlpha(0);
             halo.setColorAt(1.0, glow);
@@ -320,8 +320,8 @@ void PinballView::paintLamps(QPainter& p) const
         }
 
         QColor lit = lamp.colour;
-        lit = QColor::fromHsvF(lit.hueF(), lit.saturationF() * (1.0 - level * 0.45),
-                               std::min(1.0, 0.30 + level * 0.85));
+        lit = QColor::fromHsvF(lit.hueF(), float(lit.saturationF() * (1.0 - level * 0.45)),
+                               float(std::min(1.0, 0.30 + level * 0.85)));
 
         p.setPen(QPen(QColor(0, 0, 0, 110), std::max(0.8, s)));
         p.setBrush(lit);

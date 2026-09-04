@@ -32,7 +32,7 @@ const QString kBestKey = QStringLiteral("pyramid/best_pairs");
 PyramidView::PyramidView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(PyramidView::minimumSizeHint());
     buildActions();
     newGame();
 }

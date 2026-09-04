@@ -30,7 +30,7 @@ constexpr double kDragThreshold = 4.0;
 KlondikeView::KlondikeView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(KlondikeView::minimumSizeHint());
     setMouseTracking(true);
     buildActions();
     newGame();

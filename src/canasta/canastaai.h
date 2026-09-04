@@ -284,6 +284,10 @@ private:
     // Fixed default so an unseeded game still plays the same way twice, which
     // is what makes a failing self-test reproducible. Mutable because choosing
     // a discard reads it without otherwise changing the seat.
+    // NOLINTNEXTLINE(cert-msc32-c,cert-msc51-cpp,bugprone-random-generator-seed)
+    // The constant seed is the point, for the reason above. Suppressed here
+    // rather than switched off in .clang-tidy, so an accidental fixed seed
+    // somewhere else is still reported.
     mutable std::mt19937 m_rng { 0x51ee7 };
 };
 

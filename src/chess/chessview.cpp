@@ -70,7 +70,7 @@ QString drawText(DrawReason reason)
 ChessView::ChessView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(ChessView::minimumSizeHint());
     buildActions();
     newGame();
 }

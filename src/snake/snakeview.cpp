@@ -22,7 +22,7 @@ constexpr QColor kBoardLight { 0x18, 0x38, 0x28 };
 SnakeView::SnakeView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(SnakeView::minimumSizeHint());
     setFocusPolicy(Qt::StrongFocus);
 
     m_timer = new QTimer(this);
@@ -201,9 +201,9 @@ void SnakeView::paintEvent(QPaintEvent*)
         const bool head = i == 0;
         const double t = body.empty() ? 0.0 : double(i) / double(body.size());
 
-        QColor tint = QColor::fromHsvF(0.33, 0.55, 0.85 - t * 0.35);
+        QColor tint = QColor::fromHsvF(0.33f, 0.55f, float(0.85 - t * 0.35));
         if (m_board.dead())
-            tint = QColor::fromHsvF(0.0, 0.35, 0.72 - t * 0.30);
+            tint = QColor::fromHsvF(0.0f, 0.35f, float(0.72 - t * 0.30));
 
         QPainterPath path;
         path.addRoundedRect(box, cell * 0.28, cell * 0.28);

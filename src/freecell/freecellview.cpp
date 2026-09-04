@@ -27,7 +27,7 @@ constexpr double kDragThreshold = 4.0;
 FreeCellView::FreeCellView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(FreeCellView::minimumSizeHint());
     buildActions();
     newGame();
 }

@@ -630,7 +630,10 @@ so a card in the air would otherwise land where its destination used to be.
 
 **The other five card games do not need a size pass, and the floors that say
 they do are unreachable.** Measured, not assumed: every card view calls
-`setMinimumSize(minimumSizeHint())`, so the smallest card each can actually
+`setMinimumSize(<ThisView>::minimumSizeHint())` in its constructor — qualified
+by the class on purpose, since an unqualified virtual call there can only ever
+reach this class's override anyway and saying so is what stops it reading as a
+missed dispatch — so the smallest card each can actually
 reach — at its smallest window, **with the legibility switch on** — is Klondike
 67.9, FreeCell 59.4, Spider 54.2, Pyramid 49.0, Hearts 47.2 and Canasta's melds
 46.4, all clear of `kFaceMinWidth`. **The band is subtracted only by the four

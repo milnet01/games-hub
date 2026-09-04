@@ -223,7 +223,7 @@ void cardFan(QPainter& p, const QRectF& r, const QList<QPair<QString, bool>>& fa
 
     const double w = r.width() * 0.34;
     const double h = w * 1.4;
-    const int n = faces.size();
+    const int n = int(faces.size());
     for (int i = 0; i < n; ++i) {
         p.save();
         p.translate(r.center().x(), r.center().y() + h * 0.12);
@@ -299,8 +299,14 @@ void sudokuTile(QPainter& p, const QRectF& r)
     for (int i = 0; i < 9; ++i) {
         if (!*digits[i])
             continue;
+        // Row and column as integers before either meets `cell`. The division
+        // is deliberate -- it is a 3x3 grid -- but written inline against a
+        // double it reads as a lost fraction, and a checker cannot tell the
+        // two apart either.
+        const int row = i / 3;
+        const int column = i % 3;
         p.setPen(i % 2 ? QColor(0x1f, 0x6f, 0xb2) : QColor(0x22, 0x26, 0x2b));
-        p.drawText(QRectF(r.left() + (i % 3) * cell, r.top() + (i / 3) * cell, cell, cell),
+        p.drawText(QRectF(r.left() + column * cell, r.top() + row * cell, cell, cell),
                    Qt::AlignCenter, QString::fromUtf8(digits[i]));
     }
 }
@@ -362,8 +368,11 @@ void twenty48Tile(QPainter& p, const QRectF& r)
     f.setPointSizeF(cell * 0.36);
     p.setFont(f);
     for (int i = 0; i < 4; ++i) {
-        const QRectF box(r.left() + gap + (i % 2) * (cell + gap),
-                         r.top() + gap + (i / 2) * (cell + gap), cell, cell);
+        // As above: the 2x2 grid's row and column, integer before they scale.
+        const int row = i / 2;
+        const int column = i % 2;
+        const QRectF box(r.left() + gap + column * (cell + gap),
+                         r.top() + gap + row * (cell + gap), cell, cell);
         QPainterPath tile;
         tile.addRoundedRect(box, 5, 5);
         p.fillPath(tile, colours[i]);

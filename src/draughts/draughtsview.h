@@ -56,7 +56,10 @@ private:
 
     struct Snapshot {
         DraughtsBoard board;
-        Side toMove;
+        // Defaulted so a default-constructed snapshot holds a side rather than
+        // whatever was on the stack. Every snapshot the undo stack pushes sets
+        // it; this is about the one nobody sets.
+        Side toMove = Side::Red;
         // The gold highlight is painted from m_lastMove. Without it here, undo
         // restored the board and left the highlight on a move that had been
         // taken back -- the surface pointing at something that did not happen,

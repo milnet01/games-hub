@@ -233,8 +233,15 @@ Card readCard(QDataStream& in)
     // NOTHING, on the one input SECURITY.md names as untrusted. A rank outside
     // the pack is then consumed by every rank-keyed lookup in the engine and
     // the AI.
-    if (suit < 0 || suit > 3 || rank < kJoker || rank > kKing || deck < 0 || deck > 7)
+    if (suit < 0 || suit > 3 || rank < kJoker || rank > kKing || deck < 0 || deck > 7) {
         in.setStatus(QDataStream::ReadCorruptData);
+        // Returned rather than fallen through, which is what cardcodec does and
+        // what the comment above claimed this did. Setting the status alone
+        // still ran the cast on the value just rejected -- forcing an
+        // out-of-range number into the enum, and handing it to any caller that
+        // reads the Card before it reads the stream.
+        return Card {};
+    }
     return Card { Suit(suit), int(rank), faceUp, int(deck) };
 }
 

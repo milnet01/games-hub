@@ -294,7 +294,15 @@ static void drawBack(QPainter& p, const QRectF& r, int deck)
     p.setClipPath(innerPath);
     p.setPen(QPen(QColor(255, 255, 255, 42), std::max(0.7, r.width() * 0.012)));
     const double step = std::max(4.0, r.width() * 0.155);
-    for (double x = inner.left() - inner.height(); x < inner.right() + inner.height(); x += step) {
+    // Counted rather than accumulated. `x += step` in the condition drifts by a
+    // rounding per iteration, so the last line of a wide lattice sits somewhere
+    // slightly different from where the arithmetic says -- and on a cached card
+    // that is a difference nothing would ever explain.
+    const double first = inner.left() - inner.height();
+    const double past = inner.right() + inner.height();
+    const int lines = int(std::ceil((past - first) / step));
+    for (int i = 0; i < lines; ++i) {
+        const double x = first + i * step;
         p.drawLine(QPointF(x, inner.top()), QPointF(x + inner.height(), inner.bottom()));
         p.drawLine(QPointF(x + inner.height(), inner.top()), QPointF(x, inner.bottom()));
     }

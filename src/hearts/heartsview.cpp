@@ -64,7 +64,7 @@ QString directionName(HeartsEngine::PassDirection d)
 HeartsView::HeartsView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(HeartsView::minimumSizeHint());
 
     m_timer = new QTimer(this);
     m_timer->setSingleShot(true);

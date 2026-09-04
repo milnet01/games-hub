@@ -45,7 +45,7 @@ const MinesweeperView::Level kLevels[] = {
 MinesweeperView::MinesweeperView(QWidget* parent)
     : GameView(parent)
 {
-    setMinimumSize(minimumSizeHint());
+    setMinimumSize(MinesweeperView::minimumSizeHint());
     setMouseTracking(false);
 
     m_tick = new QTimer(this);
