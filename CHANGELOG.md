@@ -47,6 +47,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Everything the third code analyser could see is now dealt with, and it is switched on for good.** (GHUB-0170)
+  Two of them mattered to a saved game: Canasta accepted a corrupted card
+  after having decided to reject it, and taking a move back in Draughts or
+  Reversi read a value nobody had set. The rest were tidying that makes the
+  next real problem easier to spot. Draughts also stops copying the whole
+  board at every step while it looks for a jump.
+
 - **Small defects across card drawing, sound, the donation prompt and the checking scripts.** (GHUB-0162)
   Card faces could be drawn from the wrong cache entry on a screen set to
   a fractional scale such as 150%. Both card caches now have a memory

@@ -7595,7 +7595,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0170] **Work through the 69 findings clang-tidy can now see.**
+- ✅ [GHUB-0170] **Work through the 69 findings clang-tidy can now see.**
   GHUB-0139 gave clang-tidy a config; this is what it then found. It
   had been resolving to an EMPTY check set, so none of this was ever
   reported -- which is why eight review lanes reported findings in its
@@ -7626,6 +7626,41 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   EXISTS and is reproducible with `clang-tidy -p build $(git ls-files
   'src/*.cpp')`. WarningsAsErrors is deliberately empty until the list
   is worked through, and that is the moment to turn it on.
+  Resolved (2026-09-04): the list is at zero and WarningsAsErrors is on,
+  which this item named as the moment. Two commits, 351bc43 and d02e390.
+
+  The list re-measured at 75 rather than the 69 recorded here, on the same
+  command. Not a regression: the earlier figure counted differently where a
+  header warning repeats across translation units. Reproduce with
+  `run-clang-tidy -p build -j 10 -quiet $(git ls-files 'src/*.cpp')` and
+  count unique file:line:check, which is what the two commits worked from.
+
+  Two classes were false positives here and neither was silenced by hand.
+  The nine signed-char hits are all a range-checked qint8 off a save stream,
+  where the check's own remedy -- cast to unsigned char first -- turns a
+  rejected -1 into 255 and defeats the guard above it. The check is narrowed
+  to ignore that typedef, and BOTH directions were verified: the readers go
+  silent, the same field declared `signed char` is still caught. The nine
+  unchecked returns are all fprintf to stderr, each now carrying a (void)
+  cast, so the check stays live everywhere else.
+
+  Real defects found on the way, both small and neither reachable by a
+  player: Canasta's own card reader set ReadCorruptData and then cast the
+  rejected value into Suit anyway, and Draughts' and Reversi's undo Snapshot
+  left toMove uninitialised.
+
+  Evidence: run-clang-tidy reports nothing and exits 0 with WarningsAsErrors
+  set; ctest 9/9; the AI ladder unchanged to the digit against the
+  2026-09-02 baseline, which is what says the dead-store removals and the
+  collectJumps signature change moved no behaviour.
+
+  Not done, deliberately. Nothing in CI runs clang-tidy, so the enforcement
+  binds a manual run and nothing else -- wiring it into ci.yml costs runner
+  time on every push and would land in scripts/local-ci.sh's gate too, so it
+  is the owner's call rather than a tail on this item. No regression test was
+  written for any of it: the fixes are either unreachable from a test
+  (uninitialised members, static-initialisation order) or are the analyser's
+  own job, and the analyser is now the guard.
   **Layman:** Turning the third analyser on found sixty-nine things worth looking at; none is urgent, and they should be worked through rather than left.
   Kind: fix.
   Source: GHUB-0139, measured 2026-09-02.
