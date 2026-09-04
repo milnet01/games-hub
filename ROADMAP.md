@@ -3107,7 +3107,7 @@ inventing one.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0162] **Sundry small defects in the shared code and the tooling, kept so they are not lost.**
+- ✅ [GHUB-0162] **Sundry small defects in the shared code and the tooling, kept so they are not lost.**
   CARDS: the face cache is bounded at 160 ENTRIES rather than bytes
   (~40MB full, ~160MB at devicePixelRatio 2); its key is computed from
   the padded size, so two distinct card sizes can collide; the pixmap
@@ -3130,6 +3130,31 @@ inventing one.
   never checked against the case labels; scorepad-check.py never checks
   its matched band count against the array length; make_sounds.py writes
   a structurally valid WAV for a silent recipe.
+  Resolved (2026-09-04): all fifteen closed in e644ea8. Every one was
+  real; none was dismissed.
+
+  One correction worth keeping, because a later session will re-derive it.
+  The card-cache finding reads as though the padded size is inherently
+  ambiguous. It is not -- in exact arithmetic the padded map is injective,
+  and there are no collisions at any ratio. The collision is floating point:
+  the padded pixel count is a std::ceil, and a product landing a fraction
+  above a whole number rounds up. So the defect is real and the stated cause
+  is not. Keying on the snapped CARD size removes the rounding from the path
+  entirely.
+
+  Locked: the cache-key fix has a new check inside
+  cardArtKeyDecidesThePicture, proven red against the old key. The other
+  fourteen did not get one. Nine are unreachable from a test as things
+  stand -- the two cache bounds and the post-routine are memory and
+  lifetime rather than pixels, the sound and donate fixes need an audio
+  device, a real desktop or a browser, and the tooling fixes were verified
+  by inverting the source they read rather than by a committed test. That
+  is a deliberate stopping point, not an omission overlooked: see
+  GHUB-0140 for the standing list.
+
+  Not done, and out of scope: __pycache__ is absent from .gitignore, which
+  an importlib probe of the check scripts leaves behind. Noticed while
+  working here; orthogonal to this item.
   **Layman:** The last of the small findings, written down rather than forgotten.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.

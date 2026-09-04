@@ -47,6 +47,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Small defects across card drawing, sound, the donation prompt and the checking scripts.** (GHUB-0162)
+  Card faces could be drawn from the wrong cache entry on a screen set to
+  a fractional scale such as 150%. Both card caches now have a memory
+  ceiling rather than only an entry count, and are emptied before the
+  application shuts down. A sound that will not load now says so instead
+  of playing silence, the donation prompt is no longer skipped when
+  --game names a game that does not exist, and the three checking scripts
+  no longer accept spellings of the source they cannot actually read.
+
 - **Taking back the move that reached 2048 takes the win back with it.** (GHUB-0160)
   The game went on believing the target had been reached, on a board with no
   2048 tile on it.
