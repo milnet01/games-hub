@@ -10,6 +10,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Tests that stop the recent round of fixes coming back.** (GHUB-0140)
+  Resuming a game and leaving no longer deletes it, in every game that
+  saves; Hearts has a way on from the end of a hand that is not starting
+  over; a long FreeCell column stays on screen and stays clickable; and
+  Sudoku's buttons show what is actually switched on. Each test was checked
+  by putting the original fault back and watching it fail.
+
 - **A change that would make older saved games unreadable now fails the tests instead of reaching a player.** (GHUB-0075)
   A save each game wrote is committed under tests/saves/ and restored by
   the suite. A refused old save is not a crash -- the app runs and the
@@ -46,6 +53,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   own section and its own reporting advice.
 
 ### Fixed
+
+- **Coming back to a 2048 game you had not scored in yet, then leaving, threw it away.** (GHUB-0177)
+  The same fault six other games had fixed a few days earlier. 2048 was
+  missed because it also asks whether you have scored, and the score only
+  moves when two tiles join -- so an early game where you have only slid
+  looked to it like a game nobody had started.
 
 - **Notes for developers that described how the project used to work.** (GHUB-0145)
   The chess engine has not run on the drawing thread since it was moved to a

@@ -6581,6 +6581,29 @@ open.
   Kind: doc.
   Source: in-session-2026-09-03, recorded rather than performed.
 
+- ✅ [GHUB-0177] **2048 deleted a resumed game on the way out, the seventh instance of a defect the audit found six of.**
+  The 2026-08-31 audit found this shape in six games -- Klondike, Spider,
+  FreeCell, Pyramid, Reversi and Draughts -- and gave each an m_resumed
+  flag. 2048 has it too and was missed.
+
+  Twenty48Board::restore() sets m_canUndo false, and saveState() returned
+  empty on `score() == 0 && !canUndo()`. In 2048 the score moves only on a
+  MERGE, so sliding several times without merging is an ordinary early
+  position with score 0. Resume such a game, press Back, and the hub reads
+  the empty blob as "delete the stored game".
+
+  Not reachable in the six the audit fixed for the same reason it is here:
+  those key off undo depth alone, while 2048 also asks about the score, and
+  the score being zero mid-game is what makes the second half of the test
+  answer wrongly.
+
+  Resolved (2026-09-04): m_resumed added, matching the six. Found by the
+  corpus check added under GHUB-0140 -- the check was written to lock the
+  six and reported 2048 on its first run, before the fix existed.
+  **Layman:** Coming back to a 2048 game you had not scored in yet, then leaving, threw it away.
+  Kind: fix.
+  Source: GHUB-0140, found by the regression test written for it, 2026-09-04.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on
@@ -7466,7 +7489,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: test.
   Source: review-code sweep 2026-08-31.
 
-- 🚧 [GHUB-0140] **Lock the fixes that landed without a regression test.**
+- ✅ [GHUB-0140] **Lock the fixes that landed without a regression test.**
   The audit added and proved red: the Canasta House-rule tails, the
   seat's own discards, the Pyramid save bound and Snake's turn queue.
   The rest went in without one, and these are the behavioural ones
@@ -7497,6 +7520,38 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   nothing would notice.
 
   The other fixes named here are still open.
+  Resolved (2026-09-04): the remaining fixes are locked, in e81b141. Every
+  check was proven red by reverting the fix it locks, running, and putting it
+  back.
+
+  The six save-deletion fixes are covered by ONE check rather than six,
+  folded into the corpus restore that already runs: a game that has just
+  loaded must still save something. That check found a seventh game on its
+  first run, before any fix existed -- 2048, filed and fixed as GHUB-0177.
+  Worth noting as evidence for the item's own premise: the shape was known,
+  six instances were fixed, and the seventh was found only once something
+  asked the question mechanically.
+
+  Also closed: Hearts' Next Hand action, FreeCell's supermove source column
+  (in the self-test, being a rules question), FreeCell's fan compression, and
+  Sudoku's toolbar sync.
+
+  One entry in this item's list could not be locked as written, and is not
+  outstanding: Hearts' trick lift. That fix was reverted the same day for
+  being wrong on Windows and refiled as GHUB-0147, which shipped with its own
+  check that the caption never lands on a card at any window shape. This
+  list predates the revert.
+
+  FreeCellView gained deepestColumnBottom() and roomForColumns() -- the pair
+  SpiderView already carries, added for the same stated reason: no rendered
+  picture answers the question, because a card drawn under an opaque caption
+  plate looks like one that is not there.
+
+  One thing worth carrying forward. The Sudoku level assertion PASSED with
+  the sync deleted, because the level is remembered in QSettings and a fresh
+  view came up on Hard regardless. A check whose subject is also persisted
+  has to reset the stored value first, or it is testing the setting rather
+  than the restore.
   **Layman:** Some of the audit fixes have nothing stopping them coming back.
   Kind: test.
   Source: review-code sweep 2026-08-31.
