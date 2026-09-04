@@ -133,3 +133,68 @@ jobs:
           ASAN_OPTIONS=detect_leaks=0 \
           UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
           ./build-asan/gameshub_uitest --fuzz 4000
+
+  # GHUB-0170 worked the clang-tidy backlog to zero and turned WarningsAsErrors
+  # on. Nothing ran it, so the only thing keeping it at zero was somebody
+  # remembering to — which is how the backlog got to 69 in the first place.
+  #
+  # Its own job rather than a step on the matrix, for the reason the sanitizer
+  # leg is: it is Linux only, and it analyses rather than builds.
+  #
+  # The version is PINNED. Unpinned, a runner-image bump brings checks nobody
+  # has triaged and reddens a build that changed nothing — and with
+  # WarningsAsErrors set, that is a hard failure rather than a note. It is also
+  # deliberately OLDER than the clang-tidy a developer is likely to have
+  # locally: check families only grow, so a newer local run is the stricter of
+  # the two and this leg should not be the first to see a finding.
+  tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
+        with:
+          version: '6.8.3'
+          arch: linux_gcc_64
+          modules: qtmultimedia
+          cache: true
+
+      - name: Install Linux build and runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build libgl1-mesa-dev \
+            libxkbcommon-x11-0 libxcb-cursor0
+
+      # Put the pinned binary FIRST on the path rather than calling it by its
+      # versioned name below. scripts/local-ci.sh executes this workflow's own
+      # run: bodies, and `clang-tidy-18` is not a name any developer machine
+      # has -- so the analyse step would fail locally for a reason that has
+      # nothing to do with the code. /usr/local/bin precedes /usr/bin.
+      - name: Install clang-tidy
+        run: |
+          sudo apt-get install -y -qq clang-tidy-18
+          sudo ln -sf /usr/bin/clang-tidy-18 /usr/local/bin/clang-tidy
+          clang-tidy --version
+
+      # Configure only. clang-tidy needs the compile database and the headers
+      # configure_file generates (funding.h); nothing here includes a .moc, so
+      # AUTOMOC's build-time output is not required and the build is not worth
+      # its minutes. GAMESHUB_FAST_BUILD=OFF because ccache and mold have
+      # nothing to offer a job that compiles nothing.
+      - name: Configure for the compile database
+        run: >
+          cmake -S . -B build-tidy -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DGAMESHUB_FAST_BUILD=OFF
+
+      # xargs rather than run-clang-tidy, which lives in a separate package on
+      # this image. xargs exits 123 when any invocation fails, so a finding
+      # still fails the step — .clang-tidy carries WarningsAsErrors, so a
+      # finding is an error rather than a warning.
+      - name: Analyse every source
+        run: |
+          git ls-files 'src/*.cpp' \
+            | xargs -P 4 -n 4 clang-tidy -p build-tidy --quiet

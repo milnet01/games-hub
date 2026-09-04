@@ -232,14 +232,21 @@ the Windows leg — the only place MSVC is exercised — does not run on branch
 work until a pull request opens. `release.yml`
 turns a tag into a Linux AppImage and a Windows zip on the releases page.
 
-**`ci.yml` has a THIRD job** — `Saved-game fuzz (ASan/UBSan)`, on the same
-triggers, and it is not one of the two test binaries. `scripts/local-ci.sh`
-skips it unless given `--with-sanitizers`, and prints that it skipped it. Two
-job definitions, `build` and `sanitizers`, but `build` is a matrix, so GitHub
-reports **three**: the Linux build, the Windows build and the fuzz. **A plain
-local run is green against the first of those three and no more** — it drives
-no MSVC and no sanitizer. `scripts/wintest-ci.sh` is the only local route to
-the Windows leg, and it exits without running anything when the box is off.
+**`ci.yml` runs more than the two test binaries.** Three job definitions —
+`build`, `sanitizers` and `tidy` — but `build` is a matrix, so GitHub reports
+**four** checks: the Linux build, the Windows build, `Saved-game fuzz
+(ASan/UBSan)` and `clang-tidy`. All on the same triggers.
+`scripts/local-ci.sh` skips the last two unless given `--with-sanitizers` and
+`--with-tidy`, and prints that it skipped them.
+
+**A plain local run is green against the Linux build alone** — it drives no
+MSVC, no sanitizer and no analyser. `scripts/wintest-ci.sh` is the only local
+route to the Windows leg, and it exits without running anything when the box is
+off. **The `tidy` job pins clang-tidy and a developer machine does not**, which
+is deliberate: check families only grow, so whatever is installed locally is
+the stricter of the two and CI should never be the first to see a finding.
+That also means a local `--with-tidy` run is not proof the pinned version
+agrees.
 
 Cutting a release is three edits, a check and a tag, **in this order**:
 

@@ -22,6 +22,7 @@
 # Usage:  scripts/local-ci.sh            # lint + build + test the Linux leg
 #         scripts/local-ci.sh --lint     # workflow linters only (docs pushes)
 #         scripts/local-ci.sh --with-sanitizers   # add the ASan/UBSan fuzz leg
+#         scripts/local-ci.sh --with-tidy         # add the clang-tidy leg
 
 # shellcheck disable=SC2016  # the ${{ }} literal below is deliberately unexpanded
 set -uo pipefail
@@ -34,12 +35,20 @@ SKIPPED=()
 # always runs on CI. See the job guard in the step loop below.
 WITH_SANITIZERS=0
 SANITIZERS_NOTED=0
+# Same shape as the sanitizer leg: real work rather than a lint, so opt-in here
+# and always on CI. It also runs a DIFFERENT clang-tidy from the pinned one CI
+# uses -- whatever this machine has -- which is deliberate and noted in the
+# workflow: check families only grow, so the local run is the stricter of the
+# two.
+WITH_TIDY=0
+TIDY_NOTED=0
 LAST_JOB=
 LINT_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --lint)             LINT_ONLY=1 ;;
         --with-sanitizers)  WITH_SANITIZERS=1 ;;
+        --with-tidy)        WITH_TIDY=1 ;;
         *) echo "unknown option '$arg'"; exit 1 ;;
     esac
 done
@@ -94,6 +103,7 @@ fi
 STEP_RULES=$(cat <<'RULES'
 Install Qt|action|qmake6 --version
 Install Linux build and runtime dependencies|provision|ninja --version
+Install clang-tidy|provision|clang-tidy --version
 Set up MSVC environment|windows-only|
 RULES
 )
@@ -115,7 +125,7 @@ wf = yaml.safe_load(open(sys.argv[1]))
 # added a second one, and a job this script cannot see is the same silent
 # drift a step it cannot see would be -- worse, because it is a whole leg.
 # An unknown job stops the run exactly as an unknown step does.
-known = ('build', 'sanitizers')
+known = ('build', 'sanitizers', 'tidy')
 for name in wf['jobs']:
     if name not in known:
         sys.stdout.write('\x1e'.join(['UNKNOWNJOB', name, '']) + '\0')
@@ -175,6 +185,14 @@ while IFS= read -r -d '' REC; do
             note "sanitizers job — not run (pass --with-sanitizers)"
             SKIPPED+=("the ASan/UBSan saved-game fuzz")
             SANITIZERS_NOTED=1
+        }
+        continue
+    fi
+    if [ "$JOB" = "tidy" ] && [ "$WITH_TIDY" -eq 0 ]; then
+        [ "$TIDY_NOTED" -eq 0 ] && {
+            note "clang-tidy job — not run (pass --with-tidy)"
+            SKIPPED+=("the clang-tidy analysis")
+            TIDY_NOTED=1
         }
         continue
     fi
