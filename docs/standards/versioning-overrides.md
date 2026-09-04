@@ -18,7 +18,7 @@ that used to work stopped working?"* has a referent. **These are the surfaces
 that recur here, not a closed list** — global § 3's last bullet governs
 anything they miss.
 
-**A saved game.** Ten of the fourteen games save. **Changing what a game's
+**A saved game.** Twelve of the fourteen games save. **Changing what a game's
 `saveState()` writes is breaking — whether or not the stamped version moves**,
 and leaving the stamp behind makes it worse rather than smaller.
 

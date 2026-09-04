@@ -151,9 +151,14 @@ is the rule a new tool-gated case has to follow.** A configure with no bash or
 no python used to drop the test silently, and ctest then reported everything
 passing over a shorter suite — the same silent skip `scripts/local-ci.sh`
 refuses by name. So the `else()` branch is not optional: `prepush_needs_bash`,
-`scorepad_needs_python` and `legibility_needs_python` exist to be red. The one
-place a case is genuinely dropped is a platform deliberately exempted — Windows
-for the Python pair — and configure prints why. **Count them with `ctest
+`scorepad_needs_python` and `legibility_needs_python` exist to be red.
+
+**A case is genuinely dropped only where the platform is exempted on purpose,
+and there are two of those, not one.** The Python pair on Windows — configure
+prints why. And the hook test on any non-Unix platform, which is why its stub
+sits INSIDE `if(UNIX)` rather than beside it: bash is what it runs, so a red
+stub on Windows would be an alarm with nothing behind it. Put a new Unix-only
+case's `else()` inside the same guard. **Count them with `ctest
 -N` rather than against a figure here** — the number moves whenever a case is
 added, and a stale one sends you hunting for a case that was never registered
 on that platform.
@@ -982,11 +987,12 @@ That signature expects a resource name plus a `FILES` list, so handing it a
 `.qrc` gives no error, no warning and no content — every sound lookup then
 fails at runtime. Sounds are embedded by listing `sounds.qrc` as a target
 source with `CMAKE_AUTORCC ON`. **`tests/uitest.cpp` asserting every effect is
-present and non-trivial in size is the check.** `assets/sounds/` is 17 files
-and about 380 KB, and the compiled resource object matches it — but the
-binary's own total grows with every game added, so it says nothing on its own.
-It was ~800 KB when this trap was written and is ~1.6 MB now; a build that had
-silently dropped the audio would sit well above the old figure too.
+present and non-trivial in size is the check.** `assets/sounds/` is 17 files,
+and the compiled resource object matches it. **No byte figure is kept here.**
+The binary's own total grows with every game added, so it never said anything
+on its own — and a stale one is worse than none, because the sentence reads as
+a comparison somebody can make: two runs of this gate spent a finding on
+exactly that. Measure the directory when you need the number.
 
 **QPainter's `drawRect` fills with the current brush as well as outlining it.**
 A brush set for one thing leaks into everything drawn after it: the flag's red
@@ -1020,10 +1026,15 @@ and flies pinballs. Prefer adding a check there over a UI test.
 the UI test restores every one of them.** A save-format change that refuses the
 old format is not a crash — the hub keeps the fresh deal it just made, the app
 runs, nothing looks broken, and the player's half-finished game is gone without
-being told. `docs/standards/versioning-overrides.md` § 1 calls that a breaking change and
-requires a MAJOR; this corpus is what enforces it. **When it reddens, the choice
-is bump the MAJOR or write a migration — never regenerate the corpus**, which
-deletes the only evidence the format moved. `--write-saves` rewrites it and is
+being told. `docs/standards/versioning-overrides.md` § 1 names that a breaking
+change; this corpus is what enforces it. **When it reddens, the choice is write
+a migration or take the break deliberately — never regenerate the corpus**,
+which deletes the only evidence the format moved.
+
+**It is not a reason to cut `1.0.0`.** § 2 of that same document keeps MAJOR at
+0 until the last of its six items ships, so a reddened corpus inside `0.x` is
+not a MAJOR bump waiting to happen — what a breaking change costs at this
+version is the versioning standard's answer, not this file's. `--write-saves` rewrites it and is
 for adding a game, not for making the check pass.
 
 The corpus is written by `startedSave()`, which is also what the mutation fuzz
