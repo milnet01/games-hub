@@ -105,6 +105,7 @@ void Twenty48View::newGame()
 {
     m_board.newGame();
     m_finished = false;
+    m_resumed = false;
     m_undoAction->setEnabled(false);
     setFocus();
     update();
@@ -315,7 +316,7 @@ QByteArray Twenty48View::saveState() const
 {
     // Nothing worth coming back to: a board already stuck, or the opening two
     // tiles nobody has pushed yet. An empty state also clears the stored one.
-    if (m_finished || (m_board.score() == 0 && !m_board.canUndo()))
+    if (m_finished || (m_board.score() == 0 && !m_board.canUndo() && !m_resumed))
         return {};
 
     QByteArray blob;
@@ -359,6 +360,7 @@ bool Twenty48View::restoreState(const QByteArray& blob)
         return false;
 
     m_finished = false;
+    m_resumed = true;
     m_undoAction->setEnabled(false);
     update();
     refresh();

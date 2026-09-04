@@ -72,4 +72,11 @@ private:
     // "no moves left" box has been shown, and the undo ACTION's enabled state.
     Twenty48Board m_board;
     bool m_finished = false;
+    // Set by restoreState(), cleared by newGame(). Twenty48Board::restore()
+    // clears the undo history, and the score only moves on a merge -- so a
+    // resumed early game answers "nothing has happened here" to both halves of
+    // saveState()'s test and saves an empty blob, which the hub reads as
+    // "delete the stored game". Same flag, same reason, as the six games the
+    // 2026-08-31 audit fixed.
+    bool m_resumed = false;
 };

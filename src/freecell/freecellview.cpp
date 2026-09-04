@@ -186,6 +186,22 @@ QRectF FreeCellView::pileOrigin(PileKind kind, int pile) const
     return {};
 }
 
+double FreeCellView::deepestColumnBottom() const
+{
+    double deepest = 0.0;
+    for (int col = 0; col < kColumns; ++col) {
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
+        if (!column.empty())
+            deepest = std::max(deepest, cardRect(col, int(column.size()) - 1).bottom());
+    }
+    return deepest;
+}
+
+double FreeCellView::roomForColumns() const
+{
+    return height() - kMargin - captionBand(QRectF(rect()));
+}
+
 double FreeCellView::fanStep(int column) const
 {
     const double full = fanStep();

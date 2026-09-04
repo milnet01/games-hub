@@ -48,6 +48,15 @@ public:
     static constexpr int kColumns = FreeCellTable::kColumns;
     static constexpr int kCells = FreeCellTable::kCells;
 
+    // The bottom edge of the deepest column, and the height it must stay
+    // inside. Exists so a test can ask whether a BUILT column -- one longer
+    // than the deal the budget was sized for -- still fits, which no rendered
+    // picture answers: a card drawn under the opaque caption plate looks much
+    // like one that is not there. Same reasoning, and same shape, as
+    // SpiderView's pair.
+    double deepestColumnBottom() const;
+    double roomForColumns() const;
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;

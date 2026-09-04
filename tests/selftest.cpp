@@ -1962,6 +1962,35 @@ void freecellMoveSizeIsTheRule()
     check(table.restore(columns, cells, foundations, 0), "freecell: with the cells full");
     check(table.maxMoveSize(false) == 1 * (1 << 6),
           "freecell: no free cell leaves one card times the empty columns");
+
+    // A column whose cards are in your hand is not a staging area.
+    //
+    // The view lifts a run before the drop is tested, so the run's OWN column
+    // read empty here and doubled the limit -- the highlight painted red for a
+    // move that then succeeded, because the paint-time hint and the drop were
+    // asking the same function two different questions. The table records the
+    // lifted column and excludes it.
+    //
+    // One card alone in column 0 is always a movable run, so lifting it empties
+    // that column and nothing else changes.
+    for (auto& column : columns)
+        column.clear();
+    for (auto& cell : cells)
+        cell.clear();
+    columns[0].push_back(deck.front());
+    for (std::size_t i = 1; i < deck.size(); ++i)
+        columns[1].push_back(deck[i]);
+    check(table.restore(columns, cells, foundations, 0),
+          "freecell: one card alone, six columns empty, every cell free");
+
+    const int before = table.maxMoveSize(false);
+    check(before == 5 * (1 << 6), "freecell: which is the six-empty-column figure again");
+    const std::vector<Card> held = table.lift(FC::PileKind::Column, 0, 0);
+    check(held.size() == 1, "freecell: and that one card lifts");
+    check(table.columns()[0].empty(), "freecell: leaving its column looking empty");
+    check(table.maxMoveSize(false) == before,
+          "freecell: but the limit does not move, because the hand is not a free column");
+    table.putBack(FC::PileKind::Column, 0, held);
 }
 
 void freecellStacksAlternateAndDescend()

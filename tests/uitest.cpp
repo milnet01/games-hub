@@ -719,6 +719,61 @@ void sudokuRemembersItsDifficulty()
     QSettings().remove(key);
 }
 
+// FreeCell's height budget sizes the card for the DEAL, whose longest column
+// is seven. But building descending runs is the game, and a column grows past
+// that -- so an eighth card landed inside the opaque caption plate with large
+// play on, and off the bottom edge without it, where hitTest can never reach
+// it and the column becomes unplayable. A column past its budget fans tighter
+// now (GHUB-0140).
+//
+// Both halves are asserted. hitTest alone catches only the second: it knows
+// nothing about the plate, so a card drawn underneath one is still "reachable"
+// by it and the check would pass against half the defect.
+void aBuiltFreeCellColumnStaysReachable()
+{
+    // Twenty in one column, the rest spread: far past the seven the budget was
+    // sized for, and the whole pack still comes back, which is what restore
+    // asks for.
+    constexpr int kLong = 20;
+    std::vector<Card> deck = makeDeck(1, 4);
+    for (Card& c : deck)
+        c.faceUp = true;
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint32(1);
+    std::array<std::vector<Card>, FreeCellTable::kColumns> columns;
+    for (std::size_t i = 0; i < deck.size(); ++i) {
+        if (int(i) < kLong)
+            columns[0].push_back(deck[i]);
+        else
+            columns[1 + (i - kLong) % (FreeCellTable::kColumns - 1)].push_back(deck[i]);
+    }
+    for (const std::vector<Card>& column : columns)
+        cardcodec::writePile(out, column);
+    for (int i = 0; i < FreeCellTable::kCells; ++i)
+        cardcodec::writePile(out, {});
+    for (int f = 0; f < FreeCellTable::kFoundations; ++f)
+        cardcodec::writePile(out, {});
+
+    FreeCellView table;
+    // Its own smallest window, which is where the budget bites hardest.
+    table.resize(620, 440);
+    if (!table.restoreState(blob)) {
+        check(false, "freecell: a built column of twenty loads");
+        return;
+    }
+    check(true, "freecell: a built column of twenty loads");
+
+    const double bottom = table.deepestColumnBottom();
+    const double room = table.roomForColumns();
+    std::printf("      freecell column of %d: deepest column %.1f, room %.1f\n",
+                kLong, bottom, room);
+    check(bottom <= room + 1.0,
+          "freecell: a column built past the dealt length still fits above the caption");
+}
+
 // Spider's card size is solved from a height budget, and that budget has to be
 // what a column REALLY reaches rather than a guess. Its deal leaves five
 // face-down cards under one face-up, and each of the five dealt rows adds a
@@ -759,6 +814,7 @@ void aFullSpiderTableStaysOnTheSurface()
     // third of the surface, not by a pixel.
     check(bottom <= room + 1.0,
           "spider: a column that has taken every dealt row still fits above the caption");
+    aBuiltFreeCellColumnStaysReachable();
 }
 
 void savesFromOlderBuildsStillLoad()
@@ -776,6 +832,7 @@ void savesFromOlderBuildsStillLoad()
     const QStringList games = probe.gameNames();
     QStringList refused;
     QStringList unknown;
+    QStringList forgot;
     for (const QString& file : files) {
         const QString name = QFileInfo(file).completeBaseName();
         if (!games.contains(name)) {
@@ -796,8 +853,27 @@ void savesFromOlderBuildsStillLoad()
         one.show();
         pump(40);
         GameView* view = one.findChild<GameView*>();
-        if (view == nullptr || !view->restoreState(stored))
+        if (view == nullptr || !view->restoreState(stored)) {
             refused << name;
+            continue;
+        }
+
+        // And a resumed game is still worth keeping, which is a different
+        // question from whether it loaded.
+        //
+        // restore() clears the undo history, so a game that decides "has
+        // anything happened here?" from undo depth answers no on a freshly
+        // resumed deal and saves an empty blob -- and the hub reads empty as
+        // "delete the stored game". Resuming and pressing Back lost the deal,
+        // in six games at once (Klondike, Spider, FreeCell, Pyramid, Reversi
+        // and Draughts), and each now carries an m_resumed flag saying the
+        // position is worth keeping independently of undo depth.
+        //
+        // Nothing else catches it. The save loads, the game plays, and the
+        // loss happens silently on the way out -- the player is told nothing
+        // and finds the deal gone next time.
+        if (view->saveState().isEmpty())
+            forgot << name;
     }
 
     std::printf("      %lld stored saves, %lld refused\n",
@@ -809,6 +885,11 @@ void savesFromOlderBuildsStillLoad()
     if (!unknown.isEmpty())
         std::printf("      no such game any more: %s\n", qPrintable(unknown.join(QStringLiteral(", "))));
     check(unknown.isEmpty(), "every stored save belongs to a game that still exists");
+    if (!forgot.isEmpty())
+        std::printf("      saved empty after resuming: %s\n",
+                    qPrintable(forgot.join(QStringLiteral(", "))));
+    check(forgot.isEmpty(),
+          "a resumed game still saves something, rather than deleting itself on the way out");
 }
 
 // Writes the corpus above. Run deliberately, and commit what it produces.
@@ -2941,6 +3022,76 @@ int main(int argc, char* argv[])
             check(!resumed.restoreState(forged),
                   "hearts: a save whose cards do not match its trick count is refused");
             check(renderOf(&resumed) == dealt, "hearts: and refusing that changes nothing either");
+
+            // The hand-over has a way out that is not New Game.
+            //
+            // nextHand() had exactly one caller, the hand-over box's accept
+            // button, so pressing Close left the phase at HandOver with no
+            // click accepted and nothing to press -- the match was over for
+            // good. And saveState() stored that state, so it survived a
+            // restart. There is a Next Hand action on the toolbar now, live
+            // while the hand is over, sharing one path with the box.
+            //
+            // The position comes from an engine played out here rather than
+            // from the view: thirteen tricks through the view means waiting on
+            // its timers, and the view's save format is the engine's, so this
+            // arrives at the same place.
+            {
+                HeartsEngine engine;
+                int guard = 0;
+                while (engine.phase() != HeartsEngine::Phase::HandOver && guard++ < 400) {
+                    if (engine.phase() == HeartsEngine::Phase::Passing) {
+                        for (int p = 0; p < HeartsEngine::kPlayers; ++p)
+                            engine.setPass(p, engine.chooseAiPass(p));
+                        engine.executePass();
+                        continue;
+                    }
+                    if (engine.trickComplete()) {
+                        engine.collectTrick();
+                        continue;
+                    }
+                    engine.playCard(engine.currentPlayer(),
+                                    engine.chooseAiCard(engine.currentPlayer()));
+                }
+                check(engine.phase() == HeartsEngine::Phase::HandOver,
+                      "hearts: a hand played right out reaches the hand-over");
+
+                QByteArray over;
+                QDataStream out(&over, QIODevice::WriteOnly);
+                out.setVersion(QDataStream::Qt_6_0);
+                out << quint32(1);
+                engine.save(out);
+                // The view's blob is the engine's plus its own tail -- the
+                // cards picked out to pass, and two flags. Writing only the
+                // engine's half produces a blob restoreState refuses, which
+                // looks exactly like the position being rejected.
+                cardcodec::writePile(out, {});
+                out << qint8(0) << qint8(0);
+
+                HeartsView table;
+                table.resize(900, 620);
+                check(table.restoreState(over),
+                      "hearts: and that position loads into the table");
+
+                QAction* next = nullptr;
+                for (QAction* a : table.gameActions())
+                    if (a->text() == QStringLiteral("Next Hand"))
+                        next = a;
+                check(next != nullptr, "hearts: the toolbar offers Next Hand");
+                if (next != nullptr) {
+                    check(next->isEnabled(),
+                          "hearts: and it is live while the hand is over, so Close does not "
+                          "end the match");
+                    next->trigger();
+                    HeartsEngine after;
+                    QDataStream in(table.saveState());
+                    in.setVersion(QDataStream::Qt_6_0);
+                    quint32 version = 0;
+                    in >> version;
+                    check(after.load(in) && after.phase() != HeartsEngine::Phase::HandOver,
+                          "hearts: and triggering it deals the next hand");
+                }
+            }
         }
 
         {
@@ -2966,6 +3117,68 @@ int main(int argc, char* argv[])
             check(!resumed.restoreState(QByteArray("nine by nine of nothing")),
                   "sudoku: a corrupt save is refused");
             check(renderOf(&resumed) == worked, "sudoku: and refusing one changes nothing");
+
+            // The toolbar has to agree with the board it is now sitting above,
+            // and that is a different question from whether the board loaded.
+            //
+            // restoreState() sets four pieces of toolbar state and used to
+            // re-check only one. The level radio came back on Easy for a Hard
+            // puzzle -- cosmetic -- but Pencil and Show Errors displayed the
+            // OPPOSITE of what was in force, which is worse than cosmetic: the
+            // first press of either did nothing, because the action was already
+            // in the state the press was asking for, so pressing Pencil to turn
+            // it off left it on.
+            //
+            // Every value here is chosen to differ from a fresh board's, or the
+            // check passes on a toolbar that was never synced at all.
+            {
+                const auto named = [](GameView& view, const char* name) -> QAction* {
+                    for (QAction* a : view.gameActions())
+                        if (a->text() == QString::fromUtf8(name))
+                            return a;
+                    return nullptr;
+                };
+
+                SudokuView set;
+                set.resize(560, 600);
+                QAction* hard = named(set, "Hard");
+                QAction* pencil = named(set, "Pencil");
+                QAction* errors = named(set, "Show Errors");
+                check(hard != nullptr && pencil != nullptr && errors != nullptr,
+                      "sudoku: the toolbar offers a level, Pencil and Show Errors");
+                if (hard != nullptr && pencil != nullptr && errors != nullptr) {
+                    hard->trigger();          // Easy on a fresh board
+                    pencil->setChecked(true); // off on a fresh board
+                    errors->setChecked(false); // on on a fresh board
+
+                    const QByteArray blob = set.saveState();
+
+                    // The level is REMEMBERED in QSettings, so a fresh view
+                    // would come up on Hard anyway and the radio assertion
+                    // below would pass against a restore that synced nothing.
+                    // Measured: with the sync deleted it passed regardless.
+                    // Put the stored level back to Easy, so the only thing that
+                    // can move the radio is the restore.
+                    QSettings().setValue(QStringLiteral("sudoku/level"),
+                                         int(SudokuGrid::Level::Easy));
+
+                    SudokuView back;
+                    back.resize(set.size());
+                    check(named(back, "Easy") != nullptr && named(back, "Easy")->isChecked(),
+                          "sudoku: a fresh board starts on Easy, so the radio has somewhere to move from");
+                    check(back.restoreState(blob),
+                          "sudoku: a board with the toolbar moved reads back");
+                    QAction* backHard = named(back, "Hard");
+                    QAction* backPencil = named(back, "Pencil");
+                    QAction* backErrors = named(back, "Show Errors");
+                    check(backHard != nullptr && backHard->isChecked(),
+                          "sudoku: the level radio shows the level that was restored");
+                    check(backPencil != nullptr && backPencil->isChecked(),
+                          "sudoku: Pencil shows pencil mode as actually in force");
+                    check(backErrors != nullptr && !backErrors->isChecked(),
+                          "sudoku: and Show Errors does too, so the first press is not swallowed");
+                }
+            }
 
             // Sudoku has no pack, so what refuses a board the game could not
             // have reached is the solution itself: it must be a completed grid,
