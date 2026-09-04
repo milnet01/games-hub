@@ -318,8 +318,10 @@ LevelPlan planFor(Level level)
 {
     switch (level) {
     // The budgets are node counts, tuned so the worst middlegame position
-    // still answers inside about a second — the search runs on the GUI thread,
-    // and a window that stops repainting reads as a hang, not as thinking.
+    // still answers inside about a second. The search runs on a worker since
+    // GHUB-0047, so overrunning no longer stops the window repainting -- what
+    // it costs is the player sitting waiting for a reply, which is the thing
+    // these numbers are protecting.
     case Level::Easy:   return { 2, 30000, 70 };
     case Level::Medium: return { 3, 120000, 20 };
     case Level::Hard:   return { 5, 200000, 0 };

@@ -574,10 +574,14 @@ reference positions catches castling-through-check, en-passant and pin bugs
 that no amount of playing will surface reliably. `chessMoveGeneration()` in the
 self-test checks four positions and runs in about 20 ms.
 
-**The engine searches on the GUI thread, so it is bounded by a node budget
-rather than by depth alone.** `planFor()` in `chessai.cpp` sets one per level;
-Hard's worst observed middlegame answer is about 1.2 s. Raising the depth
-without raising the budget does nothing, and raising both freezes the window.
+**The engine is bounded by a node budget rather than by depth alone.**
+`planFor()` in `chessai.cpp` sets one per level; Hard's worst observed
+middlegame answer is about 1.2 s. Raising the depth without raising the budget
+does nothing, and raising both makes the opponent slower to answer. **The
+search runs on a worker** (`QtConcurrent::run`, watched by a
+`QFutureWatcher`), so a long one no longer stops the window repainting —
+GHUB-0047 moved it. What the budget buys now is the player's wait, not the
+frame rate.
 
 **Pinball's launch is calibrated, not guessed.** `minimumLaunchSpeed()` derives
 the weakest plunger from the dome height above the lane, so even a limp launch

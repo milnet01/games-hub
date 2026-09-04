@@ -94,7 +94,16 @@ cmake_version=$(sed -n 's/^project(gameshub VERSION \([0-9.]*\).*/\1/p' CMakeLis
 Triggers on push to `master` and on pull requests, with
 `concurrency: {group: ci-${{ github.ref }}, cancel-in-progress: true}` so a
 second push to the same ref cancels the first run rather than paying for
-both. One matrix job:
+both.
+
+Two job definitions. `build`, the matrix one this section describes, and
+`sanitizers` — a Linux-only job running the saved-game fuzz under ASan and
+UBSan, kept separate because MSVC ships no UBSan. `build` being a matrix,
+GitHub reports three checks rather than two, and a local run of
+`scripts/local-ci.sh` is green against the first of them alone unless it is
+given `--with-sanitizers`.
+
+The matrix:
 
 | `os` | Qt arch | Notes |
 |------|---------|-------|
@@ -412,14 +421,24 @@ far shorter than a CI job cares about.
 
   $env:QT_QPA_PLATFORM = 'offscreen'
   $run = Start-Process .\unzipped\gameshub.exe -ArgumentList '--game','spider' `
-           -PassThru -RedirectStandardError run-err.txt
+           -PassThru -NoNewWindow -RedirectStandardError run-err.txt
   Start-Sleep -Seconds 20
   if ($run.HasExited) { throw "exited with $($run.ExitCode)" }
+  $run.Refresh()
+  if ($run.MainWindowHandle -ne 0) { throw "a dialog is open: $($run.MainWindowTitle)" }
   Stop-Process -Id $run.Id -Force
   ```
 
-Both must write a `Games ` line and exit 0 from the first run, and still be
-running after the second. **Both assert the prefix, not the number** — the
+**`-NoNewWindow` and the `MainWindowHandle` test are both load bearing on
+Windows, and are the two lines this block existed without.** Liveness alone
+passes the failure they are here to catch — a release build with no console
+blocks on a message box rather than exiting, so the process is happily alive
+at 20 s with Qt never started. The paragraph below beginning *"Exits at once"
+is a Linux property* is where that is worked out, and this block is what it
+describes.
+
+Both must write a `Games ` line and exit 0 from the first run, and after the
+second still be running — and, on Windows, owning no top-level window. **Both assert the prefix, not the number** — the
 version itself is checked by INV-2 against the tag and comes from
 `project(gameshub VERSION …)` by construction, so a smoke test comparing it
 would re-check what CMake already guarantees. The Windows side reads the line
