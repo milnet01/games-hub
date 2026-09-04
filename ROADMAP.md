@@ -3221,6 +3221,33 @@ inventing one.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.
 
+- 📋 [GHUB-0180] **CLAUDE.md is too big for a cold read to cover, and its own review says so.**
+  Filed by the 2026-09-04 gate at its cap, which is the one moment the size
+  signal is allowed to fire.
+
+  1112 lines, against roughly 800 as the range the per-lane read budget is
+  derived for. The consequence is not theoretical: three consecutive loops
+  each repaired the one before, and two of the three lanes in a loop
+  routinely confirmed different halves of the document. Two cold reads never
+  reach the same parts.
+
+  The gate's own routing forbids a fourth loop on the document as it stands,
+  so this is the work instead.
+
+  What a split would look like, from where the findings clustered rather than
+  from a tidy structure: the per-game Traps are the bulk and are read one game
+  at a time, while § Commands, § Committing, § Releasing and the local gate
+  are read by every session on every turn. Those two have different readers
+  and different lifetimes. The second is what must stay in the always-loaded
+  file; the first is what a session opens when it touches that game.
+
+  Not urgent, and not a defect in what the document SAYS -- every finding
+  this gate raised is fixed. It is a statement about how much of the document
+  any single review can actually cover.
+  **Layman:** The guide future sessions read has grown past the size anyone can check in one pass.
+  Kind: doc.
+  Source: review-contract cap verdict, 2026-09-04.
+
 ## P03 — Considered
 
 Nothing here is agreed. 💭 means the scope, the value or the decision is still
@@ -6595,7 +6622,7 @@ open.
   Kind: perf.
   Source: in-session-2026-09-03, split out of GHUB-0160.
 
-- 💭 [GHUB-0176] **Three CLAUDE.md edits changed direction without the cold review that normally gates one.**
+- ✅ [GHUB-0176] **Three CLAUDE.md edits changed direction without the cold review that normally gates one.**
   Recorded so it is findable. The three edits landed in commits
   beea5c9, 0d19293 and b2edb81, and each commit body says "No gate" with
   the reason. A commit body is not somewhere anyone looks.
@@ -6615,6 +6642,38 @@ open.
   what that run settled.
 
   If it is wanted: review-contract CLAUDE.md --genre standard.
+  Resolved (2026-09-04): the gate ran and reached its cap. Loops 9, 10 and 11
+  in docs/claude-md-review-2026-08-20.md; commits 3ca53c9, 8f97efe, 7558a6b.
+  16 verified, 16 fixed, 2 dismissed, 5 open questions resolved clean.
+
+  The owner's test decided whether it was owed: a review is for when an edit
+  changes what the prose SAID, not when it only adds. Three of the six edits
+  qualified -- save-on-tick replaced "stored on close", the setMinimumSize
+  code shape changed, and the chess-threading line was a straight reversal.
+  Notably the two edits this item was FILED for were pure additions; the one
+  that qualified was the third in the same item.
+
+  What it bought, beyond the document: one live code defect. Pyramid and 2048
+  post a QTimer::singleShot to open a dialog and override neither
+  deactivate() -- filed as GHUB-0179. Both conformed to the rule as written,
+  which is what made the rule the defect.
+
+  Two process failures of my own, recorded rather than smoothed over. Loop 10
+  verified four findings and applied three, and its row said "three verified,
+  three fixed"; loop 11's cold read is what caught the drop, which is what a
+  cold re-read is for. And loop 10's own fixes supplied two of loop 11's five
+  findings.
+
+  Cap verdict: VIOLENT -- four of loop 11's five findings landed on text this
+  run wrote. Per the skill's own routing that ends the review of this document
+  as it stands, and a fourth loop is not filed. GHUB-0180 carries the work it
+  points at instead.
+
+  The measurement worth keeping: 16 verified findings, 2 of which landed on
+  the change that armed the gate. This run was an audit of the whole document
+  far more than a check on its trigger. No consequence attaches to that by
+  itself -- but it is the number to look at before deciding whether this gate
+  should be triggered by an edit or run deliberately.
   **Layman:** Some notes that tell future sessions how to work here were changed without the usual independent check.
   Kind: doc.
   Source: in-session-2026-09-03, recorded rather than performed.
