@@ -653,7 +653,21 @@ smallest windows, so it costs them nothing there. FreeCell joined that list on
 two cards of fan against a deal of seven, so before the fix it was never
 height-bound and the deal ran under the plate instead. `cardsKeepTheirFaces` in
 `tests/uitest.cpp` prints all six every run, so these are readings rather than
-history. Their `std::max(30.0, …)` … `std::max(34.0,
+history.
+
+**A card size solved against the DEAL is not solved against play, and the
+answer is a tighter fan rather than a smaller card.** Klondike, Spider and
+FreeCell all size their card for the board they deal; a column then collects
+cards — a king and its run onto an emptied column is routine, and turning a
+face-down Klondike card more than doubles its step. Sizing for the worst case
+instead would take width off every card at every window whether or not any
+column ever grew, which is the wrong trade for a game read by pip pattern. So
+each compresses an overlong column: FreeCell caps its single step, Klondike and
+Spider scale the whole column, which is what keeps the ratio between a
+face-down and a face-up step — the thing that says at a glance how much of a
+column is still to turn. Each has `deepestColumnBottom()` and
+`roomForColumns()` so a test can ask; no rendered picture answers it, because a
+card under an opaque caption plate looks like one that is not there. Their `std::max(30.0, …)` … `std::max(34.0,
 …)` floors read alarming and no window can drive them there. Canasta was the
 only game drawing faceless cards, and only in its melds: the opponents' hands
 are drawn at 0.8 but face **down**, so the threshold never applied to them.

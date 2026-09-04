@@ -84,10 +84,25 @@ private:
     static constexpr double kHeaderGap = 1.6;      // of gap()
     static constexpr double kFaceUpStep = 0.28;    // of card height
     static constexpr double kFaceDownStep = 0.13;  // of card height
+    // A scale applied to every step in one column when its natural fan would
+    // run past the bottom. 1.0 whenever it fits, which is the deal and most of
+    // play. See the comment on the definition.
+    double fanScale(const std::vector<Card>& column) const;
     // The seventh column: six face down and one turned up.
     static constexpr int kLongestDealtColumn = 7;
 
     double cardWidth() const;
+
+public:
+    // The bottom edge of the deepest column, and the height it must stay
+    // inside. Exists so a test can ask whether a column BUILT past the dealt
+    // length still fits, which no rendered picture answers -- a card drawn
+    // under the opaque caption plate looks much like one that is not there.
+    // Same pair, same reasoning, as SpiderView's and FreeCellView's.
+    double deepestColumnBottom() const;
+    double roomForColumns() const;
+
+private:
     double cardHeight() const { return cardWidth() * 1.4; }
     double gap() const { return cardWidth() * kGapRatio; }
     QRectF pileOrigin(PileKind kind, int pile) const;

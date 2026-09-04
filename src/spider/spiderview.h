@@ -80,6 +80,9 @@ private:
     double cardWidth() const;
     double cardHeight() const { return cardWidth() * 1.4; }
     double fanStep(const std::vector<Card>& column, int index) const;
+    // A scale applied to every step in one column when its natural fan would
+    // run past the bottom. 1.0 whenever it fits, which is the whole deal.
+    double fanScale(const std::vector<Card>& column) const;
     QRectF columnOrigin(int column) const;
     QRectF cardRect(int column, int index) const;
     QRectF stockRect() const;

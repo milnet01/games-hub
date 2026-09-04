@@ -240,6 +240,23 @@ double KlondikeView::fanStep(const std::vector<Card>& pile, int index) const
                                           : cardHeight() * kFaceDownStep;
 }
 
+double KlondikeView::deepestColumnBottom() const
+{
+    double deepest = 0.0;
+    for (int col = 0; col < 7; ++col) {
+        const std::vector<Card>& column = m_table.tableau()[std::size_t(col)];
+        if (!column.empty())
+            deepest = std::max(deepest,
+                               cardRect(PileKind::Tableau, col, int(column.size()) - 1).bottom());
+    }
+    return deepest;
+}
+
+double KlondikeView::roomForColumns() const
+{
+    return height() - kMargin - captionBand(QRectF(rect()));
+}
+
 QRectF KlondikeView::cardRect(PileKind kind, int pile, int index) const
 {
     QRectF r = pileOrigin(kind, pile);
@@ -247,11 +264,45 @@ QRectF KlondikeView::cardRect(PileKind kind, int pile, int index) const
         return r;
 
     const std::vector<Card>& column = pileFor(kind, pile);
+    const double scale = fanScale(column);
     double y = r.top();
     for (int i = 0; i < index && i < int(column.size()); ++i)
-        y += fanStep(column, i);
+        y += fanStep(column, i) * scale;
     r.moveTop(y);
     return r;
+}
+
+// cardWidth() sizes the card for the DEAL -- six face-down steps and one whole
+// card. Play grows a column past that: turning a face-down card more than
+// doubles its step, and a king with its run onto an emptied column is routine.
+// Sizing for the worst case instead would take width off every card at every
+// window whether or not any column ever grew, and this game is read by pip
+// pattern, so that trade is the wrong way round (GHUB-0089).
+//
+// So the cards keep their size and an overlong column tightens. FreeCell caps
+// one step because its fan is uniform; Klondike's is not -- a face-down step
+// and a face-up step differ by more than double -- so scaling the whole column
+// is what keeps their RATIO, which is the thing that says at a glance how much
+// of a column is still to turn.
+double KlondikeView::fanScale(const std::vector<Card>& column) const
+{
+    if (column.size() < 2)
+        return 1.0;
+    double natural = 0.0;
+    for (int i = 0; i < int(column.size()) - 1; ++i)
+        natural += fanStep(column, i);
+    if (natural <= 0.0)
+        return 1.0;
+
+    const double room =
+        roomForColumns() - pileOrigin(PileKind::Tableau, 0).top() - cardHeight();
+    if (natural <= room)
+        return 1.0;
+    // Never to nothing: a column stacked into one place is unreadable in a
+    // different way, so at least a pixel per card survives. That floor can
+    // still overflow at an absurd window shape, which is the same trade
+    // FreeCell's own floor makes.
+    return std::max(room, double(column.size() - 1)) / natural;
 }
 
 KlondikeView::Spot KlondikeView::hitTest(QPointF pos) const

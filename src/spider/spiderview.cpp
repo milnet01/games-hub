@@ -214,13 +214,36 @@ QRectF SpiderView::columnOrigin(int column) const
     return { kMargin + step * column, kMargin, w, cardHeight() };
 }
 
+// The height budget covers a fully DEALT table, which is what
+// aFullSpiderTableStaysOnTheSurface asserts. Moving runs between columns grows
+// one past any dealt length, so an overlong column tightens rather than every
+// card shrinking -- the same trade Klondike and FreeCell make, and for the same
+// reason: this game is read by pip pattern (GHUB-0089).
+double SpiderView::fanScale(const std::vector<Card>& column) const
+{
+    if (column.size() < 2)
+        return 1.0;
+    double natural = 0.0;
+    for (int i = 0; i < int(column.size()) - 1; ++i)
+        natural += fanStep(column, i);
+    if (natural <= 0.0)
+        return 1.0;
+
+    const double room = roomForColumns() - columnOrigin(0).top() - cardHeight();
+    if (natural <= room)
+        return 1.0;
+    // At least a pixel per card, so a column never stacks into one place.
+    return std::max(room, double(column.size() - 1)) / natural;
+}
+
 QRectF SpiderView::cardRect(int column, int index) const
 {
     QRectF r = columnOrigin(column);
     const std::vector<Card>& col = m_table.columns()[std::size_t(column)];
+    const double scale = fanScale(col);
     double y = r.top();
     for (int i = 0; i < index && i < int(col.size()); ++i)
-        y += fanStep(col, i);
+        y += fanStep(col, i) * scale;
     r.moveTop(y);
     return r;
 }

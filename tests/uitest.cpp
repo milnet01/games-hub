@@ -774,6 +774,60 @@ void aBuiltFreeCellColumnStaysReachable()
           "freecell: a column built past the dealt length still fits above the caption");
 }
 
+// Klondike sizes its card for the DEAL too -- six face-down and one turned up.
+// Play grows a column past that: turning a face-down card changes its step from
+// 0.13 of a card height to 0.28, and a king with its run onto an emptied column
+// is routine. So the tail ran under the caption plate or off the bottom edge,
+// where hitTest can never reach it (GHUB-0089).
+//
+// Klondike accumulates two different step sizes rather than one, so it scales
+// the whole column's fan rather than capping a single step the way FreeCell
+// does. Same outcome: the cards keep their size, and only an overlong column
+// tightens.
+void aBuiltKlondikeColumnStaysReachable()
+{
+    constexpr int kLong = 20;
+    std::vector<Card> deck = makeDeck(1, 4);
+    for (Card& c : deck)
+        c.faceUp = true;
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint32(1) << qint32(0);
+    // Everything not in the long column goes to the stock, which keeps the
+    // other six tableau piles out of the measurement entirely.
+    std::vector<Card> longColumn(deck.begin(), deck.begin() + kLong);
+    std::vector<Card> stock(deck.begin() + kLong, deck.end());
+    // The stock is face down and the waste face up, which restore() checks and
+    // every hit test and draw assumes.
+    for (Card& c : stock)
+        c.faceUp = false;
+    cardcodec::writePile(out, stock);
+    cardcodec::writePile(out, {});                 // waste
+    for (int f = 0; f < 4; ++f)
+        cardcodec::writePile(out, {});             // foundations
+    cardcodec::writePile(out, longColumn);         // tableau 0
+    for (int col = 1; col < 7; ++col)
+        cardcodec::writePile(out, {});
+
+    KlondikeView table;
+    // Its own smallest window, which is where the budget bites hardest.
+    table.resize(560, 504);
+    if (!table.restoreState(blob)) {
+        check(false, "klondike: a built column of twenty loads");
+        return;
+    }
+    check(true, "klondike: a built column of twenty loads");
+
+    const double bottom = table.deepestColumnBottom();
+    const double room = table.roomForColumns();
+    std::printf("      klondike column of %d: deepest column %.1f, room %.1f\n",
+                kLong, bottom, room);
+    check(bottom <= room + 1.0,
+          "klondike: a column built past the dealt length still fits above the caption");
+}
+
 // Spider's card size is solved from a height budget, and that budget has to be
 // what a column REALLY reaches rather than a guess. Its deal leaves five
 // face-down cards under one face-up, and each of the five dealt rows adds a
@@ -815,6 +869,7 @@ void aFullSpiderTableStaysOnTheSurface()
     check(bottom <= room + 1.0,
           "spider: a column that has taken every dealt row still fits above the caption");
     aBuiltFreeCellColumnStaysReachable();
+    aBuiltKlondikeColumnStaysReachable();
 }
 
 void savesFromOlderBuildsStillLoad()
