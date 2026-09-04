@@ -3248,6 +3248,36 @@ inventing one.
   Kind: doc.
   Source: review-contract cap verdict, 2026-09-04.
 
+- 📋 [GHUB-0181] **The 1.0 bar now has two answers: the standard says six items, the owner has named four more.**
+  `docs/standards/versioning-overrides.md` § 2 states the bar as an identity
+  rather than a floor: "The release that ships the last of the six items below
+  IS `1.0.0`", listing GHUB-0067, 0075, 0054, 0050, 0031 and 0053. Two of those
+  have shipped.
+
+  On 2026-09-04 the owner chose GHUB-0019, 0020, 0018 and 0070 as wanted before
+  1.0. Those four are now 📋 with his decision recorded on each, and they are
+  NOT in § 2's table.
+
+  So a maintainer asking "can we cut 1.0.0?" gets two answers. That is the exact
+  failure § 2 was rewritten to remove -- its own loop log records all three cold
+  lanes finding that the bar was stated twice and that with some items shipped
+  one maintainer would cut 1.0.0 and another refuse.
+
+  Deliberately NOT resolved by the session that filed it, because both readings
+  are defensible and the choice is the owner's:
+
+    - The four are 1.0 CONDITIONS, and § 2's table grows to ten. This changes
+      the bar, so it re-arms that document's gate (it converged 2026-08-20).
+    - The four are work he wants done in the 0.x series but not conditions, so
+      § 2 stands and this item closes by saying so in one line.
+
+  The second is cheaper and is the likelier intent -- the question asked was
+  "which do you want before 1.0", not "which gate 1.0" -- but guessing is what
+  put two answers on disk in the first place.
+  **Layman:** Two places now say what has to be finished before version 1.0, and they do not agree.
+  Kind: doc.
+  Source: owner decision 2026-09-04, against docs/standards/versioning-overrides.md section 2.
+
 ## P03 — Considered
 
 Nothing here is agreed. 💭 means the scope, the value or the decision is still
@@ -3687,7 +3717,7 @@ open.
   Kind: accessibility.
   Source: in-session-2026-08-20.
 
-- 💭 [GHUB-0070] **Nothing in the app has a name a screen reader could read — recorded, with an honest doubt about whether it is wanted.**
+- 📋 [GHUB-0070] **Nothing in the app has a name a screen reader could read — recorded, with an honest doubt about whether it is wanted.**
   There is not one `setAccessibleName`, `setAccessibleDescription` or
   `QAccessible` anywhere in `src/`. Qt gives standard widgets — the toolbar, the
   menu, the tile buttons — some default accessibility, but every game is a
@@ -3713,6 +3743,18 @@ open.
   toolbar actions and the fourteen tiles costs almost nothing and makes the hub
   navigable even if no game ever is. Do that much; leave the rest until somebody
   asks.
+  Wanted before 1.0. Owner's call, 2026-09-04.
+
+  SCOPE IS NOT SETTLED and should be before anyone starts. This item argues
+  against itself on purpose: it says the honest scope is never "make the
+  collection accessible" but at most "five grid games could announce their
+  state", and that the cheap part -- naming the toolbar actions and the
+  fourteen tiles -- is worth doing whatever is decided about the rest.
+
+  The session recommended that cheap half only, and the owner selected the
+  item without narrowing it. Treat the half as the floor rather than the
+  agreed ceiling, and ask before building a screen-reader surface for the
+  games themselves.
   **Layman:** Screen-reader software would find the games completely blank; whether that matters here is a real question, not an assumption.
   Kind: accessibility.
   Source: in-session-2026-08-20.
@@ -4293,7 +4335,7 @@ open.
 
 ### 🎨 Play
 
-- 💭 [GHUB-0018] **Canasta cannot take a move back.**
+- 📋 [GHUB-0018] **Canasta cannot take a move back.**
   Chess and Reversi can. A
   mis-clicked discard is gone, and it is the game whose cards are hardest to
   read — the two facts compound. One step is enough: the discard, or the last
@@ -4301,8 +4343,15 @@ open.
   Layman: An undo button for Canasta.
   Kind: enhancement.
   Source: in-session-2026-08-11.
+  Wanted before 1.0. Owner's call, 2026-09-04.
 
-- 💭 [GHUB-0019] **Nothing on screen says which house rules are switched on.**
+  The largest of the four by some distance: Canasta's engine keeps no move
+  log, which is why CLAUDE.md says its save serialises the engine directly
+  where Chess replays a move list. One step is enough per this item's own
+  body -- the discard, or the last lay-down -- and that scope is what keeps
+  it from becoming a rewrite.
+
+- 📋 [GHUB-0019] **Nothing on screen says which house rules are switched on.**
   GHUB-0016 covers teaching the games; this is the cheaper other half. Canasta
   has six house rules and the only place any of them is described is
   `README.md` on disk. A **Rules in force** panel listing what is on would
@@ -4310,6 +4359,15 @@ open.
   Layman: A panel showing which of your own rules are turned on.
   Kind: ux.
   Source: in-session-2026-08-11.
+  Wanted before 1.0. Owner's call, 2026-09-04, chosen from the four
+  remaining player-facing considered items. Flipped from considered on that
+  decision alone -- no analysis changed.
+
+  The case that moved it: the House set exists because the owner's family
+  plays its own variant, so which rules are in force is the one thing a
+  player needs to check at the table, and it is the one thing nothing on
+  screen says. It also fits the standing rule that the status bar is not read
+  during play, so the answer belongs on the play surface.
 
 - ✅ [GHUB-0034] **Canasta's rule set and Minesweeper's difficulty are remembered between sessions.**
   One defect shape in two games. Both settings were already
@@ -7062,7 +7120,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
 
 ### 🧰 Tests
 
-- 💭 [GHUB-0020] **A legality check that does not rely on the author's imagination.**
+- 📋 [GHUB-0020] **A legality check that does not rely on the author's imagination.**
   Four separate bugs on 2026-08-11 were positions where a move
   the player could see was legal got refused, all in one corner: where wild
   cards go. Every one passed the self-test, because the self-test checks
@@ -7073,6 +7131,12 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Layman: Have the tests find the illegal-move bugs instead of the player.
   Kind: test.
   Source: in-session-2026-08-11.
+  Wanted before 1.0. Owner's call, 2026-09-04.
+
+  The session's recommendation was after 1.0, on the grounds that it protects
+  code rather than the player; the owner chose before. Recorded so the
+  sequencing is his rather than inherited from a recommendation he did not
+  take.
 
 - ✅ [GHUB-0066] **Six games have no rules core, and they are exactly the six whose rules nothing tests.**
   CLAUDE.md opens the architecture section with the rule: every game is a rules
