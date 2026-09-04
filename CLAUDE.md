@@ -154,8 +154,12 @@ refuses by name. So the `else()` branch is not optional: `prepush_needs_bash`,
 `scorepad_needs_python` and `legibility_needs_python` exist to be red.
 
 **A case is genuinely dropped only where the platform is exempted on purpose,
-and there are two of those, not one.** The Python pair on Windows — configure
-prints why. And the hook test on any non-Unix platform, which is why its stub
+and there are two of those, not one.** The Python pair where there is no
+interpreter CMake will use AND the platform is not Unix — configure prints why.
+**That is not a Windows exemption**: the guard is `if(Python3_Interpreter_FOUND)`
+with no platform test at all, so a Windows runner that HAS an interpreter runs
+both — which is how a Linux-only `grep` pipeline inside one of them reddened
+the Windows leg six times. And the hook test on any non-Unix platform, which is why its stub
 sits INSIDE `if(UNIX)` rather than beside it: bash is what it runs, so a red
 stub on Windows would be an alarm with nothing behind it. Put a new Unix-only
 case's `else()` inside the same guard. **Count them with `ctest
@@ -381,9 +385,17 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
 
   **The single-shot is the easier half to miss, and it cannot be stopped once
   posted.** So what it needs is not a timer to stop but a guard the callback
-  reads when it arrives: Reversi's `m_generation` is the pattern, and the three
-  engine games' `m_thinking` is the same idea. Pyramid and 2048 both post one
-  to open a dialog and override neither — GHUB-0179.
+  reads when it arrives — and **`deactivate()` is what invalidates that guard**,
+  which is the whole reason a game with no member timer still overrides it.
+
+  **Chess, Draughts and Reversi each carry BOTH halves, and they cooperate.**
+  `m_generation` is stamped before the work is posted and bumped on teardown,
+  so a callback arriving late can see that it is stale; `m_thinking` says a
+  reply is still owed. Neither alone is enough — a bare `!m_thinking` cannot
+  tell a callback posted before `deactivate()` from one posted by a think
+  started after it, and a generation stamp alone does not stop a callback
+  firing during a live but paused think. Copy both. Pyramid and 2048 post a
+  single-shot to open a dialog and override neither — GHUB-0179.
 
   **`deactivate()` freezes a game; it does not settle it, and the two are
   different.** A board frozen mid-deal is static and will pass any stillness
@@ -425,9 +437,10 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   is bigger pencil marks, both under Traps below. What is required is that the
   game answer the switch, not that it answer in one particular shape.
 
-  **Canasta and Sudoku reserve no band, and Canasta must never be given one**:
-  its melds clear `kFaceMinWidth` by 0.4 px, and a band comes off the height
-  its table solves card width from.
+  **Canasta, Sudoku and Hearts reserve no band, and neither Canasta nor Hearts
+  may ever be given one**: Canasta's melds clear `kFaceMinWidth` by 0.4 px and
+  Hearts' trick by 1.2, and a band comes off the height each of them solves its
+  card width from. Sudoku draws no cards, so it has no such floor.
 
   What holds that true is not the count: `tests/uitest.cpp` walks the games the
   hub can open, renders each at its own smallest size with the switch off and
@@ -1028,8 +1041,14 @@ old format is not a crash — the hub keeps the fresh deal it just made, the app
 runs, nothing looks broken, and the player's half-finished game is gone without
 being told. `docs/standards/versioning-overrides.md` § 1 names that a breaking
 change; this corpus is what enforces it. **When it reddens, the choice is write
-a migration or take the break deliberately — never regenerate the corpus**,
-which deletes the only evidence the format moved.
+a migration or take the break deliberately — never regenerate the corpus to
+make the check green**, which deletes the only evidence the format moved.
+
+**The deliberate break has an end state, or it is just a red suite forever.**
+Replace that game's corpus file in the SAME commit that records the break, so
+the diff shows the old save going and the reason for it arriving together.
+`--write-saves` is how you do that; what the rule forbids is reaching for it
+with nothing recorded.
 
 **It is not a reason to cut `1.0.0`.** § 2 of that same document keeps MAJOR at
 0 until the last of its six items ships, so a reddened corpus inside `0.x` is
