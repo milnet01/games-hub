@@ -8,6 +8,8 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-06
+
 ### Added
 
 - **Canasta can take a move back** (GHUB-0018)
