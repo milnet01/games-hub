@@ -3732,7 +3732,7 @@ open.
   Kind: accessibility.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0070] **Nothing in the app has a name a screen reader could read — recorded, with an honest doubt about whether it is wanted.**
+- ✅ [GHUB-0070] **Nothing in the app has a name a screen reader could read — recorded, with an honest doubt about whether it is wanted.**
   There is not one `setAccessibleName`, `setAccessibleDescription` or
   `QAccessible` anywhere in `src/`. Qt gives standard widgets — the toolbar, the
   menu, the tile buttons — some default accessibility, but every game is a
@@ -3773,6 +3773,31 @@ open.
   Clarified (2026-09-06, GHUB-0181): "wanted before 1.0" above means
   wanted during 0.x. It is NOT a 1.0 condition -- versioning-overrides.md
   section 2's table is the whole bar and this item is not in it.
+  Resolved (2026-09-06): the floor is delivered and the owner chose to
+  stop there. The games half is GHUB-0183.
+
+  Scope settled as this item asked. Owner's call, 2026-09-06, on the
+  three options put to him: the hub is now navigable, the games are not,
+  and the reasoning is this item's own -- it is a surface nobody here
+  uses, and the effort competes with legibility work known to matter.
+
+  What the floor turned out to be: the opening claim that there is not
+  one setAccessibleName anywhere in src/ went stale on 2026-09-02, when
+  GHUB-0132 named the fourteen tiles. What remained was the three
+  decorated hub actions -- Back, Sound and Large play carry an arrow or
+  an emoji plus the switch's current STATE, which is the right label to
+  look at and the wrong words to hear, since a listener already gets the
+  state from the checked state.
+
+  Named on the WIDGET rather than the action: QAction carries no
+  accessible-name API, and a tool button falls back to the action's text.
+
+  theHubHasNamesToReadOut locks it, and also asserts the tiles so
+  GHUB-0132's work cannot be undone silently. Its first version was
+  VACUOUS -- it sniffed labels for the emoji, and a QStringLiteral of the
+  UTF-8 bytes builds four UTF-16 units rather than the emoji, so it
+  asserted over an empty set and passed with a button left unnamed. It
+  now looks the three up by object name; proved red.
   **Layman:** Screen-reader software would find the games completely blank; whether that matters here is a real question, not an assumption.
   Kind: accessibility.
   Source: in-session-2026-08-20.
@@ -4350,6 +4375,33 @@ open.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
+
+- 💭 [GHUB-0183] **The games themselves still tell a screen reader nothing.**
+  GHUB-0070 delivered the floor -- the tiles and the toolbar have spoken
+  names -- and the owner chose to stop there. This carries the rest.
+
+  Every game is a custom-painted QWidget that draws itself and exposes
+  nothing, so to assistive software the play area is an empty rectangle.
+
+  The honest scope is never "make the collection accessible" but at most
+  "five grid games could announce their state": Chess, Draughts, Reversi,
+  Sudoku and 2048 are grid games with a small vocabulary. Card games mostly
+  are not.
+
+  Filed as CONSIDERED rather than planned, and the reason is unchanged from
+  GHUB-0070. Nobody here uses a screen reader, and the effort competes with
+  legibility work known to matter. What argues the other way is that the app
+  is published to strangers, with OBS and Flathub queued.
+
+  Two things to know before starting. Each game needs its own
+  QAccessibleInterface and its own vocabulary, so this is per-game work
+  rather than one change. And it cannot be verified on this machine -- no
+  screen reader is installed, so a build that compiles and announces
+  nothing looks identical to one that works. Getting a way to HEAR the
+  result is part of the item, not a detail.
+  **Layman:** Someone playing by ear can reach the games but cannot play them.
+  Kind: accessibility.
+  Source: GHUB-0070's deferred half, owner's call 2026-09-06.
 
 ### 🎨 Play
 
