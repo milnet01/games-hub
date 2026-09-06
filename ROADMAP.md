@@ -1075,7 +1075,7 @@ got what the workflow built. Those are the gaps, and they are worth more here
 
 than any amount of hardening applied to an app with no sockets.
 
-- 📋 [GHUB-0050] **Every action is pinned to a commit, and then the release downloads two unpinned binaries and runs them.**
+- ✅ [GHUB-0050] **Every action is pinned to a commit, and then the release downloads two unpinned binaries and runs them.**
   `release.yml`'s Fetch linuxdeploy step pulls
   `linuxdeploy-x86_64.AppImage` and `linuxdeploy-plugin-qt-x86_64.AppImage` from
   the `continuous` release tag, `chmod +x`es them, and hands them the AppDir.
@@ -1101,6 +1101,20 @@ than any amount of hardening applied to an app with no sockets.
   The check belongs in `zizmor`'s territory conceptually but no linter will catch
   it, because it is a `run:` block rather than a `uses:` line. That is the whole
   reason it survived: the automated check looks at the field this hole is not in.
+  Resolved (2026-08-31), recorded 2026-09-06. The fix landed in d06473a
+  "audit: the release stops trusting a moving tag" and shipped in
+  v0.6.0; the bullet was never flipped, so the item sat planned while
+  the work was done -- and a session picking the next 1.0 item was about
+  to redo it. release.yml's Fetch linuxdeploy step now pins both
+  binaries to dated release tags (LINUXDEPLOY_TAG, PLUGIN_TAG), carries
+  a SHA-256 for each, and runs sha256sum -c on both BEFORE chmod +x,
+  which is the ordering that matters. The linuxdeploy sum is GitHub's
+  own published asset digest; the plugin's release predates that API
+  field so its sum was computed from the downloaded asset, and the
+  workflow comment says so. No other unpinned fetch remains in
+  release.yml. Consequence for the 1.0 bar: with GHUB-0031, GHUB-0067,
+  GHUB-0075 and now GHUB-0050 shipped, TWO of versioning-overrides.md
+  section 2's six remain -- GHUB-0054 and GHUB-0053.
   **Layman:** The tool that packages the Linux download is fetched fresh each time from a link that can change, and whatever arrives builds the file people download.
   Kind: security.
   Source: in-session-2026-08-20.
