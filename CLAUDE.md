@@ -665,6 +665,15 @@ bug, not a theory.
 **Card corner text needs room for two characters and a descender.** A box half
 a card wide clipped "10" to a stray stroke and cut the tail off "Q".
 
+**`QStringLiteral` takes a UTF-16 literal, so UTF-8 escape bytes in one build
+the wrong string.** `QStringLiteral("\xf0\x9f\x94\x8a")` is not the speaker
+emoji; it is four separate UTF-16 code units, and it compiles and compares
+clean against nothing. In a test that is worse than a wrong answer: a search
+for it matches no line, the loop asserts over an empty set, and the check
+passes over the very defect it was written for. Paste the character itself, or
+key on something that is not text at all -- an object name, as
+`theHubHasNamesToReadOut` does after being caught this way.
+
 **`slots` is a Qt keyword macro and expands to nothing.** A local named
 `slots` compiles as `const int = ...` and the error points at the `=`, which
 reads as a parser bug rather than a name collision. `signals` and `emit` are
