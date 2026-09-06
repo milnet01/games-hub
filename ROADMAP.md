@@ -8058,6 +8058,11 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   (the casts are mechanical), and decide whether "a manual run must stay
   at zero" means the pinned version or whatever is installed. Leaving it
   open costs the next session the same investigation.
+  Widened (2026-09-06): the class is not confined to minesweeperview.cpp.
+  The same bugprone-signed-bitwise finding appears in twenty48board.h,
+  on its packed board words. Both are save/restore bit packing, which is
+  where the pattern lives, so expect more of the same shape rather than
+  two isolated cases. Sweep for it rather than fixing the two named.
   **Layman:** A stricter version of one of our code checkers finds things the version we run on the build server does not.
   Kind: fix.
   Source: in-session-2026-09-06, found while closing GHUB-0179.

@@ -1670,6 +1670,55 @@ int main(int argc, char* argv[])
               "legibility: and every one of them goes back pixel for pixel");
     }
 
+    // ---- theHubHasNamesToReadOut (GHUB-0070, the floor) ----
+    //
+    // GHUB-0070 argues against itself about whether the games should announce
+    // their state, and settles one half outright: naming the tiles and the
+    // toolbar is worth doing whatever is decided about the rest. The tiles were
+    // named by GHUB-0132; this locks that and covers the toolbar.
+    //
+    // Only the three DECORATED hub actions are asserted. The rest of the
+    // toolbar is a game's own actions, whose plain text ("New Game", "Sort")
+    // is already what a screen reader should say -- and whose spoken name Qt
+    // takes from that text, so there is nothing to set and nothing that can
+    // rot. These three carry an arrow or an emoji instead.
+    {
+        HubWindow hub;
+        auto* bar = hub.findChild<QToolBar*>();
+        check(bar != nullptr, "hub: there is a toolbar to name");
+
+        // By OBJECT NAME rather than by sniffing the label for an arrow or an
+        // emoji. The first version of this block did sniff, and passed with a
+        // button deliberately left unnamed: QStringLiteral("\xf0\x9f\x94\x8a")
+        // builds four UTF-16 units rather than the speaker emoji, so nothing
+        // ever matched and the loop asserted over an empty set. Naming the
+        // three outright means a missing one fails instead of vanishing.
+        QStringList unnamed;
+        for (const char* id : { "backAction", "soundAction", "legibilityAction" }) {
+            auto* action = hub.findChild<QAction*>(QString::fromLatin1(id));
+            QWidget* button = (action != nullptr && bar != nullptr)
+                                  ? bar->widgetForAction(action)
+                                  : nullptr;
+            if (button == nullptr || button->accessibleName().isEmpty()
+                || button->accessibleDescription().isEmpty())
+                unnamed << QString::fromLatin1(id);
+        }
+        if (!unnamed.isEmpty())
+            std::printf("      NOTHING TO READ OUT: %s\n",
+                        qPrintable(unnamed.join(QStringLiteral(", "))));
+        check(unnamed.isEmpty(), "hub: every decorated toolbar button has a name to read out");
+
+        // The tiles, so GHUB-0132's work cannot be undone silently. Asked of
+        // the buttons the grid actually holds rather than of a count, which
+        // would go stale the next time a game is added.
+        QStringList mute;
+        for (QPushButton* tile : hub.findChildren<QPushButton*>()) {
+            if (tile->accessibleName().isEmpty() || tile->accessibleDescription().isEmpty())
+                mute << tile->accessibleName();
+        }
+        check(mute.isEmpty(), "hub: and every game tile says what it is");
+    }
+
     // ---- canastaOffersItsRulesInForce (GHUB-0019) ----
     //
     // The House set exists because the owner's family plays its own variant,

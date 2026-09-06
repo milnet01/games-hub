@@ -520,7 +520,9 @@ void HubWindow::buildChrome()
     m_toolBar->setToolButtonStyle(Qt::ToolButtonTextOnly);
 
     m_backAction = new QAction(QStringLiteral("← All Games"), this);
+    m_backAction->setObjectName(QStringLiteral("backAction"));
     m_backAction->setShortcut(QKeySequence(Qt::Key_Escape));
+
     connect(m_backAction, &QAction::triggered, this, [this] {
         Sound::instance().play(Sound::kBack);
         showMenu();
@@ -534,11 +536,13 @@ void HubWindow::buildChrome()
     m_soundSeparator = m_toolBar->addWidget(spacer);
 
     m_soundAction = new QAction(QStringLiteral("🔊 Sound"), this);
+    m_soundAction->setObjectName(QStringLiteral("soundAction"));
     m_soundAction->setCheckable(true);
     // Set before the connection below, so restoring the stored state does not
     // write it straight back and does not click.
     m_soundAction->setChecked(!Sound::instance().muted());
     m_soundAction->setToolTip(QStringLiteral("Turn game sounds on or off"));
+
     connect(m_soundAction, &QAction::toggled, this, [this](bool on) {
         Sound::instance().setMuted(!on);
         m_soundAction->setText(on ? QStringLiteral("🔊 Sound") : QStringLiteral("🔇 Muted"));
@@ -560,8 +564,10 @@ void HubWindow::buildChrome()
     // player who had the switch on launches with a checked button reading
     // "🔍 Normal".
     m_legibilityAction = new QAction(QStringLiteral("🔍 Normal"), this);
+    m_legibilityAction->setObjectName(QStringLiteral("legibilityAction"));
     m_legibilityAction->setCheckable(true);
     m_legibilityAction->setToolTip(QStringLiteral("Larger, higher-contrast play"));
+
     connect(m_legibilityAction, &QAction::toggled, this, [this](bool on) {
         Legibility::instance().setEnabled(on);
         m_legibilityAction->setText(on ? QStringLiteral("🔍 Large")
@@ -577,6 +583,29 @@ void HubWindow::buildChrome()
     connect(&Legibility::instance(), &Legibility::changed,
             m_legibilityAction, &QAction::setChecked);
     m_toolBar->addAction(m_legibilityAction);
+
+    // Naming the three decorated actions for a screen reader (GHUB-0070).
+    //
+    // It has to be done on the WIDGET, not the action: QAction carries no
+    // accessible-name API at all, and a tool button's spoken name otherwise
+    // falls back to the action's TEXT -- which here is an arrow or an emoji
+    // plus the switch's current STATE. A listener already gets the state from
+    // the checked state, so spoken those said the state twice and the purpose
+    // never. The button exists only once the action has been added, which is
+    // why this sits here rather than beside each action.
+    const auto nameButton = [this](QAction* action, const QString& name,
+                                   const QString& description) {
+        if (QWidget* button = m_toolBar->widgetForAction(action)) {
+            button->setAccessibleName(name);
+            button->setAccessibleDescription(description);
+        }
+    };
+    nameButton(m_backAction, QStringLiteral("All games"),
+               QStringLiteral("Leave this game and go back to the list of games"));
+    nameButton(m_soundAction, QStringLiteral("Sound"),
+               QStringLiteral("Turn game sounds on or off"));
+    nameButton(m_legibilityAction, QStringLiteral("Large play"),
+               QStringLiteral("Larger cards and higher-contrast play"));
 
     // A Help menu rather than a fifteenth tile: the grid keeps all of its slots
     // for games, and "about this program" is where a stranger already looks.

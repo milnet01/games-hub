@@ -10,6 +10,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **The hub's toolbar switches now say what they are to a screen reader** (GHUB-0070)
+  Back, Sound and Large play are labelled with an arrow or an emoji plus
+  their current state, which is right to look at and wrong to listen to.
+  Each now has a spoken name and description of its own. The game tiles
+  were already named; the games themselves still are not.
+
 - **Canasta can tell you which rules are in force** (GHUB-0019)
   A "Rules in force" button on Canasta's toolbar opens a panel naming, in
   plain words, every rule that differs from Classic. The House set exists
