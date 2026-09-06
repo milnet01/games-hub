@@ -6759,7 +6759,7 @@ open.
   Kind: fix.
   Source: GHUB-0140, found by the regression test written for it, 2026-09-04.
 
-- 📋 [GHUB-0179] **Pyramid and 2048 can open a dialog over a game you have already left.**
+- ✅ [GHUB-0179] **Pyramid and 2048 can open a dialog over a game you have already left.**
   Both post `QTimer::singleShot(200, this, ...)` to open a QMessageBox --
   pyramidview.cpp's "Cleared" and twenty48view.cpp's "No moves left" -- and
   neither overrides `deactivate()`. Leave the page inside those 200 ms and the
@@ -6782,6 +6782,29 @@ open.
   still MOVING when the hub leaves, and a posted single-shot with no running
   timer passes that. Whatever fixes this should also say what would have
   caught it.
+  Resolved (2026-09-06): fixed in nine games, not the two named. The
+  lane found the two that override deactivate() nowhere; reading the
+  code, Klondike, Spider, FreeCell, Sudoku, Snake, Pinball and
+  Minesweeper post the same unguarded dialog single-shot, and an
+  override does not help — nothing can cancel a posted single-shot.
+
+  GameView::announceLater() now owns a delayed announcement: it reads
+  isVisible() on arrival, which the hub sets by hiding the page it
+  leaves. A suppressed announcement is dropped rather than held; the
+  score is banked before the post, so only the sentence is lost.
+  Hearts is untouched — it already guards in place and holds its box,
+  because there the box gates the next hand.
+
+  What would have caught it, per the item's own ask: nothing did, and
+  the stop-on-leave block cannot — it asserts no game is still MOVING,
+  which a posted single-shot passes. Two uitest blocks are the net and
+  both were proved red before being kept. announcementsStopAtThePage-
+  YouLeft drives the guard both ways; everyDelayedDialogIsGuarded reads
+  the source and fails a singleShot whose next lines open a QMessageBox
+  without reading isVisible(), because the runtime path HANGS an
+  offscreen test rather than failing it.
+
+  Verified: ctest 9/9, both binaries exit 0, scripts/local-ci.sh green.
   **Layman:** Finish a game, leave it quickly, and its congratulations box can appear on top of whatever you opened next.
   Kind: fix.
   Source: review-contract on CLAUDE.md, 2026-09-04.
@@ -7964,6 +7987,27 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   **Layman:** One of the automatic checks was written in a way only Linux could run, so every push to GitHub failed.
   Kind: fix.
   Source: in-session-2026-09-02.
+
+- 📋 [GHUB-0182] **A newer clang-tidy than CI's pinned one reports findings the pinned one does not.**
+  A local clang-tidy (LLVM 23) reports bugprone-signed-bitwise in
+  minesweeperview.cpp's save and restore code -- the packed
+  mine/revealed/flagged byte, both directions. CI pins clang-tidy 18 and
+  is green, so this is not a CI failure and not a regression.
+
+  CLAUDE.md § Releasing already predicts exactly this: the pin is
+  deliberate, check families only grow, and whatever is installed
+  locally is the stricter of the two. What it does not say is what a
+  session should DO on finding one, and the standing handoff says a
+  manual run must stay at zero -- so the two read as a contradiction at
+  the moment it happens.
+
+  Two things to settle, and the second is the owner's: fix the findings
+  (the casts are mechanical), and decide whether "a manual run must stay
+  at zero" means the pinned version or whatever is installed. Leaving it
+  open costs the next session the same investigation.
+  **Layman:** A stricter version of one of our code checkers finds things the version we run on the build server does not.
+  Kind: fix.
+  Source: in-session-2026-09-06, found while closing GHUB-0179.
 
 ### 🎨 More games, if wanted
 
