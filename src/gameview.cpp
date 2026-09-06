@@ -4,6 +4,7 @@
 #include "theme.h"
 
 #include <QFontMetricsF>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -25,6 +26,17 @@ GameView::GameView(QWidget* parent)
     // second copy of a string they have already composed.
     connect(this, &GameView::statusChanged, this,
             [this](const QString& text) { m_lastStatus = text; });
+}
+
+void GameView::announceLater(int delayMs, std::function<void()> fn)
+{
+    QTimer::singleShot(delayMs, this, [this, fn = std::move(fn)] {
+        // Read on arrival, not at post time: see the header for why a posted
+        // single-shot cannot be cancelled and what the hub guarantees here.
+        if (!isVisible())
+            return;
+        fn();
+    });
 }
 
 QFont GameView::captionFont(const QRectF& area) const

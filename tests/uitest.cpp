@@ -39,6 +39,7 @@
 #include <QDeadlineTimer>
 #include <QFile>
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QSettings>
 #include <QLabel>
@@ -1667,6 +1668,88 @@ int main(int argc, char* argv[])
         check(silent.isEmpty(), "legibility: every measured game changes what it paints");
         check(notRestored.isEmpty(),
               "legibility: and every one of them goes back pixel for pixel");
+    }
+
+    // ---- announcementsStopAtThePageYouLeft (GHUB-0179) ----
+    //
+    // A game that ends on a clock -- Pinball draining, Snake hitting a wall --
+    // posts its game-over box on a short delay. A posted single-shot cannot be
+    // cancelled, so deactivate() has nothing to stop: leaving the page inside
+    // that delay opened the box over whichever game the hub moved to.
+    //
+    // Nothing here could catch it. The block above asserts that no game is
+    // still MOVING when the hub leaves, and a posted single-shot with no
+    // running timer passes that. These two blocks are the net -- the first
+    // that the guard works, the second that every game goes through it.
+    {
+        GameView open;
+        open.resize(200, 120);
+        open.show();
+        int arrived = 0;
+        open.announceLater(10, [&arrived] { ++arrived; });
+        pump(150);
+        check(arrived == 1, "an announcement on the page you are still on arrives");
+
+        GameView left;
+        left.resize(200, 120);
+        left.show();
+        int arrivedAfterLeaving = 0;
+        left.announceLater(10, [&arrivedAfterLeaving] { ++arrivedAfterLeaving; });
+        // What the hub does on its way out: deactivate the view it is leaving,
+        // then move the stack off it.
+        left.deactivate();
+        left.hide();
+        pump(150);
+        check(arrivedAfterLeaving == 0,
+              "an announcement posted before the hub left is dropped, not shown");
+    }
+
+    // ---- everyDelayedDialogIsGuarded (GHUB-0179) ----
+    //
+    // The block above proves announceLater() guards; this proves the games use
+    // it. A new game reaching for QTimer::singleShot to open a QMessageBox
+    // brings the defect straight back, and no runtime check here can see that:
+    // the box only opens on a path that HANGS an offscreen test rather than
+    // failing it, which is why the Snake block below stops short of 200 ms.
+    //
+    // So this reads the source instead. A singleShot whose next few lines open
+    // a QMessageBox is the shape being banned; one that reads isVisible() for
+    // itself is guarded in place, which is what Hearts does -- it holds its
+    // hand-over box for your return rather than dropping it.
+    {
+        QStringList unguarded;
+        int filesScanned = 0;
+        QDirIterator it(QStringLiteral(GAMESHUB_SOURCE_DIR "/src"),
+                        QStringList{ QStringLiteral("*.cpp") }, QDir::Files,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QString path = it.next();
+            QFile source(path);
+            if (!source.open(QIODevice::ReadOnly | QIODevice::Text))
+                continue;
+            ++filesScanned;
+            const QStringList lines =
+                QString::fromUtf8(source.readAll()).split(QLatin1Char('\n'));
+            for (int i = 0; i < lines.size(); ++i) {
+                if (!lines.at(i).contains(QLatin1String("QTimer::singleShot(")))
+                    continue;
+                // Far enough to reach a dialog opened at the top of a lambda,
+                // short enough not to run on into the next function.
+                const QString posted = lines.mid(i, 15).join(QLatin1Char('\n'));
+                if (!posted.contains(QLatin1String("QMessageBox")))
+                    continue;
+                if (posted.contains(QLatin1String("isVisible()")))
+                    continue;
+                unguarded << QStringLiteral("%1:%2").arg(QFileInfo(path).fileName()).arg(i + 1);
+            }
+        }
+        // A scan that reads nothing passes every assertion it makes, which is
+        // the one way this block could go quietly useless.
+        check(filesScanned > 10, "the source scan found the tree to read");
+        if (!unguarded.isEmpty())
+            std::printf("      UNGUARDED: %s\n", qPrintable(unguarded.join(QStringLiteral(", "))));
+        check(unguarded.isEmpty(),
+              "a delayed dialog goes through announceLater(), never a bare singleShot");
     }
 
     // ---- gamesStopTheirClocks (GHUB-0073, generalised) ----

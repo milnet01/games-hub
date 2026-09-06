@@ -300,7 +300,7 @@ void SpiderView::checkWin()
     const bool newBest = Scores::instance().recordLow(Scores::spiderBestMoves(m_table.suits()), m_table.moves());
     refresh();
 
-    QTimer::singleShot(200, this, [this, newBest] {
+    announceLater(200, [this, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("Solved"));
         box.setText(QStringLiteral("All eight runs complete!"));

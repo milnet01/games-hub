@@ -14,7 +14,6 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
-#include <QTimer>
 
 #include <algorithm>
 
@@ -323,7 +322,7 @@ void PyramidView::checkEnd()
     if (m_announced)
         return;
     m_announced = true;
-    QTimer::singleShot(200, this, [this, newBest] {
+    announceLater(200, [this, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("Cleared"));
         box.setText(QStringLiteral("The pyramid is gone!"));

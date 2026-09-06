@@ -236,7 +236,7 @@ void MinesweeperView::refresh()
             const bool newBest =
                 won && Scores::instance().recordLow(Scores::minesweeperBestTime(m_level), seconds);
             // Queued so the final board paints before the dialog covers it.
-            QTimer::singleShot(won ? 250 : 600, this, [this, won, seconds, newBest] {
+            announceLater(won ? 250 : 600, [this, won, seconds, newBest] {
                 QMessageBox box(this);
                 box.setWindowTitle(won ? QStringLiteral("Cleared") : QStringLiteral("Boom"));
                 box.setText(won ? QStringLiteral("You cleared the field!")

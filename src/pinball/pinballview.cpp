@@ -126,7 +126,7 @@ void PinballView::announceGameOver()
     Sound::instance().play(Sound::kLose);
     const bool newBest = Scores::instance().recordHigh(Scores::pinballBestScore(), m_table.score());
 
-    QTimer::singleShot(150, this, [this, newBest] {
+    announceLater(150, [this, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("Game over"));
         box.setText(QStringLiteral("Out of balls."));

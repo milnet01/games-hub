@@ -358,7 +358,7 @@ void KlondikeView::checkWin()
     Sound::instance().play(Sound::kWin);
     const bool newBest = Scores::instance().recordHigh(Scores::klondikeBestScore(), m_table.score());
     refresh();
-    QTimer::singleShot(200, this, [this, newBest] {
+    announceLater(200, [this, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("Solved"));
         box.setText(QStringLiteral("You cleared the table!"));

@@ -352,7 +352,7 @@ void SudokuView::checkSolved()
     if (m_announced)
         return;
     m_announced = true;
-    QTimer::singleShot(200, this, [this, seconds, newBest] {
+    announceLater(200, [this, seconds, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("Solved"));
         box.setText(QStringLiteral("Puzzle complete!"));

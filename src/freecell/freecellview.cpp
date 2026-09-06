@@ -255,7 +255,7 @@ void FreeCellView::checkWin()
         QStringLiteral("freecell/best_moves"), m_table.moves());
     refresh();
 
-    QTimer::singleShot(200, this, [this, newBest] {
+    announceLater(200, [this, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("Solved"));
         box.setText(QStringLiteral("Every card home!"));

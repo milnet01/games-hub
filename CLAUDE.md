@@ -394,8 +394,10 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   reply is still owed. Neither alone is enough — a bare `!m_thinking` cannot
   tell a callback posted before `deactivate()` from one posted by a think
   started after it, and a generation stamp alone does not stop a callback
-  firing during a live but paused think. Copy both. Pyramid and 2048 post a
-  single-shot to open a dialog and override neither — GHUB-0179.
+  firing during a live but paused think. Copy both. A single-shot that opens a
+  DIALOG is guarded instead by `GameView::announceLater()`, whose header says
+  why and which games use it; `everyDelayedDialogIsGuarded` in
+  `tests/uitest.cpp` fails a bare one (GHUB-0179).
 
   **`deactivate()` freezes a game; it does not settle it, and the two are
   different.** A board frozen mid-deal is static and will pass any stillness

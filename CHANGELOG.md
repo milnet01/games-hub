@@ -60,6 +60,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **A game's end-of-game box can no longer open over a game you have already left** (GHUB-0179)
+  Nine games posted their congratulation or game-over dialog on a short
+  delay. A posted single-shot cannot be cancelled, so leaving the page
+  inside that delay opened the box over whichever game the hub moved to.
+  Delayed announcements now run through GameView::announceLater(), which
+  drops the announcement if the hub has left.
+
 - **Piling cards onto one column in Klondike or Spider no longer pushes the bottom of it off the screen.** (GHUB-0089)
   The cards are sized for the board you are dealt, and a column you build
   up in play can grow longer than that. Rather than making every card

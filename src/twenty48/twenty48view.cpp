@@ -13,7 +13,6 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
-#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -162,7 +161,7 @@ void Twenty48View::checkEnd()
     const bool newBest = Scores::instance().recordHigh(bestKey(), m_board.score());
     refresh();
 
-    QTimer::singleShot(200, this, [this, newBest] {
+    announceLater(200, [this, newBest] {
         QMessageBox box(this);
         box.setWindowTitle(QStringLiteral("No moves left"));
         box.setText(QStringLiteral("The board is stuck."));

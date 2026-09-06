@@ -6,6 +6,8 @@
 #include <QString>
 #include <QWidget>
 
+#include <functional>
+
 class QPainter;
 
 // Every game in the hub is a GameView. The hub supplies the window, the
@@ -158,6 +160,23 @@ public:
     // changed length, and a board that jumps between moves is worse than a
     // slightly smaller one.
     double captionBand(const QRectF& area) const;
+
+    // Run `fn` after `delayMs`, but only if the hub has not left this game in
+    // the meantime. Use it for anything a game announces on a delay — a
+    // congratulation, a game-over box — in place of QTimer::singleShot.
+    //
+    // A posted single-shot cannot be cancelled, so deactivate() has nothing to
+    // stop and the guard has to be read when the callback ARRIVES. The hub
+    // hides the page it leaves, so `isVisible()` is that guard, and it needs
+    // nothing remembered per game. Without it a game that ends on a clock —
+    // Pinball draining, Snake hitting a wall — opens its modal box over
+    // whichever game the hub moved to (GHUB-0179).
+    //
+    // A suppressed announcement is dropped rather than held: the score is
+    // already banked before the post, so what is lost is the sentence, on a
+    // page the player has just left. Hearts holds its hand-over box instead
+    // and does not use this, because there the box gates the next hand.
+    void announceLater(int delayMs, std::function<void()> fn);
 
 Q_SIGNALS:
     // Text for the hub's status bar.
