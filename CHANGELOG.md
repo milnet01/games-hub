@@ -10,6 +10,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Canasta can take a move back** (GHUB-0018)
+  An Undo button, one step: the draw, the lay-down or the discard. A
+  mis-clicked discard ends your turn, so the computers have already
+  answered by the time you notice -- undo takes their replies back with
+  yours, the way Chess and Reversi already do.
+
 - **A Canasta take-the-pile check that thinks of positions nobody thought of** (GHUB-0020)
   Four bugs in one week were legal takes the engine refused, all around
   wild cards, and every one passed a suite that only checked positions

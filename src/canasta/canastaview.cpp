@@ -574,6 +574,12 @@ void CanastaView::buildActions()
     connect(newAction, &QAction::triggered, this, &CanastaView::newGame);
     m_actions.append(newAction);
 
+    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction->setShortcut(QKeySequence::Undo);
+    m_undoAction->setEnabled(false);
+    connect(m_undoAction, &QAction::triggered, this, &CanastaView::undo);
+    m_actions.append(m_undoAction);
+
     // Deliberately NOT in m_actions, so it never reaches the toolbar: laying
     // cards down belongs on the table, where the Lay down button is. This
     // keeps the space bar working, and refresh() still uses it to decide
@@ -755,6 +761,60 @@ void CanastaView::applyRules()
     update();
 }
 
+// Banked only once the engine has ACCEPTED the move. A refused one leaves the
+// table where it was, so overwriting the undo point there would throw away the
+// move the player actually wants back.
+void CanastaView::rememberForUndo(const QByteArray& point)
+{
+    m_undo = point;
+    if (m_undoAction != nullptr)
+        m_undoAction->setEnabled(!m_undo.isEmpty());
+}
+
+void CanastaView::forgetUndo()
+{
+    m_undo.clear();
+    if (m_undoAction != nullptr)
+        m_undoAction->setEnabled(false);
+}
+
+// One step back, and it rewinds the computers' replies with it. That is the
+// point rather than a side effect: the move worth taking back is a mis-clicked
+// DISCARD, and discarding ends your turn, so by the time you see the mistake
+// the other three have already played. ReversiView::undo does the same, in as
+// many words -- "one undo rewinds both their move and the computer's reply".
+//
+// Canasta keeps no move log, so there is nothing to invert; what it has is a
+// save that serialises the whole engine. restoreState() is therefore the undo,
+// and reusing it rather than writing a second rewind path means the AI seats'
+// per-hand freeze budget and the toolbar's ticks come back too, and that the
+// restore is all-or-nothing with a pre-flight (GHUB-0052) already proved by the
+// saved-game fuzz.
+//
+// The computers do not need stopping. The tick only plays a seat when it is
+// that seat's turn, and every undo point is a position where it is the
+// player's, so the restored table simply waits.
+void CanastaView::undo()
+{
+    if (m_undo.isEmpty())
+        return;
+
+    // Taken by value and cleared FIRST. restoreState() is a heavy call that
+    // touches most of this class, and undoing one step must not leave a second
+    // step available whatever it does.
+    const QByteArray point = m_undo;
+    forgetUndo();
+    if (!restoreState(point)) {
+        announce(QStringLiteral("That move cannot be taken back."));
+        return;
+    }
+    // Nothing announced on success, deliberately. The message panel is where a
+    // REFUSED move says why -- every move that works clears it -- so a
+    // confirmation there would change what the panel means. The card coming
+    // back to the hand is the feedback, and it is the largest change on the
+    // table.
+}
+
 void CanastaView::newGame()
 {
     ca::Rules r = m_useHouse ? m_house : ca::Rules::classic();
@@ -769,6 +829,9 @@ void CanastaView::newGame()
     applyLevels();
     for (ca::Ai& ai : m_ai)
         ai.seed(dealSeed());
+
+    // A fresh deal has nothing behind it.
+    forgetUndo();
 
     m_flights.clear();
     m_selected.clear();
@@ -931,6 +994,10 @@ bool CanastaView::restoreState(const QByteArray& blob)
     // honoured, so setting the levels directly here dropped the Expert-partner
     // rule on every resumed game while the toolbar still showed it ticked.
     applyLevels();
+
+    // A restored game has no move behind it either -- and undo() has already
+    // cleared the point it is restoring, so this cannot eat its own step.
+    forgetUndo();
 
     // Nothing was in the air when the game was put away, and nothing is now.
     m_flights.clear();
@@ -1741,10 +1808,12 @@ void CanastaView::humanDraw()
         return;
 
     const std::vector<Card> before = m_engine.hand(0);
+    const QByteArray undoPoint = saveState();
     if (!m_engine.drawFromStock()) {
         announce(m_engine.lastError());
         return;
     }
+    rememberForUndo(undoPoint);
     m_message.clear();
     Sound::instance().play(Sound::kCardDeal);
     sortHand();
@@ -1769,10 +1838,12 @@ void CanastaView::humanTakePile()
         return;
     }
 
+    const QByteArray undoPoint = saveState();
     if (!m_engine.takePile(lay)) {
         announce(m_engine.lastError());
         return;
     }
+    rememberForUndo(undoPoint);
     m_message.clear();
     Sound::instance().play(Sound::kCardPlace);
     clearSelection();
@@ -1803,10 +1874,12 @@ void CanastaView::humanMeld(int targetRank)
     const QPointF from = handCentre(n / 2, n, true);
 
     const ca::Team before = m_engine.team(0);
+    const QByteArray undoPoint = saveState();
     if (!m_engine.meldCards(cards, targetRank)) {
         announce(m_engine.lastError());
         return;
     }
+    rememberForUndo(undoPoint);
     m_message.clear();
     Sound::instance().play(Sound::kCardPlace);
     clearSelection();
@@ -1832,10 +1905,12 @@ void CanastaView::humanDiscard()
     const Card c = h[std::size_t(index)];
     const QPointF from = handCentre(index, int(h.size()), true);
 
+    const QByteArray undoPoint = saveState();
     if (!m_engine.discard(c)) {
         announce(m_engine.lastError());
         return;
     }
+    rememberForUndo(undoPoint);
     m_message.clear();
     Sound::instance().play(Sound::kCardPlace);
     clearSelection();

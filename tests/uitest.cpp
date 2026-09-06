@@ -3521,6 +3521,72 @@ int main(int argc, char* argv[])
             clickAt(&canasta, card, Qt::LeftButton);
             check(renderOf(&canasta) != picked, "canasta: clicking it again puts it back");
 
+            // ---- GHUB-0018: one step back ----
+            //
+            // Asserted on the SAVE BLOB, not on pixels. The blob IS the
+            // position -- engine, rule set, and the seats' per-hand budget --
+            // so "the table came back" is byte equality rather than a picture
+            // that could match for other reasons. It is also the thing undo is
+            // built on, so a round trip that does not come back byte for byte
+            // is the defect itself.
+            {
+                QAction* undoAction = nullptr;
+                for (QAction* a : canasta.gameActions()) {
+                    if (a->text() == QStringLiteral("Undo"))
+                        undoAction = a;
+                }
+                check(undoAction != nullptr, "canasta: there is an Undo on the toolbar");
+                check(undoAction != nullptr && !undoAction->isEnabled(),
+                      "canasta: greyed out while there is nothing to take back");
+
+                const QPointF stockPile(canasta.width() * 0.5 - 60.0, canasta.height() * 0.47);
+                const QByteArray beforeDraw = canasta.saveState();
+                check(!beforeDraw.isEmpty(), "canasta: the position can be written down");
+                clickAt(&canasta, stockPile, Qt::LeftButton);
+                pump(900);
+                check(canasta.saveState() != beforeDraw, "canasta: drawing moves the game on");
+                check(undoAction != nullptr && undoAction->isEnabled(),
+                      "canasta: and Undo lights up once there is a move to take back");
+
+                if (undoAction != nullptr)
+                    undoAction->trigger();
+                pump(300);
+                check(canasta.saveState() == beforeDraw,
+                      "canasta: undo puts the table back exactly as it was");
+                check(undoAction != nullptr && !undoAction->isEnabled(),
+                      "canasta: and one step is all there is -- nothing left to take back");
+
+                // The case the item was filed for, and the one the draw above
+                // cannot reach: a mis-clicked DISCARD. Discarding ends your
+                // turn, so by the time you see the mistake the other three
+                // have played -- and taking your card back has to take their
+                // replies back with it. ReversiView::undo has always done
+                // this; the blob is what proves Canasta does.
+                QAction* discardAction = nullptr;
+                for (QAction* a : canasta.gameActions()) {
+                    if (a->text() == QStringLiteral("Discard"))
+                        discardAction = a;
+                }
+                clickAt(&canasta, stockPile, Qt::LeftButton);  // draw again
+                pump(900);
+                const QPointF handCard(canasta.width() / 2.0, canasta.height() - 60.0);
+                clickAt(&canasta, handCard, Qt::LeftButton);   // lift one
+                const QByteArray beforeThrow = canasta.saveState();
+                if (discardAction != nullptr && discardAction->isEnabled())
+                    discardAction->trigger();
+                // Long enough for the turn to leave you and at least one
+                // computer to answer, which is the whole point of the case.
+                pump(2000);
+                const bool theyReplied = canasta.saveState() != beforeThrow;
+                check(theyReplied, "canasta: the throw passes the turn and the table moves on");
+
+                if (undoAction != nullptr && undoAction->isEnabled())
+                    undoAction->trigger();
+                pump(300);
+                check(canasta.saveState() == beforeThrow,
+                      "canasta: taking a throw back takes the computers' replies with it");
+            }
+
             // Drawing from the stock has to move the game on.
             const QPointF stock(canasta.width() * 0.5 - 60.0, canasta.height() * 0.47);
             const QPointF pile(canasta.width() * 0.5 + 60.0, canasta.height() * 0.47);

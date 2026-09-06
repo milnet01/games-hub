@@ -2111,6 +2111,31 @@ progress.
   Kind: feature.
   Source: user-request-2026-09-02.
 
+- 📋 [GHUB-0184] **Canasta's toolbar is dense enough to push the legibility switch out of reach.**
+  Measured with --shot at three widths. At 1920 the whole toolbar fits with
+  room to spare. At 1400 the legibility switch is pushed into the overflow
+  chevron. At 900 -- Canasta's own minimum -- most of the toolbar is in
+  there.
+
+  Two buttons were added on 2026-09-06, Rules in force (GHUB-0019) and Undo
+  (GHUB-0018), and they are what moved the 1400 case. Neither is the cause:
+  Canasta carries eighteen actions, of which the four "Play to N" buttons
+  alone take about a third of the width.
+
+  Why it matters more than ordinary crowding: the switch is app-wide, it is
+  the control this project exists to serve, and hiding it behind a chevron
+  is the one place a toolbar should not economise. It is still REACHABLE, so
+  this is not a defect -- which is why it is filed rather than fixed inside
+  GHUB-0018, where it would have been scope creep.
+
+  The obvious fix is to stop spending four buttons on the target score --
+  one "Play to ..." button opening a small menu -- which would pay for both
+  new buttons and more. Not attempted here; it is a change to a control the
+  owner uses and should be his call.
+  **Layman:** On a narrower window the large-play button hides behind a small arrow, which is the one button that should never be hard to find.
+  Kind: ux.
+  Source: in-session-2026-09-06, measured while closing GHUB-0018.
+
 ### ✨ Look and feel
 
 Not decoration. Every item here is a piece of information the game currently
@@ -4405,7 +4430,7 @@ open.
 
 ### 🎨 Play
 
-- 📋 [GHUB-0018] **Canasta cannot take a move back.**
+- ✅ [GHUB-0018] **Canasta cannot take a move back.**
   Chess and Reversi can. A
   mis-clicked discard is gone, and it is the game whose cards are hardest to
   read — the two facts compound. One step is enough: the discard, or the last
@@ -4423,6 +4448,46 @@ open.
   Clarified (2026-09-06, GHUB-0181): "wanted before 1.0" above means
   wanted during 0.x. It is NOT a 1.0 condition -- versioning-overrides.md
   section 2's table is the whole bar and this item is not in it.
+  Resolved (2026-09-06): an Undo action on Canasta's toolbar, one step,
+  covering all four of the player's moves -- draw, take pile, lay-down
+  and discard.
+
+  It rewinds the computers' replies with yours, and that is the point
+  rather than a side effect: the move worth taking back is a mis-clicked
+  DISCARD, and discarding ends your turn, so by the time you see the
+  mistake the other three have played. ReversiView::undo has always done
+  exactly this, in as many words, so it is the house pattern rather than
+  a new decision.
+
+  Canasta keeps no move log -- which is why CLAUDE.md says its save
+  serialises the engine where Chess replays a move list -- so one step
+  back is one SNAPSHOT rather than a move to invert. saveState() and
+  restoreState() already are that snapshot, so undo reuses them instead
+  of a second rewind path: the AI seats' per-hand freeze budget and the
+  toolbar's ticks come back too, and the restore is all-or-nothing with
+  the pre-flight GHUB-0052 built and the saved-game fuzz exercises.
+
+  Three details worth keeping. The point is banked only once the engine
+  ACCEPTS the move, so a refused move cannot overwrite the one you want
+  back. The computers need no stopping -- the tick plays a seat only on
+  its own turn, and every undo point is a position where it is yours.
+  And undo announces nothing on success: the message panel is where a
+  REFUSED move says why, every move that works clears it, so a
+  confirmation there would change what the panel means.
+
+  Proved on the SAVE BLOB rather than on pixels, which is byte equality
+  over the whole position. Both cases are covered, including the one the
+  item was filed for: throw a card, let the computers answer, undo, and
+  the table is byte-identical to before the throw. Proved red by taking
+  the snapshot after the move instead of before.
+
+  Filed alongside: GHUB-0184, Canasta's toolbar is now dense enough that
+  at 1400 wide the legibility switch is pushed into the overflow. Fits at
+  1920, still reachable, so not a defect -- but not something to leave
+  unsaid either.
+
+  Verified: selftest and uitest exit 0, ctest 9/9, local-ci green,
+  clang-tidy clean on canastaview.cpp.
 
 - ✅ [GHUB-0019] **Nothing on screen says which house rules are switched on.**
   GHUB-0016 covers teaching the games; this is the cheaper other half. Canasta

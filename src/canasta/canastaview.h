@@ -124,6 +124,10 @@ private:
 
     void buildActions();
     void newGame();
+    // One step back: the discard, or the last lay-down (GHUB-0018).
+    void undo();
+    void rememberForUndo(const QByteArray& point);
+    void forgetUndo();
     // Puts the toolbar's rule set onto the game in progress, without dealing.
     void applyRules();
     // Sets each seat's strength, which is not simply the chosen level: the
@@ -236,6 +240,12 @@ private:
                    double scale = 1.0) const;
 
     QList<QAction*> m_actions;
+    QAction* m_undoAction = nullptr;
+    // The position before the player's last move, as saveState() writes it.
+    // Canasta keeps no move log -- which is why its save serialises the engine
+    // where Chess replays a move list -- so one step back is one snapshot
+    // rather than a move to invert. Empty means there is nothing to undo.
+    QByteArray m_undo;
     QAction* m_meldAction = nullptr;
     QAction* m_discardAction = nullptr;
     QAction* m_rulesAction = nullptr;
