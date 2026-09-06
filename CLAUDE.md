@@ -271,6 +271,20 @@ the stricter of the two and CI should never be the first to see a finding.
 That also means a local `--with-tidy` run is not proof the pinned version
 agrees.
 
+**The pinned version is what "stay at zero" measures against** — owner's call,
+2026-09-06, closing GHUB-0182. Findings a newer local clang-tidy reports are
+filed, not treated as breakage: check families only grow, so measuring the rule
+against whatever happens to be installed would let an LLVM upgrade break it with
+no code change. **So a local sweep is NOT expected to come back empty**, and
+does not today: `performance-use-std-move` findings stand on save/restore paths
+by deliberate decision, being outside what GHUB-0182 named and unmeasurable on
+paths that run once. Do not "fix" them to reach a clean run. `bugprone-signed-bitwise` IS at zero across `src/`
+and is worth keeping there.
+
+**CI lints `src/*.cpp` only, so `tests/` is not analysed at all.** Its
+fixed-seed findings are deliberate -- the seeds are what make two runs
+comparable -- and cannot redden CI.
+
 Cutting a release is three edits, a check and a tag, **in this order**:
 
 1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`.
