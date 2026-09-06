@@ -88,6 +88,20 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Bit-packing across nine files no longer trips a stricter code checker** (GHUB-0182)
+  Housekeeping with no change to how anything plays: a newer version of
+  one of the code checkers flagged the way saved games and card art pack
+  values into single numbers. Nothing was wrong with the results; the
+  code now says what it means clearly enough that the stricter checker
+  agrees.
+
+- **The large-play switch no longer hides behind the toolbar's overflow arrow** (GHUB-0184)
+  The sound and large-play switches now sit at the left of the toolbar,
+  ahead of whatever the game you are in adds. A toolbar with too much in
+  it hides whatever is furthest right, and these two were furthest right
+  -- so in Canasta, which has the most buttons, the large-play switch was
+  the first thing to disappear on a narrower window.
+
 - **A game's end-of-game box can no longer open over a game you have already left** (GHUB-0179)
   Nine games posted their congratulation or game-over dialog on a short
   delay. A posted single-shot cannot be cancelled, so leaving the page

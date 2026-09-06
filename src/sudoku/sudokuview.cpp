@@ -477,7 +477,7 @@ void SudokuView::paintEvent(QPaintEvent*)
             p.setFont(pencilFont);
             p.setPen(kPencilInk);
             for (int d = 1; d <= 9; ++d) {
-                if (!(marks & (1u << (d - 1))))
+                if (!(marks & (1u << unsigned(d - 1))))
                     continue;
                 const int mr = (d - 1) / 3;
                 const int mc = (d - 1) % 3;

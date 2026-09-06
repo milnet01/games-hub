@@ -105,8 +105,6 @@ private:
     QAction* m_backAction = nullptr;
     QAction* m_soundAction = nullptr;
     QAction* m_legibilityAction = nullptr;
-    // Marks where game actions are inserted, keeping the sound toggle last.
-    QAction* m_soundSeparator = nullptr;
     QLabel* m_status = nullptr;
     QList<QAction*> m_gameActions;
     QList<Entry> m_entries;

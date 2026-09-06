@@ -22,7 +22,7 @@ public:
     // 2^17 is the largest tile a four-by-four board can reach, and it takes
     // perfect play to get there. 1 << 20 admitted four values beyond anything
     // reachable, which a hand-edited save could then put on the board.
-    static constexpr int kMaxTile = 1 << 17;
+    static constexpr int kMaxTile = int(1u << 17u);
 
     enum class Direction { Left, Right, Up, Down };
 
@@ -61,7 +61,9 @@ public:
 
     static bool isTile(int value)
     {
-        return value == 0 || (value >= 2 && value <= kMaxTile && (value & (value - 1)) == 0);
+        return value == 0
+            || (value >= 2 && value <= kMaxTile
+                && (unsigned(value) & unsigned(value - 1)) == 0);
     }
 
 private:

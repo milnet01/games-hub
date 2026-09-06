@@ -529,12 +529,8 @@ void HubWindow::buildChrome()
     });
     m_toolBar->addAction(m_backAction);
 
-    // One sound switch for the whole collection, kept at the far end of the
-    // toolbar so it never moves when a game swaps its own actions in.
-    auto* spacer = new QWidget(this);
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    m_soundSeparator = m_toolBar->addWidget(spacer);
-
+    // One sound switch for the whole collection, so it stays put when a game
+    // swaps its own actions in.
     m_soundAction = new QAction(QStringLiteral("🔊 Sound"), this);
     m_soundAction->setObjectName(QStringLiteral("soundAction"));
     m_soundAction->setCheckable(true);
@@ -583,6 +579,19 @@ void HubWindow::buildChrome()
     connect(&Legibility::instance(), &Legibility::changed,
             m_legibilityAction, &QAction::setChecked);
     m_toolBar->addAction(m_legibilityAction);
+
+    // Everything a game contributes is appended AFTER the two switches above,
+    // which is what keeps them reachable. A QToolBar too narrow for its
+    // contents moves its LAST actions into the overflow chevron, so whatever
+    // sits at the far end is what disappears first -- and the legibility
+    // switch is the one control that must never be the thing that goes
+    // (GHUB-0184). Both switches were previously added after an expanding
+    // spacer, which right-aligned them and thereby made them first out:
+    // Canasta carries eighteen actions and hid the switch at 1400px.
+    //
+    // The spacer went with the reordering. Its job was to push the switches
+    // right, and once they lead the bar it only supplied a widget wide enough
+    // to be evicted itself -- a chevron opening onto nothing.
 
     // Naming the three decorated actions for a screen reader (GHUB-0070).
     //
@@ -925,5 +934,5 @@ void HubWindow::setGameActions(GameView* view)
 
     m_gameActions = view->gameActions();
     for (QAction* a : m_gameActions)
-        m_toolBar->insertAction(m_soundSeparator, a);
+        m_toolBar->addAction(a);
 }

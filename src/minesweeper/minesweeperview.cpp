@@ -451,7 +451,7 @@ QByteArray MinesweeperView::saveState() const
     const std::vector<Minefield::Square>& squares = m_field->squares();
     out << quint32(squares.size());
     for (const Minefield::Square& s : squares)
-        out << quint8((s.mine ? 1 : 0) | (s.revealed ? 2 : 0) | (s.flagged ? 4 : 0));
+        out << quint8((s.mine ? 1u : 0u) | (s.revealed ? 2u : 0u) | (s.flagged ? 4u : 0u));
     return blob;
 }
 
@@ -485,9 +485,9 @@ bool MinesweeperView::restoreState(const QByteArray& blob)
     for (Minefield::Square& s : squares) {
         quint8 bits = 0;
         in >> bits;
-        s.mine = (bits & 1) != 0;
-        s.revealed = (bits & 2) != 0;
-        s.flagged = (bits & 4) != 0;
+        s.mine = (bits & 1u) != 0;
+        s.revealed = (bits & 2u) != 0;
+        s.flagged = (bits & 4u) != 0;
     }
     if (in.status() != QDataStream::Ok)
         return false;

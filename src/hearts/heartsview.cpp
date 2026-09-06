@@ -543,10 +543,14 @@ void HeartsView::paintEvent(QPaintEvent*)
                                  .arg(QString::fromUtf8(kSeatNames[seat]))
                                  .arg(n);
         const QRectF label(8, r.bottom() + 20, width() - 16, 20);
-        const int align = (seat == 1) ? Qt::AlignLeft
-            : (seat == 3)             ? Qt::AlignRight
-                                      : Qt::AlignHCenter;
-        p.drawText(label, align | Qt::AlignVCenter, text);
+        // Qt::Alignment rather than int: these are flag enums, so storing them
+        // in an int makes the `|` below a signed bitwise operation.
+        const Qt::Alignment align = (seat == 1) ? Qt::AlignLeft
+            : (seat == 3)                       ? Qt::AlignRight
+                                                : Qt::AlignHCenter;
+        // drawText takes int flags, and QFlags converts to unsigned, so the
+        // narrowing is spelled out rather than left implicit.
+        p.drawText(label, int(align | Qt::AlignVCenter), text);
     }
 
     // The trick in the middle.

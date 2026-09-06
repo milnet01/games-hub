@@ -473,8 +473,8 @@ static bool blitCached(QPainter& p, const QRectF& r, ArtCache& cache, size_t bou
     // never collide, which is why drawing at those alone cannot show it.
     const int wCard = int(std::lround(wq * dpr));
     const int hCard = int(std::lround(hq * dpr));
-    const uint64_t key = uint64_t(wCard & 0xffff) | (uint64_t(hCard & 0xffff) << 16)
-        | (uint64_t(identity & 0xff) << 32) | (uint64_t(scaleQ & 0xffff) << 40);
+    const uint64_t key = (uint64_t(wCard) & 0xffffu) | ((uint64_t(hCard) & 0xffffu) << 16u)
+        | ((uint64_t(identity) & 0xffu) << 32u) | ((uint64_t(scaleQ) & 0xffffu) << 40u);
 
     auto it = cache.pixmaps.find(key);
     if (it == cache.pixmaps.end()) {
@@ -544,7 +544,7 @@ void paintFace(QPainter& p, const QRectF& r, const Card& c)
     // so this one holds a whole pack at two sizes rather than a handful.
     // Rank is 0..13 and suit 0..3, so one byte names the picture. A joker's
     // suit is not drawn, but keeping it in the key only costs an entry.
-    const int identity = (c.rank << 2) | (int(c.suit) & 0x3);
+    const int identity = int((unsigned(c.rank) << 2u) | (unsigned(c.suit) & 0x3u));
     if (!blitCached(p, r, faceCache(), 160, identity, false,
                     [&c](QPainter& into, const QRectF& at) { drawFace(into, at, c); }))
         drawFace(p, r, c);

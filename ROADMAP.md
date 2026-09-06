@@ -2111,7 +2111,7 @@ progress.
   Kind: feature.
   Source: user-request-2026-09-02.
 
-- 📋 [GHUB-0184] **Canasta's toolbar is dense enough to push the legibility switch out of reach.**
+- ✅ [GHUB-0184] **Canasta's toolbar is dense enough to push the legibility switch out of reach.**
   Measured with --shot at three widths. At 1920 the whole toolbar fits with
   room to spare. At 1400 the legibility switch is pushed into the overflow
   chevron. At 900 -- Canasta's own minimum -- most of the toolbar is in
@@ -2132,6 +2132,21 @@ progress.
   one "Play to ..." button opening a small menu -- which would pay for both
   new buttons and more. Not attempted here; it is a change to a control the
   owner uses and should be his call.
+  Resolved (2026-09-06): the two app-wide switches now LEAD the toolbar
+  and a game's actions are appended after them. A QToolBar moves its
+  LAST actions into the overflow chevron, so right-aligning the switches
+  behind an expanding spacer was what made them first out. Fixed by
+  ordering rather than by the "Play to ..." menu the item proposed --
+  owner's call, taken 2026-09-06: the menu changes a control he uses
+  every game, the reorder does not. Measured with --shot at 1400x760,
+  seed 5: the legibility switch is visible third from left, and the two
+  actions now behind the chevron are Canasta's own last two, Expert
+  partner and Hints -- both preference toggles rather than per-turn
+  controls. At 1920 nothing overflows. The expanding spacer was removed
+  with the reorder: its job was to push the switches right, and once
+  they lead the bar its only remaining effect was to be evicted itself,
+  giving a chevron that opened onto an invisible widget. GHUB-0017
+  section 4.3 stated the old mechanism and was amended with it.
   **Layman:** On a narrower window the large-play button hides behind a small arrow, which is the one button that should never be hard to find.
   Kind: ux.
   Source: in-session-2026-09-06, measured while closing GHUB-0018.
@@ -8194,7 +8209,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: fix.
   Source: in-session-2026-09-02.
 
-- 📋 [GHUB-0182] **A newer clang-tidy than CI's pinned one reports findings the pinned one does not.**
+- ✅ [GHUB-0182] **A newer clang-tidy than CI's pinned one reports findings the pinned one does not.**
   A local clang-tidy (LLVM 23) reports bugprone-signed-bitwise in
   minesweeperview.cpp's save and restore code -- the packed
   mine/revealed/flagged byte, both directions. CI pins clang-tidy 18 and
@@ -8223,6 +8238,34 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   here and are what makes two runs comparable. Do not "fix" those. The
   item is about src/, and about which clang-tidy the zero is measured
   against.
+  Resolved (2026-09-06), both halves. POLICY, owner's call taken
+  2026-09-06: "a manual clang-tidy run must stay at zero" means CI's
+  PINNED clang-tidy 18. Findings from a newer local clang-tidy are
+  filed, not treated as breakage -- check families only grow, so
+  measuring the rule against whatever is installed locally makes an LLVM
+  upgrade break it with no code change, which is a rule nobody can
+  follow. CODE: swept src/ under LLVM 23 as the item asked rather than
+  fixing the two files it named. It found 33 bugprone-signed-bitwise
+  across NINE files, not the two predicted -- cardart, canastaai,
+  twenty48board.h, sudokugrid, sudokuview, minesweeperview, chessboard,
+  heartsview, freecelltable. All fixed; a re-run reports zero. Three
+  things the item did not predict. The signed operand is often the SHIFT
+  COUNT rather than the value, so 1u << (d - 1) still fires and needs
+  unsigned(d - 1). Canasta's "other team" idiom team ^ 1 was six of the
+  sites; teamOf() is seat % 2 over seats 0..3, so 1 - team is the same
+  value with no bitwise operator and no cast. And heartsview held a Qt
+  alignment flag in an int, where the fix is the correct type
+  (Qt::Alignment) rather than a cast -- that one then tripped
+  bugprone-narrowing-conversions, since drawText takes int flags and
+  QFlags converts to unsigned, so the narrowing is now spelled out.
+  SCOPE: the sweep also found 9 performance-use-std-move in four files
+  (heartsengine, heartsview, draughtsview, canastaengine). Deliberately
+  NOT fixed -- owner's call: they sit on save/restore paths that run
+  once, so the benefit is unmeasurable, and they are outside what this
+  item named. A local run is therefore NOT at zero; it is at zero for
+  bugprone-signed-bitwise. tests/ remains unlinted by CI and its
+  fixed-seed findings stay untouched, as the item's own scoping note
+  says.
   **Layman:** A stricter version of one of our code checkers finds things the version we run on the build server does not.
   Kind: fix.
   Source: in-session-2026-09-06, found while closing GHUB-0179.

@@ -136,7 +136,7 @@ void SudokuGrid::toggleMark(int row, int col, int digit)
 {
     if (isClue(row, col) || digit < 1 || digit > 9)
         return;
-    m_marks[index(row, col)] ^= std::uint16_t(1u << (digit - 1));
+    m_marks[index(row, col)] ^= std::uint16_t(1u << unsigned(digit - 1));
 }
 
 bool SudokuGrid::conflicts(int row, int col) const
@@ -198,9 +198,9 @@ bool isCompleteSolution(const std::array<int, SudokuGrid::kCells>& grid)
             const int b = grid[SudokuGrid::index((i / 3) * 3 + j / 3, (i % 3) * 3 + j % 3)];
             if (r < 1 || r > 9 || c < 1 || c > 9 || b < 1 || b > 9)
                 return false;
-            row |= std::uint16_t(1u << r);
-            col |= std::uint16_t(1u << c);
-            box |= std::uint16_t(1u << b);
+            row |= std::uint16_t(1u << unsigned(r));
+            col |= std::uint16_t(1u << unsigned(c));
+            box |= std::uint16_t(1u << unsigned(b));
         }
         constexpr std::uint16_t kAllNine = 0x03fe;   // bits 1..9
         if (row != kAllNine || col != kAllNine || box != kAllNine)

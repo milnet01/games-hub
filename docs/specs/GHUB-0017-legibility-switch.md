@@ -313,9 +313,17 @@ while it is off. So: **checked → `"🔍 Large"`, unchecked → `"🔍 Normal"`
 The toolbar is `Qt::ToolButtonTextOnly`, so this text is the entire affordance,
 and the opposite convention — a button reading "Large" meaning *click for
 large* — is equally common and would ship the control inverted.
-It is added after the expanding spacer, so it sits at the far right beside the
-sound switch and is never displaced by `HubWindow::setGameActions()`, which
-inserts a game's own actions *before* `m_soundSeparator`.
+It is added beside the sound switch, near the left end of the toolbar and
+ahead of anything a game contributes — `HubWindow::setGameActions()` appends a
+game's own actions, so it never displaces either switch.
+
+**Amended 2026-09-06 (GHUB-0184).** Both switches were previously added after
+an expanding spacer, which right-aligned them. A `QToolBar` too narrow for its
+contents moves its LAST actions into the overflow chevron, so right-aligning
+the two app-wide switches made them the first to be hidden: Canasta carries
+eighteen actions and pushed the legibility switch out of sight at 1400px. The
+switches now lead the bar and the spacer is gone, having become a widget whose
+only remaining effect was to be evicted itself.
 
 The action is app-wide, so it is visible on the tile grid as well as inside a
 game — unlike every other toolbar entry, which belongs to one game.

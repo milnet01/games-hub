@@ -328,7 +328,7 @@ bool Ai::killingTheHand(const Engine& e) const
     const Rules& r = e.rules();
     const int us = teamOf(seat);
     const Team& mine = e.team(us);
-    const Team& theirs = e.team(us ^ 1);
+    const Team& theirs = e.team(1 - us);
 
     // Cards still held count AGAINST the side holding them when a hand is
     // scored where it stands, which is the whole reason to kill one. Only this
@@ -390,7 +390,7 @@ bool Ai::worthHolding(const Engine& e, int rank, int naturals) const
         return false;
     // Never hold so much that going out becomes impossible, and never hold a
     // rank the opponents have shown they are collecting.
-    if (naturals > 4 || e.team(teamOf(e.currentSeat()) ^ 1).meldOfRank(rank) != nullptr)
+    if (naturals > 4 || e.team(1 - teamOf(e.currentSeat())).meldOfRank(rank) != nullptr)
         return false;
     return int(e.hand(e.currentSeat()).size()) > 5;
 }
@@ -413,7 +413,7 @@ bool Ai::closingOut(const Engine& e, std::size_t inHand) const
     // game — under the house rule where a side with none counts nothing in its
     // favour, it is the difference between their melds paying them and costing
     // them. So the hand is worth ending sooner against a side that has none.
-    const Team& theirs = e.team(teamOf(e.currentSeat()) ^ 1);
+    const Team& theirs = e.team(1 - teamOf(e.currentSeat()));
     const bool theyAreShort = !theirs.hasCanasta(r);
     // Expert reads the position sooner and starts closing from further out.
     std::size_t reach = m_level == Level::Expert ? (theyAreShort ? 12u : 7u)
@@ -858,7 +858,7 @@ bool Ai::wantsToFreeze(const Engine& e, Card& wild) const
     const std::vector<Card>& h = e.hand(seat);
     const Rules& r = e.rules();
     const Team& mine = e.team(teamOf(seat));
-    const Team& theirs = e.team(teamOf(seat) ^ 1);
+    const Team& theirs = e.team(1 - teamOf(seat));
     // Freezing is only worth 20 points of wild card when the pile is big enough
     // to be worth coming back for, and only if we hold the pair that takes it.
     if (int(e.pile().size()) < 5)
@@ -937,7 +937,7 @@ Card Ai::chooseDiscard(const Engine& e) const
     const std::vector<Card>& h = e.hand(seat);
     const Rules& r = e.rules();
     const Team& mine = e.team(teamOf(seat));
-    const Team& theirs = e.team(teamOf(seat) ^ 1);
+    const Team& theirs = e.team(1 - teamOf(seat));
     const int pileSize = int(e.pile().size());
     // Nothing thrown this turn can be taken. See Engine::discardCannotBeTaken()
     // for why the fourth seat of the first round is NOT covered — its throw is
@@ -949,7 +949,7 @@ Card Ai::chooseDiscard(const Engine& e) const
     // Medium stay naive on purpose, so for them it is simply 1.0 and the two
     // judgements read as they always did.
     const double caution = (m_level == Level::Hard || m_level == Level::Expert)
-        ? throwCaution(theirs, e.openRequirement(teamOf(seat) ^ 1))
+        ? throwCaution(theirs, e.openRequirement(1 - teamOf(seat)))
         : 1.0;
 
     // A seat with no cards has nothing to throw, and front() on an empty hand

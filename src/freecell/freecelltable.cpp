@@ -78,7 +78,7 @@ int FreeCellTable::maxMoveSize(bool toEmptyColumn) const
     if (toEmptyColumn && emptyColumns > 0)
         --emptyColumns;
 
-    return (freeCells + 1) * (1 << std::min(emptyColumns, 10));
+    return (freeCells + 1) * int(1u << unsigned(std::min(emptyColumns, 10)));
 }
 
 int FreeCellTable::orderedRunLength(int column) const

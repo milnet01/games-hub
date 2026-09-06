@@ -552,7 +552,7 @@ bool Board::insufficientMaterial() const
 {
     int knights = 0;
     int bishops = 0;
-    int bishopSquareColours = 0;   // bit 0 = a light bishop, bit 1 = a dark one
+    unsigned bishopSquareColours = 0;   // bit 0 = a light bishop, bit 1 = a dark one
 
     for (int row = 0; row < kRanks; ++row) {
         for (int col = 0; col < kFiles; ++col) {
@@ -566,7 +566,7 @@ bool Board::insufficientMaterial() const
                 break;
             case PieceType::Bishop:
                 ++bishops;
-                bishopSquareColours |= 1 << ((row + col) % 2);
+                bishopSquareColours |= 1u << unsigned((row + col) % 2);
                 break;
             default:
                 break;
@@ -580,7 +580,7 @@ bool Board::insufficientMaterial() const
         return true;
     // Bishops confined to one colour of square can never deliver mate, however
     // many there are or whoever owns them.
-    return knights == 0 && bishopSquareColours != 3;
+    return knights == 0 && bishopSquareColours != 3u;
 }
 
 std::string Board::notation(const Move& m) const
