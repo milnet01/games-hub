@@ -3248,7 +3248,7 @@ inventing one.
   Kind: doc.
   Source: review-contract cap verdict, 2026-09-04.
 
-- 📋 [GHUB-0181] **The 1.0 bar now has two answers: the standard says six items, the owner has named four more.**
+- ✅ [GHUB-0181] **The 1.0 bar now has two answers: the standard says six items, the owner has named four more.**
   `docs/standards/versioning-overrides.md` § 2 states the bar as an identity
   rather than a floor: "The release that ships the last of the six items below
   IS `1.0.0`", listing GHUB-0067, 0075, 0054, 0050, 0031 and 0053. Two of those
@@ -3274,6 +3274,21 @@ inventing one.
   The second is cheaper and is the likelier intent -- the question asked was
   "which do you want before 1.0", not "which gate 1.0" -- but guessing is what
   put two answers on disk in the first place.
+  Resolved (2026-09-06): the owner took the second reading. GHUB-0019,
+  0020, 0018 and 0070 are work wanted during 0.x and are NOT 1.0
+  conditions, so versioning-overrides.md section 2's six-item table
+  stands as the bar and its gate is not re-armed.
+
+  No document edit was needed, which is the cheapest answer available
+  and was missed when this was filed. Section 2 already settles it in
+  its own words: "The table is the condition ... and a prose bar
+  alongside it would be a second condition that disagrees." An item
+  marked "wanted before 1.0" on the roadmap is therefore not an
+  addition to that table unless it is IN the table.
+
+  The three still open carry the same clarification in their own notes,
+  because "Wanted before 1.0. Owner's call" is the phrase that read as
+  a condition and it is on the items rather than in the standard.
   **Layman:** Two places now say what has to be finished before version 1.0, and they do not agree.
   Kind: doc.
   Source: owner decision 2026-09-04, against docs/standards/versioning-overrides.md section 2.
@@ -3755,6 +3770,9 @@ open.
   item without narrowing it. Treat the half as the floor rather than the
   agreed ceiling, and ask before building a screen-reader surface for the
   games themselves.
+  Clarified (2026-09-06, GHUB-0181): "wanted before 1.0" above means
+  wanted during 0.x. It is NOT a 1.0 condition -- versioning-overrides.md
+  section 2's table is the whole bar and this item is not in it.
   **Layman:** Screen-reader software would find the games completely blank; whether that matters here is a real question, not an assumption.
   Kind: accessibility.
   Source: in-session-2026-08-20.
@@ -4350,6 +4368,9 @@ open.
   where Chess replays a move list. One step is enough per this item's own
   body -- the discard, or the last lay-down -- and that scope is what keeps
   it from becoming a rewrite.
+  Clarified (2026-09-06, GHUB-0181): "wanted before 1.0" above means
+  wanted during 0.x. It is NOT a 1.0 condition -- versioning-overrides.md
+  section 2's table is the whole bar and this item is not in it.
 
 - 📋 [GHUB-0019] **Nothing on screen says which house rules are switched on.**
   GHUB-0016 covers teaching the games; this is the cheaper other half. Canasta
@@ -7160,6 +7181,9 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   code rather than the player; the owner chose before. Recorded so the
   sequencing is his rather than inherited from a recommendation he did not
   take.
+  Clarified (2026-09-06, GHUB-0181): "wanted before 1.0" above means
+  wanted during 0.x. It is NOT a 1.0 condition -- versioning-overrides.md
+  section 2's table is the whole bar and this item is not in it.
 
 - ✅ [GHUB-0066] **Six games have no rules core, and they are exactly the six whose rules nothing tests.**
   CLAUDE.md opens the architecture section with the rule: every game is a rules
