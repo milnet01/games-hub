@@ -10,6 +10,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Canasta can tell you which rules are in force** (GHUB-0019)
+  A "Rules in force" button on Canasta's toolbar opens a panel naming, in
+  plain words, every rule that differs from Classic. The House set exists
+  because families play their own variant, and until now nothing on screen
+  said which of those rules were switched on. The panel reads the rules the
+  hand is actually being played by, and grows its text with the legibility
+  switch.
+
 - **Tests that stop the recent round of fixes coming back.** (GHUB-0140)
   Resuming a game and leaving no longer deletes it, in every game that
   saves; Hearts has a way on from the end of a hand that is not starting

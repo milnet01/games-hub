@@ -51,6 +51,113 @@ int cardValue(const Card& c, const Rules& rules)
     return c.rank >= 8 ? rules.highCardValue : rules.lowCardValue;
 }
 
+QStringList rulesInForce(const Rules& rules)
+{
+    const Rules classic = Rules::classic();
+    QStringList out;
+
+    // A rule is named only where it DIFFERS from Classic, and both directions
+    // are worded: a house set can switch a classic rule off as readily as on,
+    // and "not listed" then has to mean "as Classic plays it".
+    const auto flag = [&](bool now, bool asClassic, const char* whenOn, const char* whenOff) {
+        if (now != asClassic)
+            out << QString::fromUtf8(now ? whenOn : whenOff);
+    };
+    const auto number = [&](int now, int asClassic, const char* sentence) {
+        if (now != asClassic)
+            out << QString::fromUtf8(sentence).arg(now);
+    };
+
+    // Ordered the way a player asks at the table: what are we playing to, what
+    // is dealt, how do we open, how do we meld, what can we do with the pile,
+    // how does a hand end, and what is it all worth.
+    number(rules.targetScore, classic.targetScore, "The game is played to %1.");
+    number(rules.handSize, classic.handSize, "You are dealt %1 cards.");
+    number(rules.decks, classic.decks, "The pack is %1 decks shuffled together.");
+    number(rules.jokers, classic.jokers, "The pack holds %1 jokers.");
+
+    number(rules.openMinBelowZero, classic.openMinBelowZero,
+           "Opening from below zero needs %1 points.");
+    number(rules.openMinUnder1500, classic.openMinUnder1500,
+           "Opening under 1500 needs %1 points.");
+    number(rules.openMinUnder3000, classic.openMinUnder3000,
+           "Opening under 3000 needs %1 points.");
+    number(rules.openMinAbove3000, classic.openMinAbove3000,
+           "Opening at 3000 or above needs %1 points.");
+    flag(rules.noMeldingFirstRound, classic.noMeldingFirstRound,
+         "Nobody may meld in the first round.", "Melding is allowed from the first turn.");
+    flag(rules.pileMeldCountsToOpen, classic.pileMeldCountsToOpen,
+         "Cards taken from the pile count towards your opening total.",
+         "Cards taken from the pile do not count towards your opening total.");
+
+    number(rules.canastaSize, classic.canastaSize, "A canasta is %1 cards.");
+    number(rules.minMeldSize, classic.minMeldSize, "A meld needs at least %1 cards.");
+    number(rules.maxWildsPerMeld, classic.maxWildsPerMeld,
+           "A meld may hold at most %1 wild cards.");
+    number(rules.minNaturalsPerMeld, classic.minNaturalsPerMeld,
+           "A meld needs at least %1 natural cards.");
+    flag(rules.wildCardMeldsAllowed, classic.wildCardMeldsAllowed,
+         "A meld of wild cards alone is allowed.", "A meld of wild cards alone is not allowed.");
+    flag(rules.wildsFewerThanNaturals, classic.wildsFewerThanNaturals,
+         "A meld must always hold fewer wild cards than natural ones.",
+         "A meld need not hold fewer wild cards than natural ones.");
+
+    flag(rules.pileFrozenUntilOpened, classic.pileFrozenUntilOpened,
+         "The pile is frozen to a side until that side has opened.",
+         "The pile is not frozen to a side that has yet to open.");
+    flag(rules.blackThreeBlocksPile, classic.blackThreeBlocksPile,
+         "A black three on top blocks the pile.",
+         "A black three on top does not block the pile.");
+    flag(rules.unfrozenPileTakeableWithWild, classic.unfrozenPileTakeableWithWild,
+         "You may take an unfrozen pile using a wild card.",
+         "You may not take an unfrozen pile using a wild card.");
+    flag(rules.unfrozenPileTakeableByExtending, classic.unfrozenPileTakeableByExtending,
+         "You may take an unfrozen pile by adding to a meld you already have.",
+         "Adding to a meld you already have does not let you take the pile.");
+    flag(rules.canastaMakesRankSafe, classic.canastaMakesRankSafe,
+         "Once a rank is a closed canasta, discarding that rank is safe.",
+         "Closing a canasta does not make its rank safe to discard.");
+    flag(rules.freezeCardMakesATee, classic.freezeCardMakesATee,
+         "A card that freezes the pile is laid crosswise, as a tee.",
+         "A card that freezes the pile is laid square with the rest.");
+
+    flag(rules.requireCanastaToGoOut, classic.requireCanastaToGoOut,
+         "You need a canasta before you can go out.",
+         "You may go out without a canasta.");
+    flag(rules.goingOutNeedsADiscard, classic.goingOutNeedsADiscard,
+         "Going out needs a final discard.", "You may go out without a final discard.");
+    flag(rules.deadHandIfNobodyGoesOut, classic.deadHandIfNobodyGoesOut,
+         "If the stock runs out and nobody goes out, the hand is void and scores nothing.",
+         "If the stock runs out, the hand is scored as it stands.");
+    flag(rules.bothReachingTargetIsADraw, classic.bothReachingTargetIsADraw,
+         "If both sides pass the target in the same hand, the game is a draw.",
+         "If both sides pass the target, the higher score wins.");
+
+    flag(rules.canastaNeededToScore, classic.canastaNeededToScore,
+         "A side with no canasta counts its melds against it \xe2\x80\x94 catching them a minus.",
+         "A side with no canasta still counts its melds in its favour.");
+    flag(rules.canastasStackOnRedThrees, classic.canastasStackOnRedThrees,
+         "Finished canastas are stacked on the red threes.",
+         "Finished canastas stay in the meld row.");
+    number(rules.naturalCanastaBonus, classic.naturalCanastaBonus,
+           "A natural canasta is worth %1.");
+    number(rules.mixedCanastaBonus, classic.mixedCanastaBonus, "A mixed canasta is worth %1.");
+    number(rules.goingOutBonus, classic.goingOutBonus, "Going out is worth %1.");
+    number(rules.concealedGoingOutBonus, classic.concealedGoingOutBonus,
+           "Going out concealed is worth %1.");
+    number(rules.redThreeValue, classic.redThreeValue, "A red three is worth %1.");
+    number(rules.allRedThreesValue, classic.allRedThreesValue,
+           "Holding all four red threes is worth %1.");
+    number(rules.jokerValue, classic.jokerValue, "A joker is worth %1.");
+    number(rules.wildTwoValue, classic.wildTwoValue, "A two is worth %1.");
+    number(rules.aceValue, classic.aceValue, "An ace is worth %1.");
+    number(rules.highCardValue, classic.highCardValue, "Eight through king are worth %1 each.");
+    number(rules.lowCardValue, classic.lowCardValue, "Four through seven are worth %1 each.");
+    number(rules.blackThreeValue, classic.blackThreeValue, "A black three is worth %1.");
+
+    return out;
+}
+
 bool sortsBefore(const Card& a, const Card& b)
 {
     const int ka = fanOrder(a);

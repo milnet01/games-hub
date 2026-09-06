@@ -1670,6 +1670,29 @@ int main(int argc, char* argv[])
               "legibility: and every one of them goes back pixel for pixel");
     }
 
+    // ---- canastaOffersItsRulesInForce (GHUB-0019) ----
+    //
+    // The House set exists because the owner's family plays its own variant,
+    // so which rules are in force is the one thing a player needs to check at
+    // the table. What the panel SAYS is the self-test's
+    // canastaRulesInForceNamesEveryRule, on the engine's own rulesInForce();
+    // what this asks is whether a player can reach it at all.
+    //
+    // The dialog itself is not opened here and cannot be: it is modal, and a
+    // modal dialog in an offscreen test HANGS rather than fails. So the action
+    // is checked for, not triggered.
+    {
+        CanastaView canasta;
+        QAction* inForce = nullptr;
+        for (QAction* a : canasta.gameActions()) {
+            if (a->text().startsWith(QStringLiteral("Rules in force")))
+                inForce = a;
+        }
+        check(inForce != nullptr, "canasta: the toolbar offers Rules in force");
+        check(inForce != nullptr && inForce->isEnabled(),
+              "canasta: and it can be reached without setting anything up first");
+    }
+
     // ---- announcementsStopAtThePageYouLeft (GHUB-0179) ----
     //
     // A game that ends on a clock -- Pinball draining, Snake hitting a wall --

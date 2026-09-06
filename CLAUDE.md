@@ -552,6 +552,11 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   game ships two sets: `Rules::classic()`, which is never edited, and a House
   set the player edits in a dialog and which is saved via QSettings. Adding a
   house variation should be a new field there, not a branch in the engine.
+  **A new field owes two more lines**: a plain sentence in `rulesInForce()`,
+  which is what the Rules in force panel shows, and a mutation in
+  `canastaRulesInForceNamesEveryRule` — that check flips each field on its own
+  and fails a field no sentence names, so it catches a wrong sentence but
+  cannot catch a field added to neither.
   `canasta/canastaai.*` is judgement rather than search, so unlike Chess it
   needs no work budget. **Its four levels are checked against each other, not
   just described** — `canastaLevelsDiffer()` plays four rungs -- each level

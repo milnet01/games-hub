@@ -5,6 +5,7 @@
 #include "cards/card.h"
 
 #include <QDataStream>
+#include <QStringList>
 
 #include <array>
 #include <random>
@@ -213,6 +214,22 @@ bool caughtAMinus(const Team& t, const Rules& rules);
 // order a hand is held in — this is how it is arranged at a table, and the
 // engine owns it only because the engine owns the hand.
 bool sortsBefore(const Card& a, const Card& b);
+
+// Every way `rules` differs from Classic, one plain sentence each, in the
+// order a player would ask about them. Classic itself returns an empty list.
+//
+// This is what the table plays by, in the words the table uses -- the House
+// set exists because the owner's family plays its own variant, so which rules
+// are in force is the one thing a player needs to check and the one thing
+// nothing on screen said (GHUB-0019).
+//
+// In the core, and a free function, for the same reason as handScoreFor: it
+// can be checked on a hand-built Rules rather than one a dialog produced. The
+// check that matters is coverage -- `canastaRulesInForceNamesEveryRule` flips
+// each field of Rules on its own and asserts the list grows, so a house rule
+// added without a sentence here reddens the suite instead of going quietly
+// missing from the panel.
+QStringList rulesInForce(const Rules& rules);
 
 class Engine
 {

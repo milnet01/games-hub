@@ -4,6 +4,7 @@
 
 #include "cards/cardart.h"
 #include "legibility.h"
+#include "legiblefont.h"
 #include "scores.h"
 #include "sound.h"
 #include "theme.h"
@@ -15,6 +16,7 @@
 #include <QFormLayout>
 #include <QLabel>
 #include <QLayout>
+#include <QListWidget>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -294,6 +296,81 @@ ca::Rules loadHouse()
     r.freezeCardMakesATee = get("teeFreeze", 1) != 0;
     r.canastasStackOnRedThrees = get("stackCanastas", 1) != 0;
     return r;
+}
+
+// What the table is playing by, in plain words (GHUB-0019). Read-only, and
+// read from the engine's own Rules rather than rebuilt from the settings --
+// the panel exists to be trusted, so it must not be able to disagree with the
+// hand on screen.
+//
+// A dialog rather than a strip on the table: Canasta's melds clear
+// CardArt::kFaceMinWidth by a fraction of a pixel, so anything drawn on the
+// surface comes off the width a card is solved from. Owner's call, 2026-09-06.
+void showRulesInForce(QWidget* parent, const ca::Rules& rules)
+{
+    QDialog dlg(parent);
+    dlg.setWindowTitle(QStringLiteral("Rules in force"));
+
+    // This panel is nothing but text, so the legibility switch matters here
+    // more than anywhere else in the app. Read once at construction, as
+    // DonateDialog does: nobody moves the switch while a dialog is up.
+    const bool large = Legibility::instance().enabled();
+    if (large) {
+        QFont f = dlg.font();
+        growByPoints(f, 3.0);
+        dlg.setFont(f);
+    }
+
+    auto* column = new QVBoxLayout(&dlg);
+
+    const QStringList changed = ca::rulesInForce(rules);
+    // "the standard game" rather than "Classic", because the set in force can
+    // itself BE Classic -- and with a target picked off the toolbar, a Classic
+    // set still has one line to show. "Classic rules: the changes from
+    // Classic" reads as a contradiction; this does not.
+    auto* heading = new QLabel(QStringLiteral("<b>%1 rules.</b> %2")
+                                   .arg(rules.name,
+                                        changed.isEmpty()
+                                            ? QStringLiteral("Nothing differs from the standard "
+                                                             "game.")
+                                            : QStringLiteral("These differ from the standard "
+                                                             "game:")),
+                               &dlg);
+    heading->setWordWrap(true);
+    column->addWidget(heading);
+
+    QListWidget* list = nullptr;
+    if (!changed.isEmpty()) {
+        // One item per rule rather than a paragraph: the owner reads slowly,
+        // and a list can be gone down a line at a time.
+        list = new QListWidget(&dlg);
+        list->addItems(changed);
+        list->setWordWrap(true);
+        list->setSelectionMode(QAbstractItemView::NoSelection);
+        list->setFocusPolicy(Qt::NoFocus);
+        list->setMaximumHeight(large ? 560 : 440);
+        column->addWidget(list);
+    }
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    column->addWidget(buttons);
+    dlg.setMinimumWidth(large ? 660 : 520);
+    dlg.adjustSize();
+
+    // Height in a second pass, deliberately. A wrapped row's height depends on
+    // the width it ended up with, so asking before the first adjustSize gives
+    // the height of an unwrapped row and the list comes up short -- with the
+    // legibility switch on, which is where wrapping starts, that hid the last
+    // rule behind a scrollbar. AdjustToContents has the same fault.
+    if (list != nullptr) {
+        int needed = 2 * list->frameWidth();
+        for (int row = 0; row < list->count(); ++row)
+            needed += list->sizeHintForRow(row);
+        list->setMinimumHeight(std::min(needed, list->maximumHeight()));
+        dlg.adjustSize();
+    }
+    dlg.exec();
 }
 
 // The house-rules editor. Every field is one number from canasta::Rules, which
@@ -593,6 +670,14 @@ void CanastaView::buildActions()
         applyRules();
     });
     m_actions.append(m_rulesAction);
+
+    // Beside the editor, because "what am I playing by" and "change what I am
+    // playing by" are the same question asked two ways. Reads the engine, so
+    // it always answers about the hand on screen.
+    auto* inForce = new QAction(QStringLiteral("Rules in force…"), this);
+    connect(inForce, &QAction::triggered, this,
+            [this] { showRulesInForce(this, m_engine.rules()); });
+    m_actions.append(inForce);
 
     auto* sep3 = new QAction(this);
     sep3->setSeparator(true);

@@ -3,6 +3,7 @@
 #include "donate.h"
 #include "funding.h"
 #include "legibility.h"
+#include "legiblefont.h"
 
 #include <QCheckBox>
 #include <QDesktopServices>
@@ -16,23 +17,6 @@
 #include <cmath>
 
 namespace {
-
-// QFont carries EITHER a point size or a pixel size, and answers -1 for the one
-// it is not using. Adding points to a pixel-sized font therefore produced a
-// 2.0pt dialog -- microscopic, and worst of all in the very branch meant to
-// make the text bigger. Grow whichever unit is actually in force.
-void growByPoints(QFont& f, double points)
-{
-    if (f.pointSizeF() > 0.0) {
-        f.setPointSizeF(f.pointSizeF() + points);
-        return;
-    }
-    if (f.pixelSize() > 0) {
-        // A point is 1/72 inch against Qt's 96 logical DPI, so roughly 4/3 of a
-        // pixel. Exactness does not matter here; not shrinking the text does.
-        f.setPixelSize(f.pixelSize() + int(std::lround(points * 4.0 / 3.0)));
-    }
-}
 
 } // namespace
 

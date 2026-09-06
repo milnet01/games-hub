@@ -3953,6 +3953,107 @@ void canastaLevelsDiffer()
 
 // Two rule sets, because the owner's family plays its own. A house set has to
 // drive the engine as well as the classic one does.
+// GHUB-0019. The panel that tells a player which rules are in force is only
+// worth opening if it names ALL of them, and rulesInForce() is forty near
+// identical lines -- exactly the shape where a copy-paste reads the wrong
+// field and nothing notices.
+//
+// So every field is changed on its own, and each must add exactly one line.
+// A field with no sentence adds none; a sentence wired to the wrong field
+// adds none when its own field moves. `name` is deliberately absent: it is
+// the set's label, not a rule.
+//
+// A field added to Rules and to neither this list nor rulesInForce() is still
+// invisible -- C++ cannot enumerate a struct. Adding one here is the step that
+// makes the omission fail loudly, so add it here first.
+void canastaRulesInForceNamesEveryRule()
+{
+    const ca::Rules classic = ca::Rules::classic();
+    check(ca::rulesInForce(classic).isEmpty(),
+          "canasta: Classic differs from Classic in nothing, so it names nothing");
+
+    int covered = 0;
+    QStringList missed;
+    const auto onlyChange = [&](const char* field, const ca::Rules& changed) {
+        ++covered;
+        const QStringList named = ca::rulesInForce(changed);
+        if (named.size() != 1)
+            missed << QString::fromUtf8(field);
+    };
+    const auto withInt = [&](const char* field, int ca::Rules::*member, int to) {
+        ca::Rules r = classic;
+        r.*member = to;
+        onlyChange(field, r);
+    };
+    const auto withFlag = [&](const char* field, bool ca::Rules::*member) {
+        ca::Rules r = classic;
+        r.*member = !(classic.*member);
+        onlyChange(field, r);
+    };
+
+    withInt("targetScore", &ca::Rules::targetScore, 1500);
+    withInt("handSize", &ca::Rules::handSize, 13);
+    withInt("decks", &ca::Rules::decks, 3);
+    withInt("jokers", &ca::Rules::jokers, 6);
+    withInt("canastaSize", &ca::Rules::canastaSize, 6);
+    withInt("minMeldSize", &ca::Rules::minMeldSize, 4);
+    withInt("maxWildsPerMeld", &ca::Rules::maxWildsPerMeld, 2);
+    withInt("minNaturalsPerMeld", &ca::Rules::minNaturalsPerMeld, 3);
+    withInt("openMinBelowZero", &ca::Rules::openMinBelowZero, 20);
+    withInt("openMinUnder1500", &ca::Rules::openMinUnder1500, 30);
+    withInt("openMinUnder3000", &ca::Rules::openMinUnder3000, 100);
+    withInt("openMinAbove3000", &ca::Rules::openMinAbove3000, 150);
+    withInt("redThreeValue", &ca::Rules::redThreeValue, 200);
+    withInt("allRedThreesValue", &ca::Rules::allRedThreesValue, 1000);
+    withInt("naturalCanastaBonus", &ca::Rules::naturalCanastaBonus, 400);
+    withInt("mixedCanastaBonus", &ca::Rules::mixedCanastaBonus, 250);
+    withInt("goingOutBonus", &ca::Rules::goingOutBonus, 150);
+    withInt("concealedGoingOutBonus", &ca::Rules::concealedGoingOutBonus, 300);
+    withInt("jokerValue", &ca::Rules::jokerValue, 40);
+    withInt("wildTwoValue", &ca::Rules::wildTwoValue, 25);
+    withInt("aceValue", &ca::Rules::aceValue, 15);
+    withInt("highCardValue", &ca::Rules::highCardValue, 15);
+    withInt("lowCardValue", &ca::Rules::lowCardValue, 10);
+    withInt("blackThreeValue", &ca::Rules::blackThreeValue, 10);
+
+    withFlag("requireCanastaToGoOut", &ca::Rules::requireCanastaToGoOut);
+    withFlag("goingOutNeedsADiscard", &ca::Rules::goingOutNeedsADiscard);
+    withFlag("blackThreeBlocksPile", &ca::Rules::blackThreeBlocksPile);
+    withFlag("wildCardMeldsAllowed", &ca::Rules::wildCardMeldsAllowed);
+    withFlag("unfrozenPileTakeableWithWild", &ca::Rules::unfrozenPileTakeableWithWild);
+    withFlag("unfrozenPileTakeableByExtending", &ca::Rules::unfrozenPileTakeableByExtending);
+    withFlag("pileFrozenUntilOpened", &ca::Rules::pileFrozenUntilOpened);
+    withFlag("wildsFewerThanNaturals", &ca::Rules::wildsFewerThanNaturals);
+    withFlag("canastaNeededToScore", &ca::Rules::canastaNeededToScore);
+    withFlag("canastaMakesRankSafe", &ca::Rules::canastaMakesRankSafe);
+    withFlag("noMeldingFirstRound", &ca::Rules::noMeldingFirstRound);
+    withFlag("pileMeldCountsToOpen", &ca::Rules::pileMeldCountsToOpen);
+    withFlag("deadHandIfNobodyGoesOut", &ca::Rules::deadHandIfNobodyGoesOut);
+    withFlag("bothReachingTargetIsADraw", &ca::Rules::bothReachingTargetIsADraw);
+    withFlag("freezeCardMakesATee", &ca::Rules::freezeCardMakesATee);
+    withFlag("canastasStackOnRedThrees", &ca::Rules::canastasStackOnRedThrees);
+
+    if (!missed.isEmpty())
+        std::printf("        NOT NAMED: %s\n", qPrintable(missed.join(QStringLiteral(", "))));
+    std::printf("        rules covered: %d\n", covered);
+    check(missed.isEmpty(), "canasta: every rule in force is named, and named by its own field");
+
+    // The House set the app ships. Read here rather than described, because a
+    // count would go stale the next time a house default changes.
+    ca::Rules house = classic;
+    house.canastaNeededToScore = true;
+    house.noMeldingFirstRound = true;
+    house.goingOutNeedsADiscard = true;
+    house.bothReachingTargetIsADraw = true;
+    house.deadHandIfNobodyGoesOut = true;
+    house.freezeCardMakesATee = true;
+    house.canastasStackOnRedThrees = true;
+    const QStringList named = ca::rulesInForce(house);
+    check(named.size() == 7, "canasta: a House set with seven changes names seven rules");
+    for (const QString& line : named)
+        std::printf("        %s\n", qPrintable(line));
+}
+
 void canastaHouseRules()
 {
     ca::Rules house;
@@ -5689,6 +5790,7 @@ int main()
     canastaGoingOut();
     canastaFullGames();
     canastaLevelsDiffer();
+    canastaRulesInForceNamesEveryRule();
     canastaHouseRules();
     canastaPendingSizesTakeEffectOnTheNextHand();
     canastaDeadHand();
