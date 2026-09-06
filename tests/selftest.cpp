@@ -3597,6 +3597,204 @@ void canastaMinusAgainstMilking()
 
 // Frozen and unfrozen, from identical positions. The only difference between
 // the two runs is whether seat 1 threw a wild card or an ordinary one.
+// GHUB-0020. Four separate bugs on 2026-08-11 were positions where a take the
+// player could see was legal got REFUSED, all in the same corner: where wild
+// cards go. Every one passed the suite, because the suite checked positions
+// somebody had thought of.
+//
+// So this thinks of none. It builds the same reachable position several hundred
+// times over -- seat 3 on its draw, its side already opened, a known card on
+// top -- and randomises the two things those bugs lived in: how many naturals
+// of the top rank the hand holds, and how many wild cards sit beside them.
+//
+// The oracles are taken from the RULES, never from validateTake, which is the
+// whole point: an oracle written by reading the code under test agrees with its
+// bugs. Two of them are unconditional at this position and need no arithmetic
+// at all -- two naturals of the top rank always take the pile, and a natural
+// plus a wild takes it exactly when the pile is not frozen. The rest are
+// properties the engine owes itself whatever the rules say.
+//
+// The position is narrowed on purpose so those two sentences stay true without
+// qualification. The side has already opened, so no opening minimum applies;
+// the top card is a plain natural, so no three and no wild changes the rules;
+// and the top rank is never an ace, because the opening meld IS aces and a side
+// holding a meld of the top rank can take the pile by extending it.
+void canastaTakeLegalityIsNotImagined()
+{
+    // Fixed seed: a randomised check that cannot be re-run on the position that
+    // failed is a bug report nobody can act on.
+    std::mt19937 rng(20260906);
+    const std::vector<int> topRanks { 4, 5, 6, 7, 8, 10, kJack, kQueen, kKing };
+    const std::vector<Suit> suits { Suit::Spades, Suit::Hearts, Suit::Clubs, Suit::Diamonds };
+
+    int positions = 0;
+    int pairCases = 0;
+    int wildCases = 0;
+    int subsetsTried = 0;
+    QStringList refusedALegalPair;
+    QStringList gotTheWildRuleWrong;
+    QStringList atAllDisagrees;
+    QStringList brokeItsPromise;
+    QStringList movedOnARefusal;
+
+    const auto blob = [](const ca::Engine& e) {
+        QByteArray out;
+        QDataStream stream(&out, QIODevice::WriteOnly);
+        e.save(stream);
+        return out;
+    };
+
+    for (int trial = 0; trial < 300; ++trial) {
+        const int top = topRanks[rng() % topRanks.size()];
+        const bool freeze = (rng() % 2) == 0;
+        const int wantNaturals = int(rng() % 3);  // 0, 1 or 2 of the top rank
+        const int wantWilds = int(rng() % 3);
+
+        std::array<std::vector<Card>, 4> hands;
+        hands[0] = filler(kQueen);
+        // Seat 1 opens with four aces, then throws a two to freeze or a four
+        // not to. Its partner is seat 3, so seat 3's side is the opened one.
+        hands[1] = { cd(Suit::Spades, kAce),  cd(Suit::Hearts, kAce),
+                     cd(Suit::Clubs, kAce),   cd(Suit::Diamonds, kAce),
+                     cd(Suit::Spades, 2),     cd(Suit::Clubs, 4),
+                     cd(Suit::Clubs, 5),      cd(Suit::Clubs, 6),
+                     cd(Suit::Clubs, 8),      cd(Suit::Spades, 9),
+                     cd(Suit::Spades, kJack) };
+        // Seat 2 holds the card that ends up on top.
+        hands[2] = filler(kKing);
+        hands[2][0] = cd(Suit::Diamonds, top);
+
+        // Seat 3's hand is the randomised one. Threes are kept out of it
+        // entirely: a red three is melded on the deal and would change the hand
+        // underneath the check.
+        std::vector<Card> mine;
+        std::vector<Card> naturalsOfTop;
+        std::vector<Card> myWilds;
+        for (int i = 0; i < wantNaturals; ++i) {
+            const Card c = cd(suits[std::size_t(i)], top);
+            naturalsOfTop.push_back(c);
+            mine.push_back(c);
+        }
+        for (int i = 0; i < wantWilds; ++i) {
+            const Card c = (rng() % 2 == 0) ? joker(i % 2 == 0) : cd(suits[std::size_t(i)], 2);
+            myWilds.push_back(c);
+            mine.push_back(c);
+        }
+        while (mine.size() < 11) {
+            const int rank = topRanks[rng() % topRanks.size()];
+            if (rank == top)
+                continue;  // only the two above decide how many of the top rank there are
+            mine.push_back(cd(suits[rng() % suits.size()], rank));
+        }
+        hands[3] = mine;
+
+        ca::Engine e;
+        e.newGameFromStock(canastaStock(hands, 0, spare(), cd(Suit::Diamonds, 7)), 0);
+        e.drawFromStock();
+        const bool opened = e.meldCards({ cd(Suit::Spades, kAce), cd(Suit::Hearts, kAce),
+                                          cd(Suit::Clubs, kAce), cd(Suit::Diamonds, kAce) });
+        e.discard(freeze ? cd(Suit::Spades, 2) : cd(Suit::Clubs, 4));
+        e.drawFromStock();
+        e.discard(cd(Suit::Diamonds, top));
+
+        // Only positions that actually arrived are judged. A trial that did not
+        // reach the seat is skipped rather than asserted about, and `positions`
+        // is what says how many really ran -- a sweep that reaches nothing
+        // passes every assertion it makes.
+        const bool ready = opened && e.currentSeat() == 3 && e.team(1).opened
+            && e.phase() == ca::Engine::Phase::Draw && !e.pile().empty()
+            && e.pile().back().rank == top && e.pileFrozen() == freeze;
+        if (!ready)
+            continue;
+        ++positions;
+
+        const QString where = QStringLiteral("trial %1 (top %2, %3, %4 natural, %5 wild)")
+                                  .arg(trial).arg(top)
+                                  .arg(freeze ? QStringLiteral("frozen") : QStringLiteral("open"))
+                                  .arg(wantNaturals).arg(wantWilds);
+
+        // Oracle 1. Two naturals of the top rank take the pile. Always -- this
+        // is the one way that a frozen pile does not stop.
+        if (naturalsOfTop.size() >= 2) {
+            ++pairCases;
+            if (!e.canTakePile({ naturalsOfTop[0], naturalsOfTop[1] }))
+                refusedALegalPair << where;
+        }
+
+        // Oracle 2. A natural plus a wild takes it exactly when the pile is not
+        // frozen. That IS what freezing means, so both directions are asserted.
+        if (!naturalsOfTop.empty() && !myWilds.empty()) {
+            ++wildCases;
+            if (e.canTakePile({ naturalsOfTop[0], myWilds[0] }) == freeze)
+                gotTheWildRuleWrong << where;
+        }
+
+        // Every one-and two-card lay-down from the hand. At this position that
+        // is every take there is: the side holds no meld of the top rank, so
+        // nothing can be taken by extending, and a bigger lay-down is only ever
+        // needed to reach an opening minimum this side has already met.
+        bool someSubsetWorks = false;
+        const std::vector<Card>& hand = e.hand(3);
+        const QByteArray before = blob(e);
+        for (std::size_t i = 0; i < hand.size(); ++i) {
+            for (std::size_t j = i; j < hand.size(); ++j) {
+                std::vector<Card> lay { hand[i] };
+                if (j != i)
+                    lay.push_back(hand[j]);
+                ++subsetsTried;
+                const bool says = e.canTakePile(lay);
+                someSubsetWorks = someSubsetWorks || says;
+
+                // Property. Asking must not change anything, and doing must
+                // agree with saying -- a "can I?" that lies in either direction
+                // is the defect whether or not the rule behind it is right.
+                ca::Engine copy = e;
+                const bool did = copy.takePile(lay);
+                if (did != says)
+                    brokeItsPromise << where;
+                if (!did && blob(copy) != before)
+                    movedOnARefusal << where;
+            }
+        }
+
+        // Property. The engine's own summary of the same question has to match
+        // the sweep. canTakePileAtAll is what decides whether a hand can carry
+        // on once the stock has gone, so a disagreement here strands a game.
+        if (e.canTakePileAtAll() != someSubsetWorks)
+            atAllDisagrees << where;
+    }
+
+    const auto report = [](const QStringList& bad, const char* what) {
+        if (!bad.isEmpty())
+            std::printf("        %s: %s%s\n", what,
+                        qPrintable(bad.first()),
+                        bad.size() > 1
+                            ? qPrintable(QStringLiteral(" (+%1 more)").arg(bad.size() - 1))
+                            : "");
+    };
+    std::printf("        %d positions, %d with a natural pair, %d with a natural and a wild, "
+                "%d lay-downs tried\n",
+                positions, pairCases, wildCases, subsetsTried);
+    report(refusedALegalPair, "REFUSED A LEGAL PAIR");
+    report(gotTheWildRuleWrong, "WILD RULE WRONG");
+    report(atAllDisagrees, "canTakePileAtAll DISAGREES");
+    report(brokeItsPromise, "SAID ONE THING AND DID ANOTHER");
+    report(movedOnARefusal, "MOVED ON A REFUSAL");
+
+    // Asserted first, because every check below is vacuous over an empty sweep
+    // -- and a generator that stops reaching the position is exactly how this
+    // check would go quietly useless.
+    check(positions > 200, "canasta: the take sweep reached the position it is about");
+    check(pairCases > 30 && wildCases > 30,
+          "canasta: and reached both of the cases its oracles are about");
+    check(refusedALegalPair.isEmpty(), "canasta: two naturals of the top rank always take the pile");
+    check(gotTheWildRuleWrong.isEmpty(),
+          "canasta: a natural and a wild take it exactly when the pile is not frozen");
+    check(atAllDisagrees.isEmpty(), "canasta: canTakePileAtAll agrees with trying every lay-down");
+    check(brokeItsPromise.isEmpty(), "canasta: every take it allows succeeds, and no other does");
+    check(movedOnARefusal.isEmpty(), "canasta: and a refused take leaves the table untouched");
+}
+
 void canastaFrozenPile()
 {
     std::array<std::vector<Card>, 4> hands;
@@ -5784,6 +5982,7 @@ int main()
     canastaBlackThreeFinishIsHighlighted();
     canastaRedThreesInThePileAreCountedBeforeTheTake();
     canastaPileRules();
+    canastaTakeLegalityIsNotImagined();
     canastaFrozenPile();
     canastaWildCardRules();
     canastaRedThrees();

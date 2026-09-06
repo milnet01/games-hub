@@ -7245,7 +7245,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
 
 ### 🧰 Tests
 
-- 📋 [GHUB-0020] **A legality check that does not rely on the author's imagination.**
+- ✅ [GHUB-0020] **A legality check that does not rely on the author's imagination.**
   Four separate bugs on 2026-08-11 were positions where a move
   the player could see was legal got refused, all in one corner: where wild
   cards go. Every one passed the self-test, because the self-test checks
@@ -7265,6 +7265,42 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Clarified (2026-09-06, GHUB-0181): "wanted before 1.0" above means
   wanted during 0.x. It is NOT a 1.0 condition -- versioning-overrides.md
   section 2's table is the whole bar and this item is not in it.
+  Resolved (2026-09-06): canastaTakeLegalityIsNotImagined builds 300
+  random positions and tries every one- and two-card lay-down in each --
+  19,800 in all, in 2.8 s.
+
+  The position is reachable and scripted: seat 3 on its draw, its side
+  already opened, a known natural on top. What is RANDOMISED is the two
+  things the four bugs lived in -- how many naturals of the top rank the
+  hand holds, and how many wilds sit beside them.
+
+  The oracles come from the RULEBOOK, never from validateTake, and that
+  is the whole point: an oracle written by reading the code under test
+  agrees with its bugs. Two naturals of the top rank always take the
+  pile; a natural plus a wild takes it exactly when the pile is not
+  frozen. The position is narrowed so both sentences hold without
+  qualification -- already opened, so no opening minimum; a plain
+  natural on top, so no three and no wild; never an ace, since the
+  opening meld IS aces and a side holding a meld of the top rank could
+  take by extending.
+
+  Three properties beside them, which need no rules at all: asking must
+  not change the table, doing must agree with saying, and
+  canTakePileAtAll must agree with trying everything.
+
+  NO DEFECT FOUND -- the engine is right on this corner today. So the
+  check is proved by INJECTION rather than by a red run: requiring three
+  naturals instead of two reported REFUSED A LEGAL PAIR on 49
+  positions, and requiring two naturals for the wild take reported WILD
+  RULE WRONG on 69. Both named a reproducible trial number.
+
+  Worth knowing: canTakePileAtAll stayed consistent under BOTH injected
+  bugs, because it and canTakePile share validateTake. Internal
+  consistency would not have caught the four bugs; the oracles are what
+  does.
+
+  Verified: selftest 900 checks in 2.8 s, ctest 9/9, uitest exit 0,
+  local-ci green.
 
 - ✅ [GHUB-0066] **Six games have no rules core, and they are exactly the six whose rules nothing tests.**
   CLAUDE.md opens the architecture section with the rule: every game is a rules
@@ -8115,6 +8151,13 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   on its packed board words. Both are save/restore bit packing, which is
   where the pattern lives, so expect more of the same shape rather than
   two isolated cases. Sweep for it rather than fixing the two named.
+  Scoped (2026-09-06): CI's tidy job analyses `src/*.cpp` only, so
+  tests/ is not linted at all and its findings cannot redden CI. Under
+  LLVM 23 tests/selftest.cpp reports dozens, most of them
+  bugprone-random-generator-seed on fixed seeds -- which are DELIBERATE
+  here and are what makes two runs comparable. Do not "fix" those. The
+  item is about src/, and about which clang-tidy the zero is measured
+  against.
   **Layman:** A stricter version of one of our code checkers finds things the version we run on the build server does not.
   Kind: fix.
   Source: in-session-2026-09-06, found while closing GHUB-0179.

@@ -10,6 +10,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **A Canasta take-the-pile check that thinks of positions nobody thought of** (GHUB-0020)
+  Four bugs in one week were legal takes the engine refused, all around
+  wild cards, and every one passed a suite that only checked positions
+  somebody had imagined. The self-test now builds hundreds of random
+  positions and tries every lay-down in each, holding the engine to two
+  rules taken from the rulebook rather than from the code. No defect was
+  found; the check is proved to bite by injecting one.
+
 - **The hub's toolbar switches now say what they are to a screen reader** (GHUB-0070)
   Back, Sound and Large play are labelled with an arrow or an emoji plus
   their current state, which is right to look at and wrong to listen to.
