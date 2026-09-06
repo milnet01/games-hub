@@ -4372,7 +4372,7 @@ open.
   wanted during 0.x. It is NOT a 1.0 condition -- versioning-overrides.md
   section 2's table is the whole bar and this item is not in it.
 
-- 📋 [GHUB-0019] **Nothing on screen says which house rules are switched on.**
+- ✅ [GHUB-0019] **Nothing on screen says which house rules are switched on.**
   GHUB-0016 covers teaching the games; this is the cheaper other half. Canasta
   has six house rules and the only place any of them is described is
   `README.md` on disk. A **Rules in force** panel listing what is on would
@@ -4389,6 +4389,35 @@ open.
   player needs to check at the table, and it is the one thing nothing on
   screen says. It also fits the standing rule that the status bar is not read
   during play, so the answer belongs on the play surface.
+  Resolved (2026-09-06): a "Rules in force" button on Canasta's toolbar,
+  beside the House rules editor, opens a panel naming every rule that
+  differs from Classic in plain words.
+
+  A dialog rather than a strip on the table. Owner's call, 2026-09-06:
+  Canasta's melds clear CardArt::kFaceMinWidth by under half a pixel, so
+  anything drawn on the surface comes off the width a card is solved
+  from, and the seven rules the House set changes by default would not
+  have fitted there in full.
+
+  canasta::rulesInForce() is a free function in the rules CORE, so it can
+  be checked against a hand-built Rules. The panel reads the ENGINE's own
+  Rules and so cannot disagree with the hand on screen -- which includes
+  the target picked off the toolbar, applied separately from the set.
+
+  canastaRulesInForceNamesEveryRule changes each of the forty fields on
+  its own and requires each to add exactly one line, which catches the
+  copy-paste that reads the wrong field. Proved red by mis-wiring one.
+  A field added to Rules and to neither list is still invisible, so
+  CLAUDE.md now says a new house rule owes a sentence and a mutation.
+
+  Not covered by any test, said rather than implied: the dialog itself is
+  never opened -- it is modal, and a modal dialog offscreen hangs rather
+  than fails -- so uitest checks the action is present and enabled and
+  the self-test owns the contents. Both layouts were checked by eye in
+  both legibility states.
+
+  Verified: ctest 9/9, both binaries exit 0, local-ci green, clang-tidy
+  clean on every changed file.
 
 - ✅ [GHUB-0034] **Canasta's rule set and Minesweeper's difficulty are remembered between sessions.**
   One defect shape in two games. Both settings were already
