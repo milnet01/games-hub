@@ -1540,6 +1540,31 @@ than any amount of hardening applied to an app with no sockets.
   Worth knowing before starting: on GCC the same switch found three real
   things and no noise at all, so the expected shape here is a short list
   rather than a sweep.
+  Progress (2026-09-07): the set has now been read, and it came from CI
+  rather than from the wintest box -- /W4 was already on for the Windows
+  leg when this was filed, so the first green run printed the whole set.
+  The box is not needed for the measurement after all.
+
+  28 warnings on run 34091267300 (commit ce0b8b5), two kinds:
+
+    27x C4456  declaration hides a previous local declaration (shadowing)
+     1x C4310  cast truncates constant value
+
+  Where they sit is what decides the work: 24 are in tests/uitest.cpp (23
+  shadowing plus the single C4310, at uitest.cpp:437) and only 4 are in
+  src/ -- two in reversiview.cpp and two in canastaview.cpp. So the src/
+  half is a four-line job.
+
+  Two things that follow. GCC never reported any of this because -Wshadow
+  is not in -Wall -Wextra, so this is a genuinely different set rather
+  than a noisier rendering of the same one; adding -Wshadow to the GCC
+  side is worth considering with it. And the C4310 deserves reading before
+  being suppressed -- a cast truncating a constant is the one finding here
+  that can be a real defect rather than a style complaint, and CLAUDE.md
+  notes tests/ is linted by nothing else, so no other gate is watching it.
+
+  Nothing found here is Qt's own headers, which was the reason given for
+  not making it fatal blind. That concern did not materialise.
   **Layman:** The Windows half of the build shows compiler warnings but is allowed to ignore them, because nobody has looked at what it says yet.
   Kind: security.
   Source: in-session-2026-09-07.
