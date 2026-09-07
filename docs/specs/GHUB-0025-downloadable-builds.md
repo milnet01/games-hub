@@ -162,6 +162,9 @@ Triggers on `push: tags: ['v*']`. The workflow declares
 `contents: write` on the `publish` job alone, which is what `gh release
 create` needs; a repository whose default `GITHUB_TOKEN` is read-only fails
 at the publish step otherwise, and nothing else in the workflow needs write.
+That job also holds `id-token: write` and `attestations: write`, which
+`actions/attest-build-provenance` needs to sign its statement and record it;
+they are scoped to the one job for the same reason `contents: write` is.
 
 **Every action is pinned to a commit SHA**, with its version in a trailing
 comment, and `actions/checkout` is given `persist-credentials: false`. Both
@@ -289,6 +292,10 @@ it is one less dependency holding write access to this repository's
 releases. Per §11 the release commit closes
 `[Unreleased]` into a numbered block before the tag is cut, so at tag time
 `[Unreleased]` is empty and reading it would publish blank release notes.
+Before creating the release it runs `actions/attest-build-provenance` over
+both downloaded files, recording a signed statement of the repository, commit
+and workflow run behind each digest. `gh attestation verify` checks it and the
+README says how. It runs first, so no file is downloadable unattested.
 
 ### 4.4 The MSVC maths constant
 

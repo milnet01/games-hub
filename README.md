@@ -23,7 +23,7 @@ with this sort of thing.
 
 Both are on the [releases page](https://github.com/milnet01/games-hub/releases).
 
-Two things worth knowing before you download:
+A few things worth knowing before you download:
 
 - **The Linux file needs a reasonably recent Linux.** Ubuntu 24.04, Fedora 40,
   Debian 13, Tumbleweed and anything newer are all fine; older versions will
@@ -34,6 +34,18 @@ Two things worth knowing before you download:
   "Windows protected your PC". That is not a sign anything is wrong with the
   download: it appears for any program whose author has not paid for a
   certificate to stamp it with. Click *More info*, then *Run anyway*.
+- **You can check that a download is the file this repository built.** Every
+  released file carries a signed record naming the commit and the workflow run
+  that produced it. With [GitHub's `gh` tool](https://cli.github.com) installed:
+
+  ```
+  gh attestation verify GamesHub-<version>-x86_64.AppImage --repo milnet01/games-hub
+  ```
+
+  It prints where the file came from, and fails if the file is not one this
+  repository published. The same command works on the Windows zip. Version
+  0.6.0 and earlier were published before this record existed, so the check
+  fails on those as well.
 
 ## The games
 

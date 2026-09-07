@@ -8,6 +8,25 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Added
+
+- **You can check that a downloaded release is the file this repository built.** (GHUB-0054)
+  Every file published from now on carries a signed record of the
+  repository, commit and workflow run behind it. Check one with
+  `gh attestation verify <file> --repo milnet01/games-hub`; the README
+  says how. Version 0.6.0 and earlier were published before that record
+  existed, so the check fails on those as well. This is the half of the
+  item that needs no key of its own -- the signature and the checksum
+  file ride with the in-app updater instead.
+
+### Fixed
+
+- **cardart.h's header comment named three of the card games that use it.** (GHUB-0029)
+  It has served six since Canasta, FreeCell and Pyramid arrived, and it
+  is where kFaceMinWidth lives -- so a reader going there to understand
+  that threshold was told the wrong set of callers on the first line. It
+  now names no set at all, which is the part that went stale.
+
 ## [0.6.0] - 2026-09-06
 
 ### Added

@@ -1288,7 +1288,7 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0054] **A downloaded release cannot be checked against what the workflow actually built.**
+- ✅ [GHUB-0054] **A downloaded release cannot be checked against what the workflow actually built.**
   `release.yml` publishes an AppImage and a zip and nothing else. No checksum
   file, no signature, no build provenance. Someone who downloads either one has
   exactly GitHub's word for it, and no way to notice if a re-uploaded asset,
@@ -1312,6 +1312,27 @@ than any amount of hardening applied to an app with no sockets.
 
   Both halves want a line in the README saying how to check a download, since a
   checksum nobody is told about protects nobody.
+  Resolved (2026-09-07): the cheap half, and only that.
+  actions/attest-build-provenance runs in release.yml's publish job over
+  both downloaded artifacts, before gh release create, with id-token:
+  write and attestations: write scoped to that job. The README's Download
+  section says how to check a file with gh attestation verify, and says
+  that 0.6.0 and earlier carry no record. That discharges this item's
+  condition in versioning-overrides.md section 2 -- a downloaded release
+  can now be checked against what the workflow built.
+
+  NOT taken, deliberately: the Ed25519 signature and the SHA256SUMS file.
+  Both want GHUB-0043's key, GHUB-0043 is not a 1.0 condition, and this
+  was kept off that path.
+
+  Unproven until a tag is pushed: the step runs only on a release, and
+  nothing on this machine can exercise it. A failure there fails the job
+  before gh release create, so nothing is published and the recovery is
+  the existing one -- delete the tag.
+
+  docs/specs/GHUB-0025-downloadable-builds.md was amended to record the
+  step and the two permissions. No review gate: an amendment recording
+  what was built re-arms nothing.
   **Layman:** There is no way for someone to confirm the file they downloaded is the one your build produced and not something altered on the way.
   Kind: security.
   Source: in-session-2026-08-20.
@@ -2919,8 +2940,21 @@ inventing one.
   now and let the README keep the six-game picture. So the --screenshot
   option is NOT declined on its merits, it is simply unbuilt; if this is
   picked up later both routes are still open. Stays 📋.
+  Progress (2026-09-07): the second route this bullet offers now exists,
+  built for something else. --shot photographs the hub with no --game at
+  all, so one command produces a current tile grid:
+  QT_QPA_PLATFORM=offscreen ./build/gameshub --shot docs/hub.png --size
+  1200x1100. Run today at 1200x900 and inspected: the grid is current, the
+  status bar reads "14 games. Pick one.", and only the last row is cut off,
+  which a taller --size fixes.
 
-- 📋 [GHUB-0029] **cardart.h says it serves three games; it serves six.**
+  What has NOT changed is the reason it was parked. The shot is offscreen,
+  so it has no window decorations and no shadow, and the committed
+  docs/hub.png is a real desktop capture that has both. So the open
+  question is how the owner wants the picture to look, not whether
+  anything can produce one. Left 📋 pending that.
+
+- ✅ [GHUB-0029] **cardart.h says it serves three games; it serves six.**
   The header comment on src/cards/cardart.h reads "Shared card drawing
   for Klondike, Spider and Hearts, so the three games look like one deck
   rather than three." Six game views include it: canasta, freecell,
@@ -2939,6 +2973,10 @@ inventing one.
   **Layman:** The comment at the top of the shared card-drawing file names the wrong games.
   Kind: doc-fix.
   Source: in-session-2026-08-13 (found building the GHUB-0017 review packet).
+  Resolved (2026-09-07): the comment now names no set of games at all,
+  so the same staleness cannot return. Six views include the header --
+  canasta, freecell, hearts, klondike, pyramid, spider -- confirmed
+  against the tree before the edit rather than taken from this bullet.
 
 - ✅ [GHUB-0042] **The README promises a window size that nothing says how to judge.**
   Found 2026-08-19 by an adopt-project run — a cold reader given the README,

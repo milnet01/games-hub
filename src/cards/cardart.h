@@ -6,8 +6,8 @@
 #include <QFont>
 #include <QRectF>
 
-// Shared card drawing for Klondike, Spider and Hearts, so the three games look
-// like one deck rather than three.
+// Shared card drawing for every card game here, so they all look like one
+// deck rather than several.
 namespace CardArt {
 
 // Playing-card proportion: height = width * 1.4.

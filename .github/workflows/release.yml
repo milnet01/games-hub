@@ -369,6 +369,11 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      # For actions/attest-build-provenance below: id-token to get the OIDC
+      # token it signs with, attestations to record the result. Scoped to this
+      # job, so the two build jobs never hold either.
+      id-token: write
+      attestations: write
     env:
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
@@ -380,6 +385,19 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      # A signed, publicly verifiable statement of which repository, commit
+      # and workflow run produced each file, checkable with
+      # `gh attestation verify` and with no key for this project to hold or
+      # lose. It binds to the artifact DIGEST, so it names the files about to
+      # be uploaded rather than the tree they were built from -- and it runs
+      # before the release is created, so nothing is downloadable unattested.
+      - name: Attest what this run built
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: |
+            artifacts/GamesHub-*.AppImage
+            artifacts/GamesHub-*.zip
 
       # The verify job has already proved this section exists. Published with
       # the runner's own gh rather than a third-party action: one less
