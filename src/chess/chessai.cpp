@@ -134,11 +134,6 @@ void orderMoves(const Board& b, std::vector<Move>& moves)
     });
 }
 
-bool isNoisy(const Board& b, const Move& m)
-{
-    return !b.at(m.to).empty() || m.enPassant || m.promotion != PieceType::None;
-}
-
 class Search
 {
 public:

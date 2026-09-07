@@ -119,8 +119,26 @@ trap 'rm -f "$STEPS_FILE"' EXIT
 STEPS_RUN=0
 
 python3 - "$WORKFLOW" > "$STEPS_FILE" <<'PY'
-import sys, yaml
+import sys, re, yaml
 wf = yaml.safe_load(open(sys.argv[1]))
+
+# The build job is a matrix and this script runs its LINUX row, so a
+# `${{ matrix.<key> }}` in a body is resolvable rather than unknown. Resolve it
+# from the workflow's own matrix -- keeping the values here instead would be a
+# second copy of the matrix, which is the drift this whole script exists to
+# prevent. A key the row does not define is left alone, so the guard further
+# down still refuses it: this widens what can be run, never what can be missed.
+def resolve(body, job_name):
+    row = {}
+    if job_name == 'build':
+        matrix = wf['jobs']['build'].get('strategy', {}).get('matrix', {})
+        for entry in matrix.get('include', []):
+            if entry.get('name') == 'Linux':
+                row = entry
+                break
+    return re.sub(r'\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}',
+                  lambda m: str(row[m.group(1)]) if m.group(1) in row else m.group(0),
+                  body)
 # Every job, not just `build`. This read the build job alone until GHUB-0052
 # added a second one, and a job this script cannot see is the same silent
 # drift a step it cannot see would be -- worse, because it is a whole leg.
@@ -143,6 +161,8 @@ for job_name in known:
             kind = 'RUN'
         name = step.get('name') or step.get('uses', '').split('@')[0]
         body = step.get('run', '') if kind == 'RUN' else step.get('uses', '')
+        if kind == 'RUN':
+            body = resolve(body, job_name)
         # This script runs a `run:` body and applies nothing around it, so a
         # step carrying an `env:` block would execute here WITHOUT it and
         # differ from CI quietly. Refuse rather than mirror it wrongly; put

@@ -23,7 +23,6 @@ namespace {
 constexpr int kFrameMs = 16;
 constexpr QColor kPlayfield { 0x1b, 0x21, 0x3d };
 constexpr QColor kWallInk { 0x7d, 0x8a, 0xa8 };
-constexpr QColor kAccent { 0x4f, 0xc3, 0xf7 };
 }
 
 PinballView::PinballView(QWidget* parent)

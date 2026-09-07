@@ -1254,7 +1254,7 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0053] **The build asks the compiler for no help at all — not a warning, not a guard.**
+- ✅ [GHUB-0053] **The build asks the compiler for no help at all — not a warning, not a guard.**
   `CMakeLists.txt` sets `CMAKE_CXX_STANDARD 20` and stops. There is no `-Wall`, no
   `-Wextra`, no `/W4`, no `-Werror`, and no hardening flags anywhere in the tree.
   The CI job configures `-DCMAKE_BUILD_TYPE=Release` and builds; that is the whole
@@ -1284,6 +1284,45 @@ than any amount of hardening applied to an app with no sockets.
 
   Expect the first `-Wall -Wextra` run to be noisy across twenty-odd view files.
   That is the finding, not an obstacle to it.
+  Resolved (2026-09-07). Both halves, with one deliberate gap.
+
+  Warnings: `-Wall -Wextra` on GCC, `/W4` on MSVC, on for every build.
+  Fatal only under the new `-DGAMESHUB_WERROR=ON`. `ci.yml`'s matrix sets
+  it ON for Linux and OFF for Windows -- the Windows half is GHUB-0185,
+  filed rather than guessed, because the wintest box was off today and
+  `/W4` is a set nobody here has read.
+
+  The bullet predicted noise "across twenty-odd view files" and that was
+  wrong: GCC found three things, all real. A dead `isNoisy()` in chessai
+  that `legalCaptures()` had inlined, and two `Wall` aggregates leaving
+  `kickFace` unwritten. Clang, through the tidy leg, then found six dead
+  constants -- and one of those was worth the whole exercise: a file-local
+  `kMaxRedeals` in pyramidview beside the `PyramidTable::kMaxRedeals` the
+  rules actually enforce. Two copies of one number, and the dead one is
+  the one a future edit would have found first.
+
+  Hardening, release builds, non-sanitizer only: stack protector,
+  _FORTIFY_SOURCE=3, full RELRO, non-executable stack, PIE; /GS,
+  /guard:cf, /DYNAMICBASE on MSVC. Skipped under GAMESHUB_SANITIZE, since
+  ASan instruments the same paths.
+
+  Verified on the binary with readelf, not inferred from the flags, and
+  that mattered: CMAKE_POSITION_INDEPENDENT_CODE alone compiles -fPIE and
+  links no -pie, so the first build came out ET_EXEC while canary, RELRO,
+  NX and FORTIFY all passed. check_pie_supported() (CMP0083) is what makes
+  the link flag appear. Final readelf: DYN, full RELRO, non-exec stack,
+  __stack_chk_fail present, five __*_chk symbols.
+
+  One repair to `scripts/local-ci.sh` that this change forced. It fails
+  closed on any `${{ }}` it cannot evaluate, which is right, so the new
+  matrix expression stopped the Configure step from running locally at
+  all. It now resolves `${{ matrix.<key> }}` from the workflow's own Linux
+  row -- reading the matrix rather than keeping a second copy of it -- and
+  still refuses everything else.
+
+  Not changed, and not mine to change: the nine performance-use-std-move
+  findings a local clang-tidy reports. Same nine before and after, all in
+  files this item did not touch, and they stand by owner's call.
   **Layman:** The compiler can spot whole classes of mistake and add cheap protections to the finished program, and this build turns none of it on.
   Kind: security.
   Source: in-session-2026-08-20.
@@ -1476,6 +1515,34 @@ than any amount of hardening applied to an app with no sockets.
   **Layman:** A few smaller risks in the machinery that publishes the downloads.
   Kind: security.
   Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0185] **MSVC's /W4 warnings are reported on the Windows leg and fatal on neither side.**
+  GHUB-0053 turned warnings on for both compilers and made them fatal on
+  one. `ci.yml`'s matrix carries `werror: 'ON'` for Linux and `'OFF'` for
+  Windows, so `/W4` findings are printed on the Windows leg and block
+  nothing.
+
+  That was deliberate and the reason is measurement, not doubt. `/W4` is a
+  different set from `-Wall -Wextra` -- it is noisy against Qt's own
+  headers in particular -- and nothing on this machine has ever seen what
+  it says here. The wintest box was off on 2026-09-07 when GHUB-0053
+  landed, so the choice was to ship the Linux gate or to make a set nobody
+  had read fatal on the platform this project has already spent six red
+  legs on. CLAUDE.md's own rule -- assert what the code does, report what
+  the platform happens to provide -- points the same way.
+
+  What closes this: bring the wintest box up, run `scripts/wintest-ci.sh`
+  or a plain `-DGAMESHUB_WERROR=ON` configure there, read the `/W4` set,
+  fix what is real, suppress what is Qt's with a reason, then flip the
+  matrix key to `'ON'`. Until then the Windows leg is a warning reporter
+  and the Linux leg is the gate.
+
+  Worth knowing before starting: on GCC the same switch found three real
+  things and no noise at all, so the expected shape here is a short list
+  rather than a sweep.
+  **Layman:** The Windows half of the build shows compiler warnings but is allowed to ignore them, because nobody has looked at what it says yet.
+  Kind: security.
+  Source: in-session-2026-09-07.
 
 ### 🧠 Memory
 

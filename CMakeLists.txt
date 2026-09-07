@@ -63,6 +63,58 @@ if(GAMESHUB_SANITIZE)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
+# The compiler is the cheapest bug detector there is, and this build asked it
+# for nothing at all until GHUB-0053. Warnings are on for every build; -Werror
+# is opt-in and CI is what sets it, so a local build stays workable while the
+# gate stays honest. Turning it on found three real things and no noise:
+# a dead chess helper and two Wall aggregates that left a member unwritten.
+option(GAMESHUB_WERROR "Treat compiler warnings as errors (CI sets this)" OFF)
+if(MSVC)
+    add_compile_options(/W4)
+    if(GAMESHUB_WERROR)
+        add_compile_options(/WX)
+    endif()
+else()
+    add_compile_options(-Wall -Wextra)
+    if(GAMESHUB_WERROR)
+        add_compile_options(-Werror)
+    endif()
+endif()
+
+# Hardening, and it is the second half of GHUB-0053 rather than the valuable
+# one. None of this fixes a bug: it decides whether a bug that does exist
+# becomes a crash rather than something worse, in a binary handed to people who
+# cannot inspect it. A distribution package inherits most of it from the
+# distro's own build flags; the AppImage and the portable zip get what is asked
+# for here and nothing else.
+#
+# Skipped under GAMESHUB_SANITIZE: ASan instruments the same allocation and
+# stack paths, so the two report each other's work rather than the program's.
+if(NOT GAMESHUB_SANITIZE)
+    if(MSVC)
+        # /DYNAMICBASE is the Windows equivalent of PIE, so the PIE machinery
+        # below is deliberately not on this branch: it would be a check nobody
+        # here can run against a linker nobody here has.
+        add_compile_options(/GS /guard:cf)
+        add_link_options(/guard:cf /DYNAMICBASE /NXCOMPAT)
+    else()
+        # CMP0083: this property alone compiles -fPIE and links no -pie, so the
+        # binary comes out ET_EXEC while every other hardening check still
+        # passes. check_pie_supported() is what makes the link flag appear, and
+        # `readelf -h` saying DYN is the only thing that proves it.
+        include(CheckPIESupported)
+        check_pie_supported(LANGUAGES CXX)
+        set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+        # _FORTIFY_SOURCE needs an optimising build to see anything and warns
+        # when it is redefined, so it is set only where the first holds and the
+        # -U clears whatever the toolchain arrived with.
+        add_compile_options(-fstack-protector-strong)
+        add_compile_options($<$<NOT:$<CONFIG:Debug>>:-U_FORTIFY_SOURCE>)
+        add_compile_options($<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=3>)
+        add_link_options(-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack)
+    endif()
+endif()
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Multimedia Concurrent)
 qt_standard_project_setup()
 

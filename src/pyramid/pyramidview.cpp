@@ -18,7 +18,6 @@
 #include <algorithm>
 
 namespace {
-constexpr int kMaxRedeals = 2;
 // The margin and the fan step are shared by the layout and by the height budget
 // that sizes the card. They were two independent literals until the budget's
 // 0.52 drifted from the painter's 0.46-of-a-card-height, and the stock and waste

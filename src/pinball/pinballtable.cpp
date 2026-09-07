@@ -56,7 +56,7 @@ void PinballTable::buildTable()
     m_bumpers.clear();
 
     auto wall = [this](QPointF a, QPointF b, double bounce = 0.62) {
-        m_walls.push_back(Wall { a, b, 4.0, bounce, 0.0, 0, 0.0, false });
+        m_walls.push_back(Wall { a, b, 4.0, bounce, 0.0, 0, 0.0, false, {} });
     };
 
     // Outer boundary. The launch lane runs the full height on the right and is
@@ -81,7 +81,7 @@ void PinballTable::buildTable()
 
     // One-way gate across the mouth of the lane, just under the dome: the ball
     // rides up through it and cannot drop back down the lane afterwards.
-    m_walls.push_back(Wall { { kLaneX, 196 }, { 386, 196 }, 4.0, 0.3, 0.0, 0, 0.0, true });
+    m_walls.push_back(Wall { { kLaneX, 196 }, { 386, 196 }, 4.0, 0.3, 0.0, 0, 0.0, true, {} });
 
     // Inlane walls funnelling towards the flippers.
     wall({ 14, 540 }, { 104, 636 });

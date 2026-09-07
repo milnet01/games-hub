@@ -21,6 +21,18 @@ cmake --build build                     # build everything
 ./build/gameshub                        # the hub
 ./build/gameshub --game spider          # straight into one game
 
+# Warnings are on for every build (-Wall -Wextra, /W4 on MSVC) and are fatal
+# only under -DGAMESHUB_WERROR=ON, which CI sets on the LINUX leg alone --
+# MSVC's /W4 is a different set and GHUB-0185 owns measuring it. Turn it on
+# locally before pushing code, or the Linux leg is where you find out.
+# Release builds also harden: stack protector, FORTIFY_SOURCE, full RELRO,
+# non-executable stack and PIE. Neither switch changes what the code does.
+# `readelf -h build/gameshub` saying DYN is the only thing that proves PIE
+# landed -- CMAKE_POSITION_INDEPENDENT_CODE alone compiles -fPIE and links no
+# -pie, and every other hardening check still passes while it is missing.
+# GAMESHUB_SANITIZE turns the hardening off, deliberately: ASan instruments the
+# same paths and the two then report each other.
+
 # The configure step picks up ccache and mold when they are installed and says
 # so; -DGAMESHUB_FAST_BUILD=OFF turns both off. Neither changes what is built.
 # Measured 2026-09-04: a full build after wiping the build directory falls from

@@ -29,12 +29,21 @@ jobs:
           # Not ubuntu-22.04: GitHub begins deprecating that image on
           # 2026-09-17. Not windows-latest: it moved to Visual Studio 2026 in
           # June 2026, and Qt's prebuilt win64_msvc2022_64 wants VS 2022.
+          # werror: GHUB-0053 turned warnings on for both compilers, but only
+          # the GCC leg treats them as fatal. MSVC's /W4 is a different set and
+          # nothing here has ever measured it -- the Windows test box was off
+          # when this landed -- and this project has already spent six red
+          # Windows legs on constants nobody had measured on that platform.
+          # So /W4 reports on Windows and blocks on Linux. GHUB-0185 turns it
+          # on for Windows once the set has actually been looked at.
           - name: Linux
             os: ubuntu-24.04
             qt_arch: linux_gcc_64
+            werror: 'ON'
           - name: Windows
             os: windows-2022
             qt_arch: win64_msvc2022_64
+            werror: 'OFF'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -69,7 +78,9 @@ jobs:
         run: ./scripts/setup-msvc.ps1
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DGAMESHUB_WERROR=${{ matrix.werror }}
 
       - name: Build
         run: cmake --build build

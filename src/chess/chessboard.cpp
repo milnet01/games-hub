@@ -467,8 +467,8 @@ std::vector<Move> Board::legalCaptures(Colour c) const
     std::vector<Move> out;
     out.reserve(12);
     for (const Move& m : pseudoMoves(c)) {
-        // The cheap test first. This is the same question isNoisy() asks in the
-        // search, and asking it before the board copy is the point.
+        // The cheap test first -- a capture, an en passant or a promotion.
+        // Asking it before the board copy is the point.
         if (at(m.to).empty() && !m.enPassant && m.promotion == PieceType::None)
             continue;
         Board next = *this;

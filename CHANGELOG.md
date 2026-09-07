@@ -27,6 +27,26 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   that threshold was told the wrong set of callers on the first line. It
   now names no set at all, which is the part that went stale.
 
+### Security
+
+- **The build now asks the compiler for warnings and for hardening, having asked for neither.** (GHUB-0053)
+  `-Wall -Wextra` on GCC and `/W4` on MSVC, for every build. They are
+  fatal only under `-DGAMESHUB_WERROR=ON`, which CI sets on the Linux leg,
+  so a local build stays workable while the gate stays honest. Turning
+  them on found three real things and no noise: a dead chess helper, and
+  two Wall aggregates leaving a member unwritten. Clang then found six
+  dead constants, one of them a second copy of Pyramid's redeal limit
+  sitting beside the one the rules actually use.
+
+  Release builds also harden -- stack protector, `_FORTIFY_SOURCE=3`, full
+  RELRO, a non-executable stack and a position-independent executable;
+  `/GS`, `/guard:cf` and `/DYNAMICBASE` on Windows. None of it fixes a bug.
+  It decides whether a bug that does exist becomes a crash rather than
+  something worse, in a binary handed to people who cannot inspect it.
+  Verified on the built binary with `readelf` rather than assumed from the
+  flags -- PIE in particular needs `check_pie_supported()` and silently
+  does not apply without it.
+
 ## [0.6.0] - 2026-09-06
 
 ### Added
