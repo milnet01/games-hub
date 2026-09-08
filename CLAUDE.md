@@ -723,9 +723,15 @@ the melds where they stand.** Growing them in place was tried first and cannot
 work: a meld card wide enough to show a face makes a seven-card canasta about
 130 px tall at the smallest window, and `bandFor()` gives it 107 — the overflow
 runs into the stock and discard row above. So `minimumSizeHint()` returns
-900×656 while the switch is on, the smallest window at which `cardWidth()`
-reaches `CardArt::kFaceMinWidth / kMeldScale` unaided, and every card on the
-table grows together. **Floor, smallest scale and minimum size move together or
+908×656 while the switch is on, the smallest window at which `cardWidth()`
+reaches `CardArt::kFaceMinWidth / kMeldScale` unaided **at every shape the
+window can take**, and every card on the table grows together. **The width half
+is solved against the WORST inset, not the inset at that height** — `tableRect()`
+insets by 2.2% of the shorter side, so once a window is taller than it is wide
+the shorter side is the width and the table loses width as the window grows.
+Solving it at the minimum height gave 900, and the card then clamped at
+908×1000. That is GHUB-0153, and `cardsFitTable()` is asked at a spread of
+shapes now rather than at the minimum alone, which is what hid it. **Floor, smallest scale and minimum size move together or
 not at all**; `cardsFitTable()` is what asserts the floor never actually has to
 clamp, because a clamped card is one the table has no room for. **And the switch
 has to put the window back** — Qt clamps the window up to the new minimum and
@@ -1002,7 +1008,7 @@ lives in a `QScrollArea` and asks for nothing. `HubWindow::kFitsBesideYourWork`
 across, its height less a panel and a title bar — and **any** game whose minimum size
 exceeds it fails the check in `tests/uitest.cpp` — in either legibility state,
 so a per-game legibility pass that raises a minimum is bound by it too.
-Canasta already sits at 900 wide against a 960 bar, which is 60 pixels of
+Canasta already sits at 908 wide against a 960 bar, which is 52 pixels of
 headroom rather than a comfortable margin. **That check gives each
 game its own hub**, because measured through one window every game reports the
 worst one's floor and thirteen innocent games go red together.

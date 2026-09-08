@@ -21,6 +21,19 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Canasta's table holds its shape when the window changes shape** (GHUB-0153)
+  The top of a card you had hovered was not clickable, and a strip of
+  felt below it was. Space and Return could play a move while cards were
+  still in the air. On a window taller than it is wide the table lost
+  width as the window grew, which could shrink a card below the size its
+  face is drawn at; the score plates went narrow and their type went
+  large, until a team's name and what it needs to open printed on top of
+  one another. A discard that freezes the pack flew flat to the middle of
+  the pile and then jumped sideways and turned. A finished canasta
+  vanished from its stack while one of its cards was flying to it. And
+  the CANASTA! flourish was sized in a unit that let the screen decide
+  whether the word fitted.
+
 - **Canasta's rules windows no longer let the hand play on behind them, and the House rules form fits a small screen** (GHUB-0154)
   Opening House rules or Rules in force now stops the computer players
   until you close it, so a slow read can no longer let the hand finish

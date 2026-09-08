@@ -1397,6 +1397,24 @@ int main(int argc, char* argv[])
               "canasta: and the raised minimum gives the table room for it, "
               "rather than the floor clamping a card that does not fit");
 
+        // And at every shape the window can actually take, not only at the
+        // minimum. tableRect() insets by 2.2% of the SHORTER side, so a window
+        // made taller than it is wide starts insetting the WIDTH by a bigger
+        // figure -- the table loses width as the window grows. The check above
+        // asks at the minimum alone, where the shorter side is the height, and
+        // is blind to it. 900x1000 is the shape the README promises fits beside
+        // your work, and the card clamped there. GHUB-0153.
+        for (const QSize& shape : { QSize(900, 656), QSize(900, 1000), QSize(900, 1400),
+                                    QSize(960, 1000), QSize(1200, 1600), QSize(1600, 700) }) {
+            canasta.resize(shape);
+            check(canasta.cardsFitTable(),
+                  qPrintable(QStringLiteral("canasta: the table has room for a legible card "
+                                            "at %1x%2, not just at the minimum")
+                                 .arg(shape.width())
+                                 .arg(shape.height())));
+        }
+        canasta.resize(400, 300);
+
         Legibility::instance().setEnabled(false);
     }
 

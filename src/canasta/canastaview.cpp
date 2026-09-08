@@ -88,12 +88,22 @@ constexpr double kLegibleCardWidth = CardArt::kFaceMinWidth / kMeldScale;
 
 // The smallest window at which cardWidth() reaches kLegibleCardWidth on its
 // own, so the floor never has to clamp — a clamped card is one the table has no
-// room for. tableRect() insets by 2.2% of the shorter side and cardWidth() then
-// takes min(0.072 × table width, 0.10 × table height); both terms solve to
-// about 893×651, rounded up here, and deliberately still inside a 1024×768
-// desktop (spec § 6). cardsFitTable() is what checks this number is big
-// enough, without a second copy of the arithmetic to go stale.
-constexpr QSize kLegibleMinimum { 900, 656 };
+// room for. tableRect() insets by 2.2% of the SHORTER side and cardWidth() then
+// takes min(0.072 × table width, 0.10 × table height).
+//
+// The width term is solved against the worst inset rather than the inset at
+// this height, and that is what GHUB-0153 corrected. Once a window is taller
+// than it is wide the shorter side IS the width, so the inset stops shrinking
+// with height and settles at 0.022 × width — leaving 0.072 × 0.956 × width,
+// which reaches kLegibleCardWidth at 904. Solved at 656 tall instead it gives
+// 893, and the table then LOST width as the window grew taller: measured false
+// at 900×1000, which is the shape the README promises fits beside your work.
+// The height term has no such coupling and solves to 651. Both rounded up
+// here, and deliberately still inside a 1024×768 desktop (spec § 6).
+// cardsFitTable() is what checks these numbers are big enough, without a
+// second copy of the arithmetic to go stale — and it is asked at a spread of
+// window shapes now, not at the minimum alone, which is what hid this.
+constexpr QSize kLegibleMinimum { 908, 656 };
 
 const QColor kInk { 0xf4, 0xea, 0xdd };
 const QColor kInkDim { 0xc9, 0xb6, 0xa2 };
@@ -1644,11 +1654,23 @@ bool CanastaView::hits(const QPointF& pos, const QPointF& centre, double w, doub
 int CanastaView::handIndexAt(const QPointF& pos) const
 {
     const int n = int(m_engine.hand(0).size());
-    // Right to left, because the rightmost card is drawn on top.
-    for (int i = n - 1; i >= 0; --i) {
-        if (hits(pos, handCentre(i, n, isSelected(i)), cardWidth(), cardHeight(),
-                 handAngle(i, n)))
-            return i;
+    // Two passes, each right to left because the rightmost card is drawn on
+    // top. The first asks where a card IS drawn: the painter raises a card on
+    // hover as well as on selection, and this test knew only about selection,
+    // so the top of a raised card was dead and a strip of felt under it was
+    // live -- on a hand read slowly, by aim, that is the whole of the problem.
+    //
+    // The second asks where the card RESTS, and only where the first found
+    // nothing. Matching the drawn position alone would flicker: the pointer
+    // that raised a card is then below it, which drops it, which raises it
+    // again. Falling back to the resting slot is stable and leaves nothing you
+    // can see unclickable. GHUB-0153.
+    for (int pass = 0; pass < 2; ++pass) {
+        for (int i = n - 1; i >= 0; --i) {
+            const bool lifted = pass == 0 && (isSelected(i) || i == m_hover);
+            if (hits(pos, handCentre(i, n, lifted), cardWidth(), cardHeight(), handAngle(i, n)))
+                return i;
+        }
     }
     return -1;
 }
@@ -1759,12 +1781,20 @@ void CanastaView::flyHandArrivals(int seat, std::vector<Card> gained, const QPoi
 
 void CanastaView::flyToPile(const Card& c, const QPointF& from)
 {
+    // A card that freezes the pack is laid across it and drawn turned, so a
+    // flight that ended flat at the pile's centre put the card down and then
+    // let it jump sideways and rotate. Both callers throw through the engine
+    // first, so the pile already knows: the freeze card is the one just
+    // thrown when its index is the last. GHUB-0153.
+    const std::vector<Card>& pile = m_engine.pile();
+    const bool freezes = !pile.empty() && m_engine.freezeCardIndex() == int(pile.size()) - 1;
+
     Flight f;
     f.card = c;
     f.from = from;
-    f.to = pileCentre();
+    f.to = freezes ? freezeCardCentre(pileCentre()) : pileCentre();
     f.fromAngle = 0.0;
-    f.toAngle = 0.0;
+    f.toAngle = freezes ? 90.0 : 0.0;
     f.faceUp = true;
     f.speed = 5.0;
     f.dest = Dest::Pile;
@@ -1872,6 +1902,13 @@ bool CanastaView::suppressed(Dest dest, int seatOrTeam, int rank, const Card& c)
 
 void CanastaView::humanDraw()
 {
+    // Nothing moves the game on while cards are still flying. mousePressEvent
+    // has always refused, but Space reaches humanMeld() and Return
+    // humanDiscard() straight from the toolbar actions, past that guard -- and
+    // a move accepted mid-flight draws one card in two places, because a
+    // flight carries a destination captured when it left. GHUB-0153.
+    if (animating())
+        return;
     if (m_engine.phase() != ca::Engine::Phase::Draw || m_engine.currentSeat() != 0)
         return;
 
@@ -1892,6 +1929,13 @@ void CanastaView::humanDraw()
 
 void CanastaView::humanTakePile()
 {
+    // Nothing moves the game on while cards are still flying. mousePressEvent
+    // has always refused, but Space reaches humanMeld() and Return
+    // humanDiscard() straight from the toolbar actions, past that guard -- and
+    // a move accepted mid-flight draws one card in two places, because a
+    // flight carries a destination captured when it left. GHUB-0153.
+    if (animating())
+        return;
     if (m_engine.phase() != ca::Engine::Phase::Draw || m_engine.currentSeat() != 0)
         return;
 
@@ -1928,6 +1972,13 @@ void CanastaView::humanTakePile()
 
 void CanastaView::humanMeld(int targetRank)
 {
+    // Nothing moves the game on while cards are still flying. mousePressEvent
+    // has always refused, but Space reaches humanMeld() and Return
+    // humanDiscard() straight from the toolbar actions, past that guard -- and
+    // a move accepted mid-flight draws one card in two places, because a
+    // flight carries a destination captured when it left. GHUB-0153.
+    if (animating())
+        return;
     if (m_engine.phase() != ca::Engine::Phase::Play || m_engine.currentSeat() != 0)
         return;
     const std::vector<Card> cards = selectedCards();
@@ -1959,6 +2010,13 @@ void CanastaView::humanMeld(int targetRank)
 
 void CanastaView::humanDiscard()
 {
+    // Nothing moves the game on while cards are still flying. mousePressEvent
+    // has always refused, but Space reaches humanMeld() and Return
+    // humanDiscard() straight from the toolbar actions, past that guard -- and
+    // a move accepted mid-flight draws one card in two places, because a
+    // flight carries a destination captured when it left. GHUB-0153.
+    if (animating())
+        return;
     if (m_engine.phase() != ca::Engine::Phase::Play || m_engine.currentSeat() != 0)
         return;
     if (m_selected.size() != 1) {
@@ -2500,13 +2558,16 @@ void CanastaView::paintCanastaStack(QPainter& p, int team)
 
         const QRectF box = canastaStackRect(team, i, count);
         const Card top = canastaTopCard(*m, m_engine.rules());
-        // In the air, so not on the table. Brief, and the same convention the
-        // rest of the game holds: a card is never drawn in two places.
-        if (suppressed(Dest::Meld, team, rank, top))
-            continue;
-
-        // Squared up: one card shows, and its colour says natural or mixed.
-        paintCard(p, top, box.center(), (i % 2 == 0) ? 90.0 : 0.0, true, kMeldScale);
+        // The CARD may be in the air -- a card is never drawn in two places --
+        // but the canasta it belongs to has not moved. Skipping the ring and
+        // the badge along with it made a whole finished canasta blink out of
+        // the stack while one card flew to it, and the stack is how the owner
+        // reads what has been finished. The meld row beside this suppresses
+        // per card and keeps its ring; this now matches it. GHUB-0153.
+        if (!suppressed(Dest::Meld, team, rank, top)) {
+            // Squared up: one card shows, and its colour says natural or mixed.
+            paintCard(p, top, box.center(), (i % 2 == 0) ? 90.0 : 0.0, true, kMeldScale);
+        }
 
         // The ring the meld row gives a canasta, kept: at this size the top
         // card's colour is a small signal, and the owner reads slowly.
@@ -2900,7 +2961,14 @@ void CanastaView::paintScores(QPainter& p)
     // the centre of the table clear — 2 x 178 against a 688-wide table at the
     // minimum size.
     const double w = std::max(178.0, table.width() * 0.235);
-    const double h = std::max(52.0, table.height() * 0.095);
+    // The height is what the type is sized from, and it used to come off the
+    // table's height while the width came off the table's width. On a window
+    // taller than it is wide that gave a narrow plate carrying very large
+    // type, and the team's name and its opening requirement -- which share a
+    // row -- met in the middle. Capped against the plate's own width now, the
+    // dimension those strings actually have to fit across. The cap does not
+    // bite at either shape this file already documents. GHUB-0153.
+    const double h = std::clamp(table.height() * 0.095, 52.0, w * 0.31);
 
     struct Plate {
         QString title;
@@ -2928,6 +2996,10 @@ void CanastaView::paintScores(QPainter& p)
     // Sized off the plate's HEIGHT in pixels, not its width in points: point
     // sizes scaled from the width overflowed the plate and clipped the title.
     QFont title = p.font();
+    // Said rather than inherited. p.font() carries whatever the last painter
+    // set, and several of them set bold -- so this row was bold or not
+    // depending on paint order, which is not a decision anybody made.
+    title.setBold(false);
     title.setPixelSize(std::max(10, int(h * 0.26)));
     QFont big = p.font();
     big.setPixelSize(std::max(16, int(h * 0.44)));
@@ -2971,16 +3043,24 @@ void CanastaView::paintScores(QPainter& p)
     // Canasta flourish.
     if (m_celebrate > 0.0) {
         const double k = m_celebrate / kFlourish;
+        const QRectF band(table.left(), table.center().y() - table.height() * 0.10, table.width(),
+                          table.height() * 0.12);
         QFont f = p.font();
-        f.setPointSizeF(std::max(20.0, table.width() * 0.058));
+        // Pixels, from the band this is drawn into. It was the one string on
+        // this table sized in POINTS, and from the table's WIDTH -- so what
+        // decided whether the word fitted its band was the screen's
+        // point-to-pixel ratio, which is not this code's to know and is not
+        // what the band is measured in. drawText() clips to its rect, so the
+        // failure was the word losing its top and bottom. TextDontClip is the
+        // same belt the pencil marks wear, for the residue between ink and
+        // line box. GHUB-0153.
+        f.setPixelSize(std::max(20, int(band.height() * 0.72)));
         f.setBold(true);
         p.setFont(f);
         QColor c = Theme::kGold;
         c.setAlpha(int(235 * std::min(1.0, k * 1.6)));
         p.setPen(c);
-        p.drawText(QRectF(table.left(), table.center().y() - table.height() * 0.10, table.width(),
-                          table.height() * 0.12),
-                   Qt::AlignCenter, QStringLiteral("CANASTA!"));
+        p.drawText(band, Qt::AlignCenter | Qt::TextDontClip, QStringLiteral("CANASTA!"));
     }
 }
 
@@ -3000,6 +3080,9 @@ void CanastaView::paintSummary(QPainter& p)
     heading.setPixelSize(std::max(20, int(table.height() * 0.046)));
     heading.setBold(true);
     QFont body = p.font();
+    // Said, not inherited -- the heading above is the bold one, and this took
+    // whatever the last painter happened to leave on p. GHUB-0153.
+    body.setBold(false);
     body.setPixelSize(std::max(14, int(table.height() * 0.029)));
 
     QString title;

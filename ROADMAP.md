@@ -2684,7 +2684,7 @@ draws, whether or not it has had one.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0153] **Canasta's table has several layout figures that do not survive a change of shape.**
+- ✅ [GHUB-0153] **Canasta's table has several layout figures that do not survive a change of shape.**
   canastaview.cpp, all MEDIUM, none fixed. The hover lift disagrees
   between the hit test and the painter, so the top sixth of a card you
   can see is not clickable and a strip of felt below it is. The four
@@ -2701,6 +2701,70 @@ draws, whether or not it has had one.
   into a pixel rect that clips. And suppressed() skips the ring and
   badge along with the card, so a whole canasta vanishes while one card
   flies to it.
+  Resolved (2026-09-08). All eight, each verified against the source
+  before it was touched.
+
+  The hand's hit test now runs two passes: where a card IS drawn, then
+  where it RESTS. The painter raises a card on hover as well as on
+  selection and the test knew only about selection, so the top of a raised
+  card was dead and a strip of felt under it was live. Matching the drawn
+  position alone would flicker -- the pointer that raised a card is then
+  below it, which drops it, which raises it again -- so the resting slot
+  is a fallback rather than the answer.
+
+  humanDraw, humanTakePile, humanMeld and humanDiscard all refuse while
+  anything is flying. mousePressEvent always did; Space and Return reach
+  humanMeld and humanDiscard straight from the toolbar actions, past it.
+
+  kLegibleMinimum is 908x656, not 900x656. The width term was solved
+  against the inset at the minimum HEIGHT, and tableRect() insets by 2.2%
+  of the shorter side -- so once a window is taller than it is wide the
+  shorter side is the width and the table loses width as the window grows.
+  Solved against that worst inset (0.072 x 0.956 x width) it needs 904.
+  Measured before the change: cardsFitTable() was false at 900x1000, which
+  is the shape the README promises fits beside your work, and at 900x1400.
+  The floor and kMeldScale are untouched and Canasta's smallest meld card
+  is still 46.4 px, because the height term is what binds at the minimum.
+
+  flyToPile aims a freezing discard at freezeCardCentre() and turns it to
+  90 degrees on the way. It flew flat to the pile's centre and then jumped
+  sideways and rotated on landing.
+
+  The score plate's height is capped against its own width. The width came
+  off the table's width and the height -- which is what the type is sized
+  from -- off the table's height, so a tall narrow window gave a narrow
+  plate carrying very large type. Photographed at 908x1400 before the fix:
+  the team's name and its opening requirement, which share a row, printed
+  on top of one another ("You &pNoertdh"). The cap does not bite at either
+  shape the source already documents.
+
+  The CANASTA! flourish is sized in pixels from the band it is drawn into,
+  with TextDontClip. It was the one string on this table sized in POINTS,
+  and from the table's WIDTH -- so what decided whether the word fitted was
+  the screen's point-to-pixel ratio, which is not this code's to know.
+
+  paintScores' title font and paintSummary's body font say setBold(false)
+  rather than inheriting whatever the last painter left on p.
+
+  paintCanastaStack suppresses the CARD only. It was skipping the ring and
+  the badge with it, so a whole finished canasta blinked out of the stack
+  while one card flew to it. The meld row beside it already suppressed per
+  card and kept its ring.
+
+  Seen, not just reasoned about: seeded --shot at 908x656, 908x1400 and
+  1600x700, before and after. Full ctest green, built with
+  GAMESHUB_WERROR=ON.
+
+  Test: the cardsFitTable sweep in tests/uitest.cpp asks at six reachable
+  shapes rather than at the minimum alone, which is what hid this. Seen red
+  at 900x1000 and 900x1400 against the unraised constant. The other seven
+  are painting and hit-testing with no offscreen assertion available; the
+  shots are the evidence and they are named above.
+
+  Not taken: at 908x656 the "stock 22" plate appears to overlap the bottom
+  edge of the stock and discard cards by a few pixels. Seen in the shot,
+  not measured, so it is recorded here as an observation rather than filed
+  as a finding.
   **Layman:** A few numbers on the Canasta table are sized against the wrong dimension, or inherit a style from whatever was drawn before.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
