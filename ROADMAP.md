@@ -3502,6 +3502,21 @@ inventing one.
 
   Verified after the edit: post_check still reports version 0.4.0
   consistent across CMakeLists.txt, README.md and CHANGELOG.md.
+  Figure corrected (2026-09-08). This body records that
+  .claude/bump.json's $note_save_versions said "ten games stamp". It says
+  twelve now: there are twelve saveState() overrides in src/ and twelve
+  view files carrying a quint32 stamp, Snake and Pinball being the only two
+  of the fourteen that keep nothing.
+
+  Found by the review-contract gate on docs/standards/versioning-overrides.md,
+  whose § 4 carried the same ten and was contradicted by its own § 1
+  ("Twelve of the fourteen games save"). All three lanes found it
+  independently. GHUB-0075's body already carried the correction for the
+  roadmap's own copy; this note is the same fact for the recipe's.
+
+  The body above is left as written -- it is a record of what the file said
+  when this item shipped, and a shipped record is not rewritten to match a
+  later change.
   **Layman:** A note stops someone helpfully adding ten numbers to the release checklist that must never be there.
   Kind: chore.
   Source: in-session-2026-08-20.

@@ -35,8 +35,11 @@ stamp are about the cards, not the format: Klondike's `readPile` failing, and
 catch a change that shifts the stream. **A field appended at the end shifts
 nothing** — the old layout reads back clean, the extra bytes go unread, and the
 game restores a state that is silently missing whatever the new field carried.
-The four games with no pack lean on their own core's `restore()` in the same
-incidental way.
+The games with no pack lean on their own core's `restore()` in the same
+incidental way, and there are **five** — Minesweeper, Reversi, Draughts, Sudoku
+and 2048. Chess and Canasta have no pack check either and are not among them:
+Chess replays its move list and Canasta serialises its engine, which § 1's
+save paragraph above describes.
 
 **The settings store.** Renaming a key, or changing what a value means, loses
 the setting without saying so. The families are `display/legibility`,
@@ -70,8 +73,9 @@ is a surface even though no player will ever see it.
 
 ## 2. What made this `1.0`, and what changed when it landed
 
-**`1.0.0` shipped on 2026-09-08**, carrying the last two items in the table
-below. The condition is discharged. This section is kept as the record of it —
+**`1.0.0` shipped on 2026-09-08**, carrying GHUB-0054 and GHUB-0053 — the
+last two of the six below to be cleared, which are not the table's last two
+rows. The condition is discharged. This section is kept as the record of it —
 what the bar was, why those six, and when each was cleared — because the table
 is the only place that says so.
 
@@ -115,16 +119,23 @@ installs is a release cycle bought for nothing.
 
 Global § 5 still governs the suffix if that ever changes. **It would be work
 rather than a flag**, and the shape of it is recorded in GHUB-0076 so nobody
-has to measure it twice. **Today a candidate tag never gets that far**: it is
-rejected at both of `verify`'s checks — the comparison against `CMakeLists.txt`
-and the `CHANGELOG.md` heading grep — and `verify` exits before the publish
-step runs. **If those two were relaxed, it would then publish as the latest
-release**, because `gh release create` carries no `--prerelease`. That third
-change is the one easiest to miss, precisely because the first two hide it.
+has to measure it twice. **Today a candidate tag never gets that far.** `verify` holds **three**
+checks and a suffixed tag fails the first: `${GITHUB_REF_NAME#v}` is
+`1.0.0-rc.1` against `CMakeLists.txt`'s `1.0.0`. Behind it sit the
+`CHANGELOG.md` heading grep and an `awk` that fails when the section that
+heading names is empty. **Relax all three and it would then publish as the
+latest release**, because `gh release create` carries no `--prerelease` — and
+that fourth change is the one easiest to miss, precisely because the three in
+front of it hide it.
+
+**The `awk` is the one that hides longest**, because it keys on the exact
+`## [$tag]` heading. A grep relaxed to accept `v1.0.0-rc.1` against a
+`## [1.0.0]` section leaves the `awk` matching no heading and failing on empty
+notes — a stop that arrives after the two that look like the whole guard.
 
 ## 4. Version lines that are not the app's version
 
-Global § 7's case, here: **ten save-format versions, one per saving game.**
+Global § 7's case, here: **twelve save-format versions, one per saving game.**
 There is no single "save version" for the app and nothing should invent one.
 
 They are absent from `.claude/bump.json` on purpose, and `$note_save_versions`
@@ -142,7 +153,7 @@ records why, as global § 7 requires.
 | § 1 — keyboard shortcuts stay stable | **nothing** — no test presses a key it does not already know about |
 | § 1 — install targets, option names and the configure-time `CMAKE_INSTALL_PREFIX` contract | **nothing** — nothing configures or installs the project with non-default options |
 | § 2 — the `1.0` condition | discharged 2026-09-08; nothing to check. **What is unchecked now is the lapse**: no test and no script asserts that a level was chosen on the unshifted ladder, and `cut-release`'s floor catches only an addition under a PATCH step |
-| § 3 — no candidate is cut | `release.yml` rejects a suffixed tag at both its `verify` checks — by accident rather than by intent, but the effect is the rule's |
+| § 3 — no candidate is cut | `release.yml` rejects a suffixed tag at the first of `verify`'s three checks — by accident rather than by intent, but the effect is the rule's |
 | § 4 — save versions stay out of the recipe | `.claude/bump.json` lists only `CMakeLists.txt` and `README.md`, so a release cannot walk them; `post_check` verifies those two against `CHANGELOG.md` |
 
 ## Cold-eyes loop log
@@ -152,3 +163,4 @@ records why, as global § 7 requires.
 | 1 | 2026-08-20 | 3, cold — genre pinned `standard`; packet carried global §§ 3, 4, 5 and 7 in full, the `verify` job, `bump.json`, Klondike's `restoreState`, the settings-key dump and the `openGameNamed` call sites | 3 | 3 | 1 | n/a | **Seven verified, seven fixed.** **All three lanes independently found the same defect**: § 2 stated the `1.0` bar as a two-clause sentence AND as a five-item table, and three of the items served neither clause — so with two items shipped one maintainer cuts `1.0.0` and another refuses. The table is now the condition and the prose its rationale. The gate also **added a sixth item**: the owner's five did not cover the loss path § 1 itself describes, a save silently refused by a changed build, so GHUB-0075 joined them — a change to the owner's chosen bar, surfaced rather than slid in. **The sharpest Q1 was my own false measurement**: § 3 recorded *"Measured … `cmake_version=0.5.0`"* when the tree says `0.4.0`, so the run demonstrated a rejection without isolating the suffix as its cause. Replaced with a derivation from the `sed` pattern, executed: a suffixed source line still yields the bare triple. **A lane found the `verify` job uses `$tag` twice** — the second is the `CHANGELOG` heading grep — where the document quoted one, so a conformer would have patched a third of the problem. **Two restatements of global rules** (§ 5's spelling and placement, § 7's clock clause) cut to citations, which a case-2 override is required to do. `minesweeper/level` fell outside every settings family named. Two lane open questions resolved clean: `saved/<game>` is real (built by `saveKey()`, so absent from a literal-key grep — a packet artefact), and the security carve-out and changelog tests do live in global § 2. |
 | 2 | 2026-08-20 | 3, cold — identical brief, packet rebuilt from disk and widened with global §§ 2 and 8 and the dynamic-key builders | 1 | 3 | 2 | n/a | **Six verified, six fixed.** **The best finding was one lane's and it was a hole rather than a wording slip**: § 1 keyed the save rule on the STAMP moving, when the dangerous case is the opposite — change what `saveState()` writes and leave the stamp at `1`, and an old blob passes the version gate. Reworded to fire on the format changing whether or not the stamp moves. **Two lanes found the surfaces list closed** — *"these four are what a player can rely on"* — against global § 3's *"a surface nobody wrote down is still a surface"*. **A lane found the integrator half of global § 2's definition dropped twice**, which matters here because GHUB-0044 and GHUB-0045 are distribution packaging: an install target or the configure-time prefix contract is a surface no player sees. **Another found § 2 stated a floor and no trigger**, so a satisfied condition could sit at `0.9.x` indefinitely. **A lane found the CLI surface missing entirely** and its open question turned out to matter more than the finding: `--version` prints `Games <version>` and `release.yml` asserts that prefix on both artifacts, so it was already a contract nobody had written down. Its second open question — does the publish step key off a suffix — found that `gh release create` carries **no `--prerelease` at all**, making the release-candidate work three changes rather than two. **Mid-loop the owner decided this project cuts no candidates**, so § 3 became three lines and GHUB-0076 was parked as considered with the measurement intact rather than deleted. |
 | 3 | 2026-08-20 | 3, cold — identical brief, packet rebuilt from disk and widened with the publish step, both smoke legs and `main.cpp`'s argv loop | 2 | 1 | 2 | n/a | **Five verified, five fixed. Cap reached (3 for a standard), and it is a VIOLENT cap: all five landed on text THIS RUN wrote**, checked against the earlier loops' fixes rather than recalled. **Do not re-run this gate on this document.** **Size is not the cause** — at 139 lines two cold reads reached all of it easily. The cause is that the document was still being AUTHORED during the gate: loop 1 rewrote § 2's bar, loop 2 rewrote § 1's save rule and added a surface, and the owner's no-candidates decision rewrote § 3 between loops 2 and 3. Each loop therefore read largely new text, which is a run reviewing a draft rather than a draft converging. **Two lanes independently found the same Q1, and it was a claim I had made one loop earlier**: *"dropping `-v` fails the release"* is false — both smoke legs invoke `--version` only, so deleting the alias leaves every check green. It now has its own **nothing** row. **A lane found a sequence that cannot happen**: § 3 said a candidate would be *"rejected twice and then published as the latest release"*, when `verify` exits before the publish step runs. Split into today's behaviour and the conditional. **A lane found the `1.0` trigger ambiguous** — *"the first release after the last item has shipped"* reads as either the completing release or the one following it, and one reading forces an extra release carrying nothing; now worded as an identity. **And a lane found the packaging surface I added in loop 2 had no checks row**, while every other § 1 rule had one. **Two open questions settled by measurement rather than argument**: all ten saving games stamp and refuse a mismatch, not just Klondike; and Klondike's downstream guards (`readPile`, `matchesPack`) do catch a change that shifts the stream — so loop 2's *"no check downstream is looking for"* was too strong, and the honest claim is that a field appended at the END reads back clean, which is luck rather than design. **Route: ship.** |
+| 4 | 2026-09-08 | 3, cold — genre pinned `standard`; packet carried global §§ 2, 4 and 9, `bump.json`, the `verify` job, the publish step, both smoke legs, `CLAUDE.md` § Releasing, and the per-item changelog extraction for all six § 2 rows | 3 | 0 | 0 | n/a | **Three verified, three fixed; none dismissed. Loop 1 of this run — armed by the § 2 rewrite recording that `1.0.0` landed and global § 4's `0.x` shift lapsed.** **All three lanes independently found the same first two, and none of the three landed on text this run wrote** — § 4 said *ten* save-format versions against § 1's *twelve* in the same document (twelve `saveState()` overrides measured in `src/`), and § 1 said *four* games with no pack where there are five, none named. **The third came from two lanes and is the one with a cost downstream**: § 3 said `verify` holds two checks, and it holds three — the third an `awk` failing on empty notes, keyed to the exact `## [$tag]` heading, so an implementer of GHUB-0076 budgeting *relax two, add `--prerelease`* is stopped by a fourth. Lane A resolved two of lane C's open questions rather than filing them: `-v` exists in `main.cpp`'s argv loop, and `gh release create` carries no `--prerelease`. **Gate span (1c): the whole run's findings fell OUTSIDE the change that armed it — 0 of 3 — so this loop was audit rather than gate, and the audit is what paid.** One orchestrator-found precision fix to this run's own text (*the last two items in the table* read as the last two rows). One `out_of_scope`: `.claude/bump.json`'s `$note_save_versions` carried the same *ten*, corrected there and noted on GHUB-0078 rather than by rewriting its shipped body. |
