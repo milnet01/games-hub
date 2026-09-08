@@ -4,7 +4,9 @@ Answers the two questions `~/.claude/standards/versioning.md` deliberately
 refuses to answer for a project — **§ 3, what a breaking change can break
 here**, and **§ 4, what would make this `1.0`** — and records the local facts a
 conformer needs under its §§ 5 and 7. § 3's answer is required of every
-project; § 4's only while the project is `0.x`.
+project. **§ 4's was required while this project was `0.x`, and that ended:
+`1.0.0` shipped on 2026-09-08**, so § 2 below is a record of a discharged
+condition rather than a bar still to clear.
 
 **Everything else is the global standard's and is deliberately not restated** —
 which level to bump, the `0.x` shift, the security carve-out, the three ordered
@@ -66,36 +68,44 @@ heading for distribution packaging (GHUB-0044, GHUB-0045), so an install
 target, an option name, or the configure-time `CMAKE_INSTALL_PREFIX` contract
 is a surface even though no player will ever see it.
 
-## 2. What would make this `1.0`
+## 2. What made this `1.0`, and what changed when it landed
 
-**The release that ships the last of the six items below IS `1.0.0`**, and
-MAJOR stays 0 until then. Both halves are stated, and the first is worded as an
-identity rather than as *"the first release after"*: a floor alone lets a
-satisfied condition sit unacted on at `0.9.x` forever — global § 8's inert
-leading zero by another route — while *"after"* reads two ways and one of them
-forces an extra release, possibly carrying nothing, just to reach 1.0. Owner's call,
-2026-08-20, on a list of five; GHUB-0075 was added by this document's own cold
-gate, which found that § 1's silent-loss path had no guard. **The table is the
-condition** — checkable by someone else, which is what global § 4 asks for, and
-a prose bar alongside it would be a second condition that disagrees.
+**`1.0.0` shipped on 2026-09-08**, carrying the last two items in the table
+below. The condition is discharged. This section is kept as the record of it —
+what the bar was, why those six, and when each was cleared — because the table
+is the only place that says so.
 
-They are these six because they are the two ways this project can currently
-let a stranger down: it can lose their saved game, and it can hand them a
-binary they have no way to trust. GHUB-0067 and GHUB-0075 are the first;
-GHUB-0054, GHUB-0050, GHUB-0031 and GHUB-0053 are the second — a build you can
-verify, made from inputs that were pinned, on a runtime that still exists, by a
-compiler that was allowed to object. **New games do not gate it** — a
+**Global § 4's `0.x` shift lapsed with that release, and saying so is the one
+thing here a conformer still has to act on.** That section applies only while
+MAJOR is `0`; from `1.0.0` the global ladder governs unshifted. The visible
+consequence for this project is the reverse of what three releases here had got
+used to: **a new game is a MINOR now, where it was a PATCH.** The ladder itself
+is global § 2's and is deliberately not restated — read it there, and do not
+infer a level from any tag cut before 2026-09-08.
+
+**`cut-release` follows the same lapse.** Its `### Added` level floor is skipped
+while MAJOR is `0` and is live here from now on, so a patch step carrying an
+addition is stopped rather than waved through.
+
+They were these six because they were the two ways this project could let a
+stranger down: it could lose their saved game, and it could hand them a binary
+they had no way to trust. GHUB-0067 and GHUB-0075 are the first; GHUB-0054,
+GHUB-0050, GHUB-0031 and GHUB-0053 are the second — a build you can verify,
+made from inputs that were pinned, on a runtime that still exists, by a
+compiler that was allowed to object. **New games did not gate it** — a
 collection can always grow, and waiting for a fifteenth is how a leading zero
-goes inert.
+goes inert. Owner's call, 2026-08-20, on a list of five; GHUB-0075 was added by
+this document's own cold gate, which found that § 1's silent-loss path had no
+guard.
 
-| Item | What it fixes |
-|------|---------------|
-| GHUB-0067 | a save survives a clean exit and nothing else, and two copies of the app overwrite each other |
-| GHUB-0075 | nothing checks that a save written by an older build still loads, so § 1's silent loss has no guard |
-| GHUB-0054 | a downloaded release cannot be checked against what the workflow built |
-| GHUB-0050 | the release workflow downloads two unpinned binaries and runs them |
-| GHUB-0031 | the Windows build rides an action GitHub is deprecating the runtime under |
-| GHUB-0053 | the build asks the compiler for no warnings and no hardening |
+| Item | What it fixed | Cleared in |
+|------|---------------|------------|
+| GHUB-0067 | a save survived a clean exit and nothing else, and two copies of the app overwrote each other | 0.6.0 |
+| GHUB-0075 | nothing checked that a save written by an older build still loads, so § 1's silent loss had no guard | 0.6.0 |
+| GHUB-0054 | a downloaded release could not be checked against what the workflow built | 1.0.0 |
+| GHUB-0050 | the release workflow downloaded two unpinned binaries and ran them | 0.6.0 — **no `CHANGELOG.md` bullet ever claimed it**, found 2026-09-08 while writing this table. The fix is in `release.yml` and the roadmap bullet is ✅; 0.6.0's section is a published record and is not rewritten to add it |
+| GHUB-0031 | the Windows build rode an action GitHub was deprecating the runtime under | 0.5.0 |
+| GHUB-0053 | the build asked the compiler for no warnings and no hardening | 1.0.0 |
 
 ## 3. This project does not cut release candidates
 
@@ -131,7 +141,7 @@ records why, as global § 7 requires.
 | § 1 — the `-v` alias keeps existing | **nothing** — both smoke legs invoke `--version` only, so deleting `-v` leaves every check green |
 | § 1 — keyboard shortcuts stay stable | **nothing** — no test presses a key it does not already know about |
 | § 1 — install targets, option names and the configure-time `CMAKE_INSTALL_PREFIX` contract | **nothing** — nothing configures or installs the project with non-default options |
-| § 2 — the `1.0` condition | **nothing** — tracked by the six items in its table |
+| § 2 — the `1.0` condition | discharged 2026-09-08; nothing to check. **What is unchecked now is the lapse**: no test and no script asserts that a level was chosen on the unshifted ladder, and `cut-release`'s floor catches only an addition under a PATCH step |
 | § 3 — no candidate is cut | `release.yml` rejects a suffixed tag at both its `verify` checks — by accident rather than by intent, but the effect is the rule's |
 | § 4 — save versions stay out of the recipe | `.claude/bump.json` lists only `CMakeLists.txt` and `README.md`, so a release cannot walk them; `post_check` verifies those two against `CHANGELOG.md` |
 

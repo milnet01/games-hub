@@ -313,6 +313,19 @@ and is worth keeping there.
 fixed-seed findings are deliberate -- the seeds are what make two runs
 comparable -- and cannot redden CI.
 
+**Releases are NAMED as well as numbered, from 2026-09-08.** SemVer refuses to
+say how BIG a release was. That is deliberate — it is why the first number
+means "something broke" rather than "something large happened" — but it leaves
+nothing saying a release mattered. A name says that without corrupting the
+number that carries the warning. Put a `**Theme:**` line at the top of the
+changelog section and `cut-release` reads it into the release title:
+`1.1.0 — Play without a mouse`. Owner's call, 2026-09-08.
+
+It lives here rather than in `docs/standards/versioning-overrides.md` because
+it is a release PRACTICE and not a versioning rule. The machine-wide versioning
+standard's § 9 routes anything it names no home for — a release cadence, and
+this — to wherever the project keeps its own practices, which is this file.
+
 Cutting a release is three edits, a check and a tag, **in this order**:
 
 1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`.
