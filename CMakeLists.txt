@@ -221,31 +221,58 @@ set(GAME_VIEW_SOURCES
     src/pinball/pinballview.cpp
 )
 
+# Compiled ONCE each, then linked into every target that needs them. The three
+# executables used to list the source variables directly, so a core file was
+# handed to the compiler three times and a view file twice -- 118 objects for
+# about 60 files, all but the entry points built more than once.
+#
+# This is deliberately not a faster way of compiling anything. It is the same
+# compiler doing the same work fewer times, so nothing about the output moves.
+#
+# It cannot go stale, and that is the reason for choosing it over the other
+# levers: the two lists above are unchanged and remain the list of record, and
+# nothing here restates them. A file added to GAME_CORE_SOURCES is compiled
+# once and reaches every target that links this, with no second list to update
+# and nothing to forget.
+#
+# The split also stops being a convention here and starts being enforced.
+# gameshub_core links Qt6::Core alone, so a rules core that includes a widget
+# no longer compiles -- previously only gameshub_selftest's link line said so,
+# and it said it about a copy of the file rather than about the file.
+add_library(gameshub_core OBJECT ${GAME_CORE_SOURCES})
+target_include_directories(gameshub_core PUBLIC src)
+target_link_libraries(gameshub_core PUBLIC Qt6::Core)
+
+add_library(gameshub_views OBJECT ${GAME_VIEW_SOURCES})
+target_include_directories(gameshub_views PUBLIC src "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_link_libraries(gameshub_views PUBLIC Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
+
+# sounds.qrc stays on the two executables that need it rather than moving into
+# gameshub_views. It is one file of the hundred-odd, so it buys almost nothing,
+# and a Qt resource reaching a binary through another object is exactly the
+# silent-empty-resource shape the uitest exists to catch.
 qt_add_executable(gameshub
     src/main.cpp
     sounds.qrc
-    ${GAME_CORE_SOURCES}
-    ${GAME_VIEW_SOURCES}
 )
 target_include_directories(gameshub PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_compile_definitions(gameshub PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
-target_link_libraries(gameshub PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
+target_link_libraries(gameshub PRIVATE gameshub_core gameshub_views
+                                       Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
 
 # Console harness for every game's rules. No UI dependency, so it needs no
-# display and runs in milliseconds.
+# display and runs in milliseconds. It links the cores and NOT the views, which
+# is what keeps it free of Qt Widgets.
 add_executable(gameshub_selftest
     tests/selftest.cpp
-    ${GAME_CORE_SOURCES}
 )
 target_include_directories(gameshub_selftest PRIVATE src)
-target_link_libraries(gameshub_selftest PRIVATE Qt6::Core)
+target_link_libraries(gameshub_selftest PRIVATE gameshub_core Qt6::Core)
 
 # Drives real game widgets offscreen to check they build, paint and respond.
 qt_add_executable(gameshub_uitest
     tests/uitest.cpp
     sounds.qrc
-    ${GAME_CORE_SOURCES}
-    ${GAME_VIEW_SOURCES}
 )
 target_include_directories(gameshub_uitest PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
 # The UI test reads .github/FUNDING.yml back and counts it against the links the
@@ -255,7 +282,8 @@ target_include_directories(gameshub_uitest PRIVATE src "${CMAKE_CURRENT_BINARY_D
 file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" GAMESHUB_SOURCE_DIR_FWD)
 target_compile_definitions(gameshub_uitest PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}"
                                                    GAMESHUB_SOURCE_DIR="${GAMESHUB_SOURCE_DIR_FWD}")
-target_link_libraries(gameshub_uitest PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
+target_link_libraries(gameshub_uitest PRIVATE gameshub_core gameshub_views
+                                             Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
 
 enable_testing()
 add_test(NAME selftest COMMAND gameshub_selftest)

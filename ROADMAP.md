@@ -1047,6 +1047,46 @@ which is the reason it is filed rather than an excuse for not filing the rest.
   Kind: perf.
   Source: user-request-2026-09-04.
 
+- ✅ [GHUB-0187] **Every source was compiled once per target, so most of the build was the same work repeated.**
+  The three executables each listed GAME_CORE_SOURCES and GAME_VIEW_SOURCES
+  directly, so a core file reached the compiler three times and a view file
+  twice -- 118 objects for about 60 files, with only the three entry points
+  built once. GAME_CORE_SOURCES is now compiled into an OBJECT library
+  gameshub_core, GAME_VIEW_SOURCES into gameshub_views, and the objects are
+  linked into all three.
+
+  Measured with ccache and mold off, which is how CI builds, on 12 cores: a
+  cold build fell from 58.0 s to 28.8 s and 126 build steps to 65. An
+  incremental rebuild of one core file fell from 4.89 s to 4.05 s -- the
+  three links dominate there, so the everyday case gains least. CI has no
+  ccache, so every CI build is the cold number.
+
+  Chosen because it cannot go stale, which was the constraint. The two lists
+  are unchanged and remain the list of record; nothing here restates them, so
+  a file added to either is compiled once and reaches every target that needs
+  it with no second list to update.
+
+  Two levers were rejected on that same test. A unity build needs no hand
+  list either, but this codebase puts helpers in anonymous namespaces in
+  nearly every view, and CMake regroups the batches as files are added -- so
+  a new file could collide with one it was never near before, and the failure
+  would arrive at a time unrelated to the change. Precompiled headers need a
+  header list somebody maintains, and worse, a PCH masks a missing #include:
+  the file compiles because the PCH happened to carry the header, and the
+  build stops being able to tell you what a file actually depends on.
+
+  Two things checked rather than assumed. The hardening still lands -- readelf
+  on the built binary says DYN, BIND_NOW and a non-executable stack, and the
+  stack protector is present. And the core/view split is now enforced by the
+  compiler: gameshub_core links Qt6::Core alone, verified by adding
+  `#include <QWidget>` to a core file and watching it fail. That covers only
+  half the rule -- a core file reading a stored score still compiles, links
+  and passes, exactly as before, and CLAUDE.md now says so where it explains
+  the split.
+  **Layman:** The project was building most of its files two or three times over. Now it builds each once and shares the result, so a fresh build takes about half as long.
+  Kind: perf.
+  Source: user-request-2026-09-08.
+
 ### 🔒 Security
 
 Start with what is already right, because it decides which of these matter.

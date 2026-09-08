@@ -8,6 +8,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Changed
+
+- **The project builds each of its files once instead of two or three times** (GHUB-0187)
+  Nothing about the program changes; it is the same code built more
+  sensibly. A build from scratch takes about half as long, which is what
+  every automated check on GitHub pays. It also means a rules file that
+  reaches for a window no longer compiles at all, where before only one of
+  the three builds would have objected.
+
 ## [1.0.0] - 2026-09-08
 
 ### Added

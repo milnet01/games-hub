@@ -33,20 +33,36 @@ cmake --build build                     # build everything
 # GAMESHUB_SANITIZE turns the hardening off, deliberately: ASan instruments the
 # same paths and the two then report each other.
 
+# Every source is compiled ONCE, into gameshub_core or gameshub_views, and the
+# objects are linked into all three executables. Until GHUB-0187 the three
+# targets listed GAME_CORE_SOURCES and GAME_VIEW_SOURCES directly, so a core
+# file went to the compiler three times and a view file twice. Measured on this
+# machine with ccache and mold off, which is how CI builds: a cold build fell
+# from about 58 s to about 29 s, and 126 build steps to 65.
+#
+# The object libraries are not a faster compiler. They are the same work done
+# fewer times, so nothing about the output moves -- and the hardening still
+# lands, which is checked on the binary rather than assumed: readelf says DYN,
+# BIND_NOW and a non-executable stack.
+#
+# They also turn the core/view split from a convention into something the
+# compiler enforces. gameshub_core links Qt6::Core alone, so a rules core that
+# includes a widget no longer builds -- verified by adding one and watching it
+# fail. Before, only gameshub_selftest's link line said so, about its own copy
+# of the file.
+#
 # The configure step picks up ccache and mold when they are installed and says
 # so; -DGAMESHUB_FAST_BUILD=OFF turns both off. Neither changes what is built.
-# Measured 2026-09-04: a full build after wiping the build directory falls from
-# about 85 s to about 2 s, because ccache replays compilations it has already
-# done -- and this project gives it a great deal to replay, since every source
-# is compiled once PER TARGET: the cores three times, the views twice, which is
-# 118 objects for about 60 files. An incremental
-# rebuild of one file goes from about 2.4 s to about 2.1 s, which is mold.
+# ccache replays compilations it has already done, so a repeated cold build is
+# a couple of seconds whatever the object count; the figures above are what a
+# machine that has never built this pays, which is every CI run.
 #
-# Two things worth knowing. CI has neither, so a runner builds the plain way and
-# the shipped artifacts are linked by GNU ld -- if a local build is green and CI
-# is not, the toolchain is one of the differences. And the peak is a single
-# compiler process at roughly 660 MB, so -j on a machine short of memory is
-# worth setting by hand: ninja defaults to cores plus two.
+# Two things worth knowing. CI has neither ccache nor mold, so a runner builds
+# the plain way and the shipped artifacts are linked by GNU ld -- if a local
+# build is green and CI is not, the toolchain is one of the differences. And
+# the peak is a single compiler process at roughly 660 MB, unchanged by the
+# above, so -j on a machine short of memory is worth setting by hand: ninja
+# defaults to cores plus two.
 
 # --game takes the REGISTERED name, which is what the tile shows. Klondike is
 # registered as "Solitaire" (Klondike is its blurb), and an unknown name warns
@@ -335,8 +351,9 @@ That split is what makes a game's rules testable without a display, and it is
 the rule to hold when adding one.
 
 **It now holds for all fourteen.** `GAME_CORE_SOURCES` in `CMakeLists.txt` is
-the list of record, and `gameshub_selftest` links it — so a rules check for any
-game can be written straight into the self-test. Six games held their rules
+the list of record; `gameshub_core` is built from it and `gameshub_selftest`
+links that — so a rules check for any game can be written straight into the
+self-test. Six games held their rules
 inside the widget until GHUB-0066 closed on 2026-08-25 (Klondike, Spider,
 FreeCell, Pyramid, Snake and 2048); the split found two shipped bugs that
 nothing could have caught while it did not hold, GHUB-0125 and GHUB-0126.
@@ -520,6 +537,13 @@ they were never on. That is GHUB-0126, and it lost the card in two of the three.
   are all QtCore-only and all live in the view half; `legibility.cpp` carries
   the reason inline. Judging by the QtWidgets test alone puts a new preference
   store in the core half, where it links, passes, and tells you nothing.
+
+  **Since GHUB-0187 the compiler catches the FIRST of those two and still not
+  the second, and the difference is the whole point of this bullet.**
+  `gameshub_core` links `Qt6::Core` alone, so a core file that includes a
+  widget does not build. A core file that reads a stored score compiles
+  perfectly, links, and passes — exactly as before. Do not read "the split is
+  enforced now" as covering the half that has never had a mechanical check.
 
 ### Per game
 
