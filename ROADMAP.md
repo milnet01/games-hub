@@ -119,6 +119,67 @@ only, so they are not in order and are never renumbered.
   Kind: implement.
   Source: in-session-2026-08-11.
 
+## Release plan — what carries which number
+
+The number is DERIVED from the work, not chosen. Since 1.0.0 shipped on
+2026-09-08 the global ladder in ~/.claude/standards/versioning.md § 2 is in
+force, and it is the OPPOSITE of the one this project used inside 0.x: a new
+game is now a MINOR, where it used to be a PATCH. Three ordered tests over the
+whole [Unreleased] section decide it. Does anything stop working for someone who
+upgrades? MAJOR. Does anything let a user do something they could not before, or
+mark something deprecated? MINOR. Otherwise PATCH.
+
+So there is no bar to set the way there was for 1.0. The next release carrying
+any capability is 1.1.0, whatever else is in it. What follows is the ORDER the
+work is meant to land in; the numbers fall out of it.
+
+Releases are NAMED as well as numbered, from 2026-09-08. SemVer deliberately
+refuses to say how big a release was, and a name says it without corrupting the
+number that warns about breakage. Put a Theme: line in the changelog section and
+cut-release reads it into the release title — "1.1.0 — Play without a mouse".
+
+Group 1, play without a mouse. GHUB-0168 (ten games are mouse-only), GHUB-0069
+(every card move needs a drag except one), GHUB-0030 (the toolbar label goes
+stale), GHUB-0063 (a soft light on whose turn it is), GHUB-0064 (the pip shape
+depends on the OS font). First, because the owner is partially sighted and this
+is the group where the current state is a barrier rather than an inconvenience.
+GHUB-0168 is the one that wants a spec before anyone builds: ten views binding
+to one shared pattern is spec-format.md § 1's own test.
+
+Group 2, getting around the app. GHUB-0060 (one window, not fifteen remembered
+shapes), GHUB-0061 (no way between games without the front door), GHUB-0062
+(half-played games are invisible), GHUB-0068 (five places to change a setting),
+GHUB-0167 (filter the tile grid).
+
+Group 3, getting it to other people. GHUB-0044 (openSUSE Build Service),
+GHUB-0045 (Flathub), GHUB-0043 (the app tells you a new version exists). 1.0.0
+made a downloaded build checkable, which is the precondition this group was
+waiting on.
+
+Group 4, new games. GHUB-0011 Gin Rummy, GHUB-0012 Cribbage, GHUB-0013
+Blackjack, GHUB-0014 Spades, GHUB-0015 TriPeaks/Golf/Yukon, GHUB-0036 Poker,
+GHUB-0059 Bridge. Each ONE is a MINOR on its own now, so seven games alone walk
+the number from 1.x to roughly 1.11. Batching them is a choice worth making
+deliberately; inside 0.x it made no difference and now it does.
+
+Group 5, playing other people. GHUB-0080, and it is much larger than anything
+above it.
+
+Everything else — fixes, docs, CI and the memory items — carries a PATCH on its
+own.
+
+2.0.0 is a COST, not a goal. It arrives when a break is worth taking, and
+docs/standards/versioning-overrides.md § 1 names the surfaces that would force
+one: a game's saveState() output (breaking whether or not the stamp moves), a
+settings key or the meaning of its value, --game's registered names, --version's
+"Games " prefix, the keyboard shortcuts, and — once GHUB-0044 and GHUB-0045 land
+— install paths and option names, because an integrator counts.
+
+Two open items sit on that surface: GHUB-0060 changes how window geometry is
+remembered, and GHUB-0068 could re-home settings keys. If both are taken, take
+them in the SAME release. Doing them separately costs a 2.0.0 and later a 3.0.0
+for one kind of change.
+
 ## P02 — Queued
 
 Worked top to bottom. Nothing here is started.
@@ -2902,7 +2963,7 @@ draws, whether or not it has had one.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0186] **Three more games tick their toolbar by matching the label the player reads.**
+- ✅ [GHUB-0186] **Three more games tick their toolbar by matching the label the player reads.**
   GHUB-0154 fixed this in canastaview.cpp: every checkable action carries an
   objectName(), and restoreState matches on that. The same shape is still
   live in three other views. Found by the sweep on that fix, not by a
@@ -2922,6 +2983,29 @@ draws, whether or not it has had one.
   Copy the shape of its test too: it replaces every label before restoring,
   which is what makes the check bite. A check that leaves the labels alone
   passes on the unfixed code as well.
+  Resolved (2026-09-08). All three, the same fix Canasta got in GHUB-0154.
+
+  Every checkable action in chessview, klondikeview and spiderview carries
+  an objectName -- chess-level-N, klondike-draw-N, spider-suits-N -- and
+  each restoreState matches on that instead of on QAction::text(). The
+  labels stay exactly as they were; nothing a player sees has moved.
+
+  toolbarSyncSurvivesTranslation in tests/uitest.cpp locks all three, built
+  from Canasta's test and carrying both of the halves that make it bite.
+  Every label is replaced before the restore, so nothing can pass on the
+  text. And each choice differs from the view's own default -- Chess starts
+  on Medium, Klondike on Draw 1, Spider on 1 Suit -- so the fresh view comes
+  up showing the wrong one and the restore has to correct it, which is
+  asserted rather than assumed.
+
+  Proved red by putting chessview's text comparison back: the toolbar
+  assertion failed while every other check in the suite stayed green.
+
+  One thing the test needed that the Canasta one did not: startedSave()
+  rather than saveState(). A board nobody has moved in answers "nothing
+  worth keeping", so a freshly dealt Chess, Klondike or Spider has no save
+  at all and the first version of this check failed on an empty blob rather
+  than on the defect.
   **Layman:** Three games pick which toolbar button to tick by reading its wording, so translating the app would tick the wrong one and nothing would complain.
   Kind: fix.
   Source: close-findings sweep on GHUB-0154, 2026-09-08.

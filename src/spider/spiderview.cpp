@@ -61,6 +61,12 @@ void SpiderView::buildActions()
     };
     for (const auto& mode : kModes) {
         auto* a = new QAction(QString::fromUtf8(mode.name), this);
+        // Object names, not labels: restoreState matches on these. A label is
+        // what the player reads, so the Qt standard asks for tr() around it --
+        // and adding it would break the match silently, leaving the toolbar
+        // claiming a setting the resumed game is not playing. GHUB-0186, the
+        // same shape GHUB-0154 fixed in Canasta.
+        a->setObjectName(QStringLiteral("spider-suits-%1").arg(mode.suits));
         a->setCheckable(true);
         a->setChecked(mode.suits == m_table.suits());
         group->addAction(a);
@@ -173,12 +179,10 @@ bool SpiderView::restoreState(const QByteArray& blob)
     m_pressValid = false;
     m_won = false;
     m_undoAction->setEnabled(false);
-    const QString mode = QStringLiteral("%1 Suit%2")
-                             .arg(m_table.suits())
-                             .arg(m_table.suits() == 1 ? QString() : QStringLiteral("s"));
+    const QString wanted = QStringLiteral("spider-suits-%1").arg(m_table.suits());
     for (QAction* a : m_actions) {
-        if (a->isCheckable())
-            a->setChecked(a->text() == mode);
+        if (a->isCheckable() && a->objectName() == wanted)
+            a->setChecked(true);
     }
     m_resumed = true;
     update();

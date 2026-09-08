@@ -27,6 +27,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Chess, Klondike and Spider show the setting a resumed game is actually playing** (GHUB-0186)
+  Each worked out which toolbar button to tick by reading the button's
+  wording, so translating the app would have ticked the wrong one with
+  nothing to say so — the toolbar would have claimed a difficulty, a draw
+  count or a suit count the game was not using. They now match on a hidden
+  name instead. Nothing you see has changed. Canasta was fixed the same way
+  earlier.
+
 - **On every ten, the "10" no longer prints on top of one of the pips** (GHUB-0188)
   The corner "10" ran into the card's own top-left suit symbol, in every
   game that shows cards, so the pattern you read a ten by had a numeral

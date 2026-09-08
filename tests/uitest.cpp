@@ -4281,6 +4281,80 @@ int main(int argc, char* argv[])
               "a first run opens at a size that already fits beside your work");
     }
 
+    // ---- toolbarSyncSurvivesTranslation (GHUB-0186) ----
+    //
+    // Chess, Klondike and Spider each put their toolbar back after a restore by
+    // comparing QAction::text() against an untranslated literal -- the same
+    // shape GHUB-0154 fixed in Canasta, found by the sweep on that fix. Those
+    // labels are what the player reads, so the Qt standard asks for tr() around
+    // them, and adding it would break every one of these silently: the toolbar
+    // would claim a level, a draw count or a suit count the resumed game is not
+    // playing, with nothing failing.
+    //
+    // Two halves make this bite, both copied from Canasta's. Every label is
+    // replaced before the restore, so nothing can pass on the text. And each
+    // choice differs from the view's own default -- Chess starts on Medium,
+    // Klondike on Draw 1, Spider on 1 Suit -- so the fresh view comes up
+    // showing the wrong one and the restore is what has to correct it.
+    {
+        const auto named = [](const QList<QAction*>& as, const QString& n) -> QAction* {
+            for (QAction* a : as)
+                if (a->objectName() == n)
+                    return a;
+            return nullptr;
+        };
+
+        const auto roundTrip = [&](GameView& src, GameView& dst, const QString& pick,
+                                   const QString& who) {
+            QAction* choose = named(src.gameActions(), pick);
+            check(choose != nullptr,
+                  qPrintable(QStringLiteral("%1: %2 is an action with a name").arg(who, pick)));
+            if (choose == nullptr)
+                return;
+            choose->trigger();
+            pump(10);
+            // startedSave, not saveState: a board nobody has moved in answers
+            // "nothing worth keeping", so a freshly dealt game has no save at
+            // all. This nudges it into play first, exactly as the corpus does.
+            const QByteArray blob = startedSave(&src);
+            check(!blob.isEmpty(),
+                  qPrintable(QStringLiteral("%1: and a game set that way saves").arg(who)));
+
+            const QAction* before = named(dst.gameActions(), pick);
+            check(before != nullptr && !before->isChecked(),
+                  qPrintable(QStringLiteral("%1: a fresh table does NOT come up on %2, so the "
+                                            "restore has something to correct")
+                                 .arg(who, pick)));
+
+            for (QAction* a : dst.gameActions())
+                a->setText(QStringLiteral("translated"));
+            check(dst.restoreState(blob),
+                  qPrintable(QStringLiteral("%1: the save loads with every label translated away")
+                                 .arg(who)));
+            const QAction* back = named(dst.gameActions(), pick);
+            check(back != nullptr && back->isChecked(),
+                  qPrintable(QStringLiteral("%1: and the toolbar shows %2, matched on its name")
+                                 .arg(who, pick)));
+            dst.deactivate();  // src was already stopped by startedSave
+        };
+
+        {
+            ChessView src;
+            ChessView dst;
+            roundTrip(src, dst, QStringLiteral("chess-level-2"), QStringLiteral("chess"));
+        }
+        {
+            KlondikeView src;
+            KlondikeView dst;
+            roundTrip(src, dst, QStringLiteral("klondike-draw-3"), QStringLiteral("klondike"));
+        }
+        {
+            SpiderView src;
+            SpiderView dst;
+            roundTrip(src, dst, QStringLiteral("spider-suits-4"), QStringLiteral("spider"));
+        }
+    }
+
     // ---- theTitleBarCarriesTheVersion (GHUB-0189) ----
     //
     // The title bar is the one place a player can read which build they have

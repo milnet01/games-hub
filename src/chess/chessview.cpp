@@ -100,6 +100,12 @@ void ChessView::buildActions()
     group->setExclusive(true);
     for (const Level level : { Level::Easy, Level::Medium, Level::Hard }) {
         auto* a = new QAction(levelName(level), this);
+        // Object names, not labels: restoreState matches on these. A label is
+        // what the player reads, so the Qt standard asks for tr() around it --
+        // and adding it would break the match silently, leaving the toolbar
+        // claiming a setting the resumed game is not playing. GHUB-0186, the
+        // same shape GHUB-0154 fixed in Canasta.
+        a->setObjectName(QStringLiteral("chess-level-%1").arg(int(level)));
         a->setCheckable(true);
         a->setChecked(level == m_level);
         group->addAction(a);
@@ -243,9 +249,10 @@ bool ChessView::restoreState(const QByteArray& blob)
     m_game = game;
     abandonSearch();
     m_level = chess::Level(std::clamp<int>(level, 0, 2));
+    const QString wanted = QStringLiteral("chess-level-%1").arg(int(m_level));
     for (QAction* a : m_actions) {
-        if (a->isCheckable())
-            a->setChecked(a->text() == levelName(m_level));
+        if (a->isCheckable() && a->objectName() == wanted)
+            a->setChecked(true);
     }
 
     m_selected.reset();

@@ -57,6 +57,12 @@ void KlondikeView::buildActions()
     group->setExclusive(true);
     for (int n : { 1, 3 }) {
         auto* a = new QAction(QStringLiteral("Draw %1").arg(n), this);
+        // Object names, not labels: restoreState matches on these. A label is
+        // what the player reads, so the Qt standard asks for tr() around it --
+        // and adding it would break the match silently, leaving the toolbar
+        // claiming a setting the resumed game is not playing. GHUB-0186, the
+        // same shape GHUB-0154 fixed in Canasta.
+        a->setObjectName(QStringLiteral("klondike-draw-%1").arg(n));
         a->setCheckable(true);
         a->setChecked(n == m_table.drawCount());
         group->addAction(a);
@@ -176,9 +182,10 @@ bool KlondikeView::restoreState(const QByteArray& blob)
     m_won = false;
     m_resumed = true;
     m_undoAction->setEnabled(false);
+    const QString wanted = QStringLiteral("klondike-draw-%1").arg(m_table.drawCount());
     for (QAction* a : m_actions) {
-        if (a->isCheckable())
-            a->setChecked(a->text() == QStringLiteral("Draw %1").arg(m_table.drawCount()));
+        if (a->isCheckable() && a->objectName() == wanted)
+            a->setChecked(true);
     }
     update();
     refresh();
