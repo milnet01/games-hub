@@ -2318,6 +2318,36 @@ progress.
   Kind: ux.
   Source: in-session-2026-09-06, measured while closing GHUB-0018.
 
+- ✅ [GHUB-0189] **The title bar says which build you are running.**
+  The tile grid reads "Games <version>" and an open game reads
+  "<game> — Games <version>". Spelled exactly as --version prints it, so
+  the window and the command line cannot come to disagree about what this
+  build calls itself.
+
+  hubwindow.cpp is a VIEW source, so it sits in the gameshub_views object
+  library GHUB-0187 introduced, and that library did not carry
+  GAMESHUB_VERSION -- only the two executables defined it, for their own
+  entry points. It is now defined PRIVATE on the library, which reaches
+  these sources without arriving a second time at the executables.
+
+  Checked by theTitleBarCarriesTheVersion in tests/uitest.cpp rather than
+  by eye, because no screenshot can see it: --shot renders the widget
+  offscreen and an offscreen render has no window decorations at all. That
+  is the same reason GHUB-0028 is still open.
+
+  Nothing keyed on the old exact title. packaging/gameshub.desktop.in
+  matches StartupWMClass=gameshub, which is the binary rather than the
+  title, and the release workflow's Windows smoke test reads
+  MainWindowTitle only inside an error message -- what it asserts is that
+  no top-level window exists at all under the offscreen platform.
+
+  Note for the next release: a user can now read the version without a
+  terminal, which is a capability they did not have. By versioning.md § 2's
+  second test that makes the next release a MINOR rather than a PATCH.
+  **Layman:** The window now says "Games 1.0.0" instead of just "Games", so you can see which version you have without opening a terminal.
+  Kind: feature.
+  Source: user-request-2026-09-08.
+
 ### ✨ Look and feel
 
 Not decoration. Every item here is a piece of information the game currently

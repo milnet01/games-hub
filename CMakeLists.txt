@@ -245,6 +245,10 @@ target_link_libraries(gameshub_core PUBLIC Qt6::Core)
 
 add_library(gameshub_views OBJECT ${GAME_VIEW_SOURCES})
 target_include_directories(gameshub_views PUBLIC src "${CMAKE_CURRENT_BINARY_DIR}/generated")
+# hubwindow.cpp puts the version in the title bar. PRIVATE, so it reaches these
+# sources and does not arrive a second time at the executables, which define it
+# for their own entry points.
+target_compile_definitions(gameshub_views PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
 target_link_libraries(gameshub_views PUBLIC Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
 
 # sounds.qrc stays on the two executables that need it rather than moving into

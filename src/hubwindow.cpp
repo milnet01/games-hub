@@ -413,10 +413,23 @@ void pinballTile(QPainter& p, const QRectF& r)
 
 } // namespace
 
+// The title bar carries the version, because it is the one place a player can
+// read which build they have without going looking for it -- and it is what
+// they quote in a bug report. Spelled exactly as --version prints it, "Games
+// <version>", so the window and the command line never disagree about what
+// this build calls itself (GHUB-0189).
+namespace {
+QString hubTitle(const QString& page = QString())
+{
+    const QString app = QStringLiteral("Games " GAMESHUB_VERSION);
+    return page.isEmpty() ? app : page + QStringLiteral(" — ") + app;
+}
+} // namespace
+
 HubWindow::HubWindow(QWidget* parent)
     : QMainWindow(parent)
 {
-    setWindowTitle(QStringLiteral("Games"));
+    setWindowTitle(hubTitle());
     buildEntries();
     buildChrome();
 
@@ -854,7 +867,7 @@ void HubWindow::showMenu()
     m_autosave->stop(); // nothing to bank on the tile grid
     m_stack->setCurrentWidget(m_menuHost);
     onlyTheOpenPageSetsTheFloor();
-    setWindowTitle(QStringLiteral("Games"));
+    setWindowTitle(hubTitle());
     m_status->setText(QStringLiteral("%1 games. Pick one.").arg(m_entries.size()));
     applyPageGeometry(QString());
 }
@@ -895,7 +908,7 @@ void HubWindow::openGame(int index)
     m_backAction->setVisible(true);
     m_stack->setCurrentIndex(e.pageIndex);
     onlyTheOpenPageSetsTheFloor();
-    setWindowTitle(e.name + QStringLiteral(" — Games"));
+    setWindowTitle(hubTitle(e.name));
     applyPageGeometry(e.name);
     e.view->activate();
     e.view->setFocus();

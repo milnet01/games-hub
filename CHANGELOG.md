@@ -8,6 +8,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Added
+
+- **The window title says which version you are running** (GHUB-0189)
+  The title bar reads "Games 1.0.0" on the tile grid, and
+  "Pyramid — Games 1.0.0" with a game open. You no longer need a terminal
+  to find out which build you have, which is the thing to quote if you
+  ever report a problem.
+
 ### Changed
 
 - **The project builds each of its files once instead of two or three times** (GHUB-0187)

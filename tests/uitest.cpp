@@ -4281,6 +4281,32 @@ int main(int argc, char* argv[])
               "a first run opens at a size that already fits beside your work");
     }
 
+    // ---- theTitleBarCarriesTheVersion (GHUB-0189) ----
+    //
+    // The title bar is the one place a player can read which build they have
+    // without going looking, and it is what they quote in a bug report. It is
+    // spelled exactly as --version prints it, so the two cannot come to
+    // disagree about what this build calls itself -- asserted here, since no
+    // screenshot can see it: --shot renders the widget offscreen and an
+    // offscreen render has no window decorations at all.
+    {
+        HubWindow hub;
+        const QString version = QStringLiteral(GAMESHUB_VERSION);
+        check(!version.isEmpty(), "hub: the build carries a version string at all");
+        check(hub.windowTitle() == QStringLiteral("Games ") + version,
+              qPrintable(QStringLiteral("hub: the tile grid's title is \"Games <version>\", "
+                                        "the spelling --version prints -- got \"%1\"")
+                             .arg(hub.windowTitle())));
+
+        hub.openGameNamed(QStringLiteral("Pyramid"));
+        check(hub.windowTitle().startsWith(QStringLiteral("Pyramid ")),
+              qPrintable(QStringLiteral("hub: an open game names itself first -- got \"%1\"")
+                             .arg(hub.windowTitle())));
+        check(hub.windowTitle().endsWith(QStringLiteral("Games ") + version),
+              qPrintable(QStringLiteral("hub: and still ends with the version -- got \"%1\"")
+                             .arg(hub.windowTitle())));
+    }
+
     // ---- cardIndexClearsThePips (GHUB-0188) ----
     //
     // A ten's corner index used to land on its own top-left pip. The index
