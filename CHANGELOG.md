@@ -8,6 +8,8 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-08
+
 ### Added
 
 - **You can check that a downloaded release is the file this repository built.** (GHUB-0054)
