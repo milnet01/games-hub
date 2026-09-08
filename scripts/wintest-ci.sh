@@ -53,6 +53,27 @@ if ! git rev-parse --verify --quiet "$REF^{commit}" >/dev/null; then
 fi
 sha=$(git rev-parse --short "$REF")
 
+# Whether MSVC's warnings are fatal is ci.yml's answer, not this script's. Read
+# it out of the Windows matrix row rather than restating it: a second copy
+# drifts, and the drift is silent -- the box passes a build the runner fails.
+# GHUB-0185, which turned it on and found this script configuring it off.
+WERROR=$(python3 - <<'PY'
+import re, sys
+try:
+    body = open('.github/workflows/ci.yml', encoding='utf-8').read()
+except OSError:
+    sys.exit(1)
+row = re.search(r"- name:\s*Windows\b(.*?)(?=\n\s*- name:|\n\s{0,6}\S)", body, re.S)
+m = re.search(r"werror:\s*'?([A-Za-z]+)'?", row.group(1)) if row else None
+print(m.group(1) if m else '')
+PY
+)
+if [ -z "$WERROR" ]; then
+    echo "could not read the Windows leg's werror value out of .github/workflows/ci.yml" >&2
+    echo "That value decides whether this run means anything; fix the read rather than guessing." >&2
+    exit 2
+fi
+
 say "== Reaching $HOST"
 # Probe with PowerShell rather than `cmd /c ver`: it is what the build script
 # is run by, so this proves the thing actually needed. And `cmd /c ver` does
@@ -90,5 +111,5 @@ win_dest=${DEST//\//\\}
 # -tt so ctest's progress arrives as it happens rather than in one lump at the
 # end; a five-minute silence reads as a hang.
 ssh -tt -o BatchMode=yes -o ServerAliveInterval=30 "$HOST" \
-    "powershell -NoProfile -ExecutionPolicy Bypass -File $DEST/scripts/wintest-build.ps1 -Src \"$win_dest\"" |
+    "powershell -NoProfile -ExecutionPolicy Bypass -File $DEST/scripts/wintest-build.ps1 -Src \"$win_dest\" -Werror $WERROR" |
     tr -d '\r'

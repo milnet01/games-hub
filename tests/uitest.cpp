@@ -434,7 +434,7 @@ QByteArray mutateBlob(const QByteArray& seed, std::mt19937& rng, int kind)
         const bool huge = (rng() & 1u) != 0;
         b[at] = char(huge ? 0x7F : 0xFF);
         for (int i = 1; i < 4; ++i)
-            b[at + i] = char(0xFF);
+            b[at + i] = '\xFF';  // a character literal, not a cast: char is signed on MSVC, so char(0xFF) is C4310
         return b;
     }
     case 5:   // nothing at all
@@ -1723,7 +1723,7 @@ int main(int argc, char* argv[])
             // back", blaming the switch for a ball that rolled.
             const QImage before = renderOf(view);
             bool still = true;
-            for (int probe = 0; probe < 2; ++probe) {
+            for (int attempt = 0; attempt < 2; ++attempt) {
                 pump(25);
                 still = still && renderOf(view) == before;
             }
@@ -2884,22 +2884,22 @@ int main(int argc, char* argv[])
         // A game in progress survives being put away. The check is the picture:
         // a restored board that renders identically is the same position, the
         // same last move and the same side to play.
-        const QByteArray saved = chess.saveState();
-        check(!saved.isEmpty(), "chess: a game in progress is worth saving");
+        const QByteArray chessSaved = chess.saveState();
+        check(!chessSaved.isEmpty(), "chess: a game in progress is worth saving");
 
-        ChessView resumed;
-        resumed.resize(chess.size());
-        const QImage fresh = renderOf(&resumed);
-        check(resumed.restoreState(saved), "chess: and it reads back");
+        ChessView chessResumed;
+        chessResumed.resize(chess.size());
+        const QImage fresh = renderOf(&chessResumed);
+        check(chessResumed.restoreState(chessSaved), "chess: and it reads back");
         pump(300);
-        check(renderOf(&resumed) == replied, "chess: onto the very same board");
+        check(renderOf(&chessResumed) == replied, "chess: onto the very same board");
         check(fresh != replied, "chess: which is not just a new game by another name");
 
         // Junk is refused, and refusing it leaves the board alone.
-        const QImage before = renderOf(&resumed);
-        check(!resumed.restoreState(QByteArray("not a chess game")),
+        const QImage before = renderOf(&chessResumed);
+        check(!chessResumed.restoreState(QByteArray("not a chess game")),
               "chess: a corrupt save is refused");
-        check(renderOf(&resumed) == before, "chess: and refusing one changes nothing");
+        check(renderOf(&chessResumed) == before, "chess: and refusing one changes nothing");
 
         // A game nobody has moved in has nothing to come back to, which is what
         // clears a stale save rather than resuming into it.
@@ -3051,25 +3051,25 @@ int main(int argc, char* argv[])
         // these four keeps a move log either, so what is written is the board
         // itself and the render is the proof that it came back whole.
         {
-            MinesweeperView mines;
-            mines.resize(560, 520);
-            check(mines.saveState().isEmpty(), "minesweeper: an undug field saves nothing");
+            MinesweeperView minefield;
+            minefield.resize(560, 520);
+            check(minefield.saveState().isEmpty(), "minesweeper: an undug field saves nothing");
 
             // The field is centred in the widget, so the middle is always a
-            // square. The first dig is what lays the mines and starts the clock.
-            clickAt(&mines, QPointF(mines.width() / 2.0, mines.height() / 2.0), Qt::LeftButton);
-            const QImage dug = renderOf(&mines);
-            const QByteArray saved = mines.saveState();
+            // square. The first dig is what lays the minefield and starts the clock.
+            clickAt(&minefield, QPointF(minefield.width() / 2.0, minefield.height() / 2.0), Qt::LeftButton);
+            const QImage dug = renderOf(&minefield);
+            const QByteArray saved = minefield.saveState();
             check(!saved.isEmpty(), "minesweeper: a field in progress is worth saving");
 
             MinesweeperView resumed;
-            resumed.resize(mines.size());
+            resumed.resize(minefield.size());
             const QImage brandNew = renderOf(&resumed);
             check(resumed.restoreState(saved), "minesweeper: and it reads back");
             check(renderOf(&resumed) == dug, "minesweeper: onto the very same field");
             check(brandNew != dug, "minesweeper: which is not just a new field by another name");
 
-            check(!resumed.restoreState(QByteArray("no mines here")),
+            check(!resumed.restoreState(QByteArray("no minefield here")),
                   "minesweeper: a corrupt save is refused");
             check(renderOf(&resumed) == dug, "minesweeper: and refusing one changes nothing");
         }
@@ -3086,27 +3086,27 @@ int main(int argc, char* argv[])
                                (w->height() - side) / 2 + (row + 0.5) * cell);
             };
 
-            ReversiView reversi;
-            reversi.resize(520, 520);
-            check(reversi.saveState().isEmpty(), "reversi: an unplayed game saves nothing");
+            ReversiView reversiGame;
+            reversiGame.resize(520, 520);
+            check(reversiGame.saveState().isEmpty(), "reversiGame: an unplayed game saves nothing");
 
-            clickAt(&reversi, cellCentre(&reversi, 2, 3), Qt::LeftButton); // a legal opening
+            clickAt(&reversiGame, cellCentre(&reversiGame, 2, 3), Qt::LeftButton); // a legal opening
             pump(1500);                                                    // and the engine's reply
-            const QImage played = renderOf(&reversi);
-            const QByteArray saved = reversi.saveState();
-            check(!saved.isEmpty(), "reversi: a game in progress is worth saving");
+            const QImage played = renderOf(&reversiGame);
+            const QByteArray saved = reversiGame.saveState();
+            check(!saved.isEmpty(), "reversiGame: a game in progress is worth saving");
 
             ReversiView resumed;
-            resumed.resize(reversi.size());
+            resumed.resize(reversiGame.size());
             const QImage brandNew = renderOf(&resumed);
-            check(resumed.restoreState(saved), "reversi: and it reads back");
+            check(resumed.restoreState(saved), "reversiGame: and it reads back");
             pump(300);
-            check(renderOf(&resumed) == played, "reversi: onto the very same board");
-            check(brandNew != played, "reversi: which is not just a new game by another name");
+            check(renderOf(&resumed) == played, "reversiGame: onto the very same board");
+            check(brandNew != played, "reversiGame: which is not just a new game by another name");
 
             check(!resumed.restoreState(QByteArray("four discs and a prayer")),
-                  "reversi: a corrupt save is refused");
-            check(renderOf(&resumed) == played, "reversi: and refusing one changes nothing");
+                  "reversiGame: a corrupt save is refused");
+            check(renderOf(&resumed) == played, "reversiGame: and refusing one changes nothing");
 
             {
                 // Reversi's legal-move dots are the whole affordance -- where
@@ -3134,7 +3134,7 @@ int main(int argc, char* argv[])
                 for (QAction* a : hints.gameActions())
                     if (a->text().contains(QStringLiteral("Hints")))
                         hintToggle = a;
-                check(hintToggle != nullptr, "reversi: the board offers a Hints switch");
+                check(hintToggle != nullptr, "reversiGame: the board offers a Hints switch");
 
                 const auto dotPixels = [&](bool large) {
                     Legibility::instance().setEnabled(large);
@@ -3155,11 +3155,11 @@ int main(int argc, char* argv[])
                     const int plainDots = dotPixels(false);
                     const int largeDots = dotPixels(true);
                     Legibility::instance().setEnabled(false);
-                    std::printf("      reversi hint dots: %d pixels normal, %d large\n",
+                    std::printf("      reversiGame hint dots: %d pixels normal, %d large\n",
                                 plainDots, largeDots);
-                    check(plainDots > 0, "reversi: the board marks where you may play");
+                    check(plainDots > 0, "reversiGame: the board marks where you may play");
                     check(largeDots > plainDots,
-                          "reversi: and large play makes those marks bigger, not just the caption");
+                          "reversiGame: and large play makes those marks bigger, not just the caption");
                 }
             }
 
@@ -3399,13 +3399,13 @@ int main(int argc, char* argv[])
                 cardcodec::writePile(out, {});
                 out << qint8(0) << qint8(0);
 
-                HeartsView table;
-                table.resize(900, 620);
-                check(table.restoreState(over),
-                      "hearts: and that position loads into the table");
+                HeartsView hearts;
+                hearts.resize(900, 620);
+                check(hearts.restoreState(over),
+                      "hearts: and that position loads into the hearts");
 
                 QAction* next = nullptr;
-                for (QAction* a : table.gameActions())
+                for (QAction* a : hearts.gameActions())
                     if (a->text() == QStringLiteral("Next Hand"))
                         next = a;
                 check(next != nullptr, "hearts: the toolbar offers Next Hand");
@@ -3415,7 +3415,7 @@ int main(int argc, char* argv[])
                           "end the match");
                     next->trigger();
                     HeartsEngine after;
-                    QDataStream in(table.saveState());
+                    QDataStream in(hearts.saveState());
                     in.setVersion(QDataStream::Qt_6_0);
                     quint32 version = 0;
                     in >> version;
@@ -4364,21 +4364,21 @@ int main(int argc, char* argv[])
     // screenshot can see it: --shot renders the widget offscreen and an
     // offscreen render has no window decorations at all.
     {
-        HubWindow hub;
+        HubWindow shotHub;
         const QString version = QStringLiteral(GAMESHUB_VERSION);
-        check(!version.isEmpty(), "hub: the build carries a version string at all");
-        check(hub.windowTitle() == QStringLiteral("Games ") + version,
-              qPrintable(QStringLiteral("hub: the tile grid's title is \"Games <version>\", "
+        check(!version.isEmpty(), "shotHub: the build carries a version string at all");
+        check(shotHub.windowTitle() == QStringLiteral("Games ") + version,
+              qPrintable(QStringLiteral("shotHub: the tile grid's title is \"Games <version>\", "
                                         "the spelling --version prints -- got \"%1\"")
-                             .arg(hub.windowTitle())));
+                             .arg(shotHub.windowTitle())));
 
-        hub.openGameNamed(QStringLiteral("Pyramid"));
-        check(hub.windowTitle().startsWith(QStringLiteral("Pyramid ")),
-              qPrintable(QStringLiteral("hub: an open game names itself first -- got \"%1\"")
-                             .arg(hub.windowTitle())));
-        check(hub.windowTitle().endsWith(QStringLiteral("Games ") + version),
-              qPrintable(QStringLiteral("hub: and still ends with the version -- got \"%1\"")
-                             .arg(hub.windowTitle())));
+        shotHub.openGameNamed(QStringLiteral("Pyramid"));
+        check(shotHub.windowTitle().startsWith(QStringLiteral("Pyramid ")),
+              qPrintable(QStringLiteral("shotHub: an open game names itself first -- got \"%1\"")
+                             .arg(shotHub.windowTitle())));
+        check(shotHub.windowTitle().endsWith(QStringLiteral("Games ") + version),
+              qPrintable(QStringLiteral("shotHub: and still ends with the version -- got \"%1\"")
+                             .arg(shotHub.windowTitle())));
     }
 
     // ---- cardIndexClearsThePips (GHUB-0188) ----
@@ -4556,18 +4556,18 @@ int main(int argc, char* argv[])
                 return img;
             };
 
-            const Card subject { .suit = Suit::Spades, .rank = 11 };
+            const Card spadeJack { .suit = Suit::Spades, .rank = 11 };
             const double dpr = 1.5;
             const double narrow = 83.0 / dpr;   // snaps to 83 device pixels
             const double wide = 84.0 / dpr;     // snaps to 84
             const double height = 78.0;         // held equal, so only width differs
 
             empty();
-            const QImage alone = drawScaled(subject, narrow, height, true, dpr);
+            const QImage alone = drawScaled(spadeJack, narrow, height, true, dpr);
 
             empty();
-            drawScaled(subject, wide, height, true, dpr);   // fills the shared entry first
-            const QImage after = drawScaled(subject, narrow, height, true, dpr);
+            drawScaled(spadeJack, wide, height, true, dpr);   // fills the shared entry first
+            const QImage after = drawScaled(spadeJack, narrow, height, true, dpr);
 
             check(alone == after,
                   "a card face is the same picture at a fractional device pixel ratio");
@@ -5014,11 +5014,11 @@ int main(int argc, char* argv[])
                   say("the engine answers a move that is left standing").constData());
 
             // INV-1.
-            QString status;
+            QString statusLine;
             QObject::connect(subject, &GameView::statusChanged,
-                             [&status](const QString& text) { status = text; });
+                             [&statusLine](const QString& text) { statusLine = text; });
             playAMove(subject);
-            check(status.contains(QStringLiteral("thinking")),
+            check(statusLine.contains(QStringLiteral("thinking")),
                   say("the player's move puts the game on the computer's clock").constData());
 
             QAction* undo = nullptr;
@@ -5035,7 +5035,7 @@ int main(int argc, char* argv[])
             // search is still only SCHEDULED -- which is the one state
             // abandonSearch() cannot reach into.
             undo->trigger();
-            const QString settled = status;
+            const QString settled = statusLine;
             const QImage board = renderOf(subject);
 
             // Three times the measured reply and never under a second and a
@@ -5056,12 +5056,12 @@ int main(int argc, char* argv[])
             std::printf("      %s: engine reply %lldms, waited %dms after the undo; "
                         "%d pixels changed (expected 0)\n",
                         game, static_cast<long long>(replyMs), wait, changed);
-            std::printf("      %s: status was \"%s\", is now \"%s\"\n", game,
-                        qUtf8Printable(settled), qUtf8Printable(status));
+            std::printf("      %s: statusLine was \"%s\", is now \"%s\"\n", game,
+                        qUtf8Printable(settled), qUtf8Printable(statusLine));
 
             check(changed == 0,
                   say("the search scheduled before the undo never moves a piece").constData());
-            check(status == settled,
+            check(statusLine == settled,
                   say("and the game is still the player's to move").constData());
         };
 

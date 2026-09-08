@@ -43,6 +43,19 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   to show pips at all. On a small card, where the corner index is all
   there is, it stays full size.
 
+### Security
+
+- **The Windows compiler's warnings are now fatal too, as the Linux one's already were** (GHUB-0185)
+  GHUB-0053 turned warnings on for both compilers but made them stop the
+  build on Linux only, because nobody had looked at what the Windows
+  compiler objects to. It objected to 28 things, all of them harmless in
+  themselves — 27 places where a name was reused inside another of the same
+  name, and one number that did not fit the type it was stored in. All
+  cleared, and both halves of the build now refuse to finish on a warning.
+  The local Windows test script was configuring this off while the
+  automated build configured it on, so it now reads the setting from the
+  same place rather than keeping its own copy.
+
 ## [1.0.0] - 2026-09-08
 
 ### Added

@@ -29,13 +29,15 @@ jobs:
           # Not ubuntu-22.04: GitHub begins deprecating that image on
           # 2026-09-17. Not windows-latest: it moved to Visual Studio 2026 in
           # June 2026, and Qt's prebuilt win64_msvc2022_64 wants VS 2022.
-          # werror: GHUB-0053 turned warnings on for both compilers, but only
-          # the GCC leg treats them as fatal. MSVC's /W4 is a different set and
-          # nothing here has ever measured it -- the Windows test box was off
-          # when this landed -- and this project has already spent six red
-          # Windows legs on constants nobody had measured on that platform.
-          # So /W4 reports on Windows and blocks on Linux. GHUB-0185 turns it
-          # on for Windows once the set has actually been looked at.
+          # werror: GHUB-0053 turned warnings on for both compilers and made
+          # them fatal on the GCC leg alone, because MSVC's /W4 is a different
+          # set and nothing had measured it. GHUB-0185 measured it off this
+          # workflow's own output and cleared it, so both legs are fatal now.
+          #
+          # The set was 27 C4456 (a local hiding an outer local) and one C4310
+          # (a cast truncating a constant). GCC's -Wshadow=local finds the same
+          # 27, which is how they were fixed and verified here rather than three
+          # minutes into CI -- reach for that flag before touching this again.
           - name: Linux
             os: ubuntu-24.04
             qt_arch: linux_gcc_64
@@ -43,7 +45,7 @@ jobs:
           - name: Windows
             os: windows-2022
             qt_arch: win64_msvc2022_64
-            werror: 'OFF'
+            werror: 'ON'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

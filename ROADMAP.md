@@ -1617,7 +1617,7 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0185] **MSVC's /W4 warnings are reported on the Windows leg and fatal on neither side.**
+- ✅ [GHUB-0185] **MSVC's /W4 warnings are reported on the Windows leg and fatal on neither side.**
   GHUB-0053 turned warnings on for both compilers and made them fatal on
   one. `ci.yml`'s matrix carries `werror: 'ON'` for Linux and `'OFF'` for
   Windows, so `/W4` findings are printed on the Windows leg and block
@@ -1666,6 +1666,40 @@ than any amount of hardening applied to an app with no sockets.
 
   Nothing found here is Qt's own headers, which was the reason given for
   not making it fatal blind. That concern did not materialise.
+  Resolved (2026-09-08). Both legs are fatal now.
+
+  The set was 27 C4456 (a local hiding an outer local) plus one C4310 (a
+  cast truncating a constant). GCC's -Wshadow=local finds the same 27, so
+  they were found, fixed and verified here rather than three minutes into
+  CI -- reach for that flag before touching this again.
+
+  Twenty of the 27 went with ONE rename. The chess save/restore block
+  declared `saved` and `resumed` at the outer indent and ten sibling game
+  blocks each declared their own, so every one of them shadowed chess. They
+  are chessSaved and chessResumed now. The remaining nine were renamed
+  inside their own brace-matched blocks: probe, mines, reversi, table, hub,
+  subject and status in the tests, `depth` in canastaview's pile loop, and
+  `r` in reversiview's dot. The C4310 was `char(0xFF)` -- char is signed on
+  MSVC, so the constant truncates; it is the character literal '\xFF' now,
+  which needs no cast at all.
+
+  The Windows box could not have verified this as it stood, and that is the
+  finding worth keeping. scripts/wintest-build.ps1 configured without
+  -DGAMESHUB_WERROR, so it defaulted OFF while CI configured it ON: the box
+  would have returned green for a build the runner failed, which is the
+  exact drift that file's own header says it exists to prevent. It takes a
+  -Werror parameter now, and scripts/wintest-ci.sh READS the value out of
+  ci.yml's Windows matrix row rather than either script restating it --
+  same principle as local-ci.sh executing the workflow's own steps. An
+  unreadable value stops the run rather than guessing.
+
+  Verified on the box at 3fb66a7 before pushing: zero MSVC warnings with
+  /WX on, 6/6 ctest. That is fewer cases than CI registers, so it is a
+  strong signal rather than full coverage.
+
+  Also worth knowing: CI reported 4 warnings in src/ for 2 defects, because
+  each source was compiled once per target. GHUB-0187 made that one
+  compile, so the double counting is gone.
   **Layman:** The Windows half of the build shows compiler warnings but is allowed to ignore them, because nobody has looked at what it says yet.
   Kind: security.
   Source: in-session-2026-09-07.
@@ -4013,6 +4047,20 @@ open.
   **Layman:** The 'Large / Normal' button would show the wrong word if the setting were ever changed from somewhere other than that button.
   Kind: accessibility.
   Source: in-session-2026-08-14 (observed while rendering the hub for GHUB-0017).
+  Checked, not fixed (2026-09-08). This bullet's own condition is "the
+  moment a second writer appears, not before", so the question is whether
+  one has, and the answer is no.
+
+  Searched src/ for Legibility::instance().setEnabled: the only production
+  caller is still HubWindow::buildChrome's toolbar action. main.cpp reaches
+  setEnabledForSession instead, which is a different method and only inside
+  takeShot -- a --shot run exits without ever showing a toolbar, so it
+  cannot leave a label stale in front of anybody.
+
+  So the hazard is unchanged rather than realised. The trigger to watch for
+  is GHUB-0068, the settings dialog: a legibility control there is the
+  second writer this bullet predicts, and the one connect should land in the
+  same change rather than after it.
 
 - ✅ [GHUB-0037] **The legibility switch itself, hub-owned and read by every game that has had its pass.**
   Split out of GHUB-0017 (2026-08-19) so the release ledger can say what

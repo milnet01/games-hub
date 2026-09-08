@@ -15,7 +15,12 @@
 # Build Tools, Qt 6.8.3 msvc2022_64 under C:\Qt, and CMake + Ninja under
 # C:\devtools. Every one of those is checked before anything is built, because a
 # missing piece otherwise surfaces as a confusing CMake error much later.
-param([string]$Src = 'C:\gameshub')
+# -Werror mirrors ci.yml's Windows matrix row, and wintest-ci.sh reads it out
+# of that workflow rather than either script restating it. Without it this
+# configured with the option OFF while CI configured it ON, so the box returned
+# green for a build the runner would have failed -- which is the exact drift
+# this file's header says it exists to prevent (GHUB-0185).
+param([string]$Src = 'C:\gameshub', [string]$Werror = 'ON')
 $ErrorActionPreference = 'Stop'
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -49,7 +54,7 @@ set "PATH=$cmakeBin;$ninjaBin;$qt\bin;%PATH%"
 set "CMAKE_PREFIX_PATH=$qt"
 cd /d "$Src" || exit /b 1
 echo === Configure
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release || exit /b 1
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGAMESHUB_WERROR=$Werror || exit /b 1
 echo === Build
 cmake --build build || exit /b 1
 echo === Test

@@ -404,8 +404,8 @@ void ReversiView::paintEvent(QPaintEvent*)
                     const bool large = Legibility::instance().enabled();
                     p.setPen(Qt::NoPen);
                     p.setBrush(QColor(255, 255, 255, large ? 190 : 70));
-                    const double r = cell * (large ? 0.18 : 0.12);
-                    p.drawEllipse(centre, r, r);
+                    const double dot = cell * (large ? 0.18 : 0.12);
+                    p.drawEllipse(centre, dot, dot);
                 }
                 continue;
             }

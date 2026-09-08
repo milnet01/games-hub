@@ -2681,17 +2681,17 @@ void CanastaView::paintCentre(QPainter& p)
             const QPointF at(pile.x() + deepest * 1.1, pile.y() + deepest * 1.1);
             paintCard(p, cards[std::size_t(frozen)], freezeCardCentre(at), 90.0, true);
         }
-        for (int depth = deepest; depth >= 0; --depth) {
-            const int index = last - depth;
+        for (int layer = deepest; layer >= 0; --layer) {
+            const int index = last - layer;
             const Card& c = cards[std::size_t(index)];
             // Only the top card can be in the air, and while it is, the pile
             // shows what is under it rather than a card in two places.
-            if (depth == 0 && suppressed(Dest::Pile, 0, 0, c))
+            if (layer == 0 && suppressed(Dest::Pile, 0, 0, c))
                 continue;
-            const QPointF at(pile.x() + depth * 1.1, pile.y() + depth * 1.1);
+            const QPointF at(pile.x() + layer * 1.1, pile.y() + layer * 1.1);
             if (index == frozen) {
                 paintCard(p, c, freezeCardCentre(at), 90.0, true);
-            } else if (depth == 0) {
+            } else if (layer == 0) {
                 paintCard(p, c, at, 0.0, true);
             } else {
                 const QRectF r(at.x() - cw * 0.5, at.y() - ch * 0.5, cw, ch);
