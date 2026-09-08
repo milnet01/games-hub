@@ -22,6 +22,7 @@
 #include <QPainterPath>
 #include <QPushButton>
 #include <QRadialGradient>
+#include <QScrollArea>
 #include <QSettings>
 #include <QSpinBox>
 #include <QTimer>
@@ -298,6 +299,34 @@ ca::Rules loadHouse()
     return r;
 }
 
+// A modal dialog runs its own event loop, so a QTimer left running keeps
+// driving the computer seats behind it -- a slow read of the House rules form
+// could let the whole hand finish unwatched. deactivate()'s own comment states
+// the rule this restores: the computers stop when nobody is watching, and a
+// dialog on top of the table is exactly that. It restarts only what it
+// stopped, so a dialog opened on an already-stopped table leaves it stopped.
+class HoldTheClock
+{
+public:
+    explicit HoldTheClock(QTimer* timer)
+        : m_timer(timer), m_wasRunning(timer != nullptr && timer->isActive())
+    {
+        if (m_wasRunning)
+            m_timer->stop();
+    }
+    ~HoldTheClock()
+    {
+        if (m_wasRunning)
+            m_timer->start();
+    }
+    HoldTheClock(const HoldTheClock&) = delete;
+    HoldTheClock& operator=(const HoldTheClock&) = delete;
+
+private:
+    QTimer* m_timer;
+    bool m_wasRunning;
+};
+
 // What the table is playing by, in plain words (GHUB-0019). Read-only, and
 // read from the engine's own Rules rather than rebuilt from the settings --
 // the panel exists to be trusted, so it must not be able to disagree with the
@@ -467,7 +496,21 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
         &dlg);
     blurb->setWordWrap(true);
     layout->addWidget(blurb);
-    layout->addLayout(form);
+
+    // The form has a row per rule and a QDialog does not scroll, so on a short
+    // screen the button box went off the bottom with no way to reach it. The
+    // rows scroll inside the dialog instead. The cap mirrors the sibling panel
+    // above rather than asking the screen: a headless runner reports a screen
+    // this dialog will never open on.
+    auto* page = new QWidget(&dlg);
+    page->setLayout(form);
+    auto* scroll = new QScrollArea(&dlg);
+    scroll->setWidget(page);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setMaximumHeight(560);
+    layout->addWidget(scroll, 1);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel
                                              | QDialogButtonBox::RestoreDefaults,
@@ -597,6 +640,10 @@ void CanastaView::buildActions()
     // Sits with the hand actions rather than with the display toggles at the
     // far end, because that end is the first thing a narrow window hides.
     auto* sort = new QAction(QStringLiteral("Sort"), this);
+    // Object names, here and on every checkable action below, are what
+    // restoreState matches on. Its labels are user-visible; an object name is
+    // not, so it survives the tr() the Qt standard asks for. GHUB-0154.
+    sort->setObjectName(QStringLiteral("canasta-sort"));
     sort->setCheckable(true);
     sort->setChecked(m_sortHand);
     connect(sort, &QAction::toggled, this, [this](bool on) {
@@ -621,6 +668,7 @@ void CanastaView::buildActions()
     };
     for (const auto& entry : kLevels) {
         auto* a = new QAction(QString::fromUtf8(entry.name), this);
+        a->setObjectName(QStringLiteral("canasta-level-%1").arg(int(entry.value)));
         a->setCheckable(true);
         a->setChecked(entry.value == m_level);
         levels->addAction(a);
@@ -645,6 +693,7 @@ void CanastaView::buildActions()
     auto* sets = new QActionGroup(this);
     sets->setExclusive(true);
     auto* classic = new QAction(QStringLiteral("Classic"), this);
+    classic->setObjectName(QStringLiteral("canasta-ruleset-classic"));
     classic->setCheckable(true);
     // Both ticks are set from the remembered choice rather than Classic being
     // hardcoded on: the toolbar is the only thing that says which rule set is
@@ -658,6 +707,7 @@ void CanastaView::buildActions()
     m_actions.append(classic);
 
     auto* house = new QAction(QStringLiteral("House"), this);
+    house->setObjectName(QStringLiteral("canasta-ruleset-house"));
     house->setCheckable(true);
     house->setChecked(m_useHouse);
     sets->addAction(house);
@@ -669,6 +719,7 @@ void CanastaView::buildActions()
 
     m_rulesAction = new QAction(QStringLiteral("House rules…"), this);
     connect(m_rulesAction, &QAction::triggered, this, [this, house] {
+        const HoldTheClock hold(m_timer);
         if (!editHouseRules(this, m_house))
             return;
         m_useHouse = true;
@@ -681,8 +732,10 @@ void CanastaView::buildActions()
     // playing by" are the same question asked two ways. Reads the engine, so
     // it always answers about the hand on screen.
     auto* inForce = new QAction(QStringLiteral("Rules in force…"), this);
-    connect(inForce, &QAction::triggered, this,
-            [this] { showRulesInForce(this, m_engine.rules()); });
+    connect(inForce, &QAction::triggered, this, [this] {
+        const HoldTheClock hold(m_timer);
+        showRulesInForce(this, m_engine.rules());
+    });
     m_actions.append(inForce);
 
     auto* sep3 = new QAction(this);
@@ -693,13 +746,14 @@ void CanastaView::buildActions()
     targets->setExclusive(true);
     for (const int score : { 1000, 2000, 3000, 5000 }) {
         auto* a = new QAction(QStringLiteral("Play to %1").arg(score), this);
+        a->setObjectName(QStringLiteral("canasta-target-%1").arg(score));
         a->setCheckable(true);
         a->setChecked(score == m_target);
         targets->addAction(a);
         connect(a, &QAction::triggered, this, [this, score] {
             m_target = score;
             QSettings().setValue(QStringLiteral("canasta/target"), score);
-            applyRules();
+            applyRules(Changed::Target);
         });
         m_actions.append(a);
     }
@@ -744,7 +798,7 @@ void CanastaView::applyLevels()
 // the game away: a rule corrected at 2335 apiece takes effect on the table in
 // front of you, and only the three numbers that shaped the deal wait for the
 // next hand.
-void CanastaView::applyRules()
+void CanastaView::applyRules(Changed what)
 {
     // Every route that changes the rule set comes through here, so this is the
     // one place the choice has to be remembered. A saved game carries its own
@@ -756,8 +810,21 @@ void CanastaView::applyRules()
     ca::Rules r = m_useHouse ? m_house : ca::Rules::classic();
     r.targetScore = m_target;
     m_engine.applyRules(r);
-    announce(m_useHouse ? QStringLiteral("House rules now — this hand carries on.")
-                        : QStringLiteral("Classic rules now — this hand carries on."));
+
+    // Lowering the canasta size turns melds already on the table into canastas.
+    // Re-baseline before refresh() so that arrives as a fact rather than as the
+    // flourish and sound for a canasta the player did not just complete.
+    m_canastasShown = canastaCount(m_engine.team(0), m_engine.rules());
+
+    announce(what == Changed::Target
+                 ? QStringLiteral("Playing to %1 now — this hand carries on.").arg(m_target)
+                 : m_useHouse ? QStringLiteral("House rules now — this hand carries on.")
+                              : QStringLiteral("Classic rules now — this hand carries on."));
+
+    // Not update() alone: the new rules decide which melds are canastas, and
+    // the paint order reads m_canastaOrder, which only trackCanastas() moves.
+    // refresh() takes that step first.
+    refresh();
     update();
 }
 
@@ -1020,23 +1087,24 @@ bool CanastaView::restoreState(const QByteArray& blob)
     // A hand that had just been scored is waiting on a click, exactly as it was.
     m_awaitingContinue = m_engine.phase() == ca::Engine::Phase::HandOver;
 
-    // The toolbar was built before any of this was known.
+    // The toolbar was built before any of this was known. Matched on object
+    // name rather than on the label: the labels are what the player reads, so
+    // the Qt standard wants tr() around them, and adding it would have broken
+    // every line of this silently -- leaving the toolbar claiming a rule set,
+    // a target and a level the resumed game is not playing. GHUB-0154.
+    const QString wantedSet = m_useHouse ? QStringLiteral("canasta-ruleset-house")
+                                         : QStringLiteral("canasta-ruleset-classic");
+    const QString wantedTarget = QStringLiteral("canasta-target-%1").arg(m_target);
+    const QString wantedLevel = QStringLiteral("canasta-level-%1").arg(int(m_level));
     for (QAction* a : m_actions) {
-        if (a->isCheckable() && a->text() == QStringLiteral("Sort"))
+        if (!a->isCheckable())
+            continue;
+        const QString name = a->objectName();
+        if (name == QStringLiteral("canasta-sort"))
             a->setChecked(m_sortHand);
-        if (a->isCheckable() && a->text() == (m_useHouse ? QStringLiteral("House")
-                                                         : QStringLiteral("Classic")))
-            a->setChecked(true);
-        if (a->isCheckable() && a->text() == QStringLiteral("Play to %1").arg(m_target))
+        else if (name == wantedSet || name == wantedTarget || name == wantedLevel)
             a->setChecked(true);
     }
-    const QString wanted = m_level == ca::Level::Easy ? QStringLiteral("Easy")
-        : m_level == ca::Level::Medium                ? QStringLiteral("Medium")
-        : m_level == ca::Level::Hard                  ? QStringLiteral("Hard")
-                                                      : QStringLiteral("Expert");
-    for (QAction* a : m_actions)
-        if (a->isCheckable() && a->text() == wanted)
-            a->setChecked(true);
 
     refresh();
     update();

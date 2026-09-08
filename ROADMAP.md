@@ -2705,7 +2705,7 @@ draws, whether or not it has had one.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0154] **Canasta's rules dialog runs the clock, does not scroll, and syncs its toolbar by text.**
+- ✅ [GHUB-0154] **Canasta's rules dialog runs the clock, does not scroll, and syncs its toolbar by text.**
   canastaview.cpp. The dialog is modal for input but m_timer is never
   stopped, so tick() keeps driving aiHalfTurn on the three computer
   seats at kAiPause -- a slow read of a 27-row form can let the hand
@@ -2719,9 +2719,78 @@ draws, whether or not it has had one.
   restoreState syncs the toolbar by comparing QAction::text() against
   untranslated literals, so adding tr() -- which the Qt standard
   requires -- breaks the sync silently.
+  Resolved (2026-09-08). All five, verified against the source first.
+
+  The clock. Both modal dialogs now run under a HoldTheClock guard, which
+  stops m_timer for the life of the dialog and restarts only what it
+  stopped -- so a dialog opened on an already-stopped table leaves it
+  stopped. deactivate()'s own comment was already the rule: the computers
+  stop when nobody is watching, and a dialog on top of the table is that.
+
+  The form scrolls. The House rules rows sit in a QScrollArea inside the
+  dialog, capped at the same height the Rules in force panel beside it
+  uses. The cap is a number rather than a screen query on purpose -- a
+  headless runner reports a screen this dialog will never open on.
+
+  applyRules() calls refresh() rather than update() alone, so a lowered
+  canastaSize reaches trackCanastas() and the paint order knows which
+  melds became canastas. It re-baselines m_canastasShown first: a rule
+  change turning melds into canastas is a fact, not the player completing
+  one, and without that the flourish and its sound fired on a settings
+  change.
+
+  It also takes a Changed argument, so picking a new target announces the
+  target instead of claiming the rule set moved. RuleSet is the default,
+  so the three rule-set routes are untouched.
+
+  restoreState matches objectName() rather than QAction::text(). That was
+  the finding with no symptom today and the worst failure mode: the labels
+  are what the player reads, the Qt standard asks for tr() around them,
+  and adding it would have broken every comparison silently -- a toolbar
+  claiming a rule set, a target and a level the resumed game is not
+  playing.
+
+  Test: canastaToolbarSurvivesTranslation in tests/uitest.cpp. It replaces
+  every label before restoring, and sets the stored settings to the
+  opposite of the save first, so the resumed toolbar comes up wrong and
+  the restore has to correct it. Proved red on the unfixed code -- four
+  assertions failed -- then green. Full ctest green, built with
+  GAMESHUB_WERROR=ON, clang-tidy clean on the file.
+
+  The sweep found the same text-matching shape live in chessview,
+  klondikeview and spiderview. Filed as GHUB-0186 rather than fixed here.
+
+  Not taken: the House rules dialog does not honour the legibility switch,
+  where the Rules in force panel beside it does. Outside what this item
+  names, and it is a settings form the owner reads slowly, so it wants its
+  own decision rather than riding along on a bug fix.
   **Layman:** The House rules window can let a whole hand play out behind it, runs off the bottom of a small screen, and is wired up in a way that translating the app would break.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
+
+- 📋 [GHUB-0186] **Three more games tick their toolbar by matching the label the player reads.**
+  GHUB-0154 fixed this in canastaview.cpp: every checkable action carries an
+  objectName(), and restoreState matches on that. The same shape is still
+  live in three other views. Found by the sweep on that fix, not by a
+  review, so it is recorded here rather than left in a transcript.
+
+  chessview.cpp ticks its level against levelName(m_level). klondikeview.cpp
+  matches a label built as "Draw %1" from the table's draw count.
+  spiderview.cpp matches its suit mode the same way. Each runs where a
+  restored or re-entered game has to put the toolbar back.
+
+  Those labels are what the player reads, so the Qt standard asks for tr()
+  around them -- and adding it breaks every one of these comparisons
+  silently. The toolbar then claims a setting the game is not playing, and
+  nothing fails: no assertion, no warning, no wrong pixel.
+
+  Copy Canasta's fix -- name the action where it is created, match the name.
+  Copy the shape of its test too: it replaces every label before restoring,
+  which is what makes the check bite. A check that leaves the labels alone
+  passes on the unfixed code as well.
+  **Layman:** Three games pick which toolbar button to tick by reading its wording, so translating the app would tick the wrong one and nothing would complain.
+  Kind: fix.
+  Source: close-findings sweep on GHUB-0154, 2026-09-08.
 
 ### 🎨 Games agreed and not yet started
 

@@ -21,6 +21,16 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Canasta's rules windows no longer let the hand play on behind them, and the House rules form fits a small screen** (GHUB-0154)
+  Opening House rules or Rules in force now stops the computer players
+  until you close it, so a slow read can no longer let the hand finish
+  unwatched. The House rules form scrolls instead of pushing its buttons
+  off the bottom of the screen. Changing the rule set settles the table
+  straight away rather than waiting for the next move, and picking a new
+  target now says the target changed instead of claiming the rule set
+  did. A resumed game's toolbar shows the rule set, target and level it
+  is actually playing.
+
 - **cardart.h's header comment named three of the card games that use it.** (GHUB-0029)
   It has served six since Canasta, FreeCell and Pyramid arrived, and it
   is where kFaceMinWidth lives -- so a reader going there to understand

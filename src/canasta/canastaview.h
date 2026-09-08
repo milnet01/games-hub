@@ -129,7 +129,10 @@ private:
     void rememberForUndo(const QByteArray& point);
     void forgetUndo();
     // Puts the toolbar's rule set onto the game in progress, without dealing.
-    void applyRules();
+    // What moved decides what is announced: picking a new target is not a
+    // change of rule set, and saying it was is what GHUB-0154 found.
+    enum class Changed { RuleSet, Target };
+    void applyRules(Changed what = Changed::RuleSet);
     // Sets each seat's strength, which is not simply the chosen level: the
     // partner can be sharpened on its own.
     void applyLevels();

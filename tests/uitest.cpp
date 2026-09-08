@@ -1257,6 +1257,109 @@ int main(int argc, char* argv[])
         resumed.deactivate();
     }
 
+    // ---- canastaToolbarSurvivesTranslation (GHUB-0154) ----
+    //
+    // restoreState used to sync the toolbar by comparing QAction::text()
+    // against untranslated literals. Those labels are what the player reads,
+    // so the Qt standard asks for tr() around them -- and adding it would have
+    // broken every one of those comparisons silently, leaving the toolbar
+    // claiming a rule set, a target and a level the resumed game is not
+    // playing. It reads objectName() now, which nothing translates.
+    //
+    // Two halves make this bite. Every label is replaced before the restore,
+    // so nothing here can pass on the text. And the settings are set to the
+    // OPPOSITE of what the save holds first, so the resumed toolbar comes up
+    // wrong and the restore is what has to correct it -- otherwise a toolbar
+    // that was already right by default would pass having synced nothing.
+    {
+        const QString houseKey = QStringLiteral("canasta/useHouse");
+        const QString targetKey = QStringLiteral("canasta/target");
+        const QString levelKey = QStringLiteral("canasta/level");
+        const QVariant hadHouse = QSettings().value(houseKey);
+        const QVariant hadTarget = QSettings().value(targetKey);
+        const QVariant hadLevel = QSettings().value(levelKey);
+
+        const auto named = [](const QList<QAction*>& actions, const QString& name) -> QAction* {
+            for (QAction* a : actions)
+                if (a->objectName() == name)
+                    return a;
+            return nullptr;
+        };
+
+        QByteArray saved;
+        {
+            CanastaView source;
+            source.resize(1000, 740);
+            source.show();
+            pump(40);
+
+            const QList<QAction*> actions = source.gameActions();
+            QAction* house = named(actions, QStringLiteral("canasta-ruleset-house"));
+            QAction* target = named(actions, QStringLiteral("canasta-target-2000"));
+            QAction* level = named(actions, QStringLiteral("canasta-level-3"));
+            check(house != nullptr && target != nullptr && level != nullptr,
+                  "canasta: every toolbar choice the restore syncs carries an object name");
+            if (house != nullptr)
+                house->trigger();
+            if (target != nullptr)
+                target->trigger();
+            if (level != nullptr)
+                level->trigger();
+            pump(10);
+            saved = source.saveState();
+            source.deactivate();
+        }
+        check(!saved.isEmpty(), "canasta: and a game set up that way has a save");
+
+        {
+            QSettings opposite;
+            opposite.setValue(houseKey, false);
+            opposite.setValue(targetKey, 3000);
+            opposite.setValue(levelKey, int(canasta::Level::Easy));
+        }
+        {
+            CanastaView resumed;
+            resumed.resize(1000, 740);
+            const QList<QAction*> actions = resumed.gameActions();
+            const QAction* classic = named(actions, QStringLiteral("canasta-ruleset-classic"));
+            check(classic != nullptr && classic->isChecked(),
+                  "canasta: a fresh table comes up on the settings, not on the save");
+
+            // Every label a translator would touch, gone.
+            for (QAction* a : actions)
+                a->setText(QStringLiteral("translated"));
+
+            check(resumed.restoreState(saved),
+                  "canasta: and the save still loads with every label translated away");
+
+            const QAction* house = named(actions, QStringLiteral("canasta-ruleset-house"));
+            const QAction* target = named(actions, QStringLiteral("canasta-target-2000"));
+            const QAction* level = named(actions, QStringLiteral("canasta-level-3"));
+            check(house != nullptr && house->isChecked(),
+                  "canasta: the toolbar shows the House rules the resumed game is playing");
+            check(classic != nullptr && !classic->isChecked(),
+                  "canasta: and no longer shows Classic beside it");
+            check(target != nullptr && target->isChecked(),
+                  "canasta: and the target it is playing to");
+            check(level != nullptr && level->isChecked(),
+                  "canasta: and the level it is playing at");
+            resumed.deactivate();
+        }
+
+        {
+            QSettings back;
+            const auto put = [&back](const QString& key, const QVariant& had) {
+                if (had.isValid())
+                    back.setValue(key, had);
+                else
+                    back.remove(key);
+            };
+            put(houseKey, hadHouse);
+            put(targetKey, hadTarget);
+            put(levelKey, hadLevel);
+        }
+    }
+
     // ---- canastaLegibleMelds (GHUB-0017 INV-3, in Canasta's own numbers) ----
     //
     // The mechanism's spec withdrew INV-3 and INV-6 to whichever per-game pass
