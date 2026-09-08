@@ -4760,6 +4760,51 @@ open.
   Kind: accessibility.
   Source: GHUB-0070's deferred half, owner's call 2026-09-06.
 
+- ✅ [GHUB-0188] **A ten's corner index landed on its own top-left pip, in every card game.**
+  Reported by the owner off a Pyramid screenshot: on the tens, the pip
+  column runs into the numeral. Reproduced with a seeded --shot at 800x1150
+  before anything was changed, and the same seed used to confirm the fix.
+
+  The cause was the column, not the font. The index column starts at 0.08
+  of the card's width and is 0.24 wide, so it ENDS at 0.32 -- which is
+  exactly where the left pip column is CENTRED, and a pip glyph reaches
+  back further still. So an index that filled its column met the pip
+  whatever the font did. Every other rank is a single character that stops
+  well short, which is why only the tens looked wrong. The first attempt
+  fitted the numeral to the box and barely moved the picture; the box was
+  the problem.
+
+  Which pip pattern a card shows is how the owner reads it, so the pips do
+  not move and the numeral gives way. placeIndex() now allows a
+  two-character rank 0.17 of the width where pips are drawn, and the whole
+  column where they are not -- below kFaceMinWidth there are no pips and
+  the index IS the card, so it gives up nothing where it matters most.
+  There is deliberately no floor under the shrink: a floor would bind on a
+  runner with an empty font database and put the overlap straight back.
+
+  Two things this cost, and both are the project's own lessons.
+
+  The solve had to STEP rather than scale. A single proportional guess left
+  the numeral over its room by up to 0.638 px, because point size to ink is
+  not linear -- hinting rounds an advance to whole pixels. It now steps down
+  until the ink measured at the size it will really be drawn fits, which is
+  the shape SudokuView::markFont() uses. Found by the new check going red on
+  the guess, not by looking.
+
+  And the check had to be split. cardIndexClearsThePips ASSERTS
+  CardArt::indexOverflow() -- the numeral against the room, both fractions of
+  the card and both this code's -- across a spread of card widths either side
+  of kFaceMinWidth. It only REPORTS CardArt::indexPipGap(), which measures a
+  suit glyph: that is the platform's answer, not this code's, and asserting
+  it is how three Windows legs went red before. The clearance reads 1.32 px
+  at its tightest here, on the ten at a 62 px card.
+
+  paintFace and both accessors go through one placeIndex(), so the drawn
+  picture and the measured answer cannot drift apart.
+  **Layman:** On every ten, the "10" printed on top of one of the ten suit symbols, so the pattern you read the card by had a numeral sitting in it. Reported from a Pyramid screenshot.
+  Kind: accessibility.
+  Source: owner-report-2026-09-08.
+
 ### 🎨 Play
 
 - ✅ [GHUB-0018] **Canasta cannot take a move back.**

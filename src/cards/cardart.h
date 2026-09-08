@@ -31,6 +31,26 @@ inline constexpr double kFaceMinWidth = 46.0;
 // cache's size limit.
 void paintFace(QPainter& p, const QRectF& r, const Card& c);
 
+// Clear space, in pixels, between the corner index and the nearest pip under
+// it. Negative means they overlap, which is what a ten did until GHUB-0188:
+// the index column ends at 0.32 of the card and the left pip column is CENTRED
+// there, so a two-character rank met it whatever the font did.
+//
+// paintFace places the index through the same call, so this cannot drift from
+// what is drawn -- and that is the point. No rendered picture answers "does it
+// still clear at a different card size", because a picture is one size.
+// A card that draws no pips answers with the card's width, meaning nothing to
+// clear.
+double indexPipGap(const Card& c, const QRectF& r, const QFont& base);
+
+// How far the corner numeral's ink runs PAST the room it is allowed. Zero or
+// less is correct. This is the half a test may assert: the room is a fraction
+// of the card and the solve is this code's, so the answer is a property of the
+// code on every platform. indexPipGap() above is the half a test may only
+// REPORT -- it measures a suit glyph, and a runner with an empty font database
+// has no opinion worth asserting on.
+double indexOverflow(const Card& c, const QRectF& r, const QFont& base);
+
 // `deck` picks the colourway: 0 is blue, 1 is red. Games dealt from a single
 // pack take the default and are all blue; Canasta shuffles two packs together,
 // so its stock shows both backs mixed, the way a real table does.

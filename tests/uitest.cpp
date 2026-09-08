@@ -4281,6 +4281,78 @@ int main(int argc, char* argv[])
               "a first run opens at a size that already fits beside your work");
     }
 
+    // ---- cardIndexClearsThePips (GHUB-0188) ----
+    //
+    // A ten's corner index used to land on its own top-left pip. The index
+    // column ends at 0.32 of the card's width and the left pip column is
+    // CENTRED there, so a two-character rank met the pip whatever the font
+    // did -- and every other rank is one character that stops short, which is
+    // why only the tens looked wrong. The pip pattern is how a card is read
+    // here, so the pips did not move; the numeral gives way.
+    //
+    // Asserted across a SPREAD of card widths rather than at one, because this
+    // is a layout figure and a rendered picture is one size. The card art has
+    // two paths -- below CardArt::kFaceMinWidth it draws the index alone, and
+    // there is nothing to clear -- so both sides of that threshold are walked.
+    {
+        double tightest = 1e9;
+        int tightestRank = 0;
+        double tightestWidth = 0.0;
+        double worstOver = -1e9;
+        int worstOverRank = 0;
+        double worstOverWidth = 0.0;
+        bool everNarrow = false;
+        const QFont base;
+
+        for (const double w : { 30.0, 45.0, 46.0, 47.0, 62.0, 88.0, 120.0, 200.0 }) {
+            const QRectF r(0.0, 0.0, w, w * 1.4);
+            for (int rank = 2; rank <= 10; ++rank) {
+                for (const int suit : { 0, 1, 2, 3 }) {
+                    Card c;
+                    c.rank = rank;
+                    c.suit = Suit(suit);
+                    // ASSERTED, once over the worst case rather than per card:
+                    // the numeral stays inside the room the card gives it. Room
+                    // is a fraction of the card and the solve is the art's own,
+                    // so this answers the same on every platform. Before the
+                    // fix the numeral ran past it.
+                    const double over = CardArt::indexOverflow(c, r, base);
+                    if (over > worstOver) {
+                        worstOver = over;
+                        worstOverRank = rank;
+                        worstOverWidth = w;
+                    }
+                    const double gap = CardArt::indexPipGap(c, r, base);
+                    if (w < CardArt::kFaceMinWidth) {
+                        everNarrow = true;
+                        continue;  // no pips drawn at all down here
+                    }
+                    if (gap < tightest) {
+                        tightest = gap;
+                        tightestRank = rank;
+                        tightestWidth = w;
+                    }
+                }
+            }
+        }
+
+        check(everNarrow,
+              "card art: the sweep reaches below kFaceMinWidth, where no pips are drawn");
+        check(worstOver <= 0.001,
+              qPrintable(QStringLiteral("card art: every rank's index stays inside the room its "
+                                        "card gives it -- worst is the %1 at %2 px, over by %3 px")
+                             .arg(worstOverRank)
+                             .arg(worstOverWidth)
+                             .arg(worstOver, 0, 'f', 3)));
+        // REPORTED, never asserted. The clearance measures a SUIT glyph, whose
+        // width is the platform's answer and not this code's -- a runner with
+        // an empty font database returns something meaningless, and asserting
+        // on it is how three Windows legs went red before. Read it against the
+        // last run, not against zero.
+        std::printf("      card index/pip clearance: tightest %.2f px (rank %d at %.0f px card)\n",
+                    tightest, tightestRank, tightestWidth);
+    }
+
     // ---- cardArtKeyDecidesThePicture (GHUB-0048) ----
     //
     // The card art cache rounds a card's size to whole device pixels to build

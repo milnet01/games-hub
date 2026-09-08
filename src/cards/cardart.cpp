@@ -69,6 +69,74 @@ std::vector<Pip> pipLayout(int rank)
     }
 }
 
+// Where the corner index goes and how big it is, in ONE place, because
+// paintFace draws it and CardArt::indexPipGap() answers questions about it --
+// and two copies of this arithmetic would drift the day either moved.
+struct IndexPlacement {
+    QRectF box;
+    QFont font;
+    double baseSize;  // before any solving; the suit glyph under it scales off this
+    double room;      // how wide the numeral is allowed to be
+    double inkRight;  // where the numeral's ink actually ends
+};
+
+IndexPlacement placeIndex(const Card& c, const QRectF& r, const QFont& base)
+{
+    const double pad = r.width() * 0.08;
+    IndexPlacement out;
+    out.baseSize = std::max(6.0, r.width() * 0.17);
+    // A narrow column: wide enough for "10", narrow enough to leave the middle
+    // of the card free for the pips.
+    out.box = QRectF(r.left() + pad, r.top() + pad * 0.4, r.width() * 0.24, r.height() * 0.20);
+    out.font = base;
+    out.font.setBold(true);
+    out.font.setPointSizeF(out.baseSize);
+
+    // TextDontClip, for the reason SudokuView::markFont() gives: drawText CLIPS
+    // to its rect, so a font is bounded by its LINE box rather than by its ink.
+    // That is what keeps the index whole below kFaceMinWidth, where this index
+    // IS the card -- and on a platform with an empty font database, where
+    // digits measure the full em box, it would otherwise lose half of itself.
+    //
+    // Not clipping means not being bounded either. The room below is NOT the
+    // column's full width, and that was the whole of GHUB-0188: the column ends
+    // at 0.32 of the card, which is exactly where the left pip column is
+    // CENTRED -- its glyph reaches back further still -- so an index filling
+    // its column met the pip whatever the font did. Fitting the box was never
+    // enough, because the box was the problem.
+    //
+    // Which pip pattern a card shows is how it is read here, so the pips do not
+    // move and the numeral gives way. Only the ten is ever two characters, and
+    // only where pips are drawn at all: below kFaceMinWidth there are none and
+    // the index IS the card, so it keeps the whole column and gives up nothing
+    // where it matters most.
+    //
+    // Deliberately no floor under the shrink. A floor would bind on a runner
+    // with an empty font database and put the overlap straight back, and it
+    // would cost the invariant indexPipGap() exists to hold.
+    const QString label = rankLabel(c.rank);
+    const bool pipsBelow = !isJoker(c) && r.width() >= CardArt::kFaceMinWidth && c.rank >= 2
+        && c.rank <= 10;
+    out.room = pipsBelow ? r.width() * 0.17 : out.box.width();
+    const double want = QFontMetricsF(out.font).horizontalAdvance(label);
+    if (want > out.room) {
+        // The proportional guess first, then step down until the ink measured
+        // AT THE SIZE IT WILL REALLY BE DRAWN fits -- the shape
+        // SudokuView::markFont() uses, and for the same reason. Point size to
+        // ink is not linear: hinting rounds an advance to whole pixels, so the
+        // guess alone still overran by up to two thirds of a pixel. Measured,
+        // by a check that asserted the invariant and went red on the guess.
+        double size = out.baseSize * out.room / want;
+        out.font.setPointSizeF(size);
+        while (size > 1.0 && QFontMetricsF(out.font).horizontalAdvance(label) > out.room) {
+            size -= 0.25;
+            out.font.setPointSizeF(size);
+        }
+    }
+    out.inkRight = out.box.left() + QFontMetricsF(out.font).horizontalAdvance(label);
+    return out;
+}
+
 // Draws a suit glyph centred on `centre`. Real decks invert the lower pips,
 // but an upside-down heart reads as a spade at this size, so these stay
 // upright — clearer, and still reads as a proper card.
@@ -193,8 +261,8 @@ static void drawFace(QPainter& p, const QRectF& r, const Card& c)
 
     // Corner index, top-left upright and bottom-right inverted, as on a real
     // card — it is what makes a fanned hand readable.
-    const double pad = r.width() * 0.08;
-    const double indexSize = std::max(6.0, r.width() * 0.17);
+    const IndexPlacement index = placeIndex(c, r, p.font());
+    const double indexSize = index.baseSize;
 
     for (int i = 0; i < 2; ++i) {
         const bool inverted = (i == 1);
@@ -204,22 +272,11 @@ static void drawFace(QPainter& p, const QRectF& r, const Card& c)
             p.rotate(180);
             p.translate(-r.center());
         }
-        QFont f = p.font();
-        f.setBold(true);
-        f.setPointSizeF(indexSize);
+        const QRectF box = index.box;
+        QFont f = index.font;
         p.setFont(f);
-        // A narrow column: wide enough for "10", narrow enough to leave the
-        // middle of the card free for the pips.
-        const QRectF box(r.left() + pad, r.top() + pad * 0.4, r.width() * 0.24, r.height() * 0.20);
-        // TextDontClip, for the reason SudokuView::markFont() gives: drawText
-        // CLIPS to its rect, so a font is bounded by its LINE box rather than
-        // by its ink. Two digits at this size want roughly 0.25 to 0.27 of the
-        // card's width against the 0.24 here, so "10" was already tight -- and
-        // on an offscreen platform with no fonts, where digits measure the full
-        // em box, it wants about 0.45 and lost half of itself. Below
-        // kFaceMinWidth this index IS the card, which is where it matters most.
         // With AlignLeft|AlignTop the origin does not move, so nothing else
-        // about the layout changes.
+        // about the layout changes. placeIndex() has already solved the size.
         p.drawText(box, Qt::AlignLeft | Qt::AlignTop | Qt::TextDontClip, rank);
 
         f.setBold(false);
@@ -260,6 +317,38 @@ static void drawFace(QPainter& p, const QRectF& r, const Card& c)
     const double span = r.height() * 0.71;
     for (const Pip& pip : pipLayout(c.rank))
         drawPip(p, QPointF(r.left() + r.width() * pip.x, top + span * pip.y), pipSize, suit);
+}
+
+double indexOverflow(const Card& c, const QRectF& r, const QFont& base)
+{
+    const IndexPlacement index = placeIndex(c, r, base);
+    return index.inkRight - (index.box.left() + index.room);
+}
+
+double indexPipGap(const Card& c, const QRectF& r, const QFont& base)
+{
+    // Nothing to clear: a joker, a court card, an ace, or a card too narrow for
+    // pips at all. The card's width is "as much room as there could be".
+    if (isJoker(c) || r.width() < kFaceMinWidth || c.rank < 2 || c.rank > 10)
+        return r.width();
+
+    const IndexPlacement index = placeIndex(c, r, base);
+
+    // Only the TOP row can reach the index, and which column it sits in depends
+    // on the rank -- a two and a three put theirs at the centre, where there is
+    // plenty of room; everything from four up has one at the left column.
+    const double pipSize = r.width() * 0.125;
+    QFont pf = base;
+    pf.setPointSizeF(pipSize);
+    const double glyph = QFontMetricsF(pf).horizontalAdvance(suitSymbol(c.suit));
+
+    double nearest = r.right();
+    for (const Pip& pip : pipLayout(c.rank)) {
+        if (pip.y > 0.0)
+            continue;
+        nearest = std::min(nearest, r.left() + r.width() * pip.x - glyph * 0.5);
+    }
+    return nearest - index.inkRight;
 }
 
 // The picture on a back, drawn from scratch. Everything below this is about

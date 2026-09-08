@@ -17,6 +17,16 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   reaches for a window no longer compiles at all, where before only one of
   the three builds would have objected.
 
+### Fixed
+
+- **On every ten, the "10" no longer prints on top of one of the pips** (GHUB-0188)
+  The corner "10" ran into the card's own top-left suit symbol, in every
+  game that shows cards, so the pattern you read a ten by had a numeral
+  sitting in the middle of it. The pips have not moved -- the numeral is
+  what gives way, exactly as on a real deck, and only on cards big enough
+  to show pips at all. On a small card, where the corner index is all
+  there is, it stays full size.
+
 ## [1.0.0] - 2026-09-08
 
 ### Added
