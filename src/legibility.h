@@ -6,7 +6,7 @@
 // the whole collection.
 //
 // It is a singleton for the same reason Sound is — every game needs to reach it
-// and none owns it — but unlike Sound it is persisted and it broadcasts. Games
+// and none owns it — but unlike Sound it broadcasts. Games
 // are built lazily and live for the session, so a game constructed before the
 // switch moved would never learn about it without the signal; a game
 // constructed afterwards reads enabled() itself and needs no notification.

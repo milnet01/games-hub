@@ -33,7 +33,7 @@ public:
     // that cannot be shrunk below 1200 across keeps the promise on first run
     // and breaks it the moment the player tries to make room, which is exactly
     // when the promise matters. Canasta's legibility pass sits closest to it
-    // (900x656 with large play on), so this is a live constraint rather than a
+    // (908x656 with large play on), so this is a live constraint rather than a
     // comfortable one — raising a minimum past it is the thing to notice.
     static constexpr QSize kFitsBesideYourWork { 960, 1000 };
 

@@ -95,8 +95,8 @@ public:
     const Flipper& rightFlipper() const { return m_right; }
     QPointF flipperTip(const Flipper& f) const;
 
-    // The launch speed a full-strength plunger delivers, exposed so the view
-    // can show a meaningful charge meter.
+    // The slowest launch that still clears the dome. Every launch is this plus
+    // the plunger's charge, so even a limp stroke reaches the play field.
     static double minimumLaunchSpeed();
 
 private:

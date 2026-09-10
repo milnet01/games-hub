@@ -3869,7 +3869,7 @@ inventing one.
   Source: review-contract GHUB-0180 loop 1, 2026-09-10.
   Lanes: build.
 
-- 📋 [GHUB-0192] **Four source comments disagree with the code or the design they sit beside.**
+- ✅ [GHUB-0192] **Four source comments disagree with the code or the design they sit beside.**
   Found by the cold read of docs/design.md; code-side, so out of that
   gate's reach.
   - src/pinball/pinballtable.h: minimumLaunchSpeed() is described as the
@@ -3894,6 +3894,15 @@ inventing one.
   Scores::reversiBest(), ...), so a tile rename leaves scores in place.
   docs/design.md § The hub correctly names only the saved position and
   the window size.
+  Resolved (2026-09-10), all six, comments only. pinballtable.h:
+  minimumLaunchSpeed() is the slowest launch that clears the dome and
+  every launch adds the plunger's charge to it; no view reads it, so the
+  charge-meter reason went too. hubwindow.h: 908x656. canastaengine.h:
+  the rules-in-force check flips a hand-written list, so a new field
+  needs a line there as well. legibility.h: Sound persists too, so only
+  'unlike Sound it broadcasts' stays. hubwindow.cpp: a rename orphans
+  the saved position and window size, while score keys are fixed strings
+  and survive; the wrong GHUB-0158 citation is gone.
   **Layman:** A few notes inside the code describe things slightly wrongly, which could mislead whoever changes that code next.
   Kind: doc-fix.
   Source: review-contract GHUB-0180 loop 1, 2026-09-10.

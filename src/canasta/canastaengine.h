@@ -226,9 +226,9 @@ bool sortsBefore(const Card& a, const Card& b);
 // In the core, and a free function, for the same reason as handScoreFor: it
 // can be checked on a hand-built Rules rather than one a dialog produced. The
 // check that matters is coverage -- `canastaRulesInForceNamesEveryRule` flips
-// each field of Rules on its own and asserts the list grows, so a house rule
-// added without a sentence here reddens the suite instead of going quietly
-// missing from the panel.
+// each field it lists on its own and asserts the list grows, so a listed field
+// with no sentence here reddens the suite. That list is written by hand: a new
+// field needs a line there too, or it goes quietly missing from the panel.
 QStringList rulesInForce(const Rules& rules);
 
 class Engine

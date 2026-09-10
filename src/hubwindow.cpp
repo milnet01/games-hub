@@ -653,12 +653,12 @@ void HubWindow::buildChrome()
 
 namespace {
 
-// Both keys are built from the name the tile shows, and Scores does the same
-// with its own. So RENAMING A GAME ORPHANS its saved position, its remembered
-// window size and its records, silently and with no migration -- the player
-// just finds a game that has forgotten them. Nothing renames one today, and a
-// stable id per game is the fix if anything ever needs to; changing a
-// registered name meanwhile is a decision, not a tidy-up. GHUB-0158.
+// Both keys are built from the name the tile shows, so RENAMING A GAME ORPHANS
+// its saved position and its remembered window size, silently and with no
+// migration -- the player just finds a game that has forgotten them. Best
+// scores survive: their keys are fixed strings each game chooses. Nothing
+// renames one today, and a stable id per game is the fix if anything ever
+// needs to; changing a registered name meanwhile is a decision, not a tidy-up.
 QString geometryKey(const QString& page)
 {
     return QStringLiteral("window/geometry/") + (page.isEmpty() ? QStringLiteral("menu") : page);
