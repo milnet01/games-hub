@@ -29,6 +29,14 @@ constexpr int kThinkDelayMs = 340;
 // at static-initialisation time, and QStringLiteral's data is static, so the
 // copy this returns costs nothing.
 QString winsKey() { return QStringLiteral("draughts/wins"); }
+
+// Version 2 appends the draw rule's count (GHUB-0169). Version 1 predates it
+// and still loads, with the count at nought -- Canasta's route, a migration
+// rather than a break (docs/standards/versioning-overrides.md § 1).
+constexpr quint32 kBlobVersion = 2;
+// The draw should not arrive as a surprise, so the board counts down the last
+// ten moves each.
+constexpr int kDrawWarnPlies = kDrawPlies - 20;
 }
 
 DraughtsView::DraughtsView(QWidget* parent)
@@ -153,6 +161,12 @@ void DraughtsView::advance()
         announceResult(other(m_toMove));
         return;
     }
+    if (m_board.drawn()) {
+        m_finished = true;
+        refresh();
+        announceResult(std::nullopt);
+        return;
+    }
 
     refresh();
 
@@ -229,10 +243,12 @@ void DraughtsView::engineMoveReady(const SearchResult& result)
     advance();
 }
 
-void DraughtsView::announceResult(Side winner)
+void DraughtsView::announceResult(std::optional<Side> winner)
 {
     const bool playerWon = winner == m_human;
-    Sound::instance().play(playerWon ? Sound::kWin : Sound::kLose);
+    // A draw is neither, so it gets no jingle rather than the losing one.
+    if (winner)
+        Sound::instance().play(playerWon ? Sound::kWin : Sound::kLose);
 
     int wins = Scores::instance().best(winsKey());
     if (playerWon) {
@@ -242,11 +258,19 @@ void DraughtsView::announceResult(Side winner)
 
     QMessageBox box(this);
     box.setWindowTitle(QStringLiteral("Game over"));
-    box.setText(playerWon ? QStringLiteral("You win!") : QStringLiteral("The computer wins."));
-    box.setInformativeText(QStringLiteral("Pieces left — you %1, computer %2.\nGames won: %3.")
-                               .arg(m_board.count(m_human))
-                               .arg(m_board.count(other(m_human)))
-                               .arg(wins));
+    if (winner) {
+        box.setText(playerWon ? QStringLiteral("You win!") : QStringLiteral("The computer wins."));
+        box.setInformativeText(QStringLiteral("Pieces left — you %1, computer %2.\nGames won: %3.")
+                                   .arg(m_board.count(m_human))
+                                   .arg(m_board.count(other(m_human)))
+                                   .arg(wins));
+    } else {
+        box.setText(QStringLiteral("Drawn."));
+        box.setInformativeText(
+            QStringLiteral("%1 moves each with no capture and no man moved.\nGames won: %2.")
+                .arg(kDrawPlies / 2)
+                .arg(wins));
+    }
     QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
     box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
     box.exec();
@@ -263,13 +287,18 @@ void DraughtsView::refresh(const QString& message)
     if (!message.isEmpty())
         state = message;
     else if (m_finished)
-        state = QStringLiteral("Game over.");
+        state = m_board.gameOver(m_toMove) ? QStringLiteral("Game over.") : QStringLiteral("Drawn.");
     else if (humanTurn)
         state = m_board.legalMoves(m_human).front().isCapture()
             ? QStringLiteral("Your turn — you must take.")
             : QStringLiteral("Your turn.");
     else
         state = QStringLiteral("Computer thinking…");
+
+    if (!m_finished && m_board.pliesWithoutProgress() >= kDrawWarnPlies)
+        state += QStringLiteral("  No capture or man moved in %1 of %2 moves.")
+                     .arg(m_board.pliesWithoutProgress() / 2)
+                     .arg(kDrawPlies / 2);
 
     // State and the piece counts, but not the win tally: a running total of
     // past games is worth a glance in the status bar and not a line of board.
@@ -586,7 +615,7 @@ QByteArray DraughtsView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint8(m_toMove) << qint8(m_human) << qint8(m_level);
+    out << kBlobVersion << qint8(m_toMove) << qint8(m_human) << qint8(m_level);
 
     const auto writeSquare = [&out](const Square& s) { out << qint8(s.row) << qint8(s.col); };
     out << qint8(m_lastMove ? 1 : 0);
@@ -602,6 +631,8 @@ QByteArray DraughtsView::saveState() const
 
     for (Piece p : m_board.cells())
         out << qint8(p);
+    // Version 2's tail.
+    out << qint8(m_board.pliesWithoutProgress());
     return blob;
 }
 
@@ -614,7 +645,7 @@ bool DraughtsView::restoreState(const QByteArray& blob)
     qint8 human = 0;
     qint8 level = 0;
     in >> version >> toMove >> human >> level;
-    if (version != 1 || in.status() != QDataStream::Ok)
+    if (version < 1 || version > kBlobVersion || in.status() != QDataStream::Ok)
         return false;
     if (toMove < qint8(Side::Red) || toMove > qint8(Side::White))
         return false;
@@ -663,13 +694,17 @@ bool DraughtsView::restoreState(const QByteArray& blob)
         in >> value;
         p = Piece(value);
     }
+    // Version 1 predates the draw rule, so its count starts at nought.
+    qint8 sinceProgress = 0;
+    if (version >= 2)
+        in >> sinceProgress;
     if (in.status() != QDataStream::Ok)
         return false;
 
     // Read into a board of its own, so a blob that turns out to be nonsense
     // leaves the game already on screen alone.
     DraughtsBoard board;
-    if (!board.restore(cells))
+    if (!board.restore(cells, sinceProgress))
         return false;
     // A side with no move has lost, which is a finished game rather than a
     // saved one.

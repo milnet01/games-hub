@@ -21,6 +21,12 @@ enum class Piece : std::int8_t {
 constexpr int kBoardSize = 8;
 constexpr int kBoardCells = kBoardSize * kBoardSize;
 
+// The draw: forty moves by EACH side with no capture and no man moved, so
+// eighty plies. Owner's call, 2026-09-02 (GHUB-0169). Threefold repetition was
+// offered and declined, which is why the rule is one counter rather than a
+// position history.
+constexpr int kDrawPlies = 80;
+
 constexpr Side other(Side s) { return s == Side::Red ? Side::White : Side::Red; }
 
 bool belongsTo(Piece p, Side s);
@@ -66,14 +72,22 @@ public:
     void apply(const DraughtsMove& move);
 
     int count(Side side) const;
+    // The side to move has no move, and has lost. A draw is drawn(), not this.
     bool gameOver(Side toMove) const { return legalMoves(toMove).empty(); }
+
+    // Plies since the last capture or man move. Only kings stepping without
+    // taking advance it, and it is the draw rule's whole state.
+    int pliesWithoutProgress() const { return m_sinceProgress; }
+    bool drawn() const { return m_sinceProgress >= kDrawPlies; }
 
     // The whole board, for saving a game in progress.
     const std::vector<Piece>& cells() const { return m_cells; }
-    // Takes a board back. Refuses one that is the wrong size, holds something
-    // that is not a piece, stands a piece on a light square, or leaves a side
-    // with nothing at all. Leaves this board untouched when it refuses.
-    bool restore(const std::vector<Piece>& cells);
+    // Takes a board back, with how long it has gone without progress. Refuses
+    // one that is the wrong size, holds something that is not a piece, stands a
+    // piece on a light square, leaves a side with nothing at all, or carries a
+    // count the game would already have been drawn at. Leaves this board
+    // untouched when it refuses.
+    bool restore(const std::vector<Piece>& cells, int pliesWithoutProgress = 0);
 
 private:
     void set(int row, int col, Piece p) { m_cells[row * kBoardSize + col] = p; }
@@ -87,6 +101,7 @@ private:
                       std::vector<DraughtsMove>& out) const;
 
     std::vector<Piece> m_cells;
+    int m_sinceProgress = 0;
 };
 
 // Search depth by difficulty, mirroring Reversi's three levels.

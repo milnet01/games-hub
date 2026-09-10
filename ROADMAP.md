@@ -3764,6 +3764,16 @@ inventing one.
   Not urgent, and not a defect in what the document SAYS -- every finding
   this gate raised is fixed. It is a statement about how much of the document
   any single review can actually cover.
+  Owner's decision (2026-09-10): ONE design file. CLAUDE.md keeps
+  building, testing, the local gate, committing, releasing and the core
+  rules. The per-game notes and the design reasoning move to a new
+  docs/design.md, started from ~/.claude/skeleton/files/docs/design.md
+  with a section per game, which is where documentation.md section 5.2
+  puts design decisions. One file per game was offered and declined.
+  Four source comments cite CLAUDE.md trap headings by name and must
+  follow the move: src/cards/cardcodec.h, src/hearts/heartsengine.h,
+  src/hearts/heartsengine.cpp and src/pyramid/pyramidview.cpp. GHUB-0079's
+  Releasing edit lands after the split, on the smaller file.
   **Layman:** The guide future sessions read has grown past the size anyone can check in one pass.
   Kind: doc.
   Source: review-contract cap verdict, 2026-09-04.
@@ -7250,7 +7260,7 @@ open.
   Kind: test.
   Source: verify-delivery 0.5.0, 2026-08-31.
 
-- 📋 [GHUB-0169] **Draughts has no draw, so two lone kings shuffle for ever.**
+- ✅ [GHUB-0169] **Draughts has no draw, so two lone kings shuffle for ever.**
   Split out of GHUB-0131, whose capture-chain half shipped. Three
   things have to move together, which is what makes this its own item
   rather than a line in a sweep.
@@ -7277,6 +7287,17 @@ open.
   repetition was offered alongside it and declined, so the counter is a
   single integer rather than a position history, which is also the
   cheaper thing to carry through the save format.
+  Resolved 2026-09-10. The count lives in DraughtsBoard, reset by any
+  capture or any man moving (a crowning step included), and the game
+  is drawn at eighty plies. The search scores a drawn node as level,
+  so the computer no longer steps its king into a draw it is winning.
+  DraughtsView's save is version 2 with the count appended after the
+  board; version 1 still loads with the count at nought, Canasta's
+  migration route, so no saved game is lost. announceResult takes an
+  optional winner: a draw says so, plays no jingle and leaves the
+  wins tally alone. The status line counts down the last ten moves
+  each. Each of eight parts was broken in turn and its own check went
+  red; restored, ctest 9/9.
   **Layman:** A draughts game that neither side can win never ends; it just goes on.
   Kind: feature.
   Source: review-code sweep 2026-08-31, split from GHUB-0131.

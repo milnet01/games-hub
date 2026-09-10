@@ -10,6 +10,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Draughts can end in a draw: forty moves each with no capture and no man moved.** (GHUB-0169)
+  Two lone kings used to shuffle for ever. The board now counts down the
+  last ten moves each before the draw, the computer steers away from a
+  draw in a game it is winning, and a game saved by an earlier build
+  still loads.
+
 - **The window title says which version you are running** (GHUB-0189)
   The title bar reads "Games 1.0.0" on the tile grid, and
   "Pyramid — Games 1.0.0" with a game open. You no longer need a terminal

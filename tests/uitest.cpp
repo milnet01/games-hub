@@ -3265,6 +3265,46 @@ int main(int argc, char* argv[])
                 check(now[std::size_t(4 * 8 + 3)] == 0 && now[std::size_t(2 * 8 + 3)] == 0,
                       "draughts: having taken the two the route you named was for");
             }
+
+            {
+                // GHUB-0169. Version 2 carries the draw rule's count at the
+                // END, after the board, so a version 1 save -- the two-route
+                // blob above, and tests/saves/Draughts.bin -- still loads with
+                // the count at nought. This is the other half: a version 2
+                // count survives the round trip and shows on the board, and a
+                // count the game would already have been drawn at is refused.
+                const auto blobWith = [](int sinceProgress) {
+                    QByteArray blob;
+                    QDataStream out(&blob, QIODevice::WriteOnly);
+                    out.setVersion(QDataStream::Qt_6_0);
+                    out << quint32(2) << qint8(0) << qint8(0) << qint8(0) << qint8(0);
+                    std::array<qint8, 64> board {};
+                    board[std::size_t(7 * 8 + 0)] = 2;   // RedKing
+                    board[std::size_t(5 * 8 + 6)] = 1;   // RedMan
+                    board[std::size_t(0 * 8 + 7)] = 4;   // WhiteKing
+                    for (qint8 c : board)
+                        out << c;
+                    out << qint8(sinceProgress);
+                    return blob;
+                };
+
+                DraughtsView quiet;
+                quiet.resize(560, 560);
+                QString said;
+                QObject::connect(&quiet, &GameView::statusChanged,
+                                 [&said](const QString& t) { said = t; });
+                check(quiet.restoreState(blobWith(10)) && !said.contains(QStringLiteral("of 40")),
+                      "draughts: far from the draw, the board does not count it down");
+                check(quiet.restoreState(blobWith(70)), "draughts: a version 2 save loads");
+                check(said.contains(QStringLiteral("35 of 40")),
+                      "draughts: close to the draw, the board says how close");
+                const QByteArray back = quiet.saveState();
+                check(!back.isEmpty() && qint8(back.back()) == 70,
+                      "draughts: and the save writes the count back out");
+                check(!quiet.restoreState(blobWith(80)),
+                      "draughts: a save whose count has already reached the draw is refused");
+                check(!quiet.restoreState(blobWith(-1)), "draughts: and so is a negative count");
+            }
         }
 
         {

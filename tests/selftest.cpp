@@ -613,6 +613,107 @@ void draughtsTwoChainsCanEndOnOneSquare()
     }
 }
 
+// The draw, GHUB-0169: forty moves by each side with no capture and no man
+// moved. Two kings stepping out and back are the shortest way there, and the
+// red man is on the board to be moved when a check wants progress.
+void draughtsFortyQuietMovesDraw()
+{
+    const auto put = [](std::vector<Piece>& cells, int row, int col, Piece p) {
+        cells[std::size_t(row * kBoardSize + col)] = p;
+    };
+    std::vector<Piece> cells(kBoardCells, Piece::Empty);
+    put(cells, 7, 0, Piece::RedKing);
+    put(cells, 5, 6, Piece::RedMan);
+    put(cells, 0, 7, Piece::WhiteKing);
+
+    // Plays the legal move from `from` to `to`, so every ply below is one the
+    // rules would actually offer rather than one applied blind.
+    const auto play = [](DraughtsBoard& b, Side side, Square from, Square to) {
+        for (const DraughtsMove& m : b.legalMoves(side)) {
+            if (m.from == from && m.destination() == to) {
+                b.apply(m);
+                return true;
+            }
+        }
+        return false;
+    };
+    // Red out, White out, Red back, White back: four plies, round and round.
+    const auto shuffle = [&play](DraughtsBoard& b, int ply) {
+        switch (ply % 4) {
+        case 0:  return play(b, Side::Red, { 7, 0 }, { 6, 1 });
+        case 1:  return play(b, Side::White, { 0, 7 }, { 1, 6 });
+        case 2:  return play(b, Side::Red, { 6, 1 }, { 7, 0 });
+        default: return play(b, Side::White, { 1, 6 }, { 0, 7 });
+        }
+    };
+
+    DraughtsBoard b;
+    check(b.restore(cells), "draughts: the two-king position loads");
+    check(b.pliesWithoutProgress() == 0, "draughts: a board loaded with no count starts at nought");
+    bool legal = true;
+    for (int ply = 0; ply < kDrawPlies - 1; ++ply)
+        if (!shuffle(b, ply))
+            legal = false;
+    check(legal, "draughts: every king step in the shuffle is a legal move");
+    check(!b.drawn(), "draughts: one ply short of forty moves each is not yet a draw");
+    shuffle(b, kDrawPlies - 1);
+    check(b.drawn(), "draughts: forty moves each with no capture and no man moved is a draw");
+
+    DraughtsBoard man;
+    man.restore(cells);
+    for (int ply = 0; ply < kDrawPlies - 2; ++ply)
+        shuffle(man, ply);
+    check(play(man, Side::Red, { 5, 6 }, { 4, 5 }) && man.pliesWithoutProgress() == 0,
+          "draughts: a man moving starts the count again, even two plies from the draw");
+
+    // A KING capturing, so this is the capture half of the rule and not the
+    // man half again.
+    std::vector<Piece> taking(kBoardCells, Piece::Empty);
+    put(taking, 4, 3, Piece::RedKing);
+    put(taking, 3, 4, Piece::WhiteMan);
+    put(taking, 0, 1, Piece::WhiteKing);
+    DraughtsBoard capture;
+    check(capture.restore(taking, kDrawPlies - 1),
+          "draughts: a board loads with its count one ply short of the draw");
+    const std::vector<DraughtsMove> takes = capture.legalMoves(Side::Red);
+    check(takes.size() == 1 && takes.front().isCapture(), "draughts: the king has one capture");
+    if (!takes.empty())
+        capture.apply(takes.front());
+    check(capture.pliesWithoutProgress() == 0 && !capture.drawn(),
+          "draughts: a king capturing starts the count again, even on the last ply");
+
+    DraughtsBoard bounds;
+    check(!bounds.restore(cells, kDrawPlies),
+          "draughts: a count the game would already have been drawn at is refused");
+    check(!bounds.restore(cells, -1), "draughts: and so is a negative count");
+}
+
+// The search has to know the game can end this way, or a side that is ahead
+// steps its king into a draw it was winning. Red is a man up. On the last quiet
+// ply every king step draws and the man's one step keeps the game alive.
+//
+// Easy is the level with teeth. Without the rule its two-ply search prefers a
+// king step, because the man's step gives up an edge square worth more than
+// the advancement it gains. Medium and Hard push the man anyway -- they see it
+// march on towards a crown -- so they pass with or without the rule.
+void draughtsEngineSeesTheDraw()
+{
+    std::vector<Piece> cells(kBoardCells, Piece::Empty);
+    cells[std::size_t(6 * kBoardSize + 3)] = Piece::RedKing;
+    cells[std::size_t(6 * kBoardSize + 7)] = Piece::RedMan;
+    cells[std::size_t(0 * kBoardSize + 1)] = Piece::WhiteKing;
+    DraughtsBoard b;
+    check(b.restore(cells, kDrawPlies - 1), "draughts: the last-quiet-ply position loads");
+
+    bool movesTheMan = true;
+    for (DraughtsLevel level : { DraughtsLevel::Easy, DraughtsLevel::Medium, DraughtsLevel::Hard }) {
+        DraughtsMove m;
+        if (!chooseDraughtsMove(b, Side::Red, level, m) || !(m.from == Square { 6, 7 }))
+            movesTheMan = false;
+    }
+    check(movesTheMan, "draughts: at every level the engine moves the man rather than draw");
+}
+
 void draughtsEngine()
 {
     // The engine should beat random play convincingly.
@@ -5941,6 +6042,8 @@ int main()
     draughtsRules();
     draughtsCaptures();
     draughtsTwoChainsCanEndOnOneSquare();
+    draughtsFortyQuietMovesDraw();
+    draughtsEngineSeesTheDraw();
     draughtsEngine();
 
     section("Saved boards");

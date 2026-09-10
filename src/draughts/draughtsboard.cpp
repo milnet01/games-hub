@@ -36,6 +36,7 @@ bool isKing(Piece p)
 
 void DraughtsBoard::reset()
 {
+    m_sinceProgress = 0;
     m_cells.assign(kBoardCells, Piece::Empty);
     // Three rows each, on the dark squares only.
     for (int row = 0; row < 3; ++row)
@@ -48,9 +49,12 @@ void DraughtsBoard::reset()
                 set(row, col, Piece::RedMan);
 }
 
-bool DraughtsBoard::restore(const std::vector<Piece>& cells)
+bool DraughtsBoard::restore(const std::vector<Piece>& cells, int pliesWithoutProgress)
 {
     if (cells.size() != std::size_t(kBoardCells))
+        return false;
+    // A count at the limit is a drawn game, and a finished game is not saved.
+    if (pliesWithoutProgress < 0 || pliesWithoutProgress >= kDrawPlies)
         return false;
 
     int reds = 0;
@@ -75,6 +79,7 @@ bool DraughtsBoard::restore(const std::vector<Piece>& cells)
         return false;
 
     m_cells = cells;
+    m_sinceProgress = pliesWithoutProgress;
     return true;
 }
 
@@ -187,6 +192,9 @@ std::vector<DraughtsMove> DraughtsBoard::legalMoves(Side side) const
 void DraughtsBoard::apply(const DraughtsMove& move)
 {
     Piece p = at(move.from.row, move.from.col);
+    // Progress is a capture or a MAN moving, crowning included. Read before the
+    // piece is crowned below, or a man's last step would count as a king's.
+    m_sinceProgress = (move.isCapture() || !isKing(p)) ? 0 : m_sinceProgress + 1;
     set(move.from.row, move.from.col, Piece::Empty);
 
     for (const Square& s : move.captured)
@@ -251,6 +259,10 @@ int negamax(const DraughtsBoard& board, Side side, int depth, int alpha, int bet
         // No move at all is a loss for the side to play.
         return -100000 - depth;
     }
+    // After the loss, as DraughtsView::advance() does: a move that leaves the
+    // opponent nothing wins even when it is the eightieth quiet ply.
+    if (board.drawn())
+        return 0;
     if (depth <= 0) {
         const int score = evaluate(board);
         return side == Side::Red ? score : -score;

@@ -44,7 +44,8 @@ private:
     void advance();
     void playEngineMove();
     void refresh(const QString& message = {});
-    void announceResult(Side winner);
+    // No winner is a draw.
+    void announceResult(std::optional<Side> winner);
     // The one place a human move is applied. Two click paths reach it now --
     // an unambiguous destination, and a route chosen from several.
     void playMove(const DraughtsMove& m);

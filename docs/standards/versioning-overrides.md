@@ -24,10 +24,10 @@ anything they miss.
 `saveState()` writes is breaking — whether or not the stamped version moves**,
 and leaving the stamp behind makes it worse rather than smaller.
 
-Each saving game stamps a `quint32`, and **eleven of the twelve refuse a
-mismatch outright** — `KlondikeView::restoreState` returns `false` unless it
-reads `1`. **Canasta is the exception, and it is the game where that matters
-most**: it accepts any version from 1 up to its derived `kBlobVersion` and
+Each saving game stamps a `quint32`, and **every one but Canasta and Draughts
+refuses a mismatch outright** — `KlondikeView::restoreState` returns `false`
+unless it reads `1`. **Those two accept any version from 1 up to their own
+`kBlobVersion`, and Canasta is the game where that matters most**: each
 defaults the fields an older blob predates, so appending a tail there is a
 MIGRATION rather than a break. Prefer that route to taking one — reading this
 paragraph as universal is how a Canasta save change gets cut as a MAJOR for a
