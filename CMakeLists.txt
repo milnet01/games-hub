@@ -130,30 +130,21 @@ set(FUNDING_FILE "${CMAKE_CURRENT_SOURCE_DIR}/.github/FUNDING.yml")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FUNDING_FILE}")
 file(STRINGS "${FUNDING_FILE}" funding_lines)
 set(funding_entries "")
+include(cmake/funding.cmake)
 foreach(funding_line IN LISTS funding_lines)
     string(STRIP "${funding_line}" funding_line)
     if(funding_line STREQUAL "" OR funding_line MATCHES "^#")
         continue()
     endif()
-    # The handle-to-URL mapping is GitHub's, not this project's: FUNDING.yml
-    # stores account names for the platforms it knows and a full URL only for
-    # `custom`. That mapping has to live somewhere, and here is the one place
-    # it is not a copy of a link.
-    if(funding_line MATCHES "^github:[ \t]*\\[?([A-Za-z0-9._-]+)\\]?$")
-        list(APPEND funding_entries
-             "    { \"GitHub Sponsors\", \"https://github.com/sponsors/${CMAKE_MATCH_1}\" },")
-    elseif(funding_line MATCHES "^patreon:[ \t]*\\[?([A-Za-z0-9._-]+)\\]?$")
-        list(APPEND funding_entries
-             "    { \"Patreon\", \"https://www.patreon.com/${CMAKE_MATCH_1}\" },")
-    elseif(funding_line MATCHES "^custom:[ \t]*\\[?\"?(https://[^\"]+)\"?\\]?$")
-        list(APPEND funding_entries
-             "    { \"Tip page\", \"${CMAKE_MATCH_1}\" },")
-    else()
+    gameshub_funding_entry("${funding_line}" funding_entry)
+    if(funding_entry STREQUAL "")
         message(FATAL_ERROR
                 "CMakeLists.txt cannot turn this line of .github/FUNDING.yml into a "
                 "donate entry, so the app would quietly offer fewer links than the "
-                "repository declares: \"${funding_line}\". Add a rule for it here.")
+                "repository declares: \"${funding_line}\". Add a rule for it in "
+                "cmake/funding.cmake.")
     endif()
+    list(APPEND funding_entries "${funding_entry}")
 endforeach()
 if(funding_entries STREQUAL "")
     message(FATAL_ERROR ".github/FUNDING.yml declares no funding links this build can use.")
@@ -292,6 +283,13 @@ target_link_libraries(gameshub_uitest PRIVATE gameshub_core gameshub_views
 enable_testing()
 add_test(NAME selftest COMMAND gameshub_selftest)
 add_test(NAME uitest COMMAND gameshub_uitest)
+
+# Locks gameshub_funding_entry()'s custom: parsing (GHUB-0191) against the
+# configure step itself, by including the same rules file CMakeLists.txt
+# includes above rather than a copy of them. Needs neither Qt nor a display,
+# so it runs unconditionally. Contract: tests/funding-test.md.
+add_test(NAME funding
+         COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/funding-test.cmake)
 set_tests_properties(uitest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # --shot is how a layout question gets answered by looking rather than by

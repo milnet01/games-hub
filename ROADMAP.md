@@ -3847,7 +3847,7 @@ inventing one.
   Kind: doc.
   Source: owner decision 2026-09-04, against docs/standards/versioning-overrides.md section 2.
 
-- 📋 [GHUB-0191] **An unquoted two-link custom: line in FUNDING.yml builds into one broken donate link.**
+- ✅ [GHUB-0191] **An unquoted two-link custom: line in FUNDING.yml builds into one broken donate link.**
   CMakeLists.txt reads each custom: line with
   ^custom:[ \t]*\[?"?(https://[^"]+)"?\]?$ . Run with cmake -P on
   2026-09-10: a quoted two-entry list is refused and stops the build, as
@@ -3864,6 +3864,19 @@ inventing one.
   bracket. Today's FUNDING.yml uses the quoted form, so nothing ships
   broken yet. The regex fix should refuse ']' as well as ',' inside the
   capture.
+  Resolved (2026-09-10). The per-line FUNDING.yml rules moved into
+  cmake/funding.cmake as gameshub_funding_entry(), a
+  behaviour-preserving move proved by a byte-identical generated
+  funding.h, so a test could call the same rules the build does. The
+  custom: capture now refuses a comma and a closing bracket: a two-entry
+  list stops the build whether quoted or not, and a bracketed single URL
+  no longer keeps its ']'. Locked by the new `funding` ctest case,
+  tests/funding-test.cmake, with its contract in tests/funding-test.md.
+  Red run before the fix: INV-1 and INV-3c failed, printing expected
+  against actual. mutation_probe killed all five mutants (restoring the
+  old capture, letting a comma or a bracket back in, dropping the
+  optional closing bracket or opening quote). Not probed:
+  CMakeLists.txt's stop-on-empty, which lies outside the test's file.
   **Layman:** If a second custom donation link is ever added in one particular way, the build accepts it and shows people a single broken link.
   Kind: fix.
   Source: review-contract GHUB-0180 loop 1, 2026-09-10.

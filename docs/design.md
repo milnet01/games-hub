@@ -251,15 +251,16 @@ second copy that drifts the day one link changes, with nothing to catch it.
 key it has no rule for** — a dropped link otherwise looks exactly like a working
 build. A uitest check counts the keys back out of the YAML as a second guard.
 
-**A new platform's rule goes in that mapping loop, not under `custom:`.** The
-handle-to-URL stems (`https://github.com/sponsors/`, `https://www.patreon.com/`)
-do live in `CMakeLists.txt`, because FUNDING.yml stores account names rather
-than addresses for the platforms GitHub knows — so the ban above is on C++, and
-the loop is where a rule for `ko_fi:` belongs. Routing it through `custom:`
-does not work either: the loop reads one URL from a `custom:` line, though
-GitHub's `custom:` key takes a list. A quoted two-entry list stops the build;
-an unquoted one builds into a single broken URL, which is GHUB-0191. Widening
-that regex is the fix if a second custom link is ever wanted.
+**A new platform's rule goes in `gameshub_funding_entry()`, not under
+`custom:`.** The handle-to-URL stems (`https://github.com/sponsors/`,
+`https://www.patreon.com/`) do live in `cmake/funding.cmake`, because
+FUNDING.yml stores account names rather than addresses for the platforms GitHub
+knows — so the ban above is on C++, and that function is where a rule for
+`ko_fi:` belongs. Routing it through `custom:` does not work either: the rule
+reads one URL from a `custom:` line, though GitHub's `custom:` key takes a list,
+so a two-entry list stops the build whether it is quoted or not. The `funding`
+ctest case locks that. Widening the rule is the fix if a second custom link is
+ever wanted.
 
 ## What may depend on what
 
