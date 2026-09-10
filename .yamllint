@@ -1,0 +1,10 @@
+---
+# The one set of yamllint settings for this repository. ci.yml's lint job and
+# scripts/local-ci.sh both run a bare `yamllint`, which reads this file, so the
+# two cannot come to disagree (GHUB-0051).
+extends: default
+rules:
+  line-length:
+    max: 100
+  truthy:
+    check-keys: false

@@ -19,6 +19,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # GHUB-0051. These three linters ran only in scripts/local-ci.sh, from a
+  # pre-push hook each clone has to opt into and SKIP_LOCAL_CI=1 bypasses, so a
+  # pull request, or a push from any other machine, was never scanned at all --
+  # and these workflows publish binaries strangers download. The check is now a
+  # property of the repository. local-ci.sh runs this job's own steps, so the
+  # two cannot drift: the tools live here and their settings in .yamllint.
+  lint:
+    name: Workflow lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Every version pinned, and the actionlint download checked against the
+      # checksum its release publishes. pipx and shellcheck come with the
+      # runner image; actionlint runs shellcheck over each run: block it reads.
+      - name: Install the workflow linters
+        run: |
+          pipx install yamllint==1.38.0
+          pipx install zizmor==1.30.1
+          v=1.7.12
+          base=https://github.com/rhysd/actionlint/releases/download/v$v
+          curl -fsSLo actionlint.tar.gz "$base/actionlint_${v}_linux_amd64.tar.gz"
+          sum=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          echo "$sum  actionlint.tar.gz" | sha256sum --check --strict
+          tar -xzf actionlint.tar.gz actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+          actionlint --version
+          yamllint --version
+          zizmor --version
+
+      - name: Lint the workflows
+        run: |
+          actionlint
+          yamllint .github/workflows/
+          zizmor --no-progress .github/workflows/
+
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}

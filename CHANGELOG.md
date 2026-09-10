@@ -56,6 +56,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Security
 
+- **The checks on the workflows that publish downloads now run on every push, not just on one PC** (GHUB-0051)
+  actionlint, yamllint and zizmor used to run only from a pre-push
+  hook each clone had to switch on, and could skip. A lint job in
+  CI now runs all three, at pinned versions, on every push and pull
+  request; the local pipeline runs that same job.
+
 - **The Windows compiler's warnings are now fatal too, as the Linux one's already were** (GHUB-0185)
   GHUB-0053 turned warnings on for both compilers but made them stop the
   build on Linux only, because nobody had looked at what the Windows

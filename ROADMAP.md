@@ -1220,7 +1220,7 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0051] **The only check on the workflows that publish binaries runs on one machine, by choice.**
+- ✅ [GHUB-0051] **The only check on the workflows that publish binaries runs on one machine, by choice.**
   `actionlint`, `yamllint` and `zizmor` are real and they pass clean. They live in
   `scripts/local-ci.sh`, which runs from the `pre-push` hook — a hook that does
   nothing until someone runs `git config core.hooksPath .githooks` in their clone,
@@ -1244,6 +1244,15 @@ than any amount of hardening applied to an app with no sockets.
   publishes releases, and the two workflows already do the things it most wants to
   see — `permissions:` scoped per job, `persist-credentials: false` on every
   checkout, and `contents: write` confined to `publish`.
+  Resolved (2026-09-10): ci.yml has a `lint` job that installs actionlint
+  1.7.12 (the download checked against its release's own SHA-256),
+  yamllint 1.38.0 and zizmor 1.30.1, and runs all three over
+  .github/workflows/. The yamllint settings moved to .yamllint, so CI and
+  the local run read one copy. scripts/local-ci.sh learnt the job and runs
+  it first; its own hand-written linter loop is gone, and --lint now runs
+  that job alone. Checked locally with zizmor at the pinned 1.30.1: no
+  findings. The audit level the bullet mentions was not turned up; the
+  workflows already do what it asks for.
   **Layman:** The safety checks on the release process only run on your PC, and only if you set them up and do not skip them.
   Kind: security.
   Source: in-session-2026-08-20.

@@ -287,12 +287,12 @@ the Windows leg — the only place MSVC is exercised — does not run on branch
 work until a pull request opens. `release.yml`
 turns a tag into a Linux AppImage and a Windows zip on the releases page.
 
-**`ci.yml` runs more than the two test binaries.** Three job definitions —
-`build`, `sanitizers` and `tidy` — but `build` is a matrix, so GitHub reports
-**four** checks: the Linux build, the Windows build, `Saved-game fuzz
-(ASan/UBSan)` and `clang-tidy`. All on the same triggers.
-`scripts/local-ci.sh` skips the last two unless given `--with-sanitizers` and
-`--with-tidy`, and prints that it skipped them.
+**`ci.yml` runs more than the two test binaries.** Four job definitions —
+`lint`, `build`, `sanitizers` and `tidy` — but `build` is a matrix, so GitHub
+reports **five** checks: `Workflow lint`, the Linux build, the Windows build,
+`Saved-game fuzz (ASan/UBSan)` and `clang-tidy`. All on the same triggers.
+`scripts/local-ci.sh` runs the lint job first, skips the last two unless given
+`--with-sanitizers` and `--with-tidy`, and prints that it skipped them.
 
 **A plain local run is green against the Linux build alone** — it drives no
 MSVC, no sanitizer and no analyser. `scripts/wintest-ci.sh` is the only local
@@ -369,7 +369,10 @@ Every action is pinned to a commit SHA with the version in a trailing
 comment. That is not decoration: these workflows publish binaries that
 strangers download, and a moved tag on a third-party action would run
 arbitrary code against them. `actionlint`, `yamllint` and `zizmor` all pass
-clean and are the check before pushing a workflow edit.
+clean. CI's `lint` job runs all three on every push and pull request
+(GHUB-0051), and `local-ci.sh` runs that same job, so they are also the check
+before pushing a workflow edit. Their settings are `.yamllint`; the versions
+are pinned in the job.
 
 ## Core rules
 

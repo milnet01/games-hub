@@ -61,46 +61,18 @@ note() { printf '  \033[33m-\033[0m %s\n' "$1"; }
 [ -f "$WORKFLOW" ] || { echo "no $WORKFLOW — nothing to run"; exit 1; }
 
 # --------------------------------------------------------------------------
-# 1. The workflow files themselves
+# 1. The Linux legs' steps, taken from the workflow
 # --------------------------------------------------------------------------
-bold "Workflow linters"
-for tool in actionlint yamllint zizmor; do
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        # An absent linter prints nothing, which is indistinguishable from a
-        # clean run unless it is called out.
-        note "$tool is not installed — NOT CHECKED"
-        SKIPPED+=("$tool")
-        continue
-    fi
-    case $tool in
-        actionlint) out=$(actionlint 2>&1); rc=$? ;;
-        yamllint)   out=$(yamllint -d '{extends: default, rules: {line-length: {max: 100}, truthy: {check-keys: false}}}' .github/workflows/ 2>&1); rc=$? ;;
-        zizmor)     out=$(zizmor --no-progress .github/workflows/ 2>&1); rc=$? ;;
-        *)          out=""; rc=1 ;;
-    esac
-    if [ "$rc" -eq 0 ]; then
-        ok "$tool"
-    else
-        bad "$tool"
-        printf '%s\n' "$out" | grep -Ev '^ INFO' | sed 's/^/      /' | head -25
-    fi
-done
-
-if [ "$LINT_ONLY" -eq 1 ]; then
-    echo
-    bold "Lint-only run (documentation change) — build and tests not run."
-    exit $FAILED
-fi
-
-# --------------------------------------------------------------------------
-# 2. The Linux leg's steps, taken from the workflow
-# --------------------------------------------------------------------------
+# The workflow linters are the first of them: ci.yml's `lint` job (GHUB-0051).
+# They used to be a hand-written loop here, which was a second copy of the
+# check; now the job is the only copy, and --lint runs that job alone.
 # Steps this script handles without executing them verbatim. Anything not
 # named here stops the run.
 #   provision  — sets up a fresh GitHub runner; this machine is already set
 #                up, so the local equivalent is to check the tool is present
 #   action     — a `uses:` step; the real action cannot run outside Actions
 STEP_RULES=$(cat <<'RULES'
+Install the workflow linters|provision|actionlint --version && yamllint --version && zizmor --version
 Install Qt|action|qmake6 --version
 Install Linux build and runtime dependencies|provision|ninja --version
 Install clang-tidy|provision|clang-tidy --version
@@ -143,7 +115,7 @@ def resolve(body, job_name):
 # added a second one, and a job this script cannot see is the same silent
 # drift a step it cannot see would be -- worse, because it is a whole leg.
 # An unknown job stops the run exactly as an unknown step does.
-known = ('build', 'sanitizers', 'tidy')
+known = ('lint', 'build', 'sanitizers', 'tidy')
 for name in wf['jobs']:
     if name not in known:
         sys.stdout.write('\x1e'.join(['UNKNOWNJOB', name, '']) + '\0')
@@ -193,6 +165,10 @@ while IFS= read -r -d '' REC; do
     fi
     if [ "$KIND" = "UNKNOWNJOB" ]; then
         bad "UNKNOWN JOB '$NAME' in $WORKFLOW — teach $0 about it or it runs nowhere but CI"
+        continue
+    fi
+    # --lint, for a documentation-only push, runs the lint job and nothing else.
+    if [ "$LINT_ONLY" -eq 1 ] && [ "$JOB" != "lint" ]; then
         continue
     fi
 
@@ -255,8 +231,10 @@ while IFS= read -r -d '' REC; do
     # installs packages, so a rename would run `sudo apt-get` from inside a
     # pre-push hook. The body is what decides here, and a rename cannot change
     # a body.
+    # pipx, pip, curl and wget are in the list for the lint job's installer,
+    # which provisions without a system package manager.
     if [ "$RULE_KIND" != "provision" ] \
-       && printf '%s' "$BODY" | grep -qE '(^|[^[:alnum:]_])(sudo|apt-get|apt|dnf|zypper|pacman)([^[:alnum:]_]|$)'; then
+       && printf '%s' "$BODY" | grep -qE '(^|[^[:alnum:]_])(sudo|apt-get|apt|dnf|zypper|pacman|pipx|pip|curl|wget)([^[:alnum:]_]|$)'; then
         bad "step '$NAME' installs packages and carries no 'provision' rule — the step was probably renamed in $WORKFLOW; update STEP_RULES in $0"
         continue
     fi
@@ -286,11 +264,17 @@ while IFS= read -r -d '' REC; do
 done < "$STEPS_FILE"
 
 # --------------------------------------------------------------------------
-# 3. Say what was not covered — silence would read as coverage
+# 2. Say what was not covered — silence would read as coverage
 # --------------------------------------------------------------------------
 # A step list that came back empty must never read as a pass.
 if [ "$STEPS_RUN" -eq 0 ]; then
     bad "no steps were read from $WORKFLOW — the parse produced nothing"
+fi
+
+if [ "$LINT_ONLY" -eq 1 ]; then
+    echo
+    bold "Lint-only run (documentation change) — build and tests not run."
+    exit $FAILED
 fi
 
 echo
