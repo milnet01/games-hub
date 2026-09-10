@@ -33,6 +33,11 @@ public:
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
+    // Which jingle a finished game earns, or nullptr for none. Public because
+    // the result box is modal, and a modal dialog in an offscreen test hangs
+    // rather than fails -- so the choice is checked here instead.
+    static const char* jingleFor(chess::Result result, chess::Colour human);
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;

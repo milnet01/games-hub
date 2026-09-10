@@ -7667,13 +7667,20 @@ open.
   Kind: fix.
   Source: review-contract on CLAUDE.md, 2026-09-04.
 
-- 📋 [GHUB-0190] **Chess plays the losing jingle when a game is drawn.**
+- ✅ [GHUB-0190] **Chess plays the losing jingle when a game is drawn.**
   ChessView::announceResult plays Sound::kLose whenever the player did
   not win, so stalemate, repetition, the fifty-move rule and bare kings
   all sound like a loss. Draughts' new draw (GHUB-0169) plays no jingle
   instead, which is the pattern to copy. Found while reading Chess's
   announcement as the model for that work; not changed there, because
   it was outside what that item named.
+  Resolved (2026-09-10): ChessView::jingleFor() now names the choice —
+  the winning jingle for a win, the losing one for a loss, none for a
+  draw — and announceResult() plays only what it returns. It is public
+  because the result box is modal and cannot be driven offscreen; the
+  uitest block aDrawnChessGameIsNotALoss checks all three outcomes. It
+  went red on the draw with the old mapping extracted unchanged, and
+  green once the draw returned no jingle.
   **Layman:** A drawn chess game sounds like a defeat.
   Kind: fix.
   Source: in-session-2026-09-10.

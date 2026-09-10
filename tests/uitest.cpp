@@ -5260,6 +5260,26 @@ int main(int argc, char* argv[])
         Legibility::instance().setEnabled(wasLegible);
     }
 
+    // ---- aDrawnChessGameIsNotALoss (GHUB-0190) ----
+    //
+    // A draw is neither a win nor a loss, so it plays no jingle -- Draughts'
+    // rule since GHUB-0169. Chess played the losing one for stalemate,
+    // repetition, the fifty-move rule and bare kings alike. Asked of the choice
+    // rather than of a finished game: the result box is modal, and a modal
+    // dialog in an offscreen test hangs rather than fails.
+    {
+        using chess::Colour;
+        using chess::Result;
+        check(ChessView::jingleFor(Result::WhiteWins, Colour::White) == Sound::kWin,
+              "chess: a win plays the winning jingle");
+        check(ChessView::jingleFor(Result::BlackWins, Colour::White) == Sound::kLose,
+              "chess: a loss plays the losing one");
+        check(ChessView::jingleFor(Result::BlackWins, Colour::Black) == Sound::kWin,
+              "chess: and which is which follows the side the player has");
+        check(ChessView::jingleFor(Result::Draw, Colour::White) == nullptr,
+              "chess: a draw plays no jingle at all");
+    }
+
     aGameIsBankedWhileItIsBeingPlayed();
 
     anInterruptedDragPutsTheRunBack<KlondikeView>(QStringLiteral("Solitaire"));

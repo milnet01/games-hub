@@ -404,13 +404,27 @@ bool ChessView::choosePromotion(PieceType& out)
     return true;
 }
 
+const char* ChessView::jingleFor(Result result, Colour human)
+{
+    const Result won = human == Colour::White ? Result::WhiteWins : Result::BlackWins;
+    const Result lost = human == Colour::White ? Result::BlackWins : Result::WhiteWins;
+    if (result == won)
+        return Sound::kWin;
+    if (result == lost)
+        return Sound::kLose;
+    // A draw is neither, so it gets no jingle rather than the losing one --
+    // Draughts' rule since GHUB-0169.
+    return nullptr;
+}
+
 void ChessView::announceResult()
 {
     const Result result = m_game.result();
     const bool playerWon = result == (m_human == Colour::White ? Result::WhiteWins
                                                                : Result::BlackWins);
     const bool drawn = result == Result::Draw;
-    Sound::instance().play(playerWon ? Sound::kWin : Sound::kLose);
+    if (const char* jingle = jingleFor(result, m_human))
+        Sound::instance().play(jingle);
 
     int wins = Scores::instance().best(winsKey());
     if (playerWon) {

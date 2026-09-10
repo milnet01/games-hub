@@ -33,6 +33,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **A drawn chess game no longer plays the losing jingle** (GHUB-0190)
+  Stalemate, repetition, the fifty-move rule and bare kings all
+  sounded like a defeat. A draw now plays no jingle, as a drawn
+  game of Draughts already did.
+
 - **Chess, Klondike and Spider show the setting a resumed game is actually playing** (GHUB-0186)
   Each worked out which toolbar button to tick by reading the button's
   wording, so translating the app would have ticked the wrong one with
