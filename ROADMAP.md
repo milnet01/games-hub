@@ -3741,7 +3741,7 @@ inventing one.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0180] **CLAUDE.md is too big for a cold read to cover, and its own review says so.**
+- ✅ [GHUB-0180] **CLAUDE.md is too big for a cold read to cover, and its own review says so.**
   Filed by the 2026-09-04 gate at its cap, which is the one moment the size
   signal is allowed to fire.
 
@@ -3774,6 +3774,18 @@ inventing one.
   follow the move: src/cards/cardcodec.h, src/hearts/heartsengine.h,
   src/hearts/heartsengine.cpp and src/pyramid/pyramidview.cpp. GHUB-0079's
   Releasing edit lands after the split, on the smaller file.
+  Resolved (2026-09-10): split in 2551608. CLAUDE.md keeps commands, the
+  local gate, committing, releasing, the testing notes, a new section
+  Core rules with the pointer, and the traps that bite any change; the
+  per-game notes and the design reasoning moved verbatim to
+  docs/design.md, started from the skeleton with a section per game.
+  Nine source comments followed the move (the four named above plus five
+  that named moved text in prose), and two GHUB-0017 spec lines.
+  docs/design.md was gated with review-contract --genre adr: three
+  loops, nine verified findings fixed (cb9da69, 48234f5), loop 3 empty,
+  so it converged at the cap with nothing deferred. Code-side findings
+  filed as GHUB-0191 and GHUB-0192. GHUB-0079's Releasing edit now lands
+  on the smaller file.
   **Layman:** The guide future sessions read has grown past the size anyone can check in one pass.
   Kind: doc.
   Source: review-contract cap verdict, 2026-09-04.
@@ -3862,6 +3874,14 @@ inventing one.
   src/hubwindow.cpp's comment above geometryKey() and saveKey() ends
   'GHUB-0158', but GHUB-0158 is the shipped --help message-box item and
   has nothing to do with renaming a game.
+  Progress (2026-09-10, loop 3 of the same gate): a sixth, in the same
+  hubwindow.cpp comment. It says 'Scores does the same with its own',
+  i.e. that best-score keys are built from the tile's name and orphaned
+  by a rename. They are not: every score key is a fixed literal chosen
+  by its game (freecell/best_moves, Scores::klondikeBestScore(),
+  Scores::reversiBest(), ...), so a tile rename leaves scores in place.
+  docs/design.md § The hub correctly names only the saved position and
+  the window size.
   **Layman:** A few notes inside the code describe things slightly wrongly, which could mislead whoever changes that code next.
   Kind: doc-fix.
   Source: review-contract GHUB-0180 loop 1, 2026-09-10.
