@@ -79,9 +79,12 @@ play-surface caption, and the window title's game part.
 - **The context is always a string literal**, one per class or namespace:
   `"canasta::Engine"`, `"canasta::rulesInForce"`. A computed context is
   invisible to `lupdate`, so its strings would never reach a translator.
-- Text kept in a `const char*` table and shown later is marked
-  `QT_TRANSLATE_NOOP(<context>, <text>)` where it is written and translated with
-  the same context where it is shown.
+- Text kept as a `const char*` and shown later is marked where it is written
+  and translated with the same context where it is shown:
+  `QT_TRANSLATE_NOOP(<context>, <text>)` for plain text, and
+  `QT_TRANSLATE_N_NOOP(<context>, <text>)` for a count, translated with its
+  number as `n` (§ 4.4). `canasta::rulesInForce()` passes sentences such as
+  `"A canasta is %1 cards."` this way.
 
 ### 4.2 What is never wrapped
 
@@ -102,9 +105,12 @@ breaking surfaces (`versioning-overrides.md` § 1):
 `setShortcut` call today takes a `QKeySequence` standard key or a `Qt::Key`
 value (`grep -rn 'setShortcut' src`). A shortcut spelled as translatable text
 could be translated into a different key, and shortcuts are a breaking surface.
+A menu mnemonic such as the `&` in `"&Help"` is not a shortcut in this sense:
+it belongs to its label and is translated with it.
 
-A string that looks like prose but is one of these carries the marker
-`// untranslated: <reason>` on its line. The reason is not optional.
+Every letter-bearing literal of these kinds that sits in no call § 4.5
+recognises carries the marker `// untranslated: <reason>` on its line —
+`saveKey()`'s `"saved/"` is one. The reason is not optional.
 
 ### 4.3 A game has a fixed id and a translated label
 
@@ -128,8 +134,8 @@ the only language, `label` reads exactly as `name` does today.
 
 - A sentence is translated whole, with its variable parts as `%1`, `%2` through
   `arg()`. It is never assembled from pieces with `+`, because another language
-  orders the pieces differently. `ReversiView`'s pass notice becomes one
-  sentence with the player as `%1`.
+  orders the pieces differently. `ReversiView`'s pass notice becomes two whole
+  sentences, one for each side, because its verb changes with who passed.
 - A count of things uses Qt's plural form, `tr("… %n seconds …", nullptr, n)`,
   so a language with other plural rules can say it correctly. English output is
   unchanged.
@@ -144,26 +150,38 @@ found, as `CLAUDE.md` requires of a tool-gated case.
 It reads the `.cpp` and `.h` files under `src/` and exits 1, naming file and
 line, for any string literal holding a letter that is:
 
-- not the text argument of `tr()`, `QCoreApplication::translate()` or
-  `QT_TRANSLATE_NOOP()`;
-- not in one of § 4.2's exempt forms that the script can recognise by the call
-  it sits in (`setObjectName`, the `QSettings` calls, the logging calls,
-  `QIcon::fromTheme`, `#include`); and
-- not on a line carrying `// untranslated:` followed by a reason.
+- not an argument of `tr()`, `QCoreApplication::translate()`,
+  `QT_TRANSLATE_NOOP()` or `QT_TRANSLATE_N_NOOP()` — context and disambiguation
+  included;
+- not an argument of a recognised call: `setObjectName`, the `QSettings`
+  calls, the terminal-output calls (`qDebug`, `qInfo`, `qWarning`,
+  `qCritical`, `std::printf`, `std::fprintf`), `setOrganizationName`,
+  `setApplicationName`, `setApplicationDisplayName`, `setDesktopFileName`,
+  `QIcon::fromTheme`, or an `#include`; and
+- not the one literal a `// untranslated: <reason>` marker on its line
+  exempts.
 
-It exits 0 and prints nothing when every literal is accounted for. The exempt
-call list lives in the script's header comment, as `legibility-check.py` keeps
-its pair list, and is the one place to extend it.
+**A marker exempts exactly one literal.** A marked line holding a second
+letter-bearing literal that is neither translated nor in a recognised call
+fails, so marking a game's id cannot hide a bare label on the same line.
+
+It also exits 1 for a `+` that directly joins a translation call to anything
+else — § 4.4's first rule, made mechanical.
+
+It exits 0 and prints nothing when every literal is accounted for. The
+recognised calls are a named constant at the top of the script, as
+`legibility-check.py` keeps `PAIRS`, and that constant is the one place to
+extend them.
 
 ## 5. Invariants
 
 - **INV-1** — Every string literal holding a letter under `src/` is
-  translated, or sits in an exempt call, or carries `// untranslated:` with a
-  reason.
+  translated, or is an argument of a call § 4.5 recognises, or carries
+  `// untranslated:` with a reason.
   *Test:* `python3 scripts/translatable-check.py` exits 0 on the finished tree.
   Against a fixture line `addAction(QStringLiteral("Deal Again"))` added to a
   view, it exits 1 naming that file and line. The fixture isolates the wrap
-  rule: the literal is in no exempt call and carries no marker, so nothing else
+  rule: the literal is in no recognised call and carries no marker, so nothing else
   can reject it.
   *Breaks when:* a new label lands as a bare `QStringLiteral`.
 
@@ -179,17 +197,20 @@ its pair list, and is the one place to extend it.
 - **INV-3** — Nothing a player's data or a script depends on changes: the
   `saved/<name>` and `window/geometry/<name>` keys, `--game`'s names,
   `--version`'s output, and the `QSettings` file location.
-  *Test:* `uitest`'s `savesFromOlderBuildsStillLoad`, which fails when a file in
-  `tests/saves/` names a game `HubWindow::gameNames()` no longer lists; the
-  `shot` and `shot_plays_forward` ctest cases, which must succeed with `--game
-  hearts` and `--game canasta`; and `release.yml`'s `^Games ` assertion on
-  `--version`.
+  *Test:* a new `uitest` case installs a `QTranslator` subclass whose
+  `translate()` marks every string it is asked for and whose `isEmpty()`
+  returns false. With it installed, `HubWindow::gameNames()` still equals the
+  fixed list of ids, `QCoreApplication::organizationName()` and
+  `applicationName()` still read `GamesHub` and `Games`, and every tile's label
+  carries the mark. `savesFromOlderBuildsStillLoad` and the `shot` and
+  `shot_plays_forward` cases hold the English names, and `release.yml`'s
+  `^Games ` assertion holds `--version`.
   *Breaks when:* `Entry::name` is changed or wrapped in `tr()`.
 
 - **INV-4** — A sentence is one translatable unit, and a count of things uses
   the plural form.
-  *Test:* reading this item's diff for `+` beside translated text and for `%1`
-  beside a plural noun. There is nothing to run.
+  *Test:* the `translatable` check refuses a `+` joining a translation call to
+  anything else. The plural half has nothing to run; it is read in review.
   *Breaks when:* `who + tr(" no legal move — turn passes.")` ships.
 
 ## 6. Failure modes
@@ -197,10 +218,10 @@ its pair list, and is the one place to extend it.
 - **A string the check cannot see.** Text built at run time from pieces the
   check does not recognise ships untranslated. Nothing shows it in English; the
   first translation shows it as the one untranslated line.
-- **A key wrapped by mistake.** It reads the same in English, so INV-3's tests
-  pass. Under a loaded translation it moves the player's saved game or breaks
-  `--game`. § 4.2's list and § 4.3's split are the defence, and § 10 records the
-  gap.
+- **A key wrapped by mistake.** It reads the same in English, and under a
+  loaded translation it would move the player's saved game or break `--game`.
+  INV-3's marking translator exposes a wrapped game id or `QSettings` name;
+  § 10 records what it does not reach.
 - **A computed context.** `lupdate` extracts nothing from it; § 4.1 forbids it.
 - **Tests that match English text.** They pass while English is the only
   language and fail on a machine running a loaded translation. That is the
@@ -213,10 +234,12 @@ its pair list, and is the one place to extend it.
   untranslated literals; that is its red run. The retrofit then brings it to 0.
 - **The existing suite** locks INV-2. It is green before the retrofit and must
   stay green after it.
-- **`savesFromOlderBuildsStillLoad`, the `shot` and `shot_plays_forward`
-  cases** lock INV-3's English half for names, and **`release.yml`** for
-  `--version`: a changed name or prefix fails them.
-- **INV-4 has no automatic test.**
+- **A new `uitest` case with a marking translator** locks INV-3: ids and the
+  `QSettings` names stay fixed while labels change. **`savesFromOlderBuildsStillLoad`,
+  the `shot` and `shot_plays_forward` cases** hold the English names, and
+  **`release.yml`** holds `--version`.
+- **`translatable`** also locks INV-4's joining half. Its plural half has no
+  automatic test.
 
 ## 8. Alternatives considered (and rejected)
 
@@ -226,9 +249,7 @@ its pair list, and is the one place to extend it.
   is all the core/view rule asks.
 - **Build the loader now, following the computer's language.** Rejected: with
   English the only language there is nothing to load, so the loader would be
-  code no run executes. It also cannot be tested here — a sample translation
-  file needs `lrelease`, and `rpm -qa | grep -iE 'qt6.*linguist'` finds no Qt
-  Linguist package on this machine.
+  code no run executes.
 - **An in-app language menu.** Rejected by the owner, 2026-09-10.
 - **An allowlist of translatable strings, with everything else left alone.**
   Rejected: a new string would then ship untranslated by default. The marker
@@ -254,8 +275,8 @@ its pair list, and is the one place to extend it.
 |------|----------------------|
 | INV-1 | the `translatable` ctest case (`scripts/translatable-check.py`) |
 | INV-2 | **`Partial:`** the ctest suite — `uitest` matches some actions and the hub's title by their English text. **Nothing** catches a changed string it does not match |
-| INV-3 | **`Partial:`** `savesFromOlderBuildsStillLoad` and the `shot` and `shot_plays_forward` cases catch a changed name, and `release.yml` a changed `--version` prefix. **Nothing** catches a key wrapped in `tr()` while English is the only language, because it reads the same; the first-language item's tests are the catcher |
-| INV-4 | **nothing** — code review; a translator is the first to meet a fragment |
+| INV-3 | **`Partial:`** the marking-translator `uitest` case catches a changed or wrapped game id and a changed `QSettings` name; `savesFromOlderBuildsStillLoad`, the `shot` cases and `release.yml` hold the English names and `--version`. **Nothing** catches a wrapped settings-key prefix such as `"saved/"`, which reads the same under every test here |
+| INV-4 | **`Partial:`** the `translatable` check catches a `+` join. **Nothing** catches `%1` beside a plural noun — code review |
 | `// untranslated:` carries a reason | **`Partial:`** the check refuses the marker with no text after it; nothing judges whether the reason is true |
 | A shortcut is built from a key value | **nothing** — every `setShortcut` call takes one today; a reader catches the first that does not |
 
