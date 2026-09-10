@@ -3697,6 +3697,15 @@ inventing one.
   so that comparison has to stop matching on text BEFORE any tr() lands
   near it, or the restore path breaks with no compile error and no
   crash.
+  Progress (2026-09-10): spec written,
+  docs/specs/GHUB-0161-translatable-text.md. The owner's calls that day:
+  the language follows the computer's, and English only this round, so
+  loading translations moves to a first-language item the spec names but
+  does not queue. review-contract ran its two-loop cap: fifteen findings
+  verified and fixed across the two loops, one dismissed, nothing
+  deferred; rows in
+  docs/reviews/GHUB-0161-translatable-text-loop-log.md. Next: build from
+  the spec. It is status accepted and nothing is implemented yet.
   **Layman:** Every visible word in the app is written in a way that cannot be translated, and no note says whether that is on purpose.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.

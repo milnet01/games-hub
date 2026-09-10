@@ -1,6 +1,6 @@
 # GHUB-0161 — Every word a player reads can be translated
 
-**Status:** spec draft (2026-09-10).
+**Status:** accepted (2026-09-10).
 **Kind:** implement.
 **Source:** ROADMAP GHUB-0161 (review-code sweep 2026-08-31; the owner's
 decisions of 2026-09-02 and 2026-09-10).
@@ -96,6 +96,8 @@ breaking surfaces (`versioning-overrides.md` § 1):
 - `Entry::name` (§ 4.3), because it is a key and `--game`'s argument;
 - everything printed to a terminal — `--version`'s `Games <version>`, the
   `--shot` messages in `main.cpp`, and `qDebug`/`qInfo`/`qWarning` output;
+- the window title's `Games <version>` part, because it is `--version`'s
+  spelling and `uitest` checks the two against each other;
 - `QCoreApplication` identity set in `main()` — `setOrganizationName`,
   `setApplicationName`, `setApplicationDisplayName` — because `QSettings`
   derives its file from the first two;
@@ -200,12 +202,16 @@ extend them.
   *Test:* a new `uitest` case installs a `QTranslator` subclass whose
   `translate()` marks every string it is asked for and whose `isEmpty()`
   returns false. With it installed, `HubWindow::gameNames()` still equals the
-  fixed list of ids, `QCoreApplication::organizationName()` and
-  `applicationName()` still read `GamesHub` and `Games`, and every tile's label
-  carries the mark. `savesFromOlderBuildsStillLoad` and the `shot` and
-  `shot_plays_forward` cases hold the English names, and `release.yml`'s
-  `^Games ` assertion holds `--version`.
-  *Breaks when:* `Entry::name` is changed or wrapped in `tr()`.
+  fixed list of ids and every tile's label carries the mark. Opening a game by
+  its id and returning to the menu writes `window/geometry/<id>`, unmarked, and
+  a game with something worth saving writes `saved/<id>`, unmarked.
+  `savesFromOlderBuildsStillLoad` and the `shot` and `shot_plays_forward` cases
+  hold the English names, and `release.yml`'s `^Games ` assertion holds
+  `--version`. The `QSettings` identity has no test: `uitest` runs under its own
+  identity on purpose, so it never touches a player's settings, and it cannot
+  see `main()`'s.
+  *Breaks when:* `Entry::name` is changed or wrapped in `tr()`, or a key or
+  `openGameNamed()` is fed `label` instead of `name`.
 
 - **INV-4** — A sentence is one translatable unit, and a count of things uses
   the plural form.
@@ -220,8 +226,8 @@ extend them.
   first translation shows it as the one untranslated line.
 - **A key wrapped by mistake.** It reads the same in English, and under a
   loaded translation it would move the player's saved game or break `--game`.
-  INV-3's marking translator exposes a wrapped game id or `QSettings` name;
-  § 10 records what it does not reach.
+  INV-3's marking translator exposes a wrapped game id and a key built from
+  `label`; § 10 records what it does not reach.
 - **A computed context.** `lupdate` extracts nothing from it; § 4.1 forbids it.
 - **Tests that match English text.** They pass while English is the only
   language and fail on a machine running a loaded translation. That is the
@@ -235,7 +241,7 @@ extend them.
 - **The existing suite** locks INV-2. It is green before the retrofit and must
   stay green after it.
 - **A new `uitest` case with a marking translator** locks INV-3: ids and the
-  `QSettings` names stay fixed while labels change. **`savesFromOlderBuildsStillLoad`,
+  keys written from them stay fixed while labels change. **`savesFromOlderBuildsStillLoad`,
   the `shot` and `shot_plays_forward` cases** hold the English names, and
   **`release.yml`** holds `--version`.
 - **`translatable`** also locks INV-4's joining half. Its plural half has no
@@ -275,7 +281,7 @@ extend them.
 |------|----------------------|
 | INV-1 | the `translatable` ctest case (`scripts/translatable-check.py`) |
 | INV-2 | **`Partial:`** the ctest suite — `uitest` matches some actions and the hub's title by their English text. **Nothing** catches a changed string it does not match |
-| INV-3 | **`Partial:`** the marking-translator `uitest` case catches a changed or wrapped game id and a changed `QSettings` name; `savesFromOlderBuildsStillLoad`, the `shot` cases and `release.yml` hold the English names and `--version`. **Nothing** catches a wrapped settings-key prefix such as `"saved/"`, which reads the same under every test here |
+| INV-3 | **`Partial:`** the marking-translator `uitest` case catches a changed or wrapped game id and a key built from `label`; `savesFromOlderBuildsStillLoad`, the `shot` cases and `release.yml` hold the English names and `--version`. **Nothing** catches a wrapped settings-key prefix such as `"saved/"`, or a change to `main()`'s `QSettings` identity — `uitest` runs under its own |
 | INV-4 | **`Partial:`** the `translatable` check catches a `+` join. **Nothing** catches `%1` beside a plural noun — code review |
 | `// untranslated:` carries a reason | **`Partial:`** the check refuses the marker with no text after it; nothing judges whether the reason is true |
 | A shortcut is built from a key value | **nothing** — every `setShortcut` call takes one today; a reader catches the first that does not |
