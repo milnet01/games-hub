@@ -38,12 +38,12 @@ KlondikeView::KlondikeView(QWidget* parent)
 
 void KlondikeView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Deal"), this);
+    auto* newAction = new QAction(tr("New Deal"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &KlondikeView::newGame);
     m_actions.append(newAction);
 
-    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction = new QAction(tr("Undo"), this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
     connect(m_undoAction, &QAction::triggered, this, &KlondikeView::undo);
@@ -56,7 +56,7 @@ void KlondikeView::buildActions()
     auto* group = new QActionGroup(this);
     group->setExclusive(true);
     for (int n : { 1, 3 }) {
-        auto* a = new QAction(QStringLiteral("Draw %1").arg(n), this);
+        auto* a = new QAction(tr("Draw %1").arg(n), this);
         // Object names, not labels: restoreState matches on these. A label is
         // what the player reads, so the Qt standard asks for tr() around it --
         // and adding it would break the match silently, leaving the toolbar
@@ -182,7 +182,7 @@ bool KlondikeView::restoreState(const QByteArray& blob)
     m_won = false;
     m_resumed = true;
     m_undoAction->setEnabled(false);
-    const QString wanted = QStringLiteral("klondike-draw-%1").arg(m_table.drawCount());
+    const QString wanted = QStringLiteral("klondike-draw-%1").arg(m_table.drawCount()); // untranslated: an object name
     for (QAction* a : m_actions) {
         if (a->isCheckable() && a->objectName() == wanted)
             a->setChecked(true);
@@ -367,15 +367,15 @@ void KlondikeView::checkWin()
     refresh();
     announceLater(200, [this, newBest] {
         QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("Solved"));
-        box.setText(QStringLiteral("You cleared the table!"));
+        box.setWindowTitle(tr("Solved"));
+        box.setText(tr("You cleared the table!"));
         box.setInformativeText(
-            newBest ? QStringLiteral("Score: %1 — a new best!").arg(m_table.score())
-                    : QStringLiteral("Score: %1.   Best: %2.")
+            newBest ? tr("Score: %1 — a new best!").arg(m_table.score())
+                    : tr("Score: %1.   Best: %2.")
                           .arg(m_table.score())
                           .arg(Scores::instance().best(Scores::klondikeBestScore())));
-        QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
-        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+        QAbstractButton* again = box.addButton(tr("New Deal"), QMessageBox::AcceptRole);
+        box.addButton(tr("Close"), QMessageBox::RejectRole);
         box.exec();
         if (box.clickedButton() == again)
             newGame();
@@ -388,13 +388,13 @@ void KlondikeView::refresh()
     for (const auto& f : m_table.foundations())
         done += int(f.size());
 
-    QString line = QStringLiteral("%1   Foundations %2/52   Stock %3   Score %4")
-                       .arg(m_won ? QStringLiteral("Solved!") : QStringLiteral("Klondike"))
+    QString line = tr("%1   Foundations %2/52   Stock %3   Score %4")
+                       .arg(m_won ? tr("Solved!") : tr("Klondike"))
                        .arg(done)
                        .arg(m_table.stock().size())
                        .arg(m_table.score());
     if (Scores::instance().has(Scores::klondikeBestScore()))
-        line += QStringLiteral("   Best %1").arg(Scores::instance().best(Scores::klondikeBestScore()));
+        line = tr("%1   Best %2").arg(line).arg(Scores::instance().best(Scores::klondikeBestScore()));
     Q_EMIT statusChanged(line);
 }
 
@@ -434,7 +434,7 @@ void KlondikeView::paintEvent(QPaintEvent*)
         if (shown > 0 && cardflight::suppressAt(m_flights, m_flightConsumed, f, pile.back()))
             --shown;
         if (shown == 0)
-            CardArt::paintSlot(p, r, QStringLiteral("A"));
+            CardArt::paintSlot(p, r, rankLabel(kAce));
         else
             CardArt::paintFace(p, r, pile[shown - 1]);
     }
@@ -442,7 +442,7 @@ void KlondikeView::paintEvent(QPaintEvent*)
     for (int col = 0; col < 7; ++col) {
         const std::vector<Card>& column = m_table.tableau()[std::size_t(col)];
         if (column.empty()) {
-            CardArt::paintSlot(p, pileOrigin(PileKind::Tableau, col), QStringLiteral("K"));
+            CardArt::paintSlot(p, pileOrigin(PileKind::Tableau, col), rankLabel(kKing));
             continue;
         }
         for (int i = 0; i < int(column.size()); ++i) {

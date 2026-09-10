@@ -141,6 +141,11 @@ the only language, `label` reads exactly as `name` does today.
 - A count of things uses Qt's plural form, `tr("… %n seconds …", nullptr, n)`,
   so a language with other plural rules can say it correctly. English output is
   unchanged.
+- Where today's English picks its own singular — FreeCell's `"Only %1 card%2"`,
+  Spider's `"Spider (%1 suit%2)"` — the singular stays a whole sentence of its
+  own beside the `%n` form. With no translation loaded, a `%n` form prints its
+  English source for every count, so a lone one would say "1 cards" and break
+  INV-2.
 
 ### 4.5 The check
 
@@ -167,8 +172,13 @@ line, for any string literal holding a letter that is:
 letter-bearing literal that is neither translated nor in a recognised call
 fails, so marking a game's id cannot hide a bare label on the same line.
 
-It also exits 1 for a `+` that directly joins a translation call to anything
-else — § 4.4's first rule, made mechanical.
+A qualified call counts by its last name part, so `main()`'s
+`QGuiApplication::setDesktopFileName` is `setDesktopFileName`. Qt's argument
+placeholders — `%1`, `%L1`, `%n` — are not letters.
+
+It also exits 1 for a `+` or `+=` that directly joins a translation call to
+anything else — § 4.4's first rule, made mechanical. `s += tr(...)` assembles a
+sentence exactly as `s + tr(...)` does.
 
 It exits 0 and prints nothing when every literal is accounted for. The
 recognised calls are a named constant at the top of the script, as
@@ -215,8 +225,9 @@ extend them.
 
 - **INV-4** — A sentence is one translatable unit, and a count of things uses
   the plural form.
-  *Test:* the `translatable` check refuses a `+` joining a translation call to
-  anything else. The plural half has nothing to run; it is read in review.
+  *Test:* the `translatable` check refuses a `+` or `+=` joining a translation
+  call to anything else. The plural half has nothing to run; it is read in
+  review.
   *Breaks when:* `who + tr(" no legal move — turn passes.")` ships.
 
 ## 6. Failure modes
@@ -282,7 +293,7 @@ extend them.
 | INV-1 | the `translatable` ctest case (`scripts/translatable-check.py`) |
 | INV-2 | **`Partial:`** the ctest suite — `uitest` matches some actions and the hub's title by their English text. **Nothing** catches a changed string it does not match |
 | INV-3 | **`Partial:`** the marking-translator `uitest` case catches a changed or wrapped game id and a key built from `label`; `savesFromOlderBuildsStillLoad`, the `shot` cases and `release.yml` hold the English names and `--version`. **Nothing** catches a wrapped settings-key prefix such as `"saved/"`, or a change to `main()`'s `QSettings` identity — `uitest` runs under its own |
-| INV-4 | **`Partial:`** the `translatable` check catches a `+` join. **Nothing** catches `%1` beside a plural noun — code review |
+| INV-4 | **`Partial:`** the `translatable` check catches a `+` or `+=` join. **Nothing** catches `%1` beside a plural noun — code review |
 | `// untranslated:` carries a reason | **`Partial:`** the check refuses the marker with no text after it; nothing judges whether the reason is true |
 | A shortcut is built from a key value | **nothing** — every `setShortcut` call takes one today; a reader catches the first that does not |
 

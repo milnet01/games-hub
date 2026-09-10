@@ -7,6 +7,7 @@
 #include "theme.h"
 
 #include <QActionGroup>
+#include <QCoreApplication>
 #include <QDataStream>
 #include <QIODevice>
 #include <QMessageBox>
@@ -29,27 +30,27 @@ constexpr int kThinkDelayMs = 260;
 // already uses for its own keys. A QString built at static-initialisation time
 // can in principle throw where nothing can catch it; QStringLiteral's data is
 // static, so returning a copy costs nothing.
-QString winsKey() { return QStringLiteral("chess/wins"); }
+QString winsKey() { return QStringLiteral("chess/wins"); } // untranslated: settings key
 
 // The toolbar's name for a strength. One list, because a resumed game has to
 // tick the level it was saved at and two lists would drift.
 QString levelName(Level level)
 {
     switch (level) {
-    case Level::Easy: return QStringLiteral("Easy");
-    case Level::Hard: return QStringLiteral("Hard");
-    default:          return QStringLiteral("Medium");
+    case Level::Easy: return QCoreApplication::translate("ChessView", "Easy");
+    case Level::Hard: return QCoreApplication::translate("ChessView", "Hard");
+    default:          return QCoreApplication::translate("ChessView", "Medium");
     }
 }
 
 QString pieceName(PieceType type)
 {
     switch (type) {
-    case PieceType::Queen:  return QStringLiteral("Queen");
-    case PieceType::Rook:   return QStringLiteral("Rook");
-    case PieceType::Bishop: return QStringLiteral("Bishop");
-    case PieceType::Knight: return QStringLiteral("Knight");
-    default:                return QStringLiteral("Pawn");
+    case PieceType::Queen:  return QCoreApplication::translate("ChessView", "Queen");
+    case PieceType::Rook:   return QCoreApplication::translate("ChessView", "Rook");
+    case PieceType::Bishop: return QCoreApplication::translate("ChessView", "Bishop");
+    case PieceType::Knight: return QCoreApplication::translate("ChessView", "Knight");
+    default:                return QCoreApplication::translate("ChessView", "Pawn");
     }
 }
 
@@ -57,17 +58,21 @@ QString drawText(DrawReason reason)
 {
     switch (reason) {
     case DrawReason::Stalemate:
-        return QStringLiteral("Stalemate — the side to move has no legal move but is not in check.");
+        return QCoreApplication::translate(
+            "ChessView", "Stalemate — the side to move has no legal move but is not in check.");
     case DrawReason::FiftyMove:
-        return QStringLiteral("Fifty moves have passed with no capture and no pawn moved.");
+        return QCoreApplication::translate(
+            "ChessView", "Fifty moves have passed with no capture and no pawn moved.");
     case DrawReason::Repetition:
-        return QStringLiteral("The same position has appeared three times.");
+        return QCoreApplication::translate(
+            "ChessView", "The same position has appeared three times.");
     case DrawReason::InsufficientMaterial:
-        return QStringLiteral("Neither side has enough material to force mate.");
+        return QCoreApplication::translate(
+            "ChessView", "Neither side has enough material to force mate.");
     case DrawReason::None:
         break;
     }
-    return QStringLiteral("A draw.");
+    return QCoreApplication::translate("ChessView", "A draw.");
 }
 }
 
@@ -81,12 +86,12 @@ ChessView::ChessView(QWidget* parent)
 
 void ChessView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    auto* newAction = new QAction(tr("New Game"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &ChessView::newGame);
     m_actions.append(newAction);
 
-    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction = new QAction(tr("Undo"), this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
     connect(m_undoAction, &QAction::triggered, this, &ChessView::undo);
@@ -249,7 +254,7 @@ bool ChessView::restoreState(const QByteArray& blob)
     m_game = game;
     abandonSearch();
     m_level = chess::Level(std::clamp<int>(level, 0, 2));
-    const QString wanted = QStringLiteral("chess-level-%1").arg(int(m_level));
+    const QString wanted = QStringLiteral("chess-level-%1").arg(int(m_level)); // untranslated: an object name
     for (QAction* a : m_actions) {
         if (a->isCheckable() && a->objectName() == wanted)
             a->setChecked(true);
@@ -368,16 +373,16 @@ void ChessView::engineMoveReady(const SearchResult& result)
     // The two agreed, but that second path is the structural reason the
     // stale-timer defect was reachable at all, and closing it is what stops
     // the next one.
-    advance(m_game.board().inCheck() ? QStringLiteral("Computer played %1 — check!").arg(text)
-                                     : QStringLiteral("Computer played %1.").arg(text));
+    advance(m_game.board().inCheck() ? tr("Computer played %1 — check!").arg(text)
+                                     : tr("Computer played %1.").arg(text));
 }
 
 bool ChessView::choosePromotion(PieceType& out)
 {
     QMessageBox box(this);
-    box.setWindowTitle(QStringLiteral("Promotion"));
-    box.setText(QStringLiteral("Your pawn reaches the last rank."));
-    box.setInformativeText(QStringLiteral("What should it become?"));
+    box.setWindowTitle(tr("Promotion"));
+    box.setText(tr("Your pawn reaches the last rank."));
+    box.setInformativeText(tr("What should it become?"));
 
     const PieceType offered[4] = { PieceType::Queen, PieceType::Rook, PieceType::Bishop,
                                    PieceType::Knight };
@@ -414,20 +419,20 @@ void ChessView::announceResult()
     }
 
     QMessageBox box(this);
-    box.setWindowTitle(QStringLiteral("Game over"));
+    box.setWindowTitle(tr("Game over"));
     if (drawn)
-        box.setText(QStringLiteral("Drawn."));
+        box.setText(tr("Drawn."));
     else
-        box.setText(playerWon ? QStringLiteral("Checkmate — you win!")
-                              : QStringLiteral("Checkmate — the computer wins."));
-    box.setInformativeText(drawn ? QStringLiteral("%1\nGames won: %2.")
+        box.setText(playerWon ? tr("Checkmate — you win!")
+                              : tr("Checkmate — the computer wins."));
+    box.setInformativeText(drawn ? tr("%1\nGames won: %2.")
                                        .arg(drawText(m_game.drawReason()))
                                        .arg(wins)
-                                 : QStringLiteral("Moves played: %1.\nGames won: %2.")
+                                 : tr("Moves played: %1.\nGames won: %2.")
                                        .arg(m_game.history().size())
                                        .arg(wins));
-    QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
-    box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+    QAbstractButton* again = box.addButton(tr("Play Again"), QMessageBox::AcceptRole);
+    box.addButton(tr("Close"), QMessageBox::RejectRole);
     box.exec();
     if (box.clickedButton() == again)
         newGame();
@@ -441,17 +446,17 @@ void ChessView::refresh(const QString& message)
     if (!message.isEmpty())
         state = message;
     else if (m_finished)
-        state = QStringLiteral("Game over.");
+        state = tr("Game over.");
     else if (m_thinking)
-        state = QStringLiteral("Computer thinking…");
+        state = tr("Computer thinking…");
     else if (m_game.toMove() == m_human)
-        state = m_game.board().inCheck() ? QStringLiteral("You are in check.")
-                                         : QStringLiteral("Your move.");
+        state = m_game.board().inCheck() ? tr("You are in check.")
+                                         : tr("Your move.");
     else
-        state = QStringLiteral("Computer to move.");
+        state = tr("Computer to move.");
 
     m_caption = state;
-    Q_EMIT statusChanged(QStringLiteral("%1   Material %2 — %3   Won %4")
+    Q_EMIT statusChanged(tr("%1   Material %2 — %3   Won %4")
                              .arg(state)
                              .arg(m_game.board().material(m_human))
                              .arg(m_game.board().material(other(m_human)))
@@ -638,8 +643,8 @@ void ChessView::mousePressEvent(QMouseEvent* event)
         std::vector<Move> moves = movesFrom(*clicked);
         if (moves.empty()) {
             refresh(m_game.board().inCheck()
-                        ? QStringLiteral("You are in check — that piece cannot help.")
-                        : QStringLiteral("That piece has no legal move."));
+                        ? tr("You are in check — that piece cannot help.")
+                        : tr("That piece has no legal move."));
             return;
         }
         m_selected = clicked;

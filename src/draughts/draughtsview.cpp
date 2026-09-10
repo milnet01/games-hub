@@ -28,7 +28,7 @@ constexpr int kThinkDelayMs = 340;
 // A function for the reason scores.h's own key helpers are: nothing is built
 // at static-initialisation time, and QStringLiteral's data is static, so the
 // copy this returns costs nothing.
-QString winsKey() { return QStringLiteral("draughts/wins"); }
+QString winsKey() { return QStringLiteral("draughts/wins"); } // untranslated: settings key
 
 // Version 2 appends the draw rule's count (GHUB-0169). Version 1 predates it
 // and still loads, with the count at nought -- Canasta's route, a migration
@@ -49,12 +49,12 @@ DraughtsView::DraughtsView(QWidget* parent)
 
 void DraughtsView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    auto* newAction = new QAction(tr("New Game"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &DraughtsView::newGame);
     m_actions.append(newAction);
 
-    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction = new QAction(tr("Undo"), this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
     connect(m_undoAction, &QAction::triggered, this, &DraughtsView::undo);
@@ -67,12 +67,12 @@ void DraughtsView::buildActions()
     m_levelGroup = new QActionGroup(this);
     m_levelGroup->setExclusive(true);
     const struct { const char* name; DraughtsLevel level; } kLevels[] = {
-        { "Easy", DraughtsLevel::Easy },
-        { "Medium", DraughtsLevel::Medium },
-        { "Hard", DraughtsLevel::Hard },
+        { QT_TRANSLATE_NOOP("DraughtsView", "Easy"), DraughtsLevel::Easy },
+        { QT_TRANSLATE_NOOP("DraughtsView", "Medium"), DraughtsLevel::Medium },
+        { QT_TRANSLATE_NOOP("DraughtsView", "Hard"), DraughtsLevel::Hard },
     };
     for (const auto& entry : kLevels) {
-        auto* a = new QAction(QString::fromUtf8(entry.name), this);
+        auto* a = new QAction(tr(entry.name), this);
         a->setCheckable(true);
         a->setChecked(entry.level == m_level);
         m_levelGroup->addAction(a);
@@ -257,22 +257,22 @@ void DraughtsView::announceResult(std::optional<Side> winner)
     }
 
     QMessageBox box(this);
-    box.setWindowTitle(QStringLiteral("Game over"));
+    box.setWindowTitle(tr("Game over"));
     if (winner) {
-        box.setText(playerWon ? QStringLiteral("You win!") : QStringLiteral("The computer wins."));
-        box.setInformativeText(QStringLiteral("Pieces left — you %1, computer %2.\nGames won: %3.")
+        box.setText(playerWon ? tr("You win!") : tr("The computer wins."));
+        box.setInformativeText(tr("Pieces left — you %1, computer %2.\nGames won: %3.")
                                    .arg(m_board.count(m_human))
                                    .arg(m_board.count(other(m_human)))
                                    .arg(wins));
     } else {
-        box.setText(QStringLiteral("Drawn."));
+        box.setText(tr("Drawn."));
         box.setInformativeText(
-            QStringLiteral("%1 moves each with no capture and no man moved.\nGames won: %2.")
-                .arg(kDrawPlies / 2)
+            tr("%n moves each with no capture and no man moved.\nGames won: %1.", nullptr,
+               kDrawPlies / 2)
                 .arg(wins));
     }
-    QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
-    box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+    QAbstractButton* again = box.addButton(tr("Play Again"), QMessageBox::AcceptRole);
+    box.addButton(tr("Close"), QMessageBox::RejectRole);
     box.exec();
     if (box.clickedButton() == again)
         newGame();
@@ -287,26 +287,26 @@ void DraughtsView::refresh(const QString& message)
     if (!message.isEmpty())
         state = message;
     else if (m_finished)
-        state = m_board.gameOver(m_toMove) ? QStringLiteral("Game over.") : QStringLiteral("Drawn.");
+        state = m_board.gameOver(m_toMove) ? tr("Game over.") : tr("Drawn.");
     else if (humanTurn)
         state = m_board.legalMoves(m_human).front().isCapture()
-            ? QStringLiteral("Your turn — you must take.")
-            : QStringLiteral("Your turn.");
+            ? tr("Your turn — you must take.")
+            : tr("Your turn.");
     else
-        state = QStringLiteral("Computer thinking…");
+        state = tr("Computer thinking…");
 
     if (!m_finished && m_board.pliesWithoutProgress() >= kDrawWarnPlies)
-        state += QStringLiteral("  No capture or man moved in %1 of %2 moves.")
-                     .arg(m_board.pliesWithoutProgress() / 2)
-                     .arg(kDrawPlies / 2);
+        state = tr("%1  No capture or man moved in %2 of %n moves.", nullptr, kDrawPlies / 2)
+                    .arg(state)
+                    .arg(m_board.pliesWithoutProgress() / 2);
 
     // State and the piece counts, but not the win tally: a running total of
     // past games is worth a glance in the status bar and not a line of board.
-    m_caption = QStringLiteral("%1   You %2 — %3 Computer")
+    m_caption = tr("%1   You %2 — %3 Computer")
                     .arg(state)
                     .arg(m_board.count(m_human))
                     .arg(m_board.count(other(m_human)));
-    Q_EMIT statusChanged(QStringLiteral("%1   You %2 — %3 Computer   Won %4")
+    Q_EMIT statusChanged(tr("%1   You %2 — %3 Computer   Won %4")
                              .arg(state)
                              .arg(m_board.count(m_human))
                              .arg(m_board.count(other(m_human)))
@@ -538,7 +538,7 @@ void DraughtsView::mousePressEvent(QMouseEvent* event)
         if (still.size() > 1) {
             m_choices = std::move(still);
             m_chooseStep = firstDivergingStep(m_choices);
-            refresh(QStringLiteral("Still more than one way — click the next square to jump to."));
+            refresh(tr("Still more than one way — click the next square to jump to."));
             return;
         }
         if (still.size() == 1) {
@@ -562,8 +562,8 @@ void DraughtsView::mousePressEvent(QMouseEvent* event)
         if (ending.size() > 1) {
             m_choices = std::move(ending);
             m_chooseStep = firstDivergingStep(m_choices);
-            refresh(QStringLiteral("Two ways to take that — click the square you want to "
-                                   "jump to first."));
+            refresh(tr("Two ways to take that — click the square you want to "
+                       "jump to first."));
             return;
         }
         if (ending.size() == 1) {
@@ -577,8 +577,8 @@ void DraughtsView::mousePressEvent(QMouseEvent* event)
         std::vector<DraughtsMove> moves = movesFrom(*clicked);
         if (moves.empty()) {
             refresh(m_board.legalMoves(m_human).front().isCapture()
-                        ? QStringLiteral("A capture is available — you must take it.")
-                        : QStringLiteral("That piece has no move."));
+                        ? tr("A capture is available — you must take it.")
+                        : tr("That piece has no move."));
             return;
         }
         m_selected = clicked;

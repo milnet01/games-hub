@@ -17,7 +17,7 @@ namespace {
 // A function for the reason scores.h's own key helpers are: nothing is built
 // at static-initialisation time, and QStringLiteral's data is static, so the
 // copy this returns costs nothing.
-QString bestKey() { return QStringLiteral("snake/best_score"); }
+QString bestKey() { return QStringLiteral("snake/best_score"); } // untranslated: settings key
 constexpr QColor kBoardDark { 0x14, 0x30, 0x22 };
 constexpr QColor kBoardLight { 0x18, 0x38, 0x28 };
 }
@@ -37,12 +37,12 @@ SnakeView::SnakeView(QWidget* parent)
 
 void SnakeView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    auto* newAction = new QAction(tr("New Game"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &SnakeView::newGame);
     m_actions.append(newAction);
 
-    auto* pause = new QAction(QStringLiteral("Pause"), this);
+    auto* pause = new QAction(tr("Pause"), this);
     pause->setCheckable(true);
     pause->setShortcut(QKeySequence(Qt::Key_Space));
     connect(pause, &QAction::toggled, this, [this](bool on) {
@@ -119,15 +119,15 @@ void SnakeView::gameOver()
 
     announceLater(200, [this, newBest] {
         QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("Game over"));
-        box.setText(QStringLiteral("The snake stopped."));
+        box.setWindowTitle(tr("Game over"));
+        box.setText(tr("The snake stopped."));
         box.setInformativeText(newBest
-                                   ? QStringLiteral("Score: %1 — a new best!").arg(m_board.score())
-                                   : QStringLiteral("Score: %1.   Best: %2.")
+                                   ? tr("Score: %1 — a new best!").arg(m_board.score())
+                                   : tr("Score: %1.   Best: %2.")
                                          .arg(m_board.score())
                                          .arg(Scores::instance().best(bestKey())));
-        QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
-        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+        QAbstractButton* again = box.addButton(tr("Play Again"), QMessageBox::AcceptRole);
+        box.addButton(tr("Close"), QMessageBox::RejectRole);
         box.exec();
         if (box.clickedButton() == again)
             newGame();
@@ -138,15 +138,15 @@ void SnakeView::refresh()
 {
     QString state;
     if (m_board.dead())
-        state = QStringLiteral("Game over");
+        state = tr("Game over");
     else if (!m_started)
-        state = QStringLiteral("Press an arrow key to start");
+        state = tr("Press an arrow key to start");
     else if (!m_running)
-        state = QStringLiteral("Paused");
+        state = tr("Paused");
     else
-        state = QStringLiteral("Go");
+        state = tr("Go");
 
-    Q_EMIT statusChanged(QStringLiteral("%1   Score %2   Length %3   Best %4")
+    Q_EMIT statusChanged(tr("%1   Score %2   Length %3   Best %4")
                              .arg(state)
                              .arg(m_board.score())
                              .arg(m_board.snake().size())

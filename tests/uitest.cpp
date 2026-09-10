@@ -55,6 +55,7 @@
 #include <QPushButton>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QTranslator>
 
 #include <algorithm>
 #include <functional>
@@ -946,6 +947,124 @@ void savesFromOlderBuildsStillLoad()
                     qPrintable(forgot.join(QStringLiteral(", "))));
     check(forgot.isEmpty(),
           "a resumed game still saves something, rather than deleting itself on the way out");
+}
+
+// Marks every string it is asked for (GHUB-0161 INV-3). Only text that went
+// through Qt's translation lookup comes back carrying mark(), so a game id or a
+// settings key that picks it up was either wrapped by mistake or built from the
+// translated label rather than from the id.
+class MarkingTranslator : public QTranslator
+{
+public:
+    static QString mark() { return QStringLiteral("[tr]"); }
+
+    // Not empty, so installTranslator() takes it as a real translation.
+    bool isEmpty() const override { return false; }
+
+    QString translate(const char* /*context*/, const char* sourceText,
+                      const char* /*disambiguation*/, int /*n*/) const override
+    {
+        return mark() + QString::fromUtf8(sourceText);
+    }
+};
+
+// Every word a player reads is translated and nothing their data depends on is.
+// With English the only language, a key wrapped in tr() or built from a label
+// reads exactly as it should -- until a translation loads and moves every saved
+// game. So this loads one.
+void idsAndKeysSurviveATranslation()
+{
+    std::printf("\n      ids and keys under a loaded translation (GHUB-0161)\n");
+
+    // The one game opened. Solitaire because it offers a save, and because its
+    // id and its blurb differ ("Klondike"), so the two cannot be confused.
+    const QString id = QStringLiteral("Solitaire");
+    const QString geometryKey = QStringLiteral("window/geometry/") + id;
+    const QString saveKey = QStringLiteral("saved/") + id;
+    // Before as well as after. A marked key written by an earlier run -- a
+    // build with the defect, or one that died before the cleanup at the end --
+    // stays in the test store and would fail every run after it, including a
+    // run of code that is correct.
+    const auto forgetMarkedKeys = [] {
+        QSettings s;
+        for (const QString& key : s.allKeys())
+            if (key.contains(MarkingTranslator::mark()))
+                s.remove(key);
+    };
+    forgetMarkedKeys();
+    {
+        QSettings s;
+        s.remove(geometryKey);
+        s.remove(saveKey);
+    }
+
+    MarkingTranslator marker;
+    check(QCoreApplication::installTranslator(&marker),
+          "translation: a translator with something in it installs");
+    {
+        HubWindow hub;
+
+        const QStringList ids = {
+            QStringLiteral("Chess"),    QStringLiteral("Reversi"),     QStringLiteral("Draughts"),
+            QStringLiteral("Minesweeper"), QStringLiteral("Solitaire"), QStringLiteral("Spider"),
+            QStringLiteral("FreeCell"), QStringLiteral("Pyramid"),     QStringLiteral("Sudoku"),
+            QStringLiteral("Hearts"),   QStringLiteral("Canasta"),     QStringLiteral("Snake"),
+            QStringLiteral("2048"),     QStringLiteral("Pinball"),
+        };
+        check(hub.gameNames() == ids,
+              qPrintable(QStringLiteral("translation: the game ids stay fixed -- got \"%1\"")
+                             .arg(hub.gameNames().join(QStringLiteral(", ")))));
+
+        QWidget* grid = hub.findChild<QWidget*>(QStringLiteral("gamesHubTileGrid"));
+        const QList<QPushButton*> tiles =
+            grid != nullptr ? grid->findChildren<QPushButton*>() : QList<QPushButton*>();
+        QStringList plain;
+        for (QPushButton* tile : tiles)
+            if (!tile->accessibleName().startsWith(MarkingTranslator::mark()))
+                plain << tile->accessibleName();
+        if (!plain.isEmpty())
+            std::printf("      untranslated tiles: %s\n", qPrintable(plain.join(QStringLiteral(", "))));
+        check(!tiles.isEmpty() && plain.isEmpty(), "translation: every tile shows its translated label");
+
+        check(hub.openGameNamed(id), "translation: a game still opens by its id");
+        hub.show();
+        pump(40);
+        check(hub.windowTitle().startsWith(MarkingTranslator::mark() + id),
+              qPrintable(QStringLiteral("translation: the window title shows the label -- got \"%1\"")
+                             .arg(hub.windowTitle())));
+        check(hub.windowTitle().endsWith(QStringLiteral("Games " GAMESHUB_VERSION)),
+              "translation: and ends with --version's spelling, untranslated");
+
+        GameView* view = hub.findChild<GameView*>();
+        check(view != nullptr && !startedSave(view).isEmpty(),
+              "translation: the game has something worth saving");
+        QAction* back = hub.findChild<QAction*>(QStringLiteral("backAction"));
+        check(back != nullptr, "translation: there is a way back to the menu");
+        if (back != nullptr)
+            back->trigger();
+        pump(20);
+    }
+    QCoreApplication::removeTranslator(&marker);
+
+    const QSettings s;
+    check(s.contains(geometryKey), "translation: returning to the menu wrote window/geometry/<id>");
+    check(s.contains(saveKey), "translation: and the game's position under saved/<id>");
+    QStringList marked;
+    for (const QString& key : s.allKeys())
+        if (key.contains(MarkingTranslator::mark()))
+            marked << key;
+    if (!marked.isEmpty())
+        std::printf("      translated keys: %s\n", qPrintable(marked.join(QStringLiteral(", "))));
+    check(marked.isEmpty(), "translation: no settings key carries a translated word");
+
+    // Nothing left behind: a stored Solitaire save would be resumed by the next
+    // hub that opens the game.
+    {
+        QSettings clean;
+        clean.remove(geometryKey);
+        clean.remove(saveKey);
+    }
+    forgetMarkedKeys();
 }
 
 // Writes the corpus above. Run deliberately, and commit what it produces.
@@ -5151,6 +5270,8 @@ int main(int argc, char* argv[])
     theRedealCueFitsItsSlot();
 
     aFullSpiderTableStaysOnTheSurface();
+
+    idsAndKeysSurviveATranslation();
 
     savesFromOlderBuildsStillLoad();
 

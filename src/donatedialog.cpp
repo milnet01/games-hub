@@ -23,7 +23,7 @@ namespace {
 DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle(QStringLiteral("Support Games"));
+    setWindowTitle(tr("Support Games"));
     setObjectName(QStringLiteral("donateDialog"));
 
     // The legibility switch reaches here like anywhere else. A dialog lives for
@@ -42,7 +42,7 @@ DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
     outer->setSpacing(12);
 
     // What it is, before what it wants.
-    auto* heading = new QLabel(QStringLiteral("Games is free, and stays free"), this);
+    auto* heading = new QLabel(tr("Games is free, and stays free"), this);
     heading->setObjectName(QStringLiteral("donateHeading"));
     QFont hf = heading->font();
     growByPoints(hf, 4.0);
@@ -51,7 +51,7 @@ DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
     outer->addWidget(heading);
 
     auto* blurb = new QLabel(
-        QStringLiteral(
+        tr(
             "There is nothing to buy here and nothing is locked away. If you enjoy "
             "the collection and would like to help it keep growing, any of the three "
             "places below will take a contribution.\n\n"
@@ -65,7 +65,7 @@ DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
         const QString url = QString::fromLatin1(link.url);
 
         auto* button = new QPushButton(
-            QStringLiteral("Open %1 in your browser").arg(QString::fromLatin1(link.label)), this);
+            tr("Open %1 in your browser").arg(QString::fromLatin1(link.label)), this);
         button->setToolTip(url);
         connect(button, &QPushButton::clicked, this, [url] {
             // These are generated from FUNDING.yml at configure time, so the
@@ -74,8 +74,8 @@ DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
             // handler for a scheme that is not a web page at all -- and the one
             // thing this dialog promises is that a button opens a browser.
             const QUrl target(url);
-            if (target.scheme() != QLatin1String("http")
-                && target.scheme() != QLatin1String("https")) {
+            if (target.scheme() != QLatin1String("http")         // untranslated: a URL scheme
+                && target.scheme() != QLatin1String("https")) {  // untranslated: a URL scheme
                 qWarning("Refusing to open \"%s\": not a web address.", qPrintable(url));
                 return;
             }
@@ -97,7 +97,7 @@ DonateDialog::DonateDialog(bool offerToStopAsking, QWidget* parent)
 
     if (offerToStopAsking) {
         outer->addSpacing(6);
-        m_keepAsking = new QCheckBox(QStringLiteral("Keep asking me now and then"), this);
+        m_keepAsking = new QCheckBox(tr("Keep asking me now and then"), this);
         m_keepAsking->setObjectName(QStringLiteral("donateKeepAsking"));
         m_keepAsking->setChecked(donate::asksEnabled());
         // Stored as it is toggled rather than on accept, so closing the dialog

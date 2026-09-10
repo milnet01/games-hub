@@ -3673,7 +3673,7 @@ inventing one.
   Kind: doc-fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0161] **Decide whether this project localises, because nothing here says.**
+- ✅ [GHUB-0161] **Decide whether this project localises, because nothing here says.**
   Eight of the nineteen review lanes reported it independently: a
   project-wide search for tr( under src/ returns nothing, and every
   user-visible string is a bare QStringLiteral.
@@ -3706,6 +3706,15 @@ inventing one.
   deferred; rows in
   docs/reviews/GHUB-0161-translatable-text-loop-log.md. Next: build from
   the spec. It is status accepted and nothing is implemented yet.
+  Resolved (2026-09-10): built from docs/specs/GHUB-0161-translatable-text.md. Every
+  word a player reads now goes through Qt's translation lookup; settings keys,
+  object names, sound names, game ids and terminal text carry an
+  `// untranslated: <reason>` marker instead. HubWindow::Entry now holds a fixed
+  id beside a translated label. scripts/translatable-check.py is the new
+  `translatable` ctest case: red on the tree before the retrofit, green after.
+  A new uitest case loads a translator that marks every string and proves the
+  game ids and settings keys stay put. English reads exactly as before; loading
+  a language is the first-language item the spec names and nobody has queued.
   **Layman:** Every visible word in the app is written in a way that cannot be translated, and no note says whether that is on purpose.
   Kind: investigate.
   Source: review-code sweep 2026-08-31.

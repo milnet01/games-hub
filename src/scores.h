@@ -11,11 +11,11 @@ public:
     // Keys. Grouped by game so the settings file stays readable by hand.
     static QString reversiBest(int difficulty);
     static QString minesweeperBestTime(int level);
-    static QString klondikeBestScore() { return QStringLiteral("klondike/best_score"); }
+    static QString klondikeBestScore() { return QStringLiteral("klondike/best_score"); } // untranslated: settings key
     static QString spiderBestMoves(int suits);
-    static QString heartsBestScore() { return QStringLiteral("hearts/best_score"); }
-    static QString canastaBestScore() { return QStringLiteral("canasta/best_score"); }
-    static QString pinballBestScore() { return QStringLiteral("pinball/best_score"); }
+    static QString heartsBestScore() { return QStringLiteral("hearts/best_score"); }     // untranslated: settings key
+    static QString canastaBestScore() { return QStringLiteral("canasta/best_score"); }   // untranslated: settings key
+    static QString pinballBestScore() { return QStringLiteral("pinball/best_score"); }   // untranslated: settings key
 
     static Scores& instance();
 

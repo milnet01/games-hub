@@ -79,9 +79,9 @@ constexpr qint64 kMaxPlayedMs = qint64(100) * 60 * 60 * 1000;
 QString levelKey(SudokuGrid::Level level)
 {
     switch (level) {
-    case SudokuGrid::Level::Easy:   return QStringLiteral("sudoku/best_time_easy");
-    case SudokuGrid::Level::Medium: return QStringLiteral("sudoku/best_time_medium");
-    case SudokuGrid::Level::Hard:   return QStringLiteral("sudoku/best_time_hard");
+    case SudokuGrid::Level::Easy:   return QStringLiteral("sudoku/best_time_easy");   // untranslated: settings key
+    case SudokuGrid::Level::Medium: return QStringLiteral("sudoku/best_time_medium"); // untranslated: settings key
+    case SudokuGrid::Level::Hard:   return QStringLiteral("sudoku/best_time_hard");   // untranslated: settings key
     }
     return {};
 }
@@ -109,12 +109,12 @@ SudokuView::SudokuView(QWidget* parent)
 
 void SudokuView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Puzzle"), this);
+    auto* newAction = new QAction(tr("New Puzzle"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, [this] { newGame(m_level); });
     m_actions.append(newAction);
 
-    auto* restart = new QAction(QStringLiteral("Restart"), this);
+    auto* restart = new QAction(tr("Restart"), this);
     connect(restart, &QAction::triggered, this, [this] {
         m_grid.restart();
         m_solved = false;
@@ -134,7 +134,7 @@ void SudokuView::buildActions()
     });
     m_actions.append(restart);
 
-    m_pauseAction = new QAction(QStringLiteral("Pause"), this);
+    m_pauseAction = new QAction(tr("Pause"), this);
     m_pauseAction->setCheckable(true);
     connect(m_pauseAction, &QAction::toggled, this, [this](bool on) {
         if (on == m_paused)
@@ -149,7 +149,7 @@ void SudokuView::buildActions()
     });
     m_actions.append(m_pauseAction);
 
-    m_pencilAction = new QAction(QStringLiteral("Pencil"), this);
+    m_pencilAction = new QAction(tr("Pencil"), this);
     m_pencilAction->setCheckable(true);
     m_pencilAction->setShortcut(QKeySequence(Qt::Key_P));
     connect(m_pencilAction, &QAction::toggled, this, [this](bool on) {
@@ -158,7 +158,7 @@ void SudokuView::buildActions()
     });
     m_actions.append(m_pencilAction);
 
-    m_errorsAction = new QAction(QStringLiteral("Show Errors"), this);
+    m_errorsAction = new QAction(tr("Show Errors"), this);
     m_errorsAction->setCheckable(true);
     m_errorsAction->setChecked(true);
     connect(m_errorsAction, &QAction::toggled, this, [this](bool on) {
@@ -175,12 +175,12 @@ void SudokuView::buildActions()
     QActionGroup* group = m_levelGroup;
     group->setExclusive(true);
     const struct { const char* name; SudokuGrid::Level level; } kLevels[] = {
-        { "Easy", SudokuGrid::Level::Easy },
-        { "Medium", SudokuGrid::Level::Medium },
-        { "Hard", SudokuGrid::Level::Hard },
+        { QT_TRANSLATE_NOOP("SudokuView", "Easy"), SudokuGrid::Level::Easy },
+        { QT_TRANSLATE_NOOP("SudokuView", "Medium"), SudokuGrid::Level::Medium },
+        { QT_TRANSLATE_NOOP("SudokuView", "Hard"), SudokuGrid::Level::Hard },
     };
     for (const auto& entry : kLevels) {
-        auto* a = new QAction(QString::fromUtf8(entry.name), this);
+        auto* a = new QAction(tr(entry.name), this);
         a->setCheckable(true);
         a->setChecked(entry.level == m_level);
         group->addAction(a);
@@ -354,15 +354,14 @@ void SudokuView::checkSolved()
     m_announced = true;
     announceLater(200, [this, seconds, newBest] {
         QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("Solved"));
-        box.setText(QStringLiteral("Puzzle complete!"));
+        box.setWindowTitle(tr("Solved"));
+        box.setText(tr("Puzzle complete!"));
         box.setInformativeText(
-            newBest ? QStringLiteral("Time: %1 seconds — a new best!").arg(seconds)
-                    : QStringLiteral("Time: %1 seconds.   Best: %2.")
-                          .arg(seconds)
+            newBest ? tr("Time: %n seconds — a new best!", nullptr, seconds)
+                    : tr("Time: %n seconds.   Best: %1.", nullptr, seconds)
                           .arg(Scores::instance().best(levelKey(m_level), seconds)));
-        QAbstractButton* again = box.addButton(QStringLiteral("New Puzzle"), QMessageBox::AcceptRole);
-        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+        QAbstractButton* again = box.addButton(tr("New Puzzle"), QMessageBox::AcceptRole);
+        box.addButton(tr("Close"), QMessageBox::RejectRole);
         box.exec();
         if (box.clickedButton() == again)
             newGame(m_level);
@@ -373,14 +372,14 @@ void SudokuView::refresh(const QString& message)
 {
     const int seconds = int(elapsedMs() / 1000);
     QString line = message.isEmpty()
-        ? QStringLiteral("%1   Empty %2   Time %3s%4")
-              .arg(m_solved ? QStringLiteral("Solved!") : QStringLiteral("Sudoku"))
+        ? tr("%1   Empty %2   Time %3s%4")
+              .arg(m_solved ? tr("Solved!") : tr("Sudoku"))
               .arg(m_grid.emptyCount())
               .arg(seconds)
-              .arg(m_pencil ? QStringLiteral("   Pencil mode") : QString())
+              .arg(m_pencil ? tr("   Pencil mode") : QString())
         : message;
     if (Scores::instance().has(levelKey(m_level)))
-        line += QStringLiteral("   Best %1s").arg(Scores::instance().best(levelKey(m_level)));
+        line = tr("%1   Best %2s").arg(line).arg(Scores::instance().best(levelKey(m_level)));
     Q_EMIT statusChanged(line);
 }
 
@@ -408,7 +407,7 @@ void SudokuView::paintEvent(QPaintEvent*)
         f.setPointSizeF(std::max(11.0, r.width() * 0.045));
         p.setFont(f);
         p.setPen(kClueInk);
-        p.drawText(r, Qt::AlignCenter, QStringLiteral("Paused\nPress Pause again to carry on"));
+        p.drawText(r, Qt::AlignCenter, tr("Paused\nPress Pause again to carry on"));
         return;
     }
 

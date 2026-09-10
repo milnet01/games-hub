@@ -121,7 +121,7 @@ namespace {
 // would leave that "·" standing as a phrase of its own.
 QList<QPair<QString, QString>> phrasesOf(const QString& text)
 {
-    static const QRegularExpression sep(QStringLiteral("\\s\\s+(?:·\\s\\s+)?"));
+    static const QRegularExpression sep(QStringLiteral("\\s\\s+(?:·\\s\\s+)?")); // untranslated: a regular expression
     QList<QPair<QString, QString>> out; // phrase, and the separator that follows it
     qsizetype pos = 0;
     QRegularExpressionMatchIterator it = sep.globalMatch(text);

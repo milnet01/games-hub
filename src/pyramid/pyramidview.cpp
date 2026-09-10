@@ -27,7 +27,7 @@ constexpr double kFanStep = 0.46;
 // A function for the reason scores.h's own key helpers are: nothing is built
 // at static-initialisation time, and QStringLiteral's data is static, so the
 // copy this returns costs nothing.
-QString bestKey() { return QStringLiteral("pyramid/best_pairs"); }
+QString bestKey() { return QStringLiteral("pyramid/best_pairs"); } // untranslated: settings key
 }
 
 PyramidView::PyramidView(QWidget* parent)
@@ -40,12 +40,12 @@ PyramidView::PyramidView(QWidget* parent)
 
 void PyramidView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Deal"), this);
+    auto* newAction = new QAction(tr("New Deal"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &PyramidView::newGame);
     m_actions.append(newAction);
 
-    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction = new QAction(tr("Undo"), this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
     connect(m_undoAction, &QAction::triggered, this, &PyramidView::undo);
@@ -277,7 +277,7 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
     const Card first = m_table.cardAt(m_selectedSource, m_selectedIndex);
 
     if (!m_table.takePair(source, index, m_selectedSource, m_selectedIndex)) {
-        refresh(QStringLiteral("%1 and %2 make %3, not 13.")
+        refresh(tr("%1 and %2 make %3, not 13.")
                     .arg(rankLabel(first.rank))
                     .arg(rankLabel(card.rank))
                     .arg(first.rank + card.rank));
@@ -297,7 +297,7 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
 void PyramidView::dealFromStock()
 {
     if (!m_table.drawFromStock()) {
-        refresh(QStringLiteral("No redeals left."));
+        refresh(tr("No redeals left."));
         return;
     }
     m_undoAction->setEnabled(m_table.canUndo());
@@ -323,12 +323,12 @@ void PyramidView::checkEnd()
     m_announced = true;
     announceLater(200, [this, newBest] {
         QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("Cleared"));
-        box.setText(QStringLiteral("The pyramid is gone!"));
-        box.setInformativeText(newBest ? QStringLiteral("A new best.")
-                                       : QStringLiteral("Pairs taken: %1.").arg(m_table.pairs()));
-        QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
-        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+        box.setWindowTitle(tr("Cleared"));
+        box.setText(tr("The pyramid is gone!"));
+        box.setInformativeText(newBest ? tr("A new best.")
+                                       : tr("Pairs taken: %1.").arg(m_table.pairs()));
+        QAbstractButton* again = box.addButton(tr("New Deal"), QMessageBox::AcceptRole);
+        box.addButton(tr("Close"), QMessageBox::RejectRole);
         box.exec();
         if (box.clickedButton() == again)
             newGame();
@@ -343,8 +343,8 @@ void PyramidView::refresh(const QString& message)
             ++left;
 
     QString line = message.isEmpty()
-        ? QStringLiteral("%1   Pyramid %2 left   Stock %3   Redeals %4")
-              .arg(m_won ? QStringLiteral("Cleared!") : QStringLiteral("Match pairs adding to 13"))
+        ? tr("%1   Pyramid %2 left   Stock %3   Redeals %4")
+              .arg(m_won ? tr("Cleared!") : tr("Match pairs adding to 13"))
               .arg(left)
               .arg(m_table.stock().size())
               .arg(PyramidTable::kMaxRedeals - m_table.redeals())
@@ -386,7 +386,7 @@ void PyramidView::paintEvent(QPaintEvent*)
 
     if (m_table.stock().empty())
         CardArt::paintSlot(p, stockRect(),
-                           m_table.redealsLeft() ? QStringLiteral("Redeal") : QString());
+                           m_table.redealsLeft() ? tr("Redeal") : QString());
     else
         CardArt::paintBack(p, stockRect());
 

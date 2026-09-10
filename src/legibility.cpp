@@ -10,7 +10,7 @@ namespace {
 // A function for the reason scores.h's own key helpers are: nothing is built
 // at static-initialisation time, and QStringLiteral's data is static, so the
 // copy this returns costs nothing.
-QString settingsKey() { return QStringLiteral("display/legibility"); }
+QString settingsKey() { return QStringLiteral("display/legibility"); } // untranslated: settings key
 }
 
 Legibility& Legibility::instance()

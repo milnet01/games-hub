@@ -28,25 +28,35 @@ Scores& Scores::instance()
 // a key of its own: wrong in name only, and unable to corrupt a real record.
 QString Scores::reversiBest(int difficulty)
 {
-    static const char* names[] = { "easy", "medium", "hard" };
+    static const char* names[] = {
+        "easy",     // untranslated: settings key
+        "medium",   // untranslated: settings key
+        "hard",     // untranslated: settings key
+    };
     constexpr int kCount = int(std::size(names));
     if (difficulty < 0 || difficulty >= kCount)
-        return QStringLiteral("reversi/best_discs_level_%1").arg(difficulty);
-    return QStringLiteral("reversi/best_discs_%1").arg(QString::fromUtf8(names[difficulty]));
+        return QStringLiteral("reversi/best_discs_level_%1").arg(difficulty); // untranslated: settings key
+    return QStringLiteral("reversi/best_discs_%1") // untranslated: settings key
+        .arg(QString::fromUtf8(names[difficulty]));
 }
 
 QString Scores::minesweeperBestTime(int level)
 {
-    static const char* names[] = { "beginner", "intermediate", "expert" };
+    static const char* names[] = {
+        "beginner",     // untranslated: settings key
+        "intermediate", // untranslated: settings key
+        "expert",       // untranslated: settings key
+    };
     constexpr int kCount = int(std::size(names));
     if (level < 0 || level >= kCount)
-        return QStringLiteral("minesweeper/best_time_level_%1").arg(level);
-    return QStringLiteral("minesweeper/best_time_%1").arg(QString::fromUtf8(names[level]));
+        return QStringLiteral("minesweeper/best_time_level_%1").arg(level); // untranslated: settings key
+    return QStringLiteral("minesweeper/best_time_%1") // untranslated: settings key
+        .arg(QString::fromUtf8(names[level]));
 }
 
 QString Scores::spiderBestMoves(int suits)
 {
-    return QStringLiteral("spider/best_moves_%1_suit").arg(suits);
+    return QStringLiteral("spider/best_moves_%1_suit").arg(suits); // untranslated: settings key
 }
 
 bool Scores::has(const QString& key) const
@@ -104,7 +114,8 @@ void Scores::clear()
     const QStringList keys = s.allKeys();
     for (const QString& key : keys) {
         const QString leaf = key.section(QLatin1Char('/'), -1);
-        if (leaf.startsWith(QLatin1String("best_")) || leaf == QLatin1String("wins"))
+        if (leaf.startsWith(QLatin1String("best_"))  // untranslated: settings key
+            || leaf == QLatin1String("wins"))        // untranslated: settings key
             s.remove(key);
     }
     s.sync();

@@ -35,18 +35,18 @@ SpiderView::SpiderView(QWidget* parent)
 
 void SpiderView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Deal"), this);
+    auto* newAction = new QAction(tr("New Deal"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &SpiderView::newGame);
     m_actions.append(newAction);
 
-    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction = new QAction(tr("Undo"), this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
     connect(m_undoAction, &QAction::triggered, this, &SpiderView::undo);
     m_actions.append(m_undoAction);
 
-    auto* deal = new QAction(QStringLiteral("Deal Row"), this);
+    auto* deal = new QAction(tr("Deal Row"), this);
     connect(deal, &QAction::triggered, this, [this] { dealRow(); });
     m_actions.append(deal);
 
@@ -57,10 +57,12 @@ void SpiderView::buildActions()
     auto* group = new QActionGroup(this);
     group->setExclusive(true);
     const struct { const char* name; int suits; } kModes[] = {
-        { "1 Suit", 1 }, { "2 Suits", 2 }, { "4 Suits", 4 },
+        { QT_TRANSLATE_NOOP("SpiderView", "1 Suit"), 1 },
+        { QT_TRANSLATE_NOOP("SpiderView", "2 Suits"), 2 },
+        { QT_TRANSLATE_NOOP("SpiderView", "4 Suits"), 4 },
     };
     for (const auto& mode : kModes) {
-        auto* a = new QAction(QString::fromUtf8(mode.name), this);
+        auto* a = new QAction(tr(mode.name), this);
         // Object names, not labels: restoreState matches on these. A label is
         // what the player reads, so the Qt standard asks for tr() around it --
         // and adding it would break the match silently, leaving the toolbar
@@ -179,7 +181,7 @@ bool SpiderView::restoreState(const QByteArray& blob)
     m_pressValid = false;
     m_won = false;
     m_undoAction->setEnabled(false);
-    const QString wanted = QStringLiteral("spider-suits-%1").arg(m_table.suits());
+    const QString wanted = QStringLiteral("spider-suits-%1").arg(m_table.suits()); // untranslated: an object name
     for (QAction* a : m_actions) {
         if (a->isCheckable() && a->objectName() == wanted)
             a->setChecked(true);
@@ -284,7 +286,7 @@ void SpiderView::dealRow()
         return;
     if (!m_table.dealRow()) {
         // The rule that stops a deal burying an empty column beyond recovery.
-        Q_EMIT statusChanged(QStringLiteral("Fill every empty column before dealing a new row."));
+        Q_EMIT statusChanged(tr("Fill every empty column before dealing a new row."));
         return;
     }
     m_undoAction->setEnabled(m_table.canUndo());
@@ -306,15 +308,15 @@ void SpiderView::checkWin()
 
     announceLater(200, [this, newBest] {
         QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("Solved"));
-        box.setText(QStringLiteral("All eight runs complete!"));
+        box.setWindowTitle(tr("Solved"));
+        box.setText(tr("All eight runs complete!"));
         box.setInformativeText(
-            newBest ? QStringLiteral("Moves: %1 — a new best!").arg(m_table.moves())
-                    : QStringLiteral("Moves: %1.   Best: %2.")
+            newBest ? tr("Moves: %1 — a new best!").arg(m_table.moves())
+                    : tr("Moves: %1.   Best: %2.")
                           .arg(m_table.moves())
                           .arg(Scores::instance().best(Scores::spiderBestMoves(m_table.suits()))));
-        QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
-        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+        QAbstractButton* again = box.addButton(tr("New Deal"), QMessageBox::AcceptRole);
+        box.addButton(tr("Close"), QMessageBox::RejectRole);
         box.exec();
         if (box.clickedButton() == again)
             newGame();
@@ -323,11 +325,12 @@ void SpiderView::checkWin()
 
 void SpiderView::refresh()
 {
-    Q_EMIT statusChanged(QStringLiteral("%1   Runs %2/8   Stock %3   Moves %4")
-                             .arg(m_won ? QStringLiteral("Solved!")
-                                        : QStringLiteral("Spider (%1 suit%2)")
-                                              .arg(m_table.suits())
-                                              .arg(m_table.suits() == 1 ? QString() : QStringLiteral("s")))
+    // The one-suit name is its own string: with no translation loaded, a %n
+    // form prints its English source as written for every count.
+    Q_EMIT statusChanged(tr("%1   Runs %2/8   Stock %3   Moves %4")
+                             .arg(m_won                   ? tr("Solved!")
+                                  : m_table.suits() == 1 ? tr("Spider (1 suit)")
+                                  : tr("Spider (%n suits)", nullptr, m_table.suits()))
                              .arg(m_table.completed())
                              .arg(m_table.stock().size() / kColumns)
                              .arg(m_table.moves()));

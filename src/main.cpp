@@ -124,7 +124,8 @@ int main(int argc, char* argv[])
     // plugin on any system, which is what makes it usable as a smoke test.
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg(argv[i]);
-        if (arg == "--version" || arg == "-v") {
+        if (arg == "--version"    // untranslated: a command-line flag
+            || arg == "-v") {     // untranslated: a command-line flag
             std::printf("Games %s\n", GAMESHUB_VERSION);
             return 0;
         }
@@ -150,14 +151,20 @@ int main(int argc, char* argv[])
 
     // `--game hearts` opens straight into one game, so a launcher or shortcut
     // can point at a single title rather than the menu.
+    //
+    // None of the text below is translated (GHUB-0161 § 4.2): the flags are a
+    // breaking surface, and --help is printed to a terminal.
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("A small collection of desktop games."));
+    parser.setApplicationDescription(
+        QStringLiteral("A small collection of desktop games.")); // untranslated: --help text
     parser.addHelpOption();
     parser.addVersionOption();
     const QCommandLineOption gameOption(
-        { QStringLiteral("g"), QStringLiteral("game") },
-        QStringLiteral("Open a game directly: %1.").arg(window.gameNames().join(QStringLiteral(", "))),
-        QStringLiteral("name"));
+        { QStringLiteral("g"),              // untranslated: a command-line flag
+          QStringLiteral("game") },         // untranslated: a command-line flag
+        QStringLiteral("Open a game directly: %1.") // untranslated: --help text
+            .arg(window.gameNames().join(QStringLiteral(", "))),
+        QStringLiteral("name"));            // untranslated: --help text
     parser.addOption(gameOption);
 
     // Nothing else here can see a game. Twelve legibility passes shipped and
@@ -165,24 +172,24 @@ int main(int argc, char* argv[])
     // to be answered as arithmetic about rectangles — which is how a caption
     // came to be printed on top of the card you had just played (GHUB-0084).
     const QCommandLineOption shotOption(
-        QStringLiteral("shot"),
-        QStringLiteral("Write a picture of the game to <file> and exit, without playing it."),
-        QStringLiteral("file"));
+        QStringLiteral("shot"),             // untranslated: a command-line flag
+        QStringLiteral("Write a picture of the game to <file> and exit, without playing it."), // untranslated: --help text
+        QStringLiteral("file"));            // untranslated: --help text
     const QCommandLineOption sizeOption(
-        QStringLiteral("size"),
-        QStringLiteral("Window size for --shot, as WxH. Defaults to the size the app would open at."),
-        QStringLiteral("WxH"));
+        QStringLiteral("size"),             // untranslated: a command-line flag
+        QStringLiteral("Window size for --shot, as WxH. Defaults to the size the app would open at."), // untranslated: --help text
+        QStringLiteral("WxH"));             // untranslated: --help text
     const QCommandLineOption legibleOption(
-        QStringLiteral("legible"),
-        QStringLiteral("Turn large play on for --shot only, leaving the stored setting alone."));
+        QStringLiteral("legible"),          // untranslated: a command-line flag
+        QStringLiteral("Turn large play on for --shot only, leaving the stored setting alone.")); // untranslated: --help text
     const QCommandLineOption turnsOption(
-        QStringLiteral("turns"),
-        QStringLiteral("Let the computers play this many turns before --shot takes the picture."),
-        QStringLiteral("n"));
+        QStringLiteral("turns"),            // untranslated: a command-line flag
+        QStringLiteral("Let the computers play this many turns before --shot takes the picture."), // untranslated: --help text
+        QStringLiteral("n"));               // untranslated: --help text
     const QCommandLineOption seedOption(
-        QStringLiteral("seed"),
-        QStringLiteral("Pin the shuffle so two runs deal the same cards."),
-        QStringLiteral("n"));
+        QStringLiteral("seed"),             // untranslated: a command-line flag
+        QStringLiteral("Pin the shuffle so two runs deal the same cards."), // untranslated: --help text
+        QStringLiteral("n"));               // untranslated: --help text
     parser.addOption(shotOption);
     parser.addOption(sizeOption);
     parser.addOption(legibleOption);
@@ -201,7 +208,7 @@ int main(int argc, char* argv[])
         (void)std::fprintf(stderr, "Try --help.\n");
         return 1;
     }
-    if (parser.isSet(QStringLiteral("help"))) {
+    if (parser.isSet(QStringLiteral("help"))) { // untranslated: a command-line flag
         std::printf("%s", qPrintable(parser.helpText()));
         return 0;
     }

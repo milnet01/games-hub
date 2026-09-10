@@ -1,15 +1,19 @@
 #include "card.h"
 
+#include <QCoreApplication>
+
 #include <algorithm>
 
+// The index letters differ by language -- a German pack reads K, D, B -- so
+// they are translated, each with a note naming the rank it stands for.
 QString rankLabel(int rank)
 {
     switch (rank) {
     case kJoker: return QStringLiteral("★");
-    case kAce:   return QStringLiteral("A");
-    case kJack:  return QStringLiteral("J");
-    case kQueen: return QStringLiteral("Q");
-    case kKing:  return QStringLiteral("K");
+    case kAce:   return QCoreApplication::translate("Card", "A", "ace");
+    case kJack:  return QCoreApplication::translate("Card", "J", "jack");
+    case kQueen: return QCoreApplication::translate("Card", "Q", "queen");
+    case kKing:  return QCoreApplication::translate("Card", "K", "king");
     default:     return QString::number(rank);
     }
 }
@@ -28,10 +32,10 @@ QString suitSymbol(Suit s)
 QString suitName(Suit s)
 {
     switch (s) {
-    case Suit::Clubs:    return QStringLiteral("clubs");
-    case Suit::Diamonds: return QStringLiteral("diamonds");
-    case Suit::Hearts:   return QStringLiteral("hearts");
-    case Suit::Spades:   return QStringLiteral("spades");
+    case Suit::Clubs:    return QCoreApplication::translate("Card", "clubs");
+    case Suit::Diamonds: return QCoreApplication::translate("Card", "diamonds");
+    case Suit::Hearts:   return QCoreApplication::translate("Card", "hearts");
+    case Suit::Spades:   return QCoreApplication::translate("Card", "spades");
     }
     return {};
 }

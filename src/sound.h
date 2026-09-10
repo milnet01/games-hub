@@ -15,23 +15,23 @@ class Sound
 {
 public:
     // Effect names match the WAV basenames in assets/sounds/.
-    static constexpr const char* kClick = "ui_click";
-    static constexpr const char* kBack = "ui_back";
-    static constexpr const char* kDiscPlace = "disc_place";
-    static constexpr const char* kDiscFlip = "disc_flip";
-    static constexpr const char* kDig = "dig";
-    static constexpr const char* kFlag = "flag";
-    static constexpr const char* kBoom = "boom";
-    static constexpr const char* kCardDeal = "card_deal";
-    static constexpr const char* kCardPlace = "card_place";
-    static constexpr const char* kShuffle = "shuffle";
-    static constexpr const char* kBumper = "bumper";
-    static constexpr const char* kSlingshot = "slingshot";
-    static constexpr const char* kFlipper = "flipper";
-    static constexpr const char* kLaunch = "launch";
-    static constexpr const char* kDrain = "drain";
-    static constexpr const char* kWin = "win";
-    static constexpr const char* kLose = "lose";
+    static constexpr const char* kClick = "ui_click";         // untranslated: a sound name
+    static constexpr const char* kBack = "ui_back";           // untranslated: a sound name
+    static constexpr const char* kDiscPlace = "disc_place";   // untranslated: a sound name
+    static constexpr const char* kDiscFlip = "disc_flip";     // untranslated: a sound name
+    static constexpr const char* kDig = "dig";                // untranslated: a sound name
+    static constexpr const char* kFlag = "flag";              // untranslated: a sound name
+    static constexpr const char* kBoom = "boom";              // untranslated: a sound name
+    static constexpr const char* kCardDeal = "card_deal";     // untranslated: a sound name
+    static constexpr const char* kCardPlace = "card_place";   // untranslated: a sound name
+    static constexpr const char* kShuffle = "shuffle";        // untranslated: a sound name
+    static constexpr const char* kBumper = "bumper";          // untranslated: a sound name
+    static constexpr const char* kSlingshot = "slingshot";    // untranslated: a sound name
+    static constexpr const char* kFlipper = "flipper";        // untranslated: a sound name
+    static constexpr const char* kLaunch = "launch";          // untranslated: a sound name
+    static constexpr const char* kDrain = "drain";            // untranslated: a sound name
+    static constexpr const char* kWin = "win";                // untranslated: a sound name
+    static constexpr const char* kLose = "lose";              // untranslated: a sound name
 
     static Sound& instance();
 

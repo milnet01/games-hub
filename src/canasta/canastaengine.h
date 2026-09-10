@@ -34,7 +34,9 @@ inline int partnerOf(int seat) { return (seat + 2) % kSeats; }
 // hard-codes a score, a threshold or a permission; it all comes from here, so a
 // second rule set is a different Rules value rather than a second engine.
 struct Rules {
-    QString name = QStringLiteral("Classic");
+    // Written into the save as it stands, so it stays English and is
+    // translated only where it is shown -- in the "canasta::Rules" context.
+    QString name = QStringLiteral(QT_TRANSLATE_NOOP("canasta::Rules", "Classic"));
 
     int targetScore = 5000;
     int handSize = 11;

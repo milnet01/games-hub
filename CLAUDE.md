@@ -64,9 +64,10 @@ cmake --build build                     # build everything
 # above, so -j on a machine short of memory is worth setting by hand: ninja
 # defaults to cores plus two.
 
-# --game takes the REGISTERED name, which is what the tile shows. Klondike is
-# registered as "Solitaire" (Klondike is its blurb), and an unknown name warns
-# and opens the tile grid rather than failing.
+# --game takes the game's id, which is what the tile shows until a translation
+# loads: a translation changes the tile, never the id (GHUB-0161). Klondike's id
+# is "Solitaire" (Klondike is its blurb), and an unknown name warns and opens
+# the tile grid rather than failing.
 
 # Photograph a game instead of playing it. Needs no display, no compositor and
 # no injection tool, so it works here under Wayland, over plain SSH, and on a
@@ -85,11 +86,12 @@ QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/hearts.png \
 # looks like an answer.
 
 cd build && ctest --output-on-failure   # both test binaries, the --shot runs,
-                                        # the hook test, and two Python checks
+                                        # the hook test, and the Python checks
                                         # -- scorepad (the phone score book's
-                                        # numbers against the game's) and
+                                        # numbers against the game's),
                                         # legibility (the kFaceMinWidth
-                                        # threshold)
+                                        # threshold) and translatable (every
+                                        # word a player reads goes through tr())
 cmake --install build                   # refresh the installed copy
 ```
 
@@ -164,29 +166,31 @@ QT_QPA_PLATFORM=offscreen ./build/gameshub_uitest --write-saves  # see below
 tests/pre-push-test.sh                                # which arm the hook takes
 python3 scripts/scorepad-check.py                     # score book vs the game
 python3 scripts/legibility-check.py --thresholds      # kFaceMinWidth is unique
+python3 scripts/translatable-check.py                 # every word is tr()'d
 ```
 
-The last two are pure Python and run as ctest cases, so a check skipped here is
-caught there. **The registered count differs by platform, and three cases
-separate the extremes** — the two Python ones, which need an interpreter CMake
-will use, and the hook test, which is bash and Unix-only. Linux registers all
-of them; a Windows runner registers every one but the hook test; a Windows box
-whose only `python.exe` is the Store stub registers neither Python case either.
-The configure step says when it drops the Python pair.
+The Python scripts are pure Python and run as ctest cases, so a check skipped
+here is caught there. **The registered count differs by platform, and the
+Python cases and the hook test separate the extremes** — the Python cases need
+an interpreter CMake will use, and the hook test is bash and Unix-only. Linux
+registers all of them; a Windows runner registers every one but the hook test;
+a Windows box whose only `python.exe` is the Store stub registers no Python case
+either. The configure step says when it drops the Python cases.
 
 **An absent checker registers a FAILING case rather than none at all, and that
 is the rule a new tool-gated case has to follow.** A configure with no bash or
 no python used to drop the test silently, and ctest then reported everything
 passing over a shorter suite — the same silent skip `scripts/local-ci.sh`
 refuses by name. So the `else()` branch is not optional: `prepush_needs_bash`,
-`scorepad_needs_python` and `legibility_needs_python` exist to be red.
+`scorepad_needs_python`, `legibility_needs_python` and
+`translatable_needs_python` exist to be red.
 
 **A case is genuinely dropped only where the platform is exempted on purpose,
-and there are two of those, not one.** The Python pair where there is no
+and there are two of those, not one.** The Python cases where there is no
 interpreter CMake will use AND the platform is not Unix — configure prints why.
 **That is not a Windows exemption**: the guard is `if(Python3_Interpreter_FOUND)`
 with no platform test at all, so a Windows runner that HAS an interpreter runs
-both — which is how a Linux-only `grep` pipeline inside one of them reddened
+them — which is how a Linux-only `grep` pipeline inside one of them reddened
 the Windows leg six times. And the hook test on any non-Unix platform, which is why its stub
 sits INSIDE `if(UNIX)` rather than beside it: bash is what it runs, so a red
 stub on Windows would be an alarm with nothing behind it. Put a new Unix-only

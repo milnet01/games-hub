@@ -56,9 +56,10 @@ and Canasta's `canasta/house/*` and `canasta/target`. **Adding a
 key with a default is not breaking** — nothing that used to work stops.
 
 **The command line, both the flags and what they print.** `--game <name>`
-takes the name the tile shows, so renaming a registered game breaks a launcher,
-a script or a desktop file someone has pinned — Klondike is registered as
-`Solitaire`, and that is the name the flag takes. `--version` and `-v` print
+takes the game's id, which the tile shows until a translation loads and which is
+never translated itself (GHUB-0161). Renaming an id breaks a launcher, a script
+or a desktop file someone has pinned — Klondike's id is `Solitaire`, and that is
+the name the flag takes. `--version` and `-v` print
 `Games <version>` on stdout, and **the prefix is already a contract**:
 `release.yml` asserts it against both artifacts — `grep -q '^Games '` on Linux,
 `Select-String -Pattern '^Games '` on Windows — so changing it fails the

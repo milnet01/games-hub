@@ -6,6 +6,7 @@
 #include "cards/cardcodec.h"
 #include "theme.h"
 
+#include <QCoreApplication>
 #include <QDataStream>
 #include <QMessageBox>
 #include <QPushButton>
@@ -18,7 +19,13 @@
 namespace {
 
 // Seats are drawn clockwise from the player: 0 bottom, 1 left, 2 top, 3 right.
-const char* kSeatNames[HeartsEngine::kPlayers] = { "You", "West", "North", "East" };
+// Translated where they are shown, in the HeartsView context.
+const char* kSeatNames[HeartsEngine::kPlayers] = {
+    QT_TRANSLATE_NOOP("HeartsView", "You"),
+    QT_TRANSLATE_NOOP("HeartsView", "West"),
+    QT_TRANSLATE_NOOP("HeartsView", "North"),
+    QT_TRANSLATE_NOOP("HeartsView", "East"),
+};
 
 constexpr int kAiDelayMs = 600;
 constexpr int kTrickPauseMs = 900;
@@ -52,10 +59,14 @@ QPointF fanOffset(int seat, int i)
 QString directionName(HeartsEngine::PassDirection d)
 {
     switch (d) {
-    case HeartsEngine::PassDirection::Left:   return QStringLiteral("left");
-    case HeartsEngine::PassDirection::Right:  return QStringLiteral("right");
-    case HeartsEngine::PassDirection::Across: return QStringLiteral("across");
-    case HeartsEngine::PassDirection::Hold:   return QStringLiteral("nobody");
+    case HeartsEngine::PassDirection::Left:
+        return QCoreApplication::translate("HeartsView", "left");
+    case HeartsEngine::PassDirection::Right:
+        return QCoreApplication::translate("HeartsView", "right");
+    case HeartsEngine::PassDirection::Across:
+        return QCoreApplication::translate("HeartsView", "across");
+    case HeartsEngine::PassDirection::Hold:
+        return QCoreApplication::translate("HeartsView", "nobody");
     }
     return {};
 }
@@ -76,12 +87,12 @@ HeartsView::HeartsView(QWidget* parent)
 
 void HeartsView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    auto* newAction = new QAction(tr("New Game"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &HeartsView::newGame);
     m_actions.append(newAction);
 
-    m_passAction = new QAction(QStringLiteral("Pass 3 Cards"), this);
+    m_passAction = new QAction(tr("Pass 3 Cards"), this);
     m_passAction->setEnabled(false);
     connect(m_passAction, &QAction::triggered, this, &HeartsView::confirmPass);
     m_actions.append(m_passAction);
@@ -91,7 +102,7 @@ void HeartsView::buildActions()
     // at once, no click is accepted, and saveState() stores that state, so it
     // survived a restart too. The only way out was New Game, which threw away
     // every accumulated total.
-    m_nextHandAction = new QAction(QStringLiteral("Next Hand"), this);
+    m_nextHandAction = new QAction(tr("Next Hand"), this);
     m_nextHandAction->setEnabled(false);
     connect(m_nextHandAction, &QAction::triggered, this, &HeartsView::startNextHand);
     m_actions.append(m_nextHandAction);
@@ -253,44 +264,48 @@ void HeartsView::announceHand()
         const bool newBest = over && !shared && m_engine.winner() == 0
             && Scores::instance().recordLow(Scores::heartsBestScore(), m_engine.total(0));
 
-        QString detail;
+        // One whole line per seat, joined rather than appended to, so no
+        // translated sentence is built from pieces.
+        QStringList lines;
         for (int p = 0; p < HeartsEngine::kPlayers; ++p) {
-            detail += QStringLiteral("%1: %2 this hand, %3 total\n")
-                          .arg(QString::fromUtf8(kSeatNames[p]))
-                          .arg(m_engine.handPoints(p))
-                          .arg(m_engine.total(p));
+            lines << tr("%1: %2 this hand, %3 total")
+                         .arg(tr(kSeatNames[p]))
+                         .arg(m_engine.handPoints(p))
+                         .arg(m_engine.total(p));
         }
+        QString detail = lines.join(QLatin1Char('\n'));
 
         QMessageBox box(this);
-        box.setWindowTitle(over ? QStringLiteral("Game over") : QStringLiteral("Hand over"));
+        box.setWindowTitle(over ? tr("Game over") : tr("Hand over"));
         if (over) {
             const int w = m_engine.winner();
             if (shared) {
                 QStringList tied;
                 for (int p = 0; p < HeartsEngine::kPlayers; ++p)
                     if (m_engine.total(p) == m_engine.total(w))
-                        tied << QString::fromUtf8(kSeatNames[p]);
-                box.setText(QStringLiteral("A tie — %1 finish level on %2.")
-                                .arg(tied.join(QStringLiteral(" and ")))
+                        tied << tr(kSeatNames[p]);
+                box.setText(tr("A tie — %1 finish level on %2.")
+                                .arg(tied.join(tr(" and ")))
                                 .arg(m_engine.total(w)));
             } else {
-                box.setText(w == 0 ? QStringLiteral("You win!")
-                                   : QStringLiteral("%1 wins.").arg(QString::fromUtf8(kSeatNames[w])));
+                box.setText(w == 0 ? tr("You win!")
+                                   : tr("%1 wins.").arg(tr(kSeatNames[w])));
             }
         } else {
-            box.setText(QStringLiteral("Hand complete."));
+            box.setText(tr("Hand complete."));
         }
         if (newBest)
-            detail += QStringLiteral("\nA new best — your lowest winning score yet!");
+            detail = tr("%1\n\nA new best — your lowest winning score yet!").arg(detail);
         else if (over && Scores::instance().has(Scores::heartsBestScore()))
-            detail += QStringLiteral("\nBest winning score: %1.")
-                          .arg(Scores::instance().best(Scores::heartsBestScore()));
+            detail = tr("%1\n\nBest winning score: %2.")
+                         .arg(detail)
+                         .arg(Scores::instance().best(Scores::heartsBestScore()));
         box.setInformativeText(detail.trimmed());
 
-        QAbstractButton* go = box.addButton(over ? QStringLiteral("New Game")
-                                                 : QStringLiteral("Next Hand"),
+        QAbstractButton* go = box.addButton(over ? tr("New Game")
+                                                 : tr("Next Hand"),
                                             QMessageBox::AcceptRole);
-        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+        box.addButton(tr("Close"), QMessageBox::RejectRole);
         box.exec();
 
         if (box.clickedButton() != go)
@@ -307,29 +322,29 @@ QString HeartsView::captionText() const
 {
     switch (m_engine.phase()) {
     case HeartsEngine::Phase::Passing:
-        return QStringLiteral("Choose 3 cards to pass %1 — %2 chosen.")
+        return tr("Choose 3 cards to pass %1 — %2 chosen.")
             .arg(directionName(m_engine.passDirection()))
             .arg(m_selected.size());
     case HeartsEngine::Phase::HandOver:
-        return QStringLiteral("Hand over.");
+        return tr("Hand over.");
     case HeartsEngine::Phase::GameOver:
-        return QStringLiteral("Game over.");
+        return tr("Game over.");
     case HeartsEngine::Phase::Playing:
         break;
     }
 
     const std::vector<std::pair<int, Card>>& trick = m_engine.trick();
     const QString turn = m_engine.currentPlayer() == 0
-        ? QStringLiteral("Your turn.")
-        : QStringLiteral("%1 is thinking…").arg(QString::fromUtf8(kSeatNames[m_engine.currentPlayer()]));
+        ? tr("Your turn.")
+        : tr("%1 is thinking…").arg(tr(kSeatNames[m_engine.currentPlayer()]));
     if (trick.empty())
-        return m_engine.currentPlayer() == 0 ? QStringLiteral("Your lead.") : turn;
+        return m_engine.currentPlayer() == 0 ? tr("Your lead.") : turn;
 
     // Spelled out rather than a ♥ glyph: the suit led is the one fact that
     // decides what you may play, and a symbol at sentence size is what the
     // legibility switch exists to stop the player squinting at.
-    return QStringLiteral("%1 led %2.  %3")
-        .arg(QString::fromUtf8(kSeatNames[trick.front().first]))
+    return tr("%1 led %2.  %3")
+        .arg(tr(kSeatNames[trick.front().first]))
         .arg(suitName(trick.front().second.suit))
         .arg(turn);
 }
@@ -339,21 +354,21 @@ void HeartsView::refresh()
     QString state;
     switch (m_engine.phase()) {
     case HeartsEngine::Phase::Passing:
-        state = QStringLiteral("Choose 3 cards to pass %1 (%2 chosen)")
+        state = tr("Choose 3 cards to pass %1 (%2 chosen)")
                     .arg(directionName(m_engine.passDirection()))
                     .arg(m_selected.size());
         break;
     case HeartsEngine::Phase::Playing:
         state = m_engine.currentPlayer() == 0
-            ? QStringLiteral("Your turn")
-            : QStringLiteral("%1 is thinking…")
-                  .arg(QString::fromUtf8(kSeatNames[m_engine.currentPlayer()]));
+            ? tr("Your turn")
+            : tr("%1 is thinking…")
+                  .arg(tr(kSeatNames[m_engine.currentPlayer()]));
         break;
     case HeartsEngine::Phase::HandOver:
-        state = QStringLiteral("Hand over");
+        state = tr("Hand over");
         break;
     case HeartsEngine::Phase::GameOver:
-        state = QStringLiteral("Game over");
+        state = tr("Game over");
         break;
     }
 
@@ -362,14 +377,14 @@ void HeartsView::refresh()
     if (m_nextHandAction != nullptr)
         m_nextHandAction->setEnabled(m_engine.phase() == HeartsEngine::Phase::HandOver);
 
-    Q_EMIT statusChanged(QStringLiteral("%1   You %2  West %3  North %4  East %5   %6")
+    Q_EMIT statusChanged(tr("%1   You %2  West %3  North %4  East %5   %6")
                              .arg(state)
                              .arg(m_engine.total(0))
                              .arg(m_engine.total(1))
                              .arg(m_engine.total(2))
                              .arg(m_engine.total(3))
-                             .arg(m_engine.heartsBroken() ? QStringLiteral("hearts broken")
-                                                          : QStringLiteral("hearts intact")));
+                             .arg(m_engine.heartsBroken() ? tr("hearts broken")
+                                                          : tr("hearts intact")));
 }
 
 // ---------------------------------------------------------------------------
@@ -540,7 +555,7 @@ void HeartsView::paintEvent(QPaintEvent*)
         // Anchor each label to the edge its seat sits against, or the left and
         // right names run off the window.
         const QString text = QStringLiteral("%1 (%2)")
-                                 .arg(QString::fromUtf8(kSeatNames[seat]))
+                                 .arg(tr(kSeatNames[seat]))
                                  .arg(n);
         const QRectF label(8, r.bottom() + 20, width() - 16, 20);
         // Qt::Alignment rather than int: these are flag enums, so storing them
@@ -563,8 +578,8 @@ void HeartsView::paintEvent(QPaintEvent*)
         f.setPointSizeF(f.pointSizeF() + 2);
         p.setFont(f);
         p.drawText(QRectF(0, height() / 2.0 - 40, width(), 40), Qt::AlignCenter,
-                   m_engine.currentPlayer() == 0 ? QStringLiteral("Your lead")
-                                                 : QStringLiteral("Waiting…"));
+                   m_engine.currentPlayer() == 0 ? tr("Your lead")
+                                                 : tr("Waiting…"));
     }
 
     // The player's hand, left to right.

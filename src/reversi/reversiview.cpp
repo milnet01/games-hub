@@ -6,6 +6,7 @@
 #include "theme.h"
 
 #include <QActionGroup>
+#include <QCoreApplication>
 #include <QDataStream>
 #include <QLinearGradient>
 #include <QMessageBox>
@@ -31,7 +32,8 @@ constexpr int kThinkDelayMs = 320;
 
 QString playerName(Player p)
 {
-    return p == Player::Black ? QStringLiteral("Black") : QStringLiteral("White");
+    return p == Player::Black ? QCoreApplication::translate("ReversiView", "Black")
+                              : QCoreApplication::translate("ReversiView", "White");
 }
 }
 
@@ -45,12 +47,12 @@ ReversiView::ReversiView(QWidget* parent)
 
 void ReversiView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    auto* newAction = new QAction(tr("New Game"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &ReversiView::newGame);
     m_actions.append(newAction);
 
-    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction = new QAction(tr("Undo"), this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
     connect(m_undoAction, &QAction::triggered, this, &ReversiView::undo);
@@ -63,12 +65,12 @@ void ReversiView::buildActions()
     m_levelGroup = new QActionGroup(this);
     m_levelGroup->setExclusive(true);
     const struct { const char* name; Difficulty value; } kLevels[] = {
-        { "Easy", Difficulty::Easy },
-        { "Medium", Difficulty::Medium },
-        { "Hard", Difficulty::Hard },
+        { QT_TRANSLATE_NOOP("ReversiView", "Easy"), Difficulty::Easy },
+        { QT_TRANSLATE_NOOP("ReversiView", "Medium"), Difficulty::Medium },
+        { QT_TRANSLATE_NOOP("ReversiView", "Hard"), Difficulty::Hard },
     };
     for (const auto& entry : kLevels) {
-        auto* a = new QAction(QString::fromUtf8(entry.name), this);
+        auto* a = new QAction(tr(entry.name), this);
         a->setCheckable(true);
         a->setChecked(entry.value == m_difficulty);
         m_levelGroup->addAction(a);
@@ -84,7 +86,7 @@ void ReversiView::buildActions()
         m_actions.append(a);
     }
 
-    auto* hints = new QAction(QStringLiteral("Hints"), this);
+    auto* hints = new QAction(tr("Hints"), this);
     hints->setCheckable(true);
     hints->setChecked(true);
     connect(hints, &QAction::toggled, this, [this](bool on) {
@@ -170,13 +172,16 @@ void ReversiView::advance()
     }
 
     if (m_board.legalMoves(m_toMove).empty()) {
-        const QString who = (m_toMove == m_human) ? QStringLiteral("You have")
-                                                  : QStringLiteral("The computer has");
+        // Two whole sentences rather than one built from pieces: the verb
+        // changes with who passed, and a translation orders the words its own way.
+        const QString notice = (m_toMove == m_human)
+            ? tr("You have no legal move — turn passes.")
+            : tr("The computer has no legal move — turn passes.");
         m_toMove = opponent(m_toMove);
         // Kept rather than emitted once: advance() runs again on the timer below
         // and its refresh() replaced this sentence after 320ms, which is not
         // long enough to read and is the only sign a pass happened at all.
-        m_passNotice = who + QStringLiteral(" no legal move — turn passes.");
+        m_passNotice = notice;
         refresh();
         QTimer::singleShot(kThinkDelayMs, this, &ReversiView::advance);
         return;
@@ -266,7 +271,7 @@ void ReversiView::refresh(const QString& message)
     update();
 
     const bool humanTurn = !m_finished && !m_thinking && m_toMove == m_human;
-    const QString score = QStringLiteral("You %1 — %2 Computer")
+    const QString score = tr("You %1 — %2 Computer")
                               .arg(m_board.count(m_human))
                               .arg(m_board.count(opponent(m_human)));
 
@@ -274,11 +279,11 @@ void ReversiView::refresh(const QString& message)
     if (!message.isEmpty())
         state = message;
     else if (m_finished)
-        state = QStringLiteral("Game over.");
+        state = tr("Game over.");
     else if (humanTurn)
-        state = QStringLiteral("Your turn (%1).").arg(playerName(m_human));
+        state = tr("Your turn (%1).").arg(playerName(m_human));
     else
-        state = QStringLiteral("Computer thinking…");
+        state = tr("Computer thinking…");
 
     // In front of whatever comes next, so it survives until a disc is actually
     // placed rather than being replaced by the following turn's line.
@@ -295,11 +300,11 @@ void ReversiView::announceResult()
 
     QString headline;
     if (mine > theirs)
-        headline = QStringLiteral("You win!");
+        headline = tr("You win!");
     else if (theirs > mine)
-        headline = QStringLiteral("The computer wins.");
+        headline = tr("The computer wins.");
     else
-        headline = QStringLiteral("A draw.");
+        headline = tr("A draw.");
 
     Sound::instance().play(mine > theirs ? Sound::kWin : Sound::kLose);
 
@@ -310,17 +315,17 @@ void ReversiView::announceResult()
         newBest = Scores::instance().recordHigh(Scores::reversiBest(int(m_difficulty)), mine);
 
     QMessageBox box(this);
-    box.setWindowTitle(QStringLiteral("Game over"));
+    box.setWindowTitle(tr("Game over"));
     box.setText(headline);
     const int record = Scores::instance().best(Scores::reversiBest(int(m_difficulty)));
-    QString detail = QStringLiteral("Final score %1 – %2.").arg(mine).arg(theirs);
+    QString detail = tr("Final score %1 – %2.").arg(mine).arg(theirs);
     if (newBest)
-        detail += QStringLiteral("\nA new best win at this level!");
+        detail = tr("%1\nA new best win at this level!").arg(detail);
     else if (record > 0)
-        detail += QStringLiteral("\nYour best win here: %1 discs.").arg(record);
+        detail = tr("%1\nYour best win here: %n discs.", nullptr, record).arg(detail);
     box.setInformativeText(detail);
-    QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
-    box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+    QAbstractButton* again = box.addButton(tr("Play Again"), QMessageBox::AcceptRole);
+    box.addButton(tr("Close"), QMessageBox::RejectRole);
     box.exec();
 
     if (box.clickedButton() == again)

@@ -4,8 +4,8 @@
 
 namespace {
 
-constexpr auto kCountKey = "donate/launches";
-constexpr auto kAskKey = "donate/ask";
+constexpr auto kCountKey = "donate/launches"; // untranslated: settings key
+constexpr auto kAskKey = "donate/ask";        // untranslated: settings key
 
 } // namespace
 

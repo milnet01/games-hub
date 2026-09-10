@@ -21,7 +21,7 @@ namespace {
 // A function for the reason scores.h's own key helpers are: nothing is built
 // at static-initialisation time, and QStringLiteral's data is static, so the
 // copy this returns costs nothing.
-QString bestKey() { return QStringLiteral("twenty48/best_score"); }
+QString bestKey() { return QStringLiteral("twenty48/best_score"); } // untranslated: settings key
 
 // Above this relative luminance a tile is "light" and takes the dark ink. It
 // sits well below the darkest light tile (64, at L = 0.279) and well above the
@@ -88,12 +88,12 @@ Twenty48View::Twenty48View(QWidget* parent)
 
 void Twenty48View::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    auto* newAction = new QAction(tr("New Game"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &Twenty48View::newGame);
     m_actions.append(newAction);
 
-    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction = new QAction(tr("Undo"), this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
     connect(m_undoAction, &QAction::triggered, this, &Twenty48View::undo);
@@ -138,7 +138,7 @@ void Twenty48View::push(Direction direction)
         // a repaint, and nothing else schedules one on this path. Without the
         // update the play surface -- the one surface read during play -- keeps
         // showing the previous sentence while the status bar changes.
-        refresh(QStringLiteral("Nothing moves that way."));
+        refresh(tr("Nothing moves that way."));
         update();
         return;
     }
@@ -163,15 +163,15 @@ void Twenty48View::checkEnd()
 
     announceLater(200, [this, newBest] {
         QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("No moves left"));
-        box.setText(QStringLiteral("The board is stuck."));
+        box.setWindowTitle(tr("No moves left"));
+        box.setText(tr("The board is stuck."));
         box.setInformativeText(newBest
-                                   ? QStringLiteral("Score: %1 — a new best!").arg(m_board.score())
-                                   : QStringLiteral("Score: %1.   Best: %2.")
+                                   ? tr("Score: %1 — a new best!").arg(m_board.score())
+                                   : tr("Score: %1.   Best: %2.")
                                          .arg(m_board.score())
                                          .arg(Scores::instance().best(bestKey())));
-        QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
-        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+        QAbstractButton* again = box.addButton(tr("Play Again"), QMessageBox::AcceptRole);
+        box.addButton(tr("Close"), QMessageBox::RejectRole);
         box.exec();
         if (box.clickedButton() == again)
             newGame();
@@ -185,11 +185,11 @@ void Twenty48View::refresh(const QString& message)
         highest = std::max(highest, v);
 
     QString line = message.isEmpty()
-        ? QStringLiteral("%1   Score %2   Highest %3   Best %4")
-              .arg(m_finished ? QStringLiteral("Stuck")
+        ? tr("%1   Score %2   Highest %3   Best %4")
+              .arg(m_finished ? tr("Stuck")
                               : m_board.reachedTarget()
-                          ? QStringLiteral("Target reached — keep going!")
-                          : QStringLiteral("Slide with the arrow keys"))
+                          ? tr("Target reached — keep going!")
+                          : tr("Slide with the arrow keys"))
               .arg(m_board.score())
               .arg(highest)
               .arg(std::max(Scores::instance().best(bestKey()), m_board.score()))

@@ -35,9 +35,9 @@ constexpr QColor kDug { 0x33, 0x38, 0x3d };
 constexpr QColor kBezel { 0x22, 0x26, 0x2a };
 
 const MinesweeperView::Level kLevels[] = {
-    { "Beginner", 9, 9, 10 },
-    { "Intermediate", 16, 16, 40 },
-    { "Expert", 30, 16, 99 },
+    { QT_TRANSLATE_NOOP("MinesweeperView", "Beginner"), 9, 9, 10 },
+    { QT_TRANSLATE_NOOP("MinesweeperView", "Intermediate"), 16, 16, 40 },
+    { QT_TRANSLATE_NOOP("MinesweeperView", "Expert"), 30, 16, 99 },
 };
 
 } // namespace
@@ -69,12 +69,12 @@ MinesweeperView::MinesweeperView(QWidget* parent)
 
 void MinesweeperView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    auto* newAction = new QAction(tr("New Game"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, [this] { newGame(m_level); });
     m_actions.append(newAction);
 
-    m_pauseAction = new QAction(QStringLiteral("Pause"), this);
+    m_pauseAction = new QAction(tr("Pause"), this);
     m_pauseAction->setCheckable(true);
     m_pauseAction->setShortcut(Qt::Key_P);
     connect(m_pauseAction, &QAction::toggled, this, [this](bool on) {
@@ -101,7 +101,7 @@ void MinesweeperView::buildActions()
     m_levelGroup = new QActionGroup(this);
     m_levelGroup->setExclusive(true);
     for (int i = 0; i < int(std::size(kLevels)); ++i) {
-        auto* a = new QAction(QString::fromUtf8(kLevels[i].name), this);
+        auto* a = new QAction(tr(kLevels[i].name), this);
         a->setCheckable(true);
         a->setChecked(i == m_level);
         m_levelGroup->addAction(a);
@@ -206,25 +206,26 @@ void MinesweeperView::refresh()
     QString state;
     switch (m_field->state()) {
     case Minefield::State::Playing:
-        state = m_paused ? QStringLiteral("Paused — the clock is stopped.")
-            : m_started  ? QStringLiteral("Digging…")
-                         : QStringLiteral("Click anywhere to start.");
+        state = m_paused ? tr("Paused — the clock is stopped.")
+            : m_started  ? tr("Digging…")
+                         : tr("Click anywhere to start.");
         break;
     case Minefield::State::Won:
-        state = QStringLiteral("Field cleared!");
+        state = tr("Field cleared!");
         break;
     case Minefield::State::Lost:
-        state = QStringLiteral("Boom.");
+        state = tr("Boom.");
         break;
     }
 
-    QString line = QStringLiteral("%1   Mines left %2   Time %3s")
+    QString line = tr("%1   Mines left %2   Time %3s")
                        .arg(state)
                        .arg(m_field->minesRemaining())
                        .arg(seconds);
     if (Scores::instance().has(Scores::minesweeperBestTime(m_level)))
-        line += QStringLiteral("   Best %1s")
-                    .arg(Scores::instance().best(Scores::minesweeperBestTime(m_level)));
+        line = tr("%1   Best %2s")
+                   .arg(line)
+                   .arg(Scores::instance().best(Scores::minesweeperBestTime(m_level)));
     Q_EMIT statusChanged(line);
 
     if (m_field->state() != Minefield::State::Playing) {
@@ -238,21 +239,20 @@ void MinesweeperView::refresh()
             // Queued so the final board paints before the dialog covers it.
             announceLater(won ? 250 : 600, [this, won, seconds, newBest] {
                 QMessageBox box(this);
-                box.setWindowTitle(won ? QStringLiteral("Cleared") : QStringLiteral("Boom"));
-                box.setText(won ? QStringLiteral("You cleared the field!")
-                                : QStringLiteral("You hit a mine."));
+                box.setWindowTitle(won ? tr("Cleared") : tr("Boom"));
+                box.setText(won ? tr("You cleared the field!")
+                                : tr("You hit a mine."));
                 if (won) {
                     const int record = Scores::instance().best(
                         Scores::minesweeperBestTime(m_level), seconds);
                     box.setInformativeText(
-                        newBest ? QStringLiteral("Time: %1 seconds — a new best!").arg(seconds)
-                                : QStringLiteral("Time: %1 seconds.   Best: %2.")
-                                      .arg(seconds)
+                        newBest ? tr("Time: %n seconds — a new best!", nullptr, seconds)
+                                : tr("Time: %n seconds.   Best: %1.", nullptr, seconds)
                                       .arg(record));
                 }
-                QAbstractButton* again = box.addButton(QStringLiteral("Play Again"),
+                QAbstractButton* again = box.addButton(tr("Play Again"),
                                                        QMessageBox::AcceptRole);
-                box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+                box.addButton(tr("Close"), QMessageBox::RejectRole);
                 box.exec();
                 if (box.clickedButton() == again)
                     newGame(m_level);
@@ -284,7 +284,7 @@ void MinesweeperView::paintEvent(QPaintEvent*)
         f.setPointSizeF(std::max(11.0, r.width() * 0.045));
         p.setFont(f);
         p.setPen(QColor(0xd0, 0xd6, 0xdc));
-        p.drawText(r, Qt::AlignCenter, QStringLiteral("Paused\nPress Pause again to carry on"));
+        p.drawText(r, Qt::AlignCenter, tr("Paused\nPress Pause again to carry on"));
         return;
     }
 

@@ -53,7 +53,12 @@ public:
 
 private:
     struct Entry {
+        // The game's id: saved/<name>, window/geometry/<name> and --game <name>.
+        // Fixed and never translated (GHUB-0161 § 4.3).
         QString name;
+        // What the tile and the window title show. Translated; with no
+        // translation loaded it reads exactly as `name` does.
+        QString label;
         QString blurb;
         // Drawn on the tile; each game gets a recognisable miniature rather
         // than a generic placeholder.

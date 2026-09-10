@@ -8,7 +8,7 @@ namespace {
 // A function for the reason scores.h's own key helpers are: nothing is built
 // at static-initialisation time, and QStringLiteral's data is static, so the
 // copy this returns costs nothing.
-QString mutedKey() { return QStringLiteral("audio/muted"); }
+QString mutedKey() { return QStringLiteral("audio/muted"); } // untranslated: settings key
 }
 
 Sound& Sound::instance()
@@ -24,7 +24,8 @@ Sound::Sound()
     // PREFIX: the plugin takes arguments after a colon (`offscreen:enable_fonts`
     // is the one used here), and an exact comparison reads those spellings as a
     // real display and builds effects against a device that is not there.
-    m_available = !qgetenv("QT_QPA_PLATFORM").startsWith("offscreen");
+    m_available = !qgetenv("QT_QPA_PLATFORM")   // untranslated: an environment variable
+                       .startsWith("offscreen"); // untranslated: a platform plugin
     // Stored like the legibility switch beside it in the toolbar. Without this
     // the mute was discarded on every launch, while README introduces the two
     // as a pair and says the setting is remembered.
@@ -71,7 +72,7 @@ void Sound::play(const QString& name)
                                  qPrintable(name));
                 });
             }
-            effect->setSource(QUrl(QStringLiteral("qrc:/sounds/%1.wav").arg(name)));
+            effect->setSource(QUrl(QStringLiteral("qrc:/sounds/%1.wav").arg(name))); // untranslated: a resource path
             effect->setVolume(float(m_volume));
             voices.players.push_back(effect);
         }

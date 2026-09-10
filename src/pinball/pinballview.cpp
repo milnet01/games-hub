@@ -42,12 +42,12 @@ PinballView::PinballView(QWidget* parent)
 
 void PinballView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    auto* newAction = new QAction(tr("New Game"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &PinballView::newGame);
     m_actions.append(newAction);
 
-    auto* launch = new QAction(QStringLiteral("Launch"), this);
+    auto* launch = new QAction(tr("Launch"), this);
     connect(launch, &QAction::triggered, this, [this] {
         m_table.launch();
         setFocus();
@@ -127,15 +127,15 @@ void PinballView::announceGameOver()
 
     announceLater(150, [this, newBest] {
         QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("Game over"));
-        box.setText(QStringLiteral("Out of balls."));
+        box.setWindowTitle(tr("Game over"));
+        box.setText(tr("Out of balls."));
         box.setInformativeText(
-            newBest ? QStringLiteral("Score: %1 — a new best!").arg(m_table.score())
-                    : QStringLiteral("Score: %1   Best: %2")
+            newBest ? tr("Score: %1 — a new best!").arg(m_table.score())
+                    : tr("Score: %1   Best: %2")
                           .arg(m_table.score())
                           .arg(Scores::instance().best(Scores::pinballBestScore())));
-        QAbstractButton* again = box.addButton(QStringLiteral("Play Again"), QMessageBox::AcceptRole);
-        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+        QAbstractButton* again = box.addButton(tr("Play Again"), QMessageBox::AcceptRole);
+        box.addButton(tr("Close"), QMessageBox::RejectRole);
         box.exec();
         if (box.clickedButton() == again)
             newGame();
@@ -146,13 +146,13 @@ void PinballView::refresh()
 {
     QString hint;
     if (m_table.gameOver())
-        hint = QStringLiteral("Game over — New Game to play again");
+        hint = tr("Game over — New Game to play again");
     else if (m_table.ballInLane())
-        hint = QStringLiteral("Hold Space to charge, release to launch");
+        hint = tr("Hold Space to charge, release to launch");
     else
-        hint = QStringLiteral("Z / M or ← → for the flippers");
+        hint = tr("Z / M or ← → for the flippers");
 
-    Q_EMIT statusChanged(QStringLiteral("Score %1   Balls %2   Best %3   %4")
+    Q_EMIT statusChanged(tr("Score %1   Balls %2   Best %3   %4")
                              .arg(m_table.score())
                              .arg(std::max(0, m_table.ballsLeft()))
                              .arg(std::max(Scores::instance().best(Scores::pinballBestScore()),
@@ -472,10 +472,10 @@ void PinballView::paintEvent(QPaintEvent*)
     p.setFont(f);
     p.setPen(Theme::kGold);
     p.drawText(glass.adjusted(12, 0, -12, 0), Qt::AlignLeft | Qt::AlignVCenter,
-               QStringLiteral("SCORE %1").arg(m_table.score()));
+               tr("SCORE %1").arg(m_table.score()));
     p.setPen(QColor(0xe6, 0xed, 0xf6));
     p.drawText(glass.adjusted(12, 0, -12, 0), Qt::AlignRight | Qt::AlignVCenter,
-               QStringLiteral("BALLS %1").arg(std::max(0, m_table.ballsLeft())));
+               tr("BALLS %1").arg(std::max(0, m_table.ballsLeft())));
 }
 
 void PinballView::keyPressEvent(QKeyEvent* event)

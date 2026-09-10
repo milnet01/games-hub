@@ -11,6 +11,7 @@
 
 #include <QActionGroup>
 #include <QCheckBox>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -188,11 +189,18 @@ Card canastaTopCard(const ca::Meld& m, const ca::Rules& r)
 QString seatName(int seat)
 {
     switch (seat) {
-    case 0: return QStringLiteral("You");
-    case 1: return QStringLiteral("West");
-    case 2: return QStringLiteral("North");
-    default: return QStringLiteral("East");
+    case 0: return QCoreApplication::translate("CanastaView", "You");
+    case 1: return QCoreApplication::translate("CanastaView", "West");
+    case 2: return QCoreApplication::translate("CanastaView", "North");
+    default: return QCoreApplication::translate("CanastaView", "East");
     }
+}
+
+// Rules::name is written into the save as it stands, so it is translated here,
+// where it is shown, in the context canastaengine.h marks it with.
+QString ruleSetName(const ca::Rules& rules)
+{
+    return QCoreApplication::translate("canasta::Rules", rules.name.toUtf8().constData());
 }
 
 int loadTarget()
@@ -208,7 +216,7 @@ int loadTarget()
 
 // --- house rules, saved between sessions -----------------------------------
 
-const char* kHouseGroup = "canasta/house/";
+const char* kHouseGroup = "canasta/house/"; // untranslated: settings key
 
 void storeHouse(const ca::Rules& r)
 {
@@ -216,39 +224,39 @@ void storeHouse(const ca::Rules& r)
     const auto put = [&](const char* key, int v) {
         s.setValue(QString::fromLatin1(kHouseGroup) + QLatin1String(key), v);
     };
-    put("handSize", r.handSize);
-    put("canastaSize", r.canastaSize);
-    put("maxWilds", r.maxWildsPerMeld);
-    put("openBelowZero", r.openMinBelowZero);
-    put("openUnder1500", r.openMinUnder1500);
-    put("openUnder3000", r.openMinUnder3000);
-    put("openAbove3000", r.openMinAbove3000);
-    put("naturalCanasta", r.naturalCanastaBonus);
-    put("mixedCanasta", r.mixedCanastaBonus);
-    put("redThree", r.redThreeValue);
-    put("allRedThrees", r.allRedThreesValue);
-    put("goingOut", r.goingOutBonus);
-    put("concealed", r.concealedGoingOutBonus);
-    put("requireCanasta", r.requireCanastaToGoOut ? 1 : 0);
-    put("blackThreeBlocks", r.blackThreeBlocksPile ? 1 : 0);
-    put("wildTake", r.unfrozenPileTakeableWithWild ? 1 : 0);
-    put("wildsFewer", r.wildsFewerThanNaturals ? 1 : 0);
-    put("frozenUntilOpen", r.pileFrozenUntilOpened ? 1 : 0);
-    put("canastaToScore", r.canastaNeededToScore ? 1 : 0);
-    put("closedCanasta", r.canastaMakesRankSafe ? 1 : 0);
-    put("noMeldFirstRound", r.noMeldingFirstRound ? 1 : 0);
-    put("pileOpens", r.pileMeldCountsToOpen ? 1 : 0);
-    put("deadHand", r.deadHandIfNobodyGoesOut ? 1 : 0);
-    put("discardOut", r.goingOutNeedsADiscard ? 1 : 0);
-    put("drawOnBoth", r.bothReachingTargetIsADraw ? 1 : 0);
-    put("teeFreeze", r.freezeCardMakesATee ? 1 : 0);
-    put("stackCanastas", r.canastasStackOnRedThrees ? 1 : 0);
+    put("handSize", r.handSize); // untranslated: settings key
+    put("canastaSize", r.canastaSize); // untranslated: settings key
+    put("maxWilds", r.maxWildsPerMeld); // untranslated: settings key
+    put("openBelowZero", r.openMinBelowZero); // untranslated: settings key
+    put("openUnder1500", r.openMinUnder1500); // untranslated: settings key
+    put("openUnder3000", r.openMinUnder3000); // untranslated: settings key
+    put("openAbove3000", r.openMinAbove3000); // untranslated: settings key
+    put("naturalCanasta", r.naturalCanastaBonus); // untranslated: settings key
+    put("mixedCanasta", r.mixedCanastaBonus); // untranslated: settings key
+    put("redThree", r.redThreeValue); // untranslated: settings key
+    put("allRedThrees", r.allRedThreesValue); // untranslated: settings key
+    put("goingOut", r.goingOutBonus); // untranslated: settings key
+    put("concealed", r.concealedGoingOutBonus); // untranslated: settings key
+    put("requireCanasta", r.requireCanastaToGoOut ? 1 : 0); // untranslated: settings key
+    put("blackThreeBlocks", r.blackThreeBlocksPile ? 1 : 0); // untranslated: settings key
+    put("wildTake", r.unfrozenPileTakeableWithWild ? 1 : 0); // untranslated: settings key
+    put("wildsFewer", r.wildsFewerThanNaturals ? 1 : 0); // untranslated: settings key
+    put("frozenUntilOpen", r.pileFrozenUntilOpened ? 1 : 0); // untranslated: settings key
+    put("canastaToScore", r.canastaNeededToScore ? 1 : 0); // untranslated: settings key
+    put("closedCanasta", r.canastaMakesRankSafe ? 1 : 0); // untranslated: settings key
+    put("noMeldFirstRound", r.noMeldingFirstRound ? 1 : 0); // untranslated: settings key
+    put("pileOpens", r.pileMeldCountsToOpen ? 1 : 0); // untranslated: settings key
+    put("deadHand", r.deadHandIfNobodyGoesOut ? 1 : 0); // untranslated: settings key
+    put("discardOut", r.goingOutNeedsADiscard ? 1 : 0); // untranslated: settings key
+    put("drawOnBoth", r.bothReachingTargetIsADraw ? 1 : 0); // untranslated: settings key
+    put("teeFreeze", r.freezeCardMakesATee ? 1 : 0); // untranslated: settings key
+    put("stackCanastas", r.canastasStackOnRedThrees ? 1 : 0); // untranslated: settings key
 }
 
 ca::Rules loadHouse()
 {
     ca::Rules r = ca::Rules::classic();
-    r.name = QStringLiteral("House");
+    r.name = QStringLiteral(QT_TRANSLATE_NOOP("canasta::Rules", "House"));
     QSettings s;
     const auto get = [&](const char* key, int fallback) {
         return s.value(QString::fromLatin1(kHouseGroup) + QLatin1String(key), fallback).toInt();
@@ -260,52 +268,52 @@ ca::Rules loadHouse()
     const auto clamped = [&](const char* key, int fallback, int lo, int hi) {
         return std::clamp(get(key, fallback), lo, hi);
     };
-    r.handSize = clamped("handSize", r.handSize, 7, 15);
-    r.canastaSize = clamped("canastaSize", r.canastaSize, 4, 10);
-    r.maxWildsPerMeld = clamped("maxWilds", r.maxWildsPerMeld, 0, 5);
-    r.openMinBelowZero = clamped("openBelowZero", r.openMinBelowZero, 0, 300);
-    r.openMinUnder1500 = clamped("openUnder1500", r.openMinUnder1500, 0, 300);
-    r.openMinUnder3000 = clamped("openUnder3000", r.openMinUnder3000, 0, 300);
-    r.openMinAbove3000 = clamped("openAbove3000", r.openMinAbove3000, 0, 300);
-    r.naturalCanastaBonus = clamped("naturalCanasta", r.naturalCanastaBonus, 0, 2000);
-    r.mixedCanastaBonus = clamped("mixedCanasta", r.mixedCanastaBonus, 0, 2000);
-    r.redThreeValue = clamped("redThree", r.redThreeValue, 0, 500);
-    r.allRedThreesValue = clamped("allRedThrees", r.allRedThreesValue, 0, 2000);
-    r.goingOutBonus = clamped("goingOut", r.goingOutBonus, 0, 1000);
-    r.concealedGoingOutBonus = clamped("concealed", r.concealedGoingOutBonus, 0, 1000);
-    r.requireCanastaToGoOut = get("requireCanasta", 1) != 0;
-    r.blackThreeBlocksPile = get("blackThreeBlocks", 1) != 0;
-    r.unfrozenPileTakeableWithWild = get("wildTake", 1) != 0;
-    r.wildsFewerThanNaturals = get("wildsFewer", 0) != 0;
-    r.pileFrozenUntilOpened = get("frozenUntilOpen", 1) != 0;
+    r.handSize = clamped("handSize", r.handSize, 7, 15); // untranslated: settings key
+    r.canastaSize = clamped("canastaSize", r.canastaSize, 4, 10); // untranslated: settings key
+    r.maxWildsPerMeld = clamped("maxWilds", r.maxWildsPerMeld, 0, 5); // untranslated: settings key
+    r.openMinBelowZero = clamped("openBelowZero", r.openMinBelowZero, 0, 300); // untranslated: settings key
+    r.openMinUnder1500 = clamped("openUnder1500", r.openMinUnder1500, 0, 300); // untranslated: settings key
+    r.openMinUnder3000 = clamped("openUnder3000", r.openMinUnder3000, 0, 300); // untranslated: settings key
+    r.openMinAbove3000 = clamped("openAbove3000", r.openMinAbove3000, 0, 300); // untranslated: settings key
+    r.naturalCanastaBonus = clamped("naturalCanasta", r.naturalCanastaBonus, 0, 2000); // untranslated: settings key
+    r.mixedCanastaBonus = clamped("mixedCanasta", r.mixedCanastaBonus, 0, 2000); // untranslated: settings key
+    r.redThreeValue = clamped("redThree", r.redThreeValue, 0, 500); // untranslated: settings key
+    r.allRedThreesValue = clamped("allRedThrees", r.allRedThreesValue, 0, 2000); // untranslated: settings key
+    r.goingOutBonus = clamped("goingOut", r.goingOutBonus, 0, 1000); // untranslated: settings key
+    r.concealedGoingOutBonus = clamped("concealed", r.concealedGoingOutBonus, 0, 1000); // untranslated: settings key
+    r.requireCanastaToGoOut = get("requireCanasta", 1) != 0; // untranslated: settings key
+    r.blackThreeBlocksPile = get("blackThreeBlocks", 1) != 0; // untranslated: settings key
+    r.unfrozenPileTakeableWithWild = get("wildTake", 1) != 0; // untranslated: settings key
+    r.wildsFewerThanNaturals = get("wildsFewer", 0) != 0; // untranslated: settings key
+    r.pileFrozenUntilOpened = get("frozenUntilOpen", 1) != 0; // untranslated: settings key
     // On by default in the House set: the owner's family plays it, and calls
     // it catching them a minus (GHUB-0098). The stored key keeps its old
     // spelling -- renaming it would silently untick the rule for anyone who
     // has already set it.
-    r.canastaNeededToScore = get("canastaToScore", 1) != 0;
-    r.canastaMakesRankSafe = get("closedCanasta", 0) != 0;
+    r.canastaNeededToScore = get("canastaToScore", 1) != 0; // untranslated: settings key
+    r.canastaMakesRankSafe = get("closedCanasta", 0) != 0; // untranslated: settings key
     // On by default in the House set, unlike every other house flag: it is the
     // owner's family rule rather than a variation offered. Only reaches a
     // profile that has never saved house rules — a stored 0 is a choice and
     // stays a 0.
-    r.noMeldingFirstRound = get("noMeldFirstRound", 1) != 0;
+    r.noMeldingFirstRound = get("noMeldFirstRound", 1) != 0; // untranslated: settings key
     // On by default in the House set, for the same reason as the two above: it
     // is how the owner's family ends a hand rather than a variation offered.
-    r.goingOutNeedsADiscard = get("discardOut", 1) != 0;
+    r.goingOutNeedsADiscard = get("discardOut", 1) != 0; // untranslated: settings key
     // On here too: the owner's family wins by REACHING the target rather than
     // by being ahead when somebody does, so a hand carrying both sides past it
     // is a draw. Classic hands it to the higher score.
-    r.bothReachingTargetIsADraw = get("drawOnBoth", 1) != 0;
-    r.pileMeldCountsToOpen = get("pileOpens", 1) != 0;
+    r.bothReachingTargetIsADraw = get("drawOnBoth", 1) != 0; // untranslated: settings key
+    r.pileMeldCountsToOpen = get("pileOpens", 1) != 0; // untranslated: settings key
     // The one house default that deliberately differs from classic: a hand the
     // stock kills is void here unless it is turned off, because scoring a hand
     // nobody could finish rewards the side that sat on a frozen pile.
-    r.deadHandIfNobodyGoesOut = get("deadHand", 1) != 0;
+    r.deadHandIfNobodyGoesOut = get("deadHand", 1) != 0; // untranslated: settings key
     // Both on by default here for the same reason as the minus: they are how
     // the owner's family lays the table, and House is the set that exists to
     // match them. Classic keeps both off.
-    r.freezeCardMakesATee = get("teeFreeze", 1) != 0;
-    r.canastasStackOnRedThrees = get("stackCanastas", 1) != 0;
+    r.freezeCardMakesATee = get("teeFreeze", 1) != 0; // untranslated: settings key
+    r.canastasStackOnRedThrees = get("stackCanastas", 1) != 0; // untranslated: settings key
     return r;
 }
 
@@ -348,7 +356,7 @@ private:
 void showRulesInForce(QWidget* parent, const ca::Rules& rules)
 {
     QDialog dlg(parent);
-    dlg.setWindowTitle(QStringLiteral("Rules in force"));
+    dlg.setWindowTitle(QCoreApplication::translate("CanastaView", "Rules in force"));
 
     // This panel is nothing but text, so the legibility switch matters here
     // more than anywhere else in the app. Read once at construction, as
@@ -367,14 +375,15 @@ void showRulesInForce(QWidget* parent, const ca::Rules& rules)
     // itself BE Classic -- and with a target picked off the toolbar, a Classic
     // set still has one line to show. "Classic rules: the changes from
     // Classic" reads as a contradiction; this does not.
-    auto* heading = new QLabel(QStringLiteral("<b>%1 rules.</b> %2")
-                                   .arg(rules.name,
-                                        changed.isEmpty()
-                                            ? QStringLiteral("Nothing differs from the standard "
-                                                             "game.")
-                                            : QStringLiteral("These differ from the standard "
-                                                             "game:")),
-                               &dlg);
+    auto* heading = new QLabel(
+        QCoreApplication::translate("CanastaView", "<b>%1 rules.</b> %2")
+            .arg(ruleSetName(rules),
+                 changed.isEmpty()
+                     ? QCoreApplication::translate("CanastaView",
+                                                   "Nothing differs from the standard game.")
+                     : QCoreApplication::translate("CanastaView",
+                                                   "These differ from the standard game:")),
+        &dlg);
     heading->setWordWrap(true);
     column->addWidget(heading);
 
@@ -417,7 +426,7 @@ void showRulesInForce(QWidget* parent, const ca::Rules& rules)
 bool editHouseRules(QWidget* parent, ca::Rules& rules)
 {
     QDialog dlg(parent);
-    dlg.setWindowTitle(QStringLiteral("House rules"));
+    dlg.setWindowTitle(QCoreApplication::translate("CanastaView", "House rules"));
 
     auto* form = new QFormLayout;
     const auto spin = [&](const QString& label, int value, int lo, int hi) {
@@ -434,63 +443,86 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
         return box;
     };
 
-    auto* handSize = spin(QStringLiteral("Cards dealt to each player"), rules.handSize, 7, 15);
-    auto* canastaSize = spin(QStringLiteral("Cards in a canasta"), rules.canastaSize, 4, 10);
-    auto* maxWilds = spin(QStringLiteral("Most jokers in one meld"), rules.maxWildsPerMeld, 0, 5);
+    auto* handSize = spin(QCoreApplication::translate("CanastaView", "Cards dealt to each player"),
+                          rules.handSize, 7, 15);
+    auto* canastaSize = spin(QCoreApplication::translate("CanastaView", "Cards in a canasta"),
+                             rules.canastaSize, 4, 10);
+    auto* maxWilds = spin(QCoreApplication::translate("CanastaView", "Most jokers in one meld"),
+                          rules.maxWildsPerMeld, 0, 5);
 
-    auto* openLow = spin(QStringLiteral("Opening minimum, score below zero"),
+    auto* openLow = spin(QCoreApplication::translate("CanastaView",
+                                                     "Opening minimum, score below zero"),
                          rules.openMinBelowZero, 0, 300);
-    auto* openMid = spin(QStringLiteral("Opening minimum, under 1500"), rules.openMinUnder1500, 0,
-                         300);
-    auto* openHigh = spin(QStringLiteral("Opening minimum, 1500 to 2999"), rules.openMinUnder3000,
-                          0, 300);
-    auto* openTop = spin(QStringLiteral("Opening minimum, 3000 and up"), rules.openMinAbove3000, 0,
-                         300);
+    auto* openMid = spin(QCoreApplication::translate("CanastaView", "Opening minimum, under 1500"),
+                         rules.openMinUnder1500, 0, 300);
+    auto* openHigh = spin(QCoreApplication::translate("CanastaView",
+                                                      "Opening minimum, 1500 to 2999"),
+                          rules.openMinUnder3000, 0, 300);
+    auto* openTop = spin(QCoreApplication::translate("CanastaView", "Opening minimum, 3000 and up"),
+                         rules.openMinAbove3000, 0, 300);
 
-    auto* natural = spin(QStringLiteral("Natural canasta bonus"), rules.naturalCanastaBonus, 0,
-                         2000);
-    auto* mixed = spin(QStringLiteral("Mixed canasta bonus"), rules.mixedCanastaBonus, 0, 2000);
-    auto* redThree = spin(QStringLiteral("Each red three"), rules.redThreeValue, 0, 500);
-    auto* allReds = spin(QStringLiteral("All four red threes"), rules.allRedThreesValue, 0, 2000);
-    auto* goingOut = spin(QStringLiteral("Going out"), rules.goingOutBonus, 0, 1000);
-    auto* concealed = spin(QStringLiteral("Going out concealed"), rules.concealedGoingOutBonus, 0,
-                           1000);
+    auto* natural = spin(QCoreApplication::translate("CanastaView", "Natural canasta bonus"),
+                         rules.naturalCanastaBonus, 0, 2000);
+    auto* mixed = spin(QCoreApplication::translate("CanastaView", "Mixed canasta bonus"),
+                       rules.mixedCanastaBonus, 0, 2000);
+    auto* redThree = spin(QCoreApplication::translate("CanastaView", "Each red three"),
+                          rules.redThreeValue, 0, 500);
+    auto* allReds = spin(QCoreApplication::translate("CanastaView", "All four red threes"),
+                         rules.allRedThreesValue, 0, 2000);
+    auto* goingOut = spin(QCoreApplication::translate("CanastaView", "Going out"),
+                          rules.goingOutBonus, 0, 1000);
+    auto* concealed = spin(QCoreApplication::translate("CanastaView", "Going out concealed"),
+                           rules.concealedGoingOutBonus, 0, 1000);
 
-    auto* needCanasta = tick(QStringLiteral("A canasta is needed to go out"),
+    auto* needCanasta = tick(QCoreApplication::translate("CanastaView",
+                                                         "A canasta is needed to go out"),
                              rules.requireCanastaToGoOut);
-    auto* blackBlocks = tick(QStringLiteral("A black three blocks the pack"),
+    auto* blackBlocks = tick(QCoreApplication::translate("CanastaView",
+                                                         "A black three blocks the pack"),
                              rules.blackThreeBlocksPile);
-    auto* wildTake = tick(QStringLiteral("An open pack can be taken with a joker"),
+    auto* wildTake = tick(QCoreApplication::translate("CanastaView",
+                                                      "An open pack can be taken with a joker"),
                           rules.unfrozenPileTakeableWithWild);
-    auto* wildsFewer = tick(QStringLiteral("A meld keeps more real cards than jokers"),
+    auto* wildsFewer = tick(QCoreApplication::translate("CanastaView",
+                                                        "A meld keeps more real cards than jokers"),
                             rules.wildsFewerThanNaturals);
-    auto* frozenUntilOpen = tick(QStringLiteral("The pack is frozen until your side has opened"),
+    auto* frozenUntilOpen = tick(QCoreApplication::translate(
+                                     "CanastaView", "The pack is frozen until your side has opened"),
                                  rules.pileFrozenUntilOpened);
-    auto* needCanastaToScore = tick(QStringLiteral("A side with no canasta is caught a minus: its "
-                                                   "own melds count against it"),
+    auto* needCanastaToScore = tick(QCoreApplication::translate(
+                                        "CanastaView", "A side with no canasta is caught a minus: "
+                                                       "its own melds count against it"),
                                     rules.canastaNeededToScore);
     // Key still reads "closedCanasta" from when this rule was first written the
     // wrong way round: renaming it would silently untick it for anyone who has
     // already set it, and the setting itself is the same one.
-    auto* closedCanasta = tick(QStringLiteral("A canasta makes its rank a safe discard"),
+    auto* closedCanasta = tick(QCoreApplication::translate(
+                                   "CanastaView", "A canasta makes its rank a safe discard"),
                                rules.canastaMakesRankSafe);
-    auto* firstRound = tick(QStringLiteral("Nobody lays down in the first round"),
+    auto* firstRound = tick(QCoreApplication::translate("CanastaView",
+                                                        "Nobody lays down in the first round"),
                             rules.noMeldingFirstRound);
-    auto* pileOpens = tick(QStringLiteral("The pack can be part of your opening"),
+    auto* pileOpens = tick(QCoreApplication::translate("CanastaView",
+                                                       "The pack can be part of your opening"),
                            rules.pileMeldCountsToOpen);
-    auto* deadHand = tick(QStringLiteral("A hand nobody goes out on scores nothing"),
+    auto* deadHand = tick(QCoreApplication::translate("CanastaView",
+                                                      "A hand nobody goes out on scores nothing"),
                           rules.deadHandIfNobodyGoesOut);
-    auto* discardOut = tick(QStringLiteral("You go out by throwing your last card, unless you "
-                                           "finish on all four black threes"),
+    auto* discardOut = tick(QCoreApplication::translate(
+                                "CanastaView", "You go out by throwing your last card, unless "
+                                               "you finish on all four black threes"),
                             rules.goingOutNeedsADiscard);
-    auto* drawOnBoth = tick(QStringLiteral("Both sides reaching the target is a draw"),
+    auto* drawOnBoth = tick(QCoreApplication::translate(
+                                "CanastaView", "Both sides reaching the target is a draw"),
                             rules.bothReachingTargetIsADraw);
 
     // How the table is laid out rather than what is legal on it. Same dialog,
     // because to the people playing they are house rules like any other.
-    auto* teeFreeze = tick(QStringLiteral("The card that freezes the pack lies as a T"),
+    auto* teeFreeze = tick(QCoreApplication::translate(
+                               "CanastaView", "The card that freezes the pack lies as a T"),
                            rules.freezeCardMakesATee);
-    auto* stackCanastas = tick(QStringLiteral("Finished canastas stack on the red threes"),
+    auto* stackCanastas = tick(QCoreApplication::translate(
+                                   "CanastaView", "Finished canastas stack on the red threes"),
                                rules.canastasStackOnRedThrees);
 
     auto* layout = new QVBoxLayout(&dlg);
@@ -500,9 +532,11 @@ bool editHouseRules(QWidget* parent, ca::Rules& rules)
         // 50-point joker is the big one, a two is the small one. Said once,
         // where the rules are set, rather than glossed on every row that
         // mentions them.
-        QStringLiteral("These are your own rules. Classic Canasta is always still there\n"
-                       "on the Rules menu, so nothing here can lose it.\n"
-                       "A joker means either kind: the big joker, or a two — the small joker."),
+        QCoreApplication::translate(
+            "CanastaView",
+            "These are your own rules. Classic Canasta is always still there\n"
+            "on the Rules menu, so nothing here can lose it.\n"
+            "A joker means either kind: the big joker, or a two — the small joker."),
         &dlg);
     blurb->setWordWrap(true);
     layout->addWidget(blurb);
@@ -622,12 +656,12 @@ CanastaView::CanastaView(QWidget* parent)
 
 void CanastaView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Game"), this);
+    auto* newAction = new QAction(tr("New Game"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &CanastaView::newGame);
     m_actions.append(newAction);
 
-    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction = new QAction(tr("Undo"), this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
     connect(m_undoAction, &QAction::triggered, this, &CanastaView::undo);
@@ -637,19 +671,19 @@ void CanastaView::buildActions()
     // cards down belongs on the table, where the Lay down button is. This
     // keeps the space bar working, and refresh() still uses it to decide
     // whether the move is available at all.
-    m_meldAction = new QAction(QStringLiteral("Meld"), this);
+    m_meldAction = new QAction(tr("Meld"), this);
     m_meldAction->setShortcut(Qt::Key_Space);
     connect(m_meldAction, &QAction::triggered, this, [this] { humanMeld(-1); });
     addAction(m_meldAction);
 
-    m_discardAction = new QAction(QStringLiteral("Discard"), this);
+    m_discardAction = new QAction(tr("Discard"), this);
     m_discardAction->setShortcut(Qt::Key_Return);
     connect(m_discardAction, &QAction::triggered, this, &CanastaView::humanDiscard);
     m_actions.append(m_discardAction);
 
     // Sits with the hand actions rather than with the display toggles at the
     // far end, because that end is the first thing a narrow window hides.
-    auto* sort = new QAction(QStringLiteral("Sort"), this);
+    auto* sort = new QAction(tr("Sort"), this);
     // Object names, here and on every checkable action below, are what
     // restoreState matches on. Its labels are user-visible; an object name is
     // not, so it survives the tr() the Qt standard asks for. GHUB-0154.
@@ -671,13 +705,13 @@ void CanastaView::buildActions()
     auto* levels = new QActionGroup(this);
     levels->setExclusive(true);
     const struct { const char* name; ca::Level value; } kLevels[] = {
-        { "Easy", ca::Level::Easy },
-        { "Medium", ca::Level::Medium },
-        { "Hard", ca::Level::Hard },
-        { "Expert", ca::Level::Expert },
+        { QT_TRANSLATE_NOOP("CanastaView", "Easy"), ca::Level::Easy },
+        { QT_TRANSLATE_NOOP("CanastaView", "Medium"), ca::Level::Medium },
+        { QT_TRANSLATE_NOOP("CanastaView", "Hard"), ca::Level::Hard },
+        { QT_TRANSLATE_NOOP("CanastaView", "Expert"), ca::Level::Expert },
     };
     for (const auto& entry : kLevels) {
-        auto* a = new QAction(QString::fromUtf8(entry.name), this);
+        auto* a = new QAction(tr(entry.name), this);
         a->setObjectName(QStringLiteral("canasta-level-%1").arg(int(entry.value)));
         a->setCheckable(true);
         a->setChecked(entry.value == m_level);
@@ -702,7 +736,7 @@ void CanastaView::buildActions()
     // to come back to.
     auto* sets = new QActionGroup(this);
     sets->setExclusive(true);
-    auto* classic = new QAction(QStringLiteral("Classic"), this);
+    auto* classic = new QAction(tr("Classic"), this);
     classic->setObjectName(QStringLiteral("canasta-ruleset-classic"));
     classic->setCheckable(true);
     // Both ticks are set from the remembered choice rather than Classic being
@@ -716,7 +750,7 @@ void CanastaView::buildActions()
     });
     m_actions.append(classic);
 
-    auto* house = new QAction(QStringLiteral("House"), this);
+    auto* house = new QAction(tr("House"), this);
     house->setObjectName(QStringLiteral("canasta-ruleset-house"));
     house->setCheckable(true);
     house->setChecked(m_useHouse);
@@ -727,7 +761,7 @@ void CanastaView::buildActions()
     });
     m_actions.append(house);
 
-    m_rulesAction = new QAction(QStringLiteral("House rules…"), this);
+    m_rulesAction = new QAction(tr("House rules…"), this);
     connect(m_rulesAction, &QAction::triggered, this, [this, house] {
         const HoldTheClock hold(m_timer);
         if (!editHouseRules(this, m_house))
@@ -741,7 +775,7 @@ void CanastaView::buildActions()
     // Beside the editor, because "what am I playing by" and "change what I am
     // playing by" are the same question asked two ways. Reads the engine, so
     // it always answers about the hand on screen.
-    auto* inForce = new QAction(QStringLiteral("Rules in force…"), this);
+    auto* inForce = new QAction(tr("Rules in force…"), this);
     connect(inForce, &QAction::triggered, this, [this] {
         const HoldTheClock hold(m_timer);
         showRulesInForce(this, m_engine.rules());
@@ -755,7 +789,7 @@ void CanastaView::buildActions()
     auto* targets = new QActionGroup(this);
     targets->setExclusive(true);
     for (const int score : { 1000, 2000, 3000, 5000 }) {
-        auto* a = new QAction(QStringLiteral("Play to %1").arg(score), this);
+        auto* a = new QAction(tr("Play to %1").arg(score), this);
         a->setObjectName(QStringLiteral("canasta-target-%1").arg(score));
         a->setCheckable(true);
         a->setChecked(score == m_target);
@@ -772,7 +806,7 @@ void CanastaView::buildActions()
     sep4->setSeparator(true);
     m_actions.append(sep4);
 
-    auto* partner = new QAction(QStringLiteral("Expert partner"), this);
+    auto* partner = new QAction(tr("Expert partner"), this);
     partner->setCheckable(true);
     partner->setChecked(m_sharpPartner);
     connect(partner, &QAction::toggled, this, [this](bool on) {
@@ -783,7 +817,7 @@ void CanastaView::buildActions()
     });
     m_actions.append(partner);
 
-    auto* hints = new QAction(QStringLiteral("Hints"), this);
+    auto* hints = new QAction(tr("Hints"), this);
     hints->setCheckable(true);
     hints->setChecked(m_showHints);
     connect(hints, &QAction::toggled, this, [this](bool on) {
@@ -827,9 +861,9 @@ void CanastaView::applyRules(Changed what)
     m_canastasShown = canastaCount(m_engine.team(0), m_engine.rules());
 
     announce(what == Changed::Target
-                 ? QStringLiteral("Playing to %1 now — this hand carries on.").arg(m_target)
-                 : m_useHouse ? QStringLiteral("House rules now — this hand carries on.")
-                              : QStringLiteral("Classic rules now — this hand carries on."));
+                 ? tr("Playing to %1 now — this hand carries on.").arg(m_target)
+                 : m_useHouse ? tr("House rules now — this hand carries on.")
+                              : tr("Classic rules now — this hand carries on."));
 
     // Not update() alone: the new rules decide which melds are canastas, and
     // the paint order reads m_canastaOrder, which only trackCanastas() moves.
@@ -882,7 +916,7 @@ void CanastaView::undo()
     const QByteArray point = m_undo;
     forgetUndo();
     if (!restoreState(point)) {
-        announce(QStringLiteral("That move cannot be taken back."));
+        announce(tr("That move cannot be taken back."));
         return;
     }
     // Nothing announced on success, deliberately. The message panel is where a
@@ -1102,15 +1136,15 @@ bool CanastaView::restoreState(const QByteArray& blob)
     // the Qt standard wants tr() around them, and adding it would have broken
     // every line of this silently -- leaving the toolbar claiming a rule set,
     // a target and a level the resumed game is not playing. GHUB-0154.
-    const QString wantedSet = m_useHouse ? QStringLiteral("canasta-ruleset-house")
-                                         : QStringLiteral("canasta-ruleset-classic");
-    const QString wantedTarget = QStringLiteral("canasta-target-%1").arg(m_target);
-    const QString wantedLevel = QStringLiteral("canasta-level-%1").arg(int(m_level));
+    const QString wantedSet = m_useHouse ? QStringLiteral("canasta-ruleset-house")    // untranslated: an object name
+                                         : QStringLiteral("canasta-ruleset-classic"); // untranslated: an object name
+    const QString wantedTarget = QStringLiteral("canasta-target-%1").arg(m_target); // untranslated: an object name
+    const QString wantedLevel = QStringLiteral("canasta-level-%1").arg(int(m_level)); // untranslated: an object name
     for (QAction* a : m_actions) {
         if (!a->isCheckable())
             continue;
         const QString name = a->objectName();
-        if (name == QStringLiteral("canasta-sort"))
+        if (name == QStringLiteral("canasta-sort")) // untranslated: an object name
             a->setChecked(m_sortHand);
         else if (name == wantedSet || name == wantedTarget || name == wantedLevel)
             a->setChecked(true);
@@ -1192,11 +1226,11 @@ void CanastaView::tick()
                         || !ca::caughtAMinus(m_engine.team(t), m_engine.rules()))
                         continue;
                     announce(t == 0
-                                 ? QStringLiteral("Caught a minus — you had no canasta, so your "
-                                                  "own melds counted against you.")
-                                 : QStringLiteral("Caught them a minus — West and East had no "
-                                                  "canasta, so their melds counted against "
-                                                  "them."));
+                                 ? tr("Caught a minus — you had no canasta, so your "
+                                      "own melds counted against you.")
+                                 : tr("Caught them a minus — West and East had no "
+                                      "canasta, so their melds counted against "
+                                      "them."));
                 }
                 m_awaitingContinue = true;
                 redraw = true;
@@ -1946,7 +1980,7 @@ void CanastaView::humanTakePile()
     // on an empty pile simply did nothing, which reads as the board being stuck
     // rather than as a rule. The owner reads the table, not the status bar.
     if (m_engine.pile().empty()) {
-        announce(QStringLiteral("The pack is empty — there is nothing to pick up."));
+        announce(tr("The pack is empty — there is nothing to pick up."));
         return;
     }
 
@@ -1983,7 +2017,7 @@ void CanastaView::humanMeld(int targetRank)
         return;
     const std::vector<Card> cards = selectedCards();
     if (cards.empty()) {
-        announce(QStringLiteral("Pick the cards you want to lay down first."));
+        announce(tr("Pick the cards you want to lay down first."));
         return;
     }
 
@@ -2020,7 +2054,7 @@ void CanastaView::humanDiscard()
     if (m_engine.phase() != ca::Engine::Phase::Play || m_engine.currentSeat() != 0)
         return;
     if (m_selected.size() != 1) {
-        announce(QStringLiteral("Pick exactly one card to throw away."));
+        announce(tr("Pick exactly one card to throw away."));
         return;
     }
 
@@ -2128,57 +2162,57 @@ void CanastaView::refresh()
     case ca::Engine::Phase::GameOver:
         switch (m_engine.winner()) {
         case 0:
-            what = QStringLiteral("You and North win the game.");
+            what = tr("You and North win the game.");
             break;
         case ca::Engine::kDraw:
-            what = QStringLiteral("Both sides reached %1 — the game is a draw.")
+            what = tr("Both sides reached %1 — the game is a draw.")
                        .arg(m_engine.rules().targetScore);
             break;
         default:
-            what = QStringLiteral("West and East win the game.");
+            what = tr("West and East win the game.");
             break;
         }
         break;
     case ca::Engine::Phase::HandOver:
-        what = QStringLiteral("Hand over — click to deal the next one.");
+        what = tr("Hand over — click to deal the next one.");
         break;
     case ca::Engine::Phase::Draw:
         if (m_engine.currentSeat() != 0)
-            what = QStringLiteral("%1 is drawing.").arg(seatName(m_engine.currentSeat()));
+            what = tr("%1 is drawing.").arg(seatName(m_engine.currentSeat()));
         else if (m_selected.empty())
-            what = QStringLiteral("Your turn: take from the stock, or take the pack with the cards you pick.");
+            what = tr("Your turn: take from the stock, or take the pack with the cards you pick.");
         else
             // Cards picked up but Meld greyed out is the one place the board
             // looks broken rather than sequenced, so say why.
-            what = QStringLiteral("Your turn: click the pack to take it with those cards, or draw "
-                                  "first — melding comes after the draw.");
+            what = tr("Your turn: click the pack to take it with those cards, or draw "
+                      "first — melding comes after the draw.");
         break;
     case ca::Engine::Phase::Play:
         if (m_engine.currentSeat() != 0)
-            what = QStringLiteral("%1 is playing.").arg(seatName(m_engine.currentSeat()));
+            what = tr("%1 is playing.").arg(seatName(m_engine.currentSeat()));
         else if (!m_engine.meldingAllowed())
-            what = QStringLiteral("First round: nobody lays anything down yet — just throw a "
-                                  "card away.");
+            what = tr("First round: nobody lays anything down yet — just throw a "
+                      "card away.");
         else
-            what = QStringLiteral("Lay down what you want, then throw one card away.");
+            what = tr("Lay down what you want, then throw one card away.");
         break;
     }
     if (!m_message.isEmpty())
         what = m_message;
 
     const int need = m_engine.openRequirement(0);
-    const QString opening = us.opened ? QStringLiteral("open")
-                                      : QStringLiteral("need %1 to open").arg(need);
+    const QString opening = us.opened ? tr("open")
+                                      : tr("need %1 to open").arg(need);
 
-    Q_EMIT statusChanged(QStringLiteral("%1  ·  You %2  Them %3  (to %4)  ·  %5, %6  ·  stock %7%8")
+    Q_EMIT statusChanged(tr("%1  ·  You %2  Them %3  (to %4)  ·  %5, %6  ·  stock %7%8")
                              .arg(what)
                              .arg(us.score)
                              .arg(them.score)
                              .arg(m_engine.rules().targetScore)
-                             .arg(m_engine.rules().name)
+                             .arg(ruleSetName(m_engine.rules()))
                              .arg(opening)
                              .arg(m_engine.stockCount())
-                             .arg(m_engine.pileFrozen() ? QStringLiteral("  ·  pack FROZEN")
+                             .arg(m_engine.pileFrozen() ? tr("  ·  pack FROZEN")
                                                         : QString()));
 }
 
@@ -2786,9 +2820,9 @@ void CanastaView::paintCentreStrip(QPainter& p)
         QColor colour;
     };
     std::vector<Part> parts;
-    parts.push_back({ QStringLiteral("stock %1").arg(m_engine.stockCount()), kInkDim });
+    parts.push_back({ tr("stock %1").arg(m_engine.stockCount()), kInkDim });
     if (m_engine.pileFrozen())
-        parts.push_back({ QStringLiteral("FROZEN"), QColor(0x9a, 0xd8, 0xf0) });
+        parts.push_back({ tr("FROZEN"), QColor(0x9a, 0xd8, 0xf0) });
     // While the first round holds, nothing laid down and nothing taken — so the
     // throw is safe, which is worth saying rather than leaving to be counted
     // off the turn order. The wording splits on whether the seat that plays
@@ -2797,16 +2831,16 @@ void CanastaView::paintCentreStrip(QPainter& p)
     // the rule stops protecting you.
     if (!m_engine.meldingAllowed())
         parts.push_back({ m_engine.discardCannotBeTaken()
-                              ? QStringLiteral("FIRST ROUND — your throw is safe")
-                              : QStringLiteral("FIRST ROUND ENDS — the next seat can take"),
+                              ? tr("FIRST ROUND — your throw is safe")
+                              : tr("FIRST ROUND ENDS — the next seat can take"),
                           m_engine.discardCannotBeTaken() ? QColor(0x9f, 0xd8, 0xa8)
                                                           : kAlert });
     if (haveThrow) {
-        parts.push_back({ QStringLiteral("%1 threw").arg(seatName(m_lastThrownBy)), kInkDim });
+        parts.push_back({ tr("%1 threw").arg(seatName(m_lastThrownBy)), kInkDim });
         // Suit colours as they are on the card, but lifted off the dark plate:
         // black ink on claret cannot be read at all.
         parts.push_back({ isJoker(m_lastThrown)
-                              ? QStringLiteral("Joker")
+                              ? tr("Joker")
                               : QStringLiteral("%1 %2").arg(rankLabel(m_lastThrown.rank),
                                                             suitSymbol(m_lastThrown.suit)),
                           isRed(m_lastThrown) ? QColor(0xff, 0x92, 0x92)
@@ -2917,8 +2951,8 @@ void CanastaView::paintLayDown(QPainter& p)
     p.setFont(f);
     p.setPen(legal ? Theme::kGold : kInkDim);
     p.drawText(r, Qt::AlignCenter,
-               m_selected.size() == 1 ? QStringLiteral("Lay it down")
-                                      : QStringLiteral("Lay down %1").arg(m_selected.size()));
+               m_selected.size() == 1 ? tr("Lay it down")
+                                      : tr("Lay down %1").arg(m_selected.size()));
 }
 
 // The cards under the cursor while they are being dragged, fanned the way they
@@ -2983,13 +3017,13 @@ void CanastaView::paintScores(QPainter& p)
     // looked like it did. Spelled out on the plate that names the team rather
     // than abbreviated: reading it should not need the rule book.
     const auto opening = [this](int t) {
-        return m_engine.team(t).opened ? QStringLiteral("opened")
-                                       : QStringLiteral("needs %1").arg(m_engine.openRequirement(t));
+        return m_engine.team(t).opened ? tr("opened")
+                                       : tr("needs %1").arg(m_engine.openRequirement(t));
     };
     const Plate plates[2] = {
-        { QStringLiteral("You & North"), m_engine.team(0).score, m_engine.team(0).handScore, true,
+        { tr("You & North"), m_engine.team(0).score, m_engine.team(0).handScore, true,
           opening(0) },
-        { QStringLiteral("West & East"), m_engine.team(1).score, m_engine.team(1).handScore, false,
+        { tr("West & East"), m_engine.team(1).score, m_engine.team(1).handScore, false,
           opening(1) },
     };
 
@@ -3034,7 +3068,7 @@ void CanastaView::paintScores(QPainter& p)
             p.setFont(title);
             p.setPen(plates[i].hand >= 0 ? QColor(0x9f, 0xd8, 0xa8) : QColor(0xe2, 0x9b, 0x9b));
             p.drawText(r.adjusted(0, 0, -10, -4), Qt::AlignRight | Qt::AlignBottom,
-                       QStringLiteral("%1%2 last hand")
+                       tr("%1%2 last hand")
                            .arg(plates[i].hand >= 0 ? QStringLiteral("+") : QString())
                            .arg(plates[i].hand));
         }
@@ -3060,7 +3094,7 @@ void CanastaView::paintScores(QPainter& p)
         QColor c = Theme::kGold;
         c.setAlpha(int(235 * std::min(1.0, k * 1.6)));
         p.setPen(c);
-        p.drawText(band, Qt::AlignCenter | Qt::TextDontClip, QStringLiteral("CANASTA!"));
+        p.drawText(band, Qt::AlignCenter | Qt::TextDontClip, tr("CANASTA!"));
     }
 }
 
@@ -3087,23 +3121,23 @@ void CanastaView::paintSummary(QPainter& p)
 
     QString title;
     if (over)
-        title = m_engine.winner() == ca::Engine::kDraw ? QStringLiteral("A draw")
-            : m_engine.winner() == 0                    ? QStringLiteral("You win!")
-                                                        : QStringLiteral("They win");
+        title = m_engine.winner() == ca::Engine::kDraw ? tr("A draw")
+            : m_engine.winner() == 0                    ? tr("You win!")
+                                                        : tr("They win");
     else
-        title = QStringLiteral("Hand %1").arg(m_engine.handNumber());
+        title = tr("Hand %1").arg(m_engine.handNumber());
 
+    // Two whole sentences rather than ", concealed" spliced into one.
     const QString out = m_engine.wentOutSeat() >= 0
-        ? QStringLiteral("%1 went out%2.")
+        ? (m_engine.wasConcealed() ? tr("%1 went out, concealed.") : tr("%1 went out."))
               .arg(seatName(m_engine.wentOutSeat()))
-              .arg(m_engine.wasConcealed() ? QStringLiteral(", concealed") : QString())
         : m_engine.rules().deadHandIfNobodyGoesOut
             // Two zeroes with nothing said reads as the game having lost the
             // score rather than having voided the hand on purpose.
-            ? QStringLiteral("The stock ran out — nobody went out, so the hand is dead.")
-            : QStringLiteral("The stock ran out.");
-    const QString lines = QStringLiteral("%1\n\nYou & North   %2%3     →  %4\n"
-                                         "West & East   %5%6     →  %7\n\n%8")
+            ? tr("The stock ran out — nobody went out, so the hand is dead.")
+            : tr("The stock ran out.");
+    const QString lines = tr("%1\n\nYou & North   %2%3     →  %4\n"
+                             "West & East   %5%6     →  %7\n\n%8")
                               .arg(out)
                               .arg(us.handScore >= 0 ? QStringLiteral("+") : QString())
                               .arg(us.handScore)
@@ -3111,8 +3145,8 @@ void CanastaView::paintSummary(QPainter& p)
                               .arg(them.handScore >= 0 ? QStringLiteral("+") : QString())
                               .arg(them.handScore)
                               .arg(them.score)
-                              .arg(over ? QStringLiteral("Click for a new game.")
-                                        : QStringLiteral("Click to deal the next hand."));
+                              .arg(over ? tr("Click for a new game.")
+                                        : tr("Click to deal the next hand."));
 
     // Measure first, then draw a panel that fits. The text is what decides the
     // size; the table only caps it.

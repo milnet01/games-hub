@@ -89,7 +89,7 @@ std::string squareName(Square s)
 
 void Board::reset()
 {
-    setFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    setFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"); // untranslated: FEN
 }
 
 namespace {
@@ -162,7 +162,7 @@ bool Board::setFromFen(const std::string& fen)
     // Every field below is overwritten, so what it starts from does not matter.
     Board candidate = *this;
     candidate.m_cells = cells;
-    candidate.m_toMove = fields[1] == "b" ? Colour::Black : Colour::White;
+    candidate.m_toMove = fields[1] == "b" ? Colour::Black : Colour::White; // untranslated: FEN
 
     const std::string rights = fields.size() > 2 ? fields[2] : "-";
     candidate.m_castle[0][0] = rights.find('K') != std::string::npos;
@@ -218,7 +218,8 @@ std::string Board::positionKey() const
             out += '/';
     }
 
-    out += m_toMove == Colour::White ? " w " : " b ";
+    out += m_toMove == Colour::White ? " w "  // untranslated: FEN
+                                     : " b "; // untranslated: FEN
     std::string rights;
     if (m_castle[0][0]) rights += 'K';
     if (m_castle[0][1]) rights += 'Q';
@@ -586,7 +587,8 @@ bool Board::insufficientMaterial() const
 std::string Board::notation(const Move& m) const
 {
     if (m.castle)
-        return m.to.col > m.from.col ? "O-O" : "O-O-O";
+        return m.to.col > m.from.col ? "O-O"     // untranslated: castling is written O-O in every language
+                                     : "O-O-O";  // untranslated: castling is written O-O in every language
 
     const Piece mover = at(m.from);
     std::string out;

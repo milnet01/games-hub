@@ -4,6 +4,7 @@
 #include "gameview.h"
 #include "legibility.h"
 #include "sound.h"
+#include "cards/card.h"
 #include "chess/chessart.h"
 #include "chess/chessview.h"
 #include "draughts/draughtsview.h"
@@ -247,14 +248,14 @@ void cardFan(QPainter& p, const QRectF& r, const QList<QPair<QString, bool>>& fa
 
 void klondikeTile(QPainter& p, const QRectF& r)
 {
-    cardFan(p, r, { { QStringLiteral("♠"), false }, { QStringLiteral("A"), true },
+    cardFan(p, r, { { QStringLiteral("♠"), false }, { rankLabel(kAce), true },
                     { QStringLiteral("♦"), true } }, 16);
 }
 
 void freecellTile(QPainter& p, const QRectF& r)
 {
-    cardFan(p, r, { { QStringLiteral("A"), false }, { QStringLiteral("2"), true },
-                    { QStringLiteral("3"), false } }, 14);
+    cardFan(p, r, { { rankLabel(kAce), false }, { rankLabel(2), true },
+                    { rankLabel(3), false } }, 14);
 }
 
 void pyramidTile(QPainter& p, const QRectF& r)
@@ -313,22 +314,22 @@ void sudokuTile(QPainter& p, const QRectF& r)
 
 void spiderTile(QPainter& p, const QRectF& r)
 {
-    cardFan(p, r, { { QStringLiteral("K"), false }, { QStringLiteral("Q"), false },
-                    { QStringLiteral("J"), false }, { QStringLiteral("10"), false } }, 11);
+    cardFan(p, r, { { rankLabel(kKing), false }, { rankLabel(kQueen), false },
+                    { rankLabel(kJack), false }, { rankLabel(10), false } }, 11);
 }
 
 void heartsTile(QPainter& p, const QRectF& r)
 {
     // The heart goes last so it lands on top of the fan — it is the tile's
     // whole identity.
-    cardFan(p, r, { { QStringLiteral("♠"), false }, { QStringLiteral("Q"), false },
+    cardFan(p, r, { { QStringLiteral("♠"), false }, { rankLabel(kQueen), false },
                     { QStringLiteral("♥"), true } }, 15);
 }
 
 void canastaTile(QPainter& p, const QRectF& r)
 {
     // A meld with a joker in it: the one card no other game in the hub has.
-    cardFan(p, r, { { QStringLiteral("K"), false }, { QStringLiteral("K"), true },
+    cardFan(p, r, { { rankLabel(kKing), false }, { rankLabel(kKing), true },
                     { QStringLiteral("★"), false } }, 14);
 }
 
@@ -421,7 +422,7 @@ void pinballTile(QPainter& p, const QRectF& r)
 namespace {
 QString hubTitle(const QString& page = QString())
 {
-    const QString app = QStringLiteral("Games " GAMESHUB_VERSION);
+    const QString app = QStringLiteral("Games " GAMESHUB_VERSION); // untranslated: --version's spelling
     return page.isEmpty() ? app : page + QStringLiteral(" — ") + app;
 }
 } // namespace
@@ -449,34 +450,51 @@ HubWindow::HubWindow(QWidget* parent)
 
 void HubWindow::buildEntries()
 {
+    // Each game's id comes first and is never translated: it is a settings key
+    // and --game's argument (GHUB-0161 § 4.3). The label beside it is what the
+    // tile and the window title show.
     m_entries = {
-        { QStringLiteral("Chess"), QStringLiteral("The full game"), chessTile,
+        { QStringLiteral("Chess"), // untranslated: the game's id
+          tr("Chess"), tr("The full game"), chessTile,
           [] { return new ChessView; } },
-        { QStringLiteral("Reversi"), QStringLiteral("Flip the board"), reversiTile,
+        { QStringLiteral("Reversi"), // untranslated: the game's id
+          tr("Reversi"), tr("Flip the board"), reversiTile,
           [] { return new ReversiView; } },
-        { QStringLiteral("Draughts"), QStringLiteral("Checkers, with kings"), draughtsTile,
+        { QStringLiteral("Draughts"), // untranslated: the game's id
+          tr("Draughts"), tr("Checkers, with kings"), draughtsTile,
           [] { return new DraughtsView; } },
-        { QStringLiteral("Minesweeper"), QStringLiteral("Clear the field"), minesweeperTile,
+        { QStringLiteral("Minesweeper"), // untranslated: the game's id
+          tr("Minesweeper"), tr("Clear the field"), minesweeperTile,
           [] { return new MinesweeperView; } },
-        { QStringLiteral("Solitaire"), QStringLiteral("Klondike"), klondikeTile,
+        { QStringLiteral("Solitaire"), // untranslated: the game's id
+          tr("Solitaire"), tr("Klondike"), klondikeTile,
           [] { return new KlondikeView; } },
-        { QStringLiteral("Spider"), QStringLiteral("Solitaire, harder"), spiderTile,
+        { QStringLiteral("Spider"), // untranslated: the game's id
+          tr("Spider"), tr("Solitaire, harder"), spiderTile,
           [] { return new SpiderView; } },
-        { QStringLiteral("FreeCell"), QStringLiteral("Solitaire, solvable"), freecellTile,
+        { QStringLiteral("FreeCell"), // untranslated: the game's id
+          tr("FreeCell"), tr("Solitaire, solvable"), freecellTile,
           [] { return new FreeCellView; } },
-        { QStringLiteral("Pyramid"), QStringLiteral("Pairs make 13"), pyramidTile,
+        { QStringLiteral("Pyramid"), // untranslated: the game's id
+          tr("Pyramid"), tr("Pairs make 13"), pyramidTile,
           [] { return new PyramidView; } },
-        { QStringLiteral("Sudoku"), QStringLiteral("Fill the grid"), sudokuTile,
+        { QStringLiteral("Sudoku"), // untranslated: the game's id
+          tr("Sudoku"), tr("Fill the grid"), sudokuTile,
           [] { return new SudokuView; } },
-        { QStringLiteral("Hearts"), QStringLiteral("Avoid the tricks"), heartsTile,
+        { QStringLiteral("Hearts"), // untranslated: the game's id
+          tr("Hearts"), tr("Avoid the tricks"), heartsTile,
           [] { return new HeartsView; } },
-        { QStringLiteral("Canasta"), QStringLiteral("Melds and partners"), canastaTile,
+        { QStringLiteral("Canasta"), // untranslated: the game's id
+          tr("Canasta"), tr("Melds and partners"), canastaTile,
           [] { return new CanastaView; } },
-        { QStringLiteral("Snake"), QStringLiteral("Eat and grow"), snakeTile,
+        { QStringLiteral("Snake"), // untranslated: the game's id
+          tr("Snake"), tr("Eat and grow"), snakeTile,
           [] { return new SnakeView; } },
-        { QStringLiteral("2048"), QStringLiteral("Slide and merge"), twenty48Tile,
+        { QStringLiteral("2048"), // untranslated: the game's id
+          tr("2048"), tr("Slide and merge"), twenty48Tile,
           [] { return new Twenty48View; } },
-        { QStringLiteral("Pinball"), QStringLiteral("Keep it alive"), pinballTile,
+        { QStringLiteral("Pinball"), // untranslated: the game's id
+          tr("Pinball"), tr("Keep it alive"), pinballTile,
           [] { return new PinballView; } },
     };
 }
@@ -491,7 +509,7 @@ void HubWindow::buildChrome()
     auto* outer = new QVBoxLayout(m_menuPage);
     outer->setContentsMargins(20, 18, 20, 20);
 
-    auto* heading = new QLabel(QStringLiteral("Pick a game"), m_menuPage);
+    auto* heading = new QLabel(tr("Pick a game"), m_menuPage);
     QFont hf = heading->font();
     hf.setPointSizeF(hf.pointSizeF() + 5);
     hf.setBold(true);
@@ -503,7 +521,7 @@ void HubWindow::buildChrome()
     grid->setSpacing(14);
     for (int i = 0; i < m_entries.size(); ++i) {
         const Entry& e = m_entries[i];
-        auto* tile = new GameTile(e.name, e.blurb, e.paintTile, m_menuPage);
+        auto* tile = new GameTile(e.label, e.blurb, e.paintTile, m_menuPage);
         connect(tile, &QPushButton::clicked, this, [this, i] {
             Sound::instance().play(Sound::kClick);
             openGame(i);
@@ -528,11 +546,11 @@ void HubWindow::buildChrome()
     m_menuHost = menuScroller;
     m_stack->addWidget(menuScroller);
 
-    m_toolBar = addToolBar(QStringLiteral("Game"));
+    m_toolBar = addToolBar(tr("Game"));
     m_toolBar->setMovable(false);
     m_toolBar->setToolButtonStyle(Qt::ToolButtonTextOnly);
 
-    m_backAction = new QAction(QStringLiteral("← All Games"), this);
+    m_backAction = new QAction(tr("← All Games"), this);
     m_backAction->setObjectName(QStringLiteral("backAction"));
     m_backAction->setShortcut(QKeySequence(Qt::Key_Escape));
 
@@ -544,17 +562,17 @@ void HubWindow::buildChrome()
 
     // One sound switch for the whole collection, so it stays put when a game
     // swaps its own actions in.
-    m_soundAction = new QAction(QStringLiteral("🔊 Sound"), this);
+    m_soundAction = new QAction(tr("🔊 Sound"), this);
     m_soundAction->setObjectName(QStringLiteral("soundAction"));
     m_soundAction->setCheckable(true);
     // Set before the connection below, so restoring the stored state does not
     // write it straight back and does not click.
     m_soundAction->setChecked(!Sound::instance().muted());
-    m_soundAction->setToolTip(QStringLiteral("Turn game sounds on or off"));
+    m_soundAction->setToolTip(tr("Turn game sounds on or off"));
 
     connect(m_soundAction, &QAction::toggled, this, [this](bool on) {
         Sound::instance().setMuted(!on);
-        m_soundAction->setText(on ? QStringLiteral("🔊 Sound") : QStringLiteral("🔇 Muted"));
+        m_soundAction->setText(on ? tr("🔊 Sound") : tr("🔇 Muted"));
         if (on)
             Sound::instance().play(Sound::kClick);
     });
@@ -572,15 +590,14 @@ void HubWindow::buildChrome()
     // setChecked() emit toggled and sync the label. Copy the precedent and a
     // player who had the switch on launches with a checked button reading
     // "🔍 Normal".
-    m_legibilityAction = new QAction(QStringLiteral("🔍 Normal"), this);
+    m_legibilityAction = new QAction(tr("🔍 Normal"), this);
     m_legibilityAction->setObjectName(QStringLiteral("legibilityAction"));
     m_legibilityAction->setCheckable(true);
-    m_legibilityAction->setToolTip(QStringLiteral("Larger, higher-contrast play"));
+    m_legibilityAction->setToolTip(tr("Larger, higher-contrast play"));
 
     connect(m_legibilityAction, &QAction::toggled, this, [this](bool on) {
         Legibility::instance().setEnabled(on);
-        m_legibilityAction->setText(on ? QStringLiteral("🔍 Large")
-                                       : QStringLiteral("🔍 Normal"));
+        m_legibilityAction->setText(on ? tr("🔍 Large") : tr("🔍 Normal"));
     });
     m_legibilityAction->setChecked(Legibility::instance().enabled());
     // And the other way round. The switch moves without this button being
@@ -622,21 +639,20 @@ void HubWindow::buildChrome()
             button->setAccessibleDescription(description);
         }
     };
-    nameButton(m_backAction, QStringLiteral("All games"),
-               QStringLiteral("Leave this game and go back to the list of games"));
-    nameButton(m_soundAction, QStringLiteral("Sound"),
-               QStringLiteral("Turn game sounds on or off"));
-    nameButton(m_legibilityAction, QStringLiteral("Large play"),
-               QStringLiteral("Larger cards and higher-contrast play"));
+    nameButton(m_backAction, tr("All games"),
+               tr("Leave this game and go back to the list of games"));
+    nameButton(m_soundAction, tr("Sound"), tr("Turn game sounds on or off"));
+    nameButton(m_legibilityAction, tr("Large play"),
+               tr("Larger cards and higher-contrast play"));
 
     // A Help menu rather than a fifteenth tile: the grid keeps all of its slots
     // for games, and "about this program" is where a stranger already looks.
     // The ellipsis is the standard promise that pressing it opens something
     // rather than doing something.
-    auto* helpMenu = menuBar()->addMenu(QStringLiteral("&Help"));
-    auto* donateAction = new QAction(QStringLiteral("Support this project…"), this);
+    auto* helpMenu = menuBar()->addMenu(tr("&Help"));
+    auto* donateAction = new QAction(tr("Support this project…"), this);
     donateAction->setObjectName(QStringLiteral("donateAction"));
-    donateAction->setStatusTip(QStringLiteral("Ways to support the collection"));
+    donateAction->setStatusTip(tr("Ways to support the collection"));
     connect(donateAction, &QAction::triggered, this, [this] {
         DonateDialog dialog(false, this);
         dialog.exec();
@@ -653,20 +669,23 @@ void HubWindow::buildChrome()
 
 namespace {
 
-// Both keys are built from the name the tile shows, so RENAMING A GAME ORPHANS
-// its saved position and its remembered window size, silently and with no
-// migration -- the player just finds a game that has forgotten them. Best
-// scores survive: their keys are fixed strings each game chooses. Nothing
-// renames one today, and a stable id per game is the fix if anything ever
-// needs to; changing a registered name meanwhile is a decision, not a tidy-up.
+// Both keys are built from the game's id, Entry::name, and never from the
+// label the tile shows. A label is translated, so a key built from one would
+// move every player's saved game and window size the day a translation loaded
+// (GHUB-0161 § 4.3). Changing an id still ORPHANS both, silently and with no
+// migration -- the player just finds a game that has forgotten them -- so
+// renaming one is a decision, not a tidy-up. Best scores are unaffected: their
+// keys are fixed strings each game chooses.
 QString geometryKey(const QString& page)
 {
-    return QStringLiteral("window/geometry/") + (page.isEmpty() ? QStringLiteral("menu") : page);
+    if (page.isEmpty())
+        return QStringLiteral("window/geometry/menu"); // untranslated: settings key
+    return QStringLiteral("window/geometry/") + page;  // untranslated: settings key
 }
 
 QString saveKey(const QString& game)
 {
-    return QStringLiteral("saved/") + game;
+    return QStringLiteral("saved/") + game; // untranslated: settings key
 }
 
 } // namespace
@@ -719,8 +738,8 @@ void HubWindow::checkSettingsWritable(QSettings& s)
     // Said once. The status bar is where it can still be acted on; by the close
     // path the window is going away and there is nowhere left to say it.
     m_settingsTroubleReported = true;
-    m_status->setText(QStringLiteral(
-        "Settings cannot be saved — games and window sizes will not be remembered."));
+    m_status->setText(
+        tr("Settings cannot be saved — games and window sizes will not be remembered."));
 }
 
 bool HubWindow::writeIfChanged(QSettings& s, const QString& key, const QByteArray& value)
@@ -868,7 +887,7 @@ void HubWindow::showMenu()
     m_stack->setCurrentWidget(m_menuHost);
     onlyTheOpenPageSetsTheFloor();
     setWindowTitle(hubTitle());
-    m_status->setText(QStringLiteral("%1 games. Pick one.").arg(m_entries.size()));
+    m_status->setText(tr("%n games. Pick one.", nullptr, int(m_entries.size())));
     applyPageGeometry(QString());
 }
 
@@ -908,13 +927,13 @@ void HubWindow::openGame(int index)
     m_backAction->setVisible(true);
     m_stack->setCurrentIndex(e.pageIndex);
     onlyTheOpenPageSetsTheFloor();
-    setWindowTitle(hubTitle(e.name));
+    setWindowTitle(hubTitle(e.label));
     applyPageGeometry(e.name);
     e.view->activate();
     e.view->setFocus();
     m_autosave->start();
     if (resumed)
-        m_status->setText(QStringLiteral("Carried on from where you left off."));
+        m_status->setText(tr("Carried on from where you left off."));
 }
 
 QStringList HubWindow::gameNames() const

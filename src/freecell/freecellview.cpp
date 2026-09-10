@@ -34,12 +34,12 @@ FreeCellView::FreeCellView(QWidget* parent)
 
 void FreeCellView::buildActions()
 {
-    auto* newAction = new QAction(QStringLiteral("New Deal"), this);
+    auto* newAction = new QAction(tr("New Deal"), this);
     newAction->setShortcut(QKeySequence::New);
     connect(newAction, &QAction::triggered, this, &FreeCellView::newGame);
     m_actions.append(newAction);
 
-    m_undoAction = new QAction(QStringLiteral("Undo"), this);
+    m_undoAction = new QAction(tr("Undo"), this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
     connect(m_undoAction, &QAction::triggered, this, &FreeCellView::undo);
@@ -252,20 +252,21 @@ void FreeCellView::checkWin()
     m_won = true;
     Sound::instance().play(Sound::kWin);
     const bool newBest = Scores::instance().recordLow(
-        QStringLiteral("freecell/best_moves"), m_table.moves());
+        QStringLiteral("freecell/best_moves"), m_table.moves()); // untranslated: settings key
     refresh();
 
     announceLater(200, [this, newBest] {
         QMessageBox box(this);
-        box.setWindowTitle(QStringLiteral("Solved"));
-        box.setText(QStringLiteral("Every card home!"));
+        box.setWindowTitle(tr("Solved"));
+        box.setText(tr("Every card home!"));
         box.setInformativeText(
-            newBest ? QStringLiteral("Moves: %1 — a new best!").arg(m_table.moves())
-                    : QStringLiteral("Moves: %1.   Best: %2.")
+            newBest ? tr("Moves: %1 — a new best!").arg(m_table.moves())
+                    : tr("Moves: %1.   Best: %2.")
                           .arg(m_table.moves())
-                          .arg(Scores::instance().best(QStringLiteral("freecell/best_moves"))));
-        QAbstractButton* again = box.addButton(QStringLiteral("New Deal"), QMessageBox::AcceptRole);
-        box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+                          .arg(Scores::instance().best(
+                              QStringLiteral("freecell/best_moves")))); // untranslated: settings key
+        QAbstractButton* again = box.addButton(tr("New Deal"), QMessageBox::AcceptRole);
+        box.addButton(tr("Close"), QMessageBox::RejectRole);
         box.exec();
         if (box.clickedButton() == again)
             newGame();
@@ -283,15 +284,17 @@ void FreeCellView::refresh(const QString& message)
             ++freeCells;
 
     QString line = message.isEmpty()
-        ? QStringLiteral("%1   Home %2/52   Free cells %3   Moves %4")
-              .arg(m_won ? QStringLiteral("Solved!") : QStringLiteral("FreeCell"))
+        ? tr("%1   Home %2/52   Free cells %3   Moves %4")
+              .arg(m_won ? tr("Solved!") : tr("FreeCell"))
               .arg(done)
               .arg(freeCells)
               .arg(m_table.moves())
         : message;
-    if (Scores::instance().has(QStringLiteral("freecell/best_moves")))
-        line += QStringLiteral("   Best %1")
-                    .arg(Scores::instance().best(QStringLiteral("freecell/best_moves")));
+    if (Scores::instance().has(QStringLiteral("freecell/best_moves"))) // untranslated: settings key
+        line = tr("%1   Best %2")
+                   .arg(line)
+                   .arg(Scores::instance().best(
+                       QStringLiteral("freecell/best_moves"))); // untranslated: settings key
     Q_EMIT statusChanged(line);
 }
 
@@ -326,7 +329,7 @@ void FreeCellView::paintEvent(QPaintEvent*)
         if (shown > 0 && cardflight::suppressAt(m_flights, m_flightConsumed, i, pile.back()))
             --shown;
         if (shown == 0)
-            CardArt::paintSlot(p, r, QStringLiteral("A"));
+            CardArt::paintSlot(p, r, rankLabel(kAce));
         else
             CardArt::paintFace(p, r, pile[shown - 1]);
     }
@@ -391,7 +394,7 @@ void FreeCellView::mousePressEvent(QMouseEvent* event)
 
     if (s.kind == PileKind::Column) {
         if (s.index < m_table.firstMovableIndex(s.pile)) {
-            refresh(QStringLiteral("Only a run in alternating colours moves together."));
+            refresh(tr("Only a run in alternating colours moves together."));
             return;
         }
     } else if (s.index != int(pileFor(s.kind, s.pile).size()) - 1) {
@@ -465,9 +468,11 @@ void FreeCellView::mouseReleaseEvent(QMouseEvent* event)
         int limit = 0;
         placed = m_table.dropOnColumn(m_drag, col, &limit);
         if (!placed && limit > 0) {
-            refusal = QStringLiteral("Only %1 card%2 can move at once — free a cell or a column.")
-                          .arg(limit)
-                          .arg(limit == 1 ? QString() : QStringLiteral("s"));
+            // The singular is its own sentence: with no translation loaded, a
+            // %n form prints its English source as written for every count.
+            refusal = limit == 1
+                ? tr("Only 1 card can move at once — free a cell or a column.")
+                : tr("Only %n cards can move at once — free a cell or a column.", nullptr, limit);
             break;
         }
     }

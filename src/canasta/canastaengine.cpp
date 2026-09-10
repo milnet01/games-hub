@@ -1,5 +1,7 @@
 #include "canastaengine.h"
 
+#include <QCoreApplication>
+
 #include <algorithm>
 #include <utility>
 
@@ -59,101 +61,150 @@ QStringList rulesInForce(const Rules& rules)
     // A rule is named only where it DIFFERS from Classic, and both directions
     // are worded: a house set can switch a classic rule off as readily as on,
     // and "not listed" then has to mean "as Classic plays it".
+    //
+    // Each sentence is marked where it is written and translated here, in the
+    // "canasta::rulesInForce" context (GHUB-0161 § 4.1). A number goes in as
+    // the plural form's n, so a count of cards reads correctly in any language.
     const auto flag = [&](bool now, bool asClassic, const char* whenOn, const char* whenOff) {
         if (now != asClassic)
-            out << QString::fromUtf8(now ? whenOn : whenOff);
+            out << QCoreApplication::translate("canasta::rulesInForce", now ? whenOn : whenOff);
     };
     const auto number = [&](int now, int asClassic, const char* sentence) {
         if (now != asClassic)
-            out << QString::fromUtf8(sentence).arg(now);
+            out << QCoreApplication::translate("canasta::rulesInForce", sentence, nullptr, now);
     };
 
     // Ordered the way a player asks at the table: what are we playing to, what
     // is dealt, how do we open, how do we meld, what can we do with the pile,
     // how does a hand end, and what is it all worth.
-    number(rules.targetScore, classic.targetScore, "The game is played to %1.");
-    number(rules.handSize, classic.handSize, "You are dealt %1 cards.");
-    number(rules.decks, classic.decks, "The pack is %1 decks shuffled together.");
-    number(rules.jokers, classic.jokers, "The pack holds %1 jokers.");
+    number(rules.targetScore, classic.targetScore,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "The game is played to %n."));
+    number(rules.handSize, classic.handSize,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "You are dealt %n cards."));
+    number(rules.decks, classic.decks,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "The pack is %n decks shuffled together."));
+    number(rules.jokers, classic.jokers,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "The pack holds %n jokers."));
 
     number(rules.openMinBelowZero, classic.openMinBelowZero,
-           "Opening from below zero needs %1 points.");
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce",
+                               "Opening from below zero needs %n points."));
     number(rules.openMinUnder1500, classic.openMinUnder1500,
-           "Opening under 1500 needs %1 points.");
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "Opening under 1500 needs %n points."));
     number(rules.openMinUnder3000, classic.openMinUnder3000,
-           "Opening under 3000 needs %1 points.");
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "Opening under 3000 needs %n points."));
     number(rules.openMinAbove3000, classic.openMinAbove3000,
-           "Opening at 3000 or above needs %1 points.");
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce",
+                               "Opening at 3000 or above needs %n points."));
     flag(rules.noMeldingFirstRound, classic.noMeldingFirstRound,
-         "Nobody may meld in the first round.", "Melding is allowed from the first turn.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "Nobody may meld in the first round."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "Melding is allowed from the first turn."));
     flag(rules.pileMeldCountsToOpen, classic.pileMeldCountsToOpen,
-         "Cards taken from the pile count towards your opening total.",
-         "Cards taken from the pile do not count towards your opening total.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "Cards taken from the pile count towards your opening total."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "Cards taken from the pile do not count towards your opening total."));
 
-    number(rules.canastaSize, classic.canastaSize, "A canasta is %1 cards.");
-    number(rules.minMeldSize, classic.minMeldSize, "A meld needs at least %1 cards.");
+    number(rules.canastaSize, classic.canastaSize,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A canasta is %n cards."));
+    number(rules.minMeldSize, classic.minMeldSize,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A meld needs at least %n cards."));
     number(rules.maxWildsPerMeld, classic.maxWildsPerMeld,
-           "A meld may hold at most %1 wild cards.");
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A meld may hold at most %n wild cards."));
     number(rules.minNaturalsPerMeld, classic.minNaturalsPerMeld,
-           "A meld needs at least %1 natural cards.");
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A meld needs at least %n natural cards."));
     flag(rules.wildCardMeldsAllowed, classic.wildCardMeldsAllowed,
-         "A meld of wild cards alone is allowed.", "A meld of wild cards alone is not allowed.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "A meld of wild cards alone is allowed."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "A meld of wild cards alone is not allowed."));
     flag(rules.wildsFewerThanNaturals, classic.wildsFewerThanNaturals,
-         "A meld must always hold fewer wild cards than natural ones.",
-         "A meld need not hold fewer wild cards than natural ones.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "A meld must always hold fewer wild cards than natural ones."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "A meld need not hold fewer wild cards than natural ones."));
 
     flag(rules.pileFrozenUntilOpened, classic.pileFrozenUntilOpened,
-         "The pile is frozen to a side until that side has opened.",
-         "The pile is not frozen to a side that has yet to open.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "The pile is frozen to a side until that side has opened."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "The pile is not frozen to a side that has yet to open."));
     flag(rules.blackThreeBlocksPile, classic.blackThreeBlocksPile,
-         "A black three on top blocks the pile.",
-         "A black three on top does not block the pile.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "A black three on top blocks the pile."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "A black three on top does not block the pile."));
     flag(rules.unfrozenPileTakeableWithWild, classic.unfrozenPileTakeableWithWild,
-         "You may take an unfrozen pile using a wild card.",
-         "You may not take an unfrozen pile using a wild card.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "You may take an unfrozen pile using a wild card."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "You may not take an unfrozen pile using a wild card."));
     flag(rules.unfrozenPileTakeableByExtending, classic.unfrozenPileTakeableByExtending,
-         "You may take an unfrozen pile by adding to a meld you already have.",
-         "Adding to a meld you already have does not let you take the pile.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "You may take an unfrozen pile by adding to a meld you already have."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "Adding to a meld you already have does not let you take the pile."));
     flag(rules.canastaMakesRankSafe, classic.canastaMakesRankSafe,
-         "Once a rank is a closed canasta, discarding that rank is safe.",
-         "Closing a canasta does not make its rank safe to discard.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "Once a rank is a closed canasta, discarding that rank is safe."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "Closing a canasta does not make its rank safe to discard."));
     flag(rules.freezeCardMakesATee, classic.freezeCardMakesATee,
-         "A card that freezes the pile is laid crosswise, as a tee.",
-         "A card that freezes the pile is laid square with the rest.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "A card that freezes the pile is laid crosswise, as a tee."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "A card that freezes the pile is laid square with the rest."));
 
     flag(rules.requireCanastaToGoOut, classic.requireCanastaToGoOut,
-         "You need a canasta before you can go out.",
-         "You may go out without a canasta.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "You need a canasta before you can go out."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "You may go out without a canasta."));
     flag(rules.goingOutNeedsADiscard, classic.goingOutNeedsADiscard,
-         "Going out needs a final discard.", "You may go out without a final discard.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "Going out needs a final discard."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "You may go out without a final discard."));
     flag(rules.deadHandIfNobodyGoesOut, classic.deadHandIfNobodyGoesOut,
-         "If the stock runs out and nobody goes out, the hand is void and scores nothing.",
-         "If the stock runs out, the hand is scored as it stands.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "If the stock runs out and nobody goes out, the hand is void and "
+                           "scores nothing."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "If the stock runs out, the hand is scored as it stands."));
     flag(rules.bothReachingTargetIsADraw, classic.bothReachingTargetIsADraw,
-         "If both sides pass the target in the same hand, the game is a draw.",
-         "If both sides pass the target, the higher score wins.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "If both sides pass the target in the same hand, the game is a draw."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "If both sides pass the target, the higher score wins."));
 
     flag(rules.canastaNeededToScore, classic.canastaNeededToScore,
-         "A side with no canasta counts its melds against it \xe2\x80\x94 catching them a minus.",
-         "A side with no canasta still counts its melds in its favour.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "A side with no canasta counts its melds against it \xe2\x80\x94 "
+                           "catching them a minus."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "A side with no canasta still counts its melds in its favour."));
     flag(rules.canastasStackOnRedThrees, classic.canastasStackOnRedThrees,
-         "Finished canastas are stacked on the red threes.",
-         "Finished canastas stay in the meld row.");
+         QT_TRANSLATE_NOOP("canasta::rulesInForce",
+                           "Finished canastas are stacked on the red threes."),
+         QT_TRANSLATE_NOOP("canasta::rulesInForce", "Finished canastas stay in the meld row."));
     number(rules.naturalCanastaBonus, classic.naturalCanastaBonus,
-           "A natural canasta is worth %1.");
-    number(rules.mixedCanastaBonus, classic.mixedCanastaBonus, "A mixed canasta is worth %1.");
-    number(rules.goingOutBonus, classic.goingOutBonus, "Going out is worth %1.");
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A natural canasta is worth %n."));
+    number(rules.mixedCanastaBonus, classic.mixedCanastaBonus,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A mixed canasta is worth %n."));
+    number(rules.goingOutBonus, classic.goingOutBonus,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "Going out is worth %n."));
     number(rules.concealedGoingOutBonus, classic.concealedGoingOutBonus,
-           "Going out concealed is worth %1.");
-    number(rules.redThreeValue, classic.redThreeValue, "A red three is worth %1.");
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "Going out concealed is worth %n."));
+    number(rules.redThreeValue, classic.redThreeValue,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A red three is worth %n."));
     number(rules.allRedThreesValue, classic.allRedThreesValue,
-           "Holding all four red threes is worth %1.");
-    number(rules.jokerValue, classic.jokerValue, "A joker is worth %1.");
-    number(rules.wildTwoValue, classic.wildTwoValue, "A two is worth %1.");
-    number(rules.aceValue, classic.aceValue, "An ace is worth %1.");
-    number(rules.highCardValue, classic.highCardValue, "Eight through king are worth %1 each.");
-    number(rules.lowCardValue, classic.lowCardValue, "Four through seven are worth %1 each.");
-    number(rules.blackThreeValue, classic.blackThreeValue, "A black three is worth %1.");
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce",
+                               "Holding all four red threes is worth %n."));
+    number(rules.jokerValue, classic.jokerValue,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A joker is worth %n."));
+    number(rules.wildTwoValue, classic.wildTwoValue,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A two is worth %n."));
+    number(rules.aceValue, classic.aceValue,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "An ace is worth %n."));
+    number(rules.highCardValue, classic.highCardValue,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "Eight through king are worth %n each."));
+    number(rules.lowCardValue, classic.lowCardValue,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "Four through seven are worth %n each."));
+    number(rules.blackThreeValue, classic.blackThreeValue,
+           QT_TRANSLATE_N_NOOP("canasta::rulesInForce", "A black three is worth %n."));
 
     return out;
 }
@@ -888,7 +939,7 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
 {
     out.clear();
     if (cards.empty()) {
-        error = QStringLiteral("Nothing selected.");
+        error = QCoreApplication::translate("canasta::Engine", "Nothing selected.");
         return false;
     }
 
@@ -899,7 +950,8 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
 
     for (const Card& c : cards) {
         if (isRedThree(c)) {
-            error = QStringLiteral("A red three is a bonus card, not one you meld.");
+            error = QCoreApplication::translate(
+                "canasta::Engine", "A red three is a bonus card, not one you meld.");
             return false;
         }
         if (isWild(c)) {
@@ -907,7 +959,8 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
             continue;
         }
         if (isBlackThree(c) && !goingOut) {
-            error = QStringLiteral("Black threes can only be melded on the turn you go out.");
+            error = QCoreApplication::translate(
+                "canasta::Engine", "Black threes can only be melded on the turn you go out.");
             return false;
         }
         auto it = std::find_if(naturals.begin(), naturals.end(),
@@ -937,7 +990,8 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
             wildRank = naturals.front().first;
         } else if (naturals.empty()) {
             if (!m_rules.wildCardMeldsAllowed) {
-                error = QStringLiteral("Say which meld the joker is joining.");
+                error = QCoreApplication::translate(
+                    "canasta::Engine", "Say which meld the joker is joining.");
                 return false;
             }
             out.push_back(Meld { kJoker, wilds });
@@ -951,11 +1005,11 @@ bool Engine::group(const std::vector<Card>& cards, bool goingOut, int targetRank
     }
 
     if (naturals.empty() && wilds.empty()) {
-        error = QStringLiteral("Nothing selected.");
+        error = QCoreApplication::translate("canasta::Engine", "Nothing selected.");
         return false;
     }
     if (!wilds.empty() && wildRank == 3) {
-        error = QStringLiteral("Black threes never take a joker.");
+        error = QCoreApplication::translate("canasta::Engine", "Black threes never take a joker.");
         return false;
     }
 
@@ -1032,7 +1086,8 @@ bool Engine::spreadWilds(std::vector<std::pair<int, std::vector<Card>>>& natural
         }
 
         if (best < 0) {
-            error = QStringLiteral("Nothing in that lay-down can take another joker.");
+            error = QCoreApplication::translate(
+                "canasta::Engine", "Nothing in that lay-down can take another joker.");
             return false;
         }
         naturals[std::size_t(best)].second.push_back(w);
@@ -1052,40 +1107,46 @@ bool Engine::validateGroups(int team, const std::vector<Meld>& groups, bool goin
 
         if (g.rank == 3) {
             if (!goingOut) {
-                error = QStringLiteral("Black threes can only be melded on the turn you go out.");
+                error = QCoreApplication::translate(
+                    "canasta::Engine", "Black threes can only be melded on the turn you go out.");
                 return false;
             }
             if (merged.wilds() > 0) {
-                error = QStringLiteral("Black threes never take a joker.");
+                error = QCoreApplication::translate(
+                    "canasta::Engine", "Black threes never take a joker.");
                 return false;
             }
         }
 
         if (merged.size() < m_rules.minMeldSize) {
-            error = QStringLiteral("A meld needs at least %1 cards; %2 has %3.")
-                        .arg(m_rules.minMeldSize)
+            error = QCoreApplication::translate("canasta::Engine",
+                                                "A meld needs at least %n cards; %1 has %2.",
+                                                nullptr, m_rules.minMeldSize)
                         .arg(rankLabel(g.rank))
                         .arg(merged.size());
             return false;
         }
         if (merged.wilds() > m_rules.maxWildsPerMeld) {
-            error = QStringLiteral("At most %1 jokers in one meld.").arg(m_rules.maxWildsPerMeld);
+            error = QCoreApplication::translate("canasta::Engine", "At most %n jokers in one meld.",
+                                                nullptr, m_rules.maxWildsPerMeld);
             return false;
         }
         // A wild-only meld has no naturals by definition, so the floor below
         // applies only to ordinary melds.
         if (g.rank != kJoker && merged.naturals() < m_rules.minNaturalsPerMeld) {
-            error = QStringLiteral("A meld needs at least %1 real cards.")
-                        .arg(m_rules.minNaturalsPerMeld);
+            error = QCoreApplication::translate("canasta::Engine",
+                                                "A meld needs at least %n real cards.", nullptr,
+                                                m_rules.minNaturalsPerMeld);
             return false;
         }
         if (m_rules.wildsFewerThanNaturals && g.rank != kJoker
             && merged.wilds() >= merged.naturals()) {
-            error = QStringLiteral("A meld keeps more real cards than jokers: that would "
-                                   "leave %1 %2s against %3 jokers.")
+            error = QCoreApplication::translate("canasta::Engine",
+                                                "A meld keeps more real cards than jokers: that "
+                                                "would leave %1 %2s against %n jokers.",
+                                                nullptr, merged.wilds())
                         .arg(merged.naturals())
-                        .arg(rankLabel(g.rank))
-                        .arg(merged.wilds());
+                        .arg(rankLabel(g.rank));
             return false;
         }
     }
@@ -1111,12 +1172,13 @@ bool Engine::validateMeld(const std::vector<Card>& cards, int targetRank,
     const int t = teamOf(seat);
 
     if (!meldingAllowed()) {
-        error = QStringLiteral("Nobody lays anything down in the first round — every seat "
-                               "plays once first.");
+        error = QCoreApplication::translate(
+            "canasta::Engine", "Nobody lays anything down in the first round — every seat "
+            "plays once first.");
         return false;
     }
     if (!handContains(seat, cards)) {
-        error = QStringLiteral("Those cards are not in your hand.");
+        error = QCoreApplication::translate("canasta::Engine", "Those cards are not in your hand.");
         return false;
     }
     const bool goingOut = m_hands[std::size_t(seat)].size() == cards.size();
@@ -1129,7 +1191,8 @@ bool Engine::validateMeld(const std::vector<Card>& cards, int targetRank,
         const int need = m_openReq[std::size_t(t)];
         const int have = layDownValue(cards);
         if (have < need) {
-            error = QStringLiteral("Your side needs %1 to open, and that is only %2.")
+            error = QCoreApplication::translate(
+                "canasta::Engine", "Your side needs %1 to open, and that is only %2.")
                         .arg(need)
                         .arg(have);
             return false;
@@ -1144,39 +1207,43 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
                           QString& error) const
 {
     if (m_pile.empty()) {
-        error = QStringLiteral("The pack is empty.");
+        error = QCoreApplication::translate("canasta::Engine", "The pack is empty.");
         return false;
     }
     // Taking the pile always melds the top card, so a rule that stops anyone
     // laying down in the first round stops the pile being taken as well.
     if (!meldingAllowed()) {
-        error = QStringLiteral("Nobody lays anything down in the first round — every seat "
-                               "plays once first.");
+        error = QCoreApplication::translate(
+            "canasta::Engine", "Nobody lays anything down in the first round — every seat "
+            "plays once first.");
         return false;
     }
     const Card top = m_pile.back();
     if (m_rules.canastaMakesRankSafe) {
         const Meld* mine = m_teams[std::size_t(teamOf(m_current))].meldOfRank(top.rank);
         if (mine != nullptr && mine->isCanasta(m_rules)) {
-            error = QStringLiteral("Your side has a canasta in %1s, so a %1 on top is a safe "
-                                   "discard and cannot take the pile.")
+            error = QCoreApplication::translate(
+                "canasta::Engine", "Your side has a canasta in %1s, so a %1 on top is a safe "
+                "discard and cannot take the pile.")
                         .arg(rankLabel(top.rank));
             return false;
         }
     }
     if (isWild(top)) {
-        error = QStringLiteral("A joker on top stops the pack being taken.");
+        error = QCoreApplication::translate(
+            "canasta::Engine", "A joker on top stops the pack being taken.");
         return false;
     }
     if (m_rules.blackThreeBlocksPile && isBlackThree(top)) {
-        error = QStringLiteral("A black three on top stops the pack being taken.");
+        error = QCoreApplication::translate(
+            "canasta::Engine", "A black three on top stops the pack being taken.");
         return false;
     }
 
     const int seat = m_current;
     const int t = teamOf(seat);
     if (!handContains(seat, layDown)) {
-        error = QStringLiteral("Those cards are not in your hand.");
+        error = QCoreApplication::translate("canasta::Engine", "Those cards are not in your hand.");
         return false;
     }
 
@@ -1199,8 +1266,12 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
     if (mustUseTwoNaturals) {
         if (naturalsOfTop < 2) {
             error = m_frozen
-                ? QStringLiteral("The pack is frozen: you need two matching cards from your hand.")
-                : QStringLiteral("Until your side has opened, you need two matching cards from your hand.");
+                ? QCoreApplication::translate(
+                    "canasta::Engine",
+                    "The pack is frozen: you need two matching cards from your hand.")
+                : QCoreApplication::translate(
+                    "canasta::Engine",
+                    "Until your side has opened, you need two matching cards from your hand.");
             return false;
         }
     } else {
@@ -1210,7 +1281,9 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
         const bool byWild = m_rules.unfrozenPileTakeableWithWild && naturalsOfTop >= 1
             && wildsOffered >= 1;
         if (!byExtending && !byPair && !byWild) {
-            error = QStringLiteral("You have no way to use the %1 on top.").arg(rankLabel(top.rank));
+            error = QCoreApplication::translate(
+                "canasta::Engine",
+                "You have no way to use the %1 on top.").arg(rankLabel(top.rank));
             return false;
         }
     }
@@ -1232,7 +1305,7 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
     // went, so its group existing is the check.
     if (std::none_of(groups.begin(), groups.end(),
                      [&](const Meld& m) { return m.rank == top.rank; })) {
-        error = QStringLiteral("The top card has to be melded.");
+        error = QCoreApplication::translate("canasta::Engine", "The top card has to be melded.");
         return false;
     }
     if (!validateGroups(t, groups, goingOut, error))
@@ -1254,11 +1327,13 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
         }
         if (have < need) {
             error = m_rules.pileMeldCountsToOpen
-                ? QStringLiteral("Your side needs %1 to open, and that is only %2.")
+                ? QCoreApplication::translate(
+                    "canasta::Engine", "Your side needs %1 to open, and that is only %2.")
                       .arg(need)
                       .arg(have)
-                : QStringLiteral("Your side needs %1 to open from your other melds — the %2s "
-                                 "taking the pile do not count, and the rest comes to %3.")
+                : QCoreApplication::translate(
+                    "canasta::Engine", "Your side needs %1 to open from your other melds — the %2s "
+                    "taking the pile do not count, and the rest comes to %3.")
                       .arg(need)
                       .arg(rankLabel(top.rank))
                       .arg(have);
@@ -1315,8 +1390,9 @@ bool Engine::keepsADiscard(int team, std::size_t handAfter, const std::vector<Me
     // black-three exception still may not go out without a canasta, and falling
     // through to that check is what keeps both rules binding at once.
     if (m_rules.goingOutNeedsADiscard && handAfter == 0 && !laysFourBlackThrees(groups)) {
-        error = QStringLiteral("You go out by throwing your last card — keep one back to "
-                               "throw, or finish on all four black threes.");
+        error = QCoreApplication::translate(
+            "canasta::Engine", "You go out by throwing your last card — keep one back to "
+            "throw, or finish on all four black threes.");
         return false;
     }
 
@@ -1328,8 +1404,10 @@ bool Engine::keepsADiscard(int team, std::size_t handAfter, const std::vector<Me
         return true;
 
     error = handAfter == 0
-        ? QStringLiteral("Your side needs a canasta before anyone can go out.")
-        : QStringLiteral("Without a canasta you have to keep a card to discard.");
+        ? QCoreApplication::translate(
+            "canasta::Engine", "Your side needs a canasta before anyone can go out.")
+        : QCoreApplication::translate(
+            "canasta::Engine", "Without a canasta you have to keep a card to discard.");
     return false;
 }
 
@@ -1345,9 +1423,9 @@ bool Engine::canDrawFromStock() const
 bool Engine::drawFromStock()
 {
     if (m_phase != Phase::Draw)
-        return fail(QStringLiteral("It is not time to draw."));
+        return fail(QCoreApplication::translate("canasta::Engine", "It is not time to draw."));
     if (m_stock.empty())
-        return fail(QStringLiteral("The stock is empty."));
+        return fail(QCoreApplication::translate("canasta::Engine", "The stock is empty."));
 
     m_error.clear();
     m_hands[std::size_t(m_current)].push_back(m_stock.back());
@@ -1443,7 +1521,7 @@ bool Engine::findPileTake(std::vector<Card>& out) const
 bool Engine::takePile(const std::vector<Card>& layDown)
 {
     if (m_phase != Phase::Draw)
-        return fail(QStringLiteral("It is not time to draw."));
+        return fail(QCoreApplication::translate("canasta::Engine", "It is not time to draw."));
 
     std::vector<Meld> groups;
     QString error;
@@ -1492,7 +1570,8 @@ bool Engine::canMeldCards(const std::vector<Card>& cards, int targetRank) const
 bool Engine::meldCards(const std::vector<Card>& cards, int targetRank)
 {
     if (m_phase != Phase::Play)
-        return fail(QStringLiteral("Draw before you lay anything down."));
+        return fail(QCoreApplication::translate(
+            "canasta::Engine", "Draw before you lay anything down."));
 
     std::vector<Meld> groups;
     QString error;
@@ -1530,17 +1609,20 @@ bool Engine::canDiscard(const Card& c) const
 bool Engine::discard(const Card& c)
 {
     if (m_phase != Phase::Play)
-        return fail(QStringLiteral("Draw before you discard."));
+        return fail(QCoreApplication::translate("canasta::Engine", "Draw before you discard."));
     const int seat = m_current;
     if (!handContains(seat, { c }))
-        return fail(QStringLiteral("That card is not in your hand."));
+        return fail(QCoreApplication::translate(
+            "canasta::Engine", "That card is not in your hand."));
     if (isRedThree(c))
-        return fail(QStringLiteral("A red three is never discarded."));
+        return fail(QCoreApplication::translate(
+            "canasta::Engine", "A red three is never discarded."));
 
     const bool goingOut = m_hands[std::size_t(seat)].size() == 1;
     if (goingOut && m_rules.requireCanastaToGoOut
         && !m_teams[std::size_t(teamOf(seat))].hasCanasta(m_rules))
-        return fail(QStringLiteral("Your side needs a canasta before you can go out."));
+        return fail(QCoreApplication::translate(
+            "canasta::Engine", "Your side needs a canasta before you can go out."));
 
     m_error.clear();
     removeFromHand(seat, { c });

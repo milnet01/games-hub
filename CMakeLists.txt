@@ -363,23 +363,31 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME legibility
              COMMAND ${Python3_EXECUTABLE}
                      ${CMAKE_CURRENT_SOURCE_DIR}/scripts/legibility-check.py --thresholds)
+
+    # GHUB-0161: every word a player reads goes through Qt's translation lookup,
+    # and a new bare label fails the build rather than shipping untranslatable.
+    add_test(NAME translatable
+             COMMAND ${Python3_EXECUTABLE}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/scripts/translatable-check.py)
 elseif(UNIX)
-    # Only on Linux. Both of these are pure Python and platform-independent, so
-    # they have to run SOMEWHERE rather than everywhere, and Linux is where the
+    # Only on Linux. These are pure Python and platform-independent, so they
+    # have to run SOMEWHERE rather than everywhere, and Linux is where the
     # pipeline runs them. A Linux configure with no python has lost a check and
     # should say so; a Windows one has not, and reddening the Windows leg over a
     # check the Linux leg already ran would be an alarm with nothing behind it.
     add_test(NAME scorepad_needs_python COMMAND ${CMAKE_COMMAND} -E false)
     add_test(NAME legibility_needs_python COMMAND ${CMAKE_COMMAND} -E false)
+    add_test(NAME translatable_needs_python COMMAND ${CMAKE_COMMAND} -E false)
 else()
     # Windows with no interpreter CMake will use. Said out loud, because the
     # alternative is a silent one: the owner's Windows box has only the Store
     # stub python.exe, so it registers strictly fewer cases than the GitHub
     # runner -- and a green run there was read as full coverage while the runner
-    # was failing on one of the two checks this branch drops.
+    # was failing on one of the checks this branch drops.
     message(STATUS
-            "gameshub: no Python3 interpreter -- the scorepad and legibility "
-            "checks are NOT registered; ctest here runs fewer tests than CI")
+            "gameshub: no Python3 interpreter -- the scorepad, legibility and "
+            "translatable checks are NOT registered; ctest here runs fewer "
+            "tests than CI")
 endif()
 
 # ---------------------------------------------------------------------------

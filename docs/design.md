@@ -127,9 +127,11 @@ reopens the size it was left, and saved games — a game that overrides
 it is opened, with no save dialog anywhere. An empty state means
 "nothing worth keeping" and clears the stored one, which is how a finished
 game avoids resuming onto its own final scores. `geometryKey()` and `saveKey()`
-build those keys from the name the tile shows, so renaming a game orphans its
-saved position and its window size, silently and with no migration. Changing a
-registered name is a decision, not a tidy-up.
+build those keys from the game's id, `Entry::name`, never from the label the
+tile shows: a label is translated, and a key built from one would move with the
+language (GHUB-0161). Renaming an id orphans its saved position and its window
+size, silently and with no migration. Changing an id is a decision, not a
+tidy-up.
 
 **`saveState()` is called on a one-second tick while the game is on screen,
 not only on the way out**, so it has to stay cheap — the dearest today is
@@ -288,6 +290,10 @@ Each of these has one home:
   hears it; § Legibility, for what a pass may look like.
 - **Randomness** — `dealSeed()`, as a member initialiser. `CLAUDE.md`
   § Commands owns that rule, beside `--seed`.
+- **Words a player reads** — every one goes through Qt's translation lookup,
+  and anything a program reads instead carries `// untranslated: <reason>`.
+  `docs/specs/GHUB-0161-translatable-text.md` owns the rules; the
+  `translatable` ctest case enforces them.
 - **Saves** — below.
 
 ### Saves
