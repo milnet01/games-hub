@@ -172,18 +172,18 @@ resizing.
 
 `src/legibility.*` — `Legibility`, the app-wide legibility preference
 (`display/legibility`, default off). It is no longer the only thing this app
-stores outside a game's own group: `donate/ask` and `donate/launches` are
-app-wide too, and `window/geometry/<page>` and `saved/<game>` are written
-per page and per game by `hubwindow.cpp`'s `geometryKey()` and `saveKey()`.
-**Anything sweeping stored state — a settings reset, a migration — has all
-four families to handle, PLUS every per-game group**: `scores.cpp` writes
-`<game>/best_*` keys and Canasta keeps its House set under `canasta/house/`
-and its target under `canasta/target`, so a reset that clears only the four
-app-wide families leaves a rule set and a score table standing, and getting it wrong is quiet: clearing the donate
+stores outside a game's own group: `audio/muted` (`sound.cpp`), `donate/ask`
+and `donate/launches` are app-wide too, and `window/geometry/<page>` and
+`saved/<game>` are written per page and per game by `hubwindow.cpp`'s
+`geometryKey()` and `saveKey()`. **Anything sweeping stored state — a settings
+reset, a migration — has every one of those families to handle, PLUS every
+per-game group**: `scores.cpp` writes `<game>/best_*` keys and Canasta keeps its
+House set under `canasta/house/` and its target under `canasta/target`, so a
+reset that clears only the app-wide families leaves a rule set and a score table standing, and getting it wrong is quiet: clearing the donate
 switch but leaving the counter at 149 fires the prompt on the very next
 start, and leaving `saved/` behind resumes games a "reset" was meant to
 forget.
-A singleton like `Sound`, but stored and
+A singleton like `Sound`, but
 broadcasting: games are built lazily and live for the session, so one built
 before the switch moved would never learn without the signal.
 `docs/specs/GHUB-0017-legibility-switch.md` is the contract. **All fourteen
@@ -253,9 +253,10 @@ handle-to-URL stems (`https://github.com/sponsors/`, `https://www.patreon.com/`)
 do live in `CMakeLists.txt`, because FUNDING.yml stores account names rather
 than addresses for the platforms GitHub knows — so the ban above is on C++, and
 the loop is where a rule for `ko_fi:` belongs. Routing it through `custom:`
-instead does not even build: the loop reads a one-URL `custom:` list and refuses
-a two-entry one, though GitHub's `custom:` key takes a list. Widening that
-regex is the fix if a second custom link is ever wanted.
+does not work either: the loop reads one URL from a `custom:` line, though
+GitHub's `custom:` key takes a list. A quoted two-entry list stops the build;
+an unquoted one builds into a single broken URL, which is GHUB-0191. Widening
+that regex is the fix if a second custom link is ever wanted.
 
 ## What may depend on what
 
@@ -279,7 +280,8 @@ so a game reaches the hub only through what `GameView` declares.
 Each of these has one home:
 
 - **Teardown when the hub leaves a game** — § The game contract.
-- **Answering the legibility switch** — § Legibility.
+- **Answering the legibility switch** — § The game contract, for how a game
+  hears it; § Legibility, for what a pass may look like.
 - **Randomness** — `dealSeed()`, as a member initialiser. `CLAUDE.md`
   § Commands owns that rule, beside `--seed`.
 - **Saves** — below.
@@ -421,15 +423,22 @@ height-bound and the deal ran under the plate instead. `cardsKeepTheirFaces` in
 history.
 
 **A card game with animation must not let the model and the picture disagree.**
-Each flight carries where it is going, and the destination skips drawing that
-card until it lands (`suppressed()`); otherwise a card in the air is also drawn
-at its destination and the eye sees it twice. **The match is CONSUMED one per
-flight** — `CanastaView::m_consumed` marks a flight the moment it answers, so a
-second identical card in the air finds the next unmarked flight rather than the
-same one. Without that, two identical cards arriving together suppress both
-destination copies and one card disappears; Canasta shuffles two packs and
-`Card::deck` sits outside `operator==`, so identical cards in flight together
-are routine here rather than exotic.
+`cards/cardflight.*` is the shared way to animate a card, and Klondike, Spider
+and FreeCell use it; Canasta predates it and keeps its own copy in
+`CanastaView`. Each flight carries where it is going, and the destination skips
+drawing that card until it lands (`cardflight::suppressAt()`, Canasta's
+`suppressed()`); otherwise a card in the air is also drawn at its destination
+and the eye sees it twice. **The match is CONSUMED one per flight** — the
+`consumed` scratch passed to `suppressAt()`, or `CanastaView::m_consumed`,
+marks a flight the moment it answers, so a second identical card in the air
+finds the next unmarked flight rather than the same one. Without that, two
+identical cards arriving together suppress both destination copies and one
+card disappears; Canasta shuffles two packs and `Card::deck` sits outside
+`operator==`, so identical cards in flight together are routine here rather
+than exotic. **A caller owes two things**: clear that scratch at the top of
+every `paintEvent`, and clear the flights whenever the layout moves — a
+flight's destination was captured when the card left, so it would otherwise
+land where its target used to be.
 
 ### Chess
 
@@ -448,9 +457,11 @@ tile. `ChessView::advance()` is the single point that moves the game on.
 **Alpha-beta only resolves the BEST move's score exactly.** Every other root
 move comes back as an upper bound, and a bad move whose search fails low can be
 reported level with the best one. Chess's Easy and Medium levels pick at random
-among moves within a few centipawns of the best, so they searched a full window
-at the root (`rootScores`'s `exact` flag) — without it, Hard was playing
-`Nf3-g1` from a normal opening because a fail-low tie sorted to the front. The
+among moves within a few centipawns of the best, so they search a full window
+at the root (`rootScores`'s `exact` flag). Hard plays only the top move and
+keeps the narrow window, so `rootScores` rotates the move that actually raised
+alpha to the front — without that, Hard was playing `Nf3-g1` from a normal
+opening because a fail-low tie sorted to the front. The
 observable symptom is an engine that is strong in tactics and absurd in quiet
 positions, which reads as a bad evaluation rather than a bad window.
 
@@ -716,3 +727,4 @@ bug, not a theory.
 
 | Loop | Date | Lanes | Q1 | Q2 | Q3 | Q4 | Outcome |
 |------|------|-------|----|----|----|----|---------|
+| 1 | 2026-09-10 | 3, cold — genre pinned `adr`; all three lanes arrived holding the pre-split `CLAUDE.md` from session auto-load | 6 | 1 | 0 | n/a | **Seven findings after merging: five verified and fixed, two dismissed.** Fixed: § Chess credited Hard's guard to `rootScores`'s `exact` flag, which Hard never sets (three lanes); § Cards never described `cardflight.*`, the shared animation code, or its two caller duties (three lanes); § Legibility's stored-state list missed `audio/muted`; the one-home list sent legibility to § Legibility alone; § The donate prompt said a two-entry `custom:` list does not build, false for the unquoted form (run with `cmake -P`; code side filed as GHUB-0191). Dismissed: § Pinball's `minimumLaunchSpeed()` sentence is right and the header comment is the stale side; the `keepsADiscard()` sentence is true for the rule it describes and changes nothing built. Four stale source comments filed as GHUB-0192. Open questions resolved clean: `m_drag` against `m_held`, and `announceLater`'s guard. Sweep: no copy of a rewritten sentence elsewhere. Loop 2 dispatched. |

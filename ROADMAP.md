@@ -3823,6 +3823,40 @@ inventing one.
   Kind: doc.
   Source: owner decision 2026-09-04, against docs/standards/versioning-overrides.md section 2.
 
+- 📋 [GHUB-0191] **An unquoted two-link custom: line in FUNDING.yml builds into one broken donate link.**
+  CMakeLists.txt reads each custom: line with
+  ^custom:[ \t]*\[?"?(https://[^"]+)"?\]?$ . Run with cmake -P on
+  2026-09-10: a quoted two-entry list is refused and stops the build, as
+  intended, but an unquoted one - custom: [https://a, https://b] - matches,
+  and the greedy [^"]+ captures 'https://a, https://b]' as one URL. The
+  build succeeds and the uitest key count still sees one custom key.
+  Fix in the regex: refuse a comma or a closing bracket inside the capture,
+  so both list forms stop the build until the loop is widened on purpose.
+  docs/design.md section The donate prompt describes the current behaviour
+  and names this item.
+  **Layman:** If a second custom donation link is ever added in one particular way, the build accepts it and shows people a single broken link.
+  Kind: fix.
+  Source: review-contract GHUB-0180 loop 1, 2026-09-10.
+  Lanes: build.
+
+- 📋 [GHUB-0192] **Four source comments disagree with the code or the design they sit beside.**
+  Found by the cold read of docs/design.md; code-side, so out of that
+  gate's reach.
+  - src/pinball/pinballtable.h: minimumLaunchSpeed() is described as the
+    speed a full-strength plunger delivers. The definition computes the
+    weakest launch that clears the dome.
+  - src/hubwindow.h: says Canasta's large-play minimum is 900x656. The
+    constant is 908 (GHUB-0153).
+  - src/canasta/canastaengine.h: the rulesInForce comment says a field
+    added without a sentence reddens the suite. The check flips only the
+    fields it lists, so a field added to neither is not caught.
+  - src/legibility.h: 'unlike Sound it is persisted'. Sound persists
+    audio/muted.
+  **Layman:** A few notes inside the code describe things slightly wrongly, which could mislead whoever changes that code next.
+  Kind: doc-fix.
+  Source: review-contract GHUB-0180 loop 1, 2026-09-10.
+  Lanes: docs.
+
 ## P03 — Considered
 
 Nothing here is agreed. 💭 means the scope, the value or the decision is still
