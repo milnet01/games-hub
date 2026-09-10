@@ -7551,6 +7551,17 @@ open.
   Kind: fix.
   Source: review-contract on CLAUDE.md, 2026-09-04.
 
+- 📋 [GHUB-0190] **Chess plays the losing jingle when a game is drawn.**
+  ChessView::announceResult plays Sound::kLose whenever the player did
+  not win, so stalemate, repetition, the fifty-move rule and bare kings
+  all sound like a loss. Draughts' new draw (GHUB-0169) plays no jingle
+  instead, which is the pattern to copy. Found while reading Chess's
+  announcement as the model for that work; not changed there, because
+  it was outside what that item named.
+  **Layman:** A drawn chess game sounds like a defeat.
+  Kind: fix.
+  Source: in-session-2026-09-10.
+
 ## The score book on a phone
 
 A replacement for the paper score book the owner's family keeps at the table on
