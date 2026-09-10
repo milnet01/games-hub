@@ -328,7 +328,11 @@ this — to wherever the project keeps its own practices, which is this file.
 
 Cutting a release is three edits, a check and a tag, **in this order**:
 
-1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`.
+1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`. **Which number**
+   is `~/.claude/standards/versioning.md` § 2's to decide, with this project's
+   breaking surfaces in `docs/standards/versioning-overrides.md` § 1. That
+   standard's § 4 shifts the ladder down only inside `0.x`, and this project
+   left `0.x` at `1.0.0` — so a new game is a MINOR.
 2. Bump `Current version X.Y.Z` in `README.md`.
 3. Close `## [Unreleased]` in `CHANGELOG.md` into `## [X.Y.Z] - <date>`, and
    leave a fresh empty `[Unreleased]` above it.
@@ -336,6 +340,12 @@ Cutting a release is three edits, a check and a tag, **in this order**:
    consistent`. **Nothing else runs it** — not a hook, not `local-ci.sh`, not
    the workflow — so a step skipped above is caught here or nowhere.
 5. Commit, then `git tag vX.Y.Z && git push --follow-tags`.
+
+**A roadmap ID on a changelog bullet LINE claims that item shipped.**
+`cut-release` stops the release unless the roadmap shows every such item
+shipped. An ID in the bullet's continuation prose is a cross-reference and
+passes, so an item you only mention goes there, never on the bullet line.
+`~/.claude/skills/cut-release/SKILL.md` owns the rule; GHUB-0065 hit it.
 
 **`.claude/bump.json` is the one enumeration of version-bearing files** — it
 names `CMakeLists.txt` and `README.md`, and its `post_check` is what catches

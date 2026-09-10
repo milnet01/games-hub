@@ -3521,7 +3521,7 @@ inventing one.
   Kind: chore.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0079] **Nothing points a releaser at the versioning standard, so the one document that decides the number is unfindable.**
+- ✅ [GHUB-0079] **Nothing points a releaser at the versioning standard, so the one document that decides the number is unfindable.**
   CLAUDE.md's Releasing section is where a releaser looks. It gives
   four numbered steps starting "Bump project(gameshub VERSION ...)"
   and says nothing about WHICH number to bump. So the standards
@@ -3565,6 +3565,18 @@ inventing one.
   in the Releasing section says so, and the gate is the only thing that
   catches it. Write both rules at once rather than gating this section
   twice.
+  Resolved (2026-09-10), on the smaller file GHUB-0180 left: CLAUDE.md
+  section Releasing step 1 now names versioning.md section 2 as what
+  decides the number, with the overrides' breaking surfaces, and says
+  the section 4 zero-dot-x shift ended at 1.0.0, so a new game is a
+  MINOR. A new paragraph says a roadmap ID on a changelog bullet LINE
+  claims the item shipped and cut-release stops the release unless the
+  roadmap shows it shipped, while an ID in continuation prose is a
+  cross-reference; it points at cut-release's SKILL.md as the rule's
+  owner. The 0.x consequence this item first asked for lapsed when 1.0.0
+  shipped, so it was not written. Gate: both are pure additions, and
+  CLAUDE.md section Review history (owner's call 2026-09-04) owes its
+  gate only when an edit changes what the prose said, so none ran.
   **Layman:** The rules for choosing a version number exist now, but the page someone actually reads before a release does not mention them.
   Kind: doc.
   Source: in-session-2026-08-20.
