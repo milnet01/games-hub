@@ -356,7 +356,7 @@ public:
     // three before it.
     //
     // Read the other way round — as though it were named discardCanBeTaken —
-    // it is a loaded gun, in the corner CLAUDE.md already calls the hardest
+    // it is a loaded gun, in the corner docs/design.md calls the hardest
     // quarter of a bug to notice: an AI rule built on the inverted reading is
     // right three times a round and wrong on the fourth.
     //

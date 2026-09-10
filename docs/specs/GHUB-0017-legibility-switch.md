@@ -84,7 +84,7 @@ it.** `canastaview.cpp` says melds are drawn "not so small that the shared card
 art gives up on the face". They are: `kMeldScale = 0.74`, so a meld clears 46
 pixels only when `cardWidth()` is at least 62.2 — the top half of a `[34, 88]`
 clamp. At the floor a meld card is 25.2 pixels. Opponent hands at 0.8 clear it
-only above 57.5. `CLAUDE.md`'s trap entry states the true position ("a stack of
+only above 57.5. `docs/design.md` § Cards states the true position ("a stack of
 slivers rather than cards, and has to name them some other way"), which is why
 melds carry a "K ×5" badge at all — a badge that would be pointless if the
 comment were right.
@@ -623,7 +623,7 @@ holds the only other copy, in Python.
   with destinations computed from the old geometry. `applyLegibility` must be
   treated by Canasta's pass as a re-layout point, not a repaint; its flights
   index into `Meld::cards` and the hand, so a resize mid-flight can put a card
-  in the air and its destination in different places (`CLAUDE.md`, Traps).
+  in the air and its destination in different places (`docs/design.md` § Cards).
 
 ## 7. Tests
 

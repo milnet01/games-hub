@@ -1271,7 +1271,7 @@ bool Engine::validateTake(const std::vector<Card>& layDown, std::vector<Meld>& g
     // position with no legal move at all, and it was being handed a size the
     // take would not produce: land on two-by-the-arithmetic and one in fact,
     // with no canasta, and the seat is stranded -- canDiscard refuses and every
-    // meld refuses, which is the hang CLAUDE.md calls the expensive symptom.
+    // meld refuses: the hang docs/design.md calls the expensive symptom.
     // Land on nought and goOut() takes the seat out with no canasta at all.
     //
     // Counted over everything but the top card, because the top card goes into

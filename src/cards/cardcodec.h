@@ -12,7 +12,7 @@
 // rather than the moves that made it.
 //
 // Chess saves its move list and replays it, so the rules re-check every step on
-// the way back in (CLAUDE.md § "A game's save is the moves that made it"). A
+// the way back in (docs/design.md § Saves). A
 // solitaire keeps no move log, so its save is the piles themselves — and what
 // stands in for that re-check is the pack: the cards that come back must be the
 // cards that were dealt. fitsPack() and matchesPack() are that check.

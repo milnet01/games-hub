@@ -20,7 +20,7 @@
 // nothing from QtWidgets -- the same reasoning legibility.cpp carries.
 //
 // Shared rather than written a fourth time, because Canasta already paid for
-// the traps and CLAUDE.md records them. Two are handled here. suppressAt()
+// the traps; docs/design.md records them. Two are handled here. suppressAt()
 // consumes ONE flight per answer, so two identical cards arriving together
 // suppress two destination copies rather than one twice -- routine rather than
 // exotic wherever a game shuffles more than one pack. And a flight carries a

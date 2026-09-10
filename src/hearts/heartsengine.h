@@ -99,7 +99,7 @@ public:
     // the table, both score columns and every flag that decides what is legal
     // next. Hearts keeps no move log, so -- like Canasta and unlike Chess --
     // its save is the position itself and the pack is what re-checks it
-    // (CLAUDE.md § "A game with no move log saves the table").
+    // (docs/design.md § Saves).
     //
     // Written through QDataStream, so the format IS the member order below.
     // Adding a member means adding it at the END and bumping the view's

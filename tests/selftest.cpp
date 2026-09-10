@@ -3079,7 +3079,7 @@ void canastaRedThreesInThePileAreCountedBeforeTheTake()
     // by that arithmetic and one in fact, with no canasta, and the seat is
     // stranded: it may not go out, so it may not discard its last card, and
     // every meld refuses. Nothing legal remains and the turn cannot end -- the
-    // hang CLAUDE.md calls the expensive symptom, because it does not fail, it
+    // hang docs/design.md calls the expensive symptom: it does not fail, it
     // stops.
     //
     // Only the deal ever puts a red three in the pile. A drawn one goes down at

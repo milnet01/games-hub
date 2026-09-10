@@ -233,7 +233,7 @@ bool HeartsEngine::playCard(int player, const Card& c)
 
     // The Queen breaking hearts as well as a heart does is a VARIANT, not the
     // strictest rule -- it is what the widely-known Windows version plays, and
-    // it is deliberate. CLAUDE.md's Hearts bullet states it; it was in the code
+    // it is deliberate. docs/design.md § Hearts states it; it was in the code
     // and in no document, which is what made it read as an accident
     // (GHUB-0160).
     if (c.suit == Suit::Hearts || c == kQueenOfSpades)
@@ -501,7 +501,7 @@ bool HeartsEngine::load(QDataStream& in)
     // The pack is what stands in for replaying the moves. Hearts takes cards
     // out of play as tricks are collected, so it cannot ask for the whole pack
     // back -- it gets fitsPack plus a count of its own, the way Spider and
-    // Pyramid do (CLAUDE.md § "A game with no move log saves the table").
+    // Pyramid do (docs/design.md § Saves).
     std::vector<Card> present;
     cardcodec::gather(present, hands);
     for (const std::pair<int, Card>& played : trick)

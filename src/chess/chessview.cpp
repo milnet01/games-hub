@@ -364,9 +364,10 @@ void ChessView::engineMoveReady(const SearchResult& result)
 
     // Through advance(), not around it. This used to re-implement advance()'s
     // over-check, refresh and announce inline -- a second path through the
-    // function CLAUDE.md calls the single point that moves the game on. The two
-    // agreed, but that second path is the structural reason the stale-timer
-    // defect was reachable at all, and closing it is what stops the next one.
+    // function docs/design.md calls the single point that moves the game on.
+    // The two agreed, but that second path is the structural reason the
+    // stale-timer defect was reachable at all, and closing it is what stops
+    // the next one.
     advance(m_game.board().inCheck() ? QStringLiteral("Computer played %1 — check!").arg(text)
                                      : QStringLiteral("Computer played %1.").arg(text));
 }
