@@ -126,7 +126,10 @@ reopens the size it was left, and saved games — a game that overrides
 `GameView::saveState()`/`restoreState()` is stored and restored the next time
 it is opened, with no save dialog anywhere. An empty state means
 "nothing worth keeping" and clears the stored one, which is how a finished
-game avoids resuming onto its own final scores.
+game avoids resuming onto its own final scores. `geometryKey()` and `saveKey()`
+build those keys from the name the tile shows, so renaming a game orphans its
+saved position and its window size, silently and with no migration. Changing a
+registered name is a decision, not a tidy-up.
 
 **`saveState()` is called on a one-second tick while the game is on screen,
 not only on the way out**, so it has to stay cheap — the dearest today is
@@ -435,10 +438,12 @@ finds the next unmarked flight rather than the same one. Without that, two
 identical cards arriving together suppress both destination copies and one
 card disappears; Canasta shuffles two packs and `Card::deck` sits outside
 `operator==`, so identical cards in flight together are routine here rather
-than exotic. **A caller owes two things**: clear that scratch at the top of
-every `paintEvent`, and clear the flights whenever the layout moves — a
-flight's destination was captured when the card left, so it would otherwise
-land where its target used to be.
+than exotic. **A caller owes three things.** Size that scratch to the flights
+and zero it at the top of every `paintEvent`. Clear the flights whenever the
+layout moves — a flight's destination was captured when the card left, so it
+would otherwise land where its target used to be. And a game whose deal
+animates answers `hasPendingAnimation()` from its flights, per § The game
+contract.
 
 ### Chess
 
@@ -511,8 +516,8 @@ Klondike is the tile named Solitaire. Cores: `src/klondike/klondiketable.*`,
 `klondikeview.*`, `spiderview.*`, `freecellview.*`, each beside its core.
 
 Klondike and Spider both keep piles as
-`std::vector<Card>` and drag by lifting a run off its pile into `m_drag`,
-restoring it on a failed drop. Card width is solved from the row cost
+`std::vector<Card>`. A drag asks the core to `lift()` the run, draws the view's
+copy in `m_drag`, and hands a failed drop back with `putBack()`. Card width is solved from the row cost
 (`7w + 6·gap` for Klondike) — assuming a fixed pixel gap pushed the last
 column off screen.
 
@@ -728,3 +733,4 @@ bug, not a theory.
 | Loop | Date | Lanes | Q1 | Q2 | Q3 | Q4 | Outcome |
 |------|------|-------|----|----|----|----|---------|
 | 1 | 2026-09-10 | 3, cold — genre pinned `adr`; all three lanes arrived holding the pre-split `CLAUDE.md` from session auto-load | 6 | 1 | 0 | n/a | **Seven findings after merging: five verified and fixed, two dismissed.** Fixed: § Chess credited Hard's guard to `rootScores`'s `exact` flag, which Hard never sets (three lanes); § Cards never described `cardflight.*`, the shared animation code, or its two caller duties (three lanes); § Legibility's stored-state list missed `audio/muted`; the one-home list sent legibility to § Legibility alone; § The donate prompt said a two-entry `custom:` list does not build, false for the unquoted form (run with `cmake -P`; code side filed as GHUB-0191). Dismissed: § Pinball's `minimumLaunchSpeed()` sentence is right and the header comment is the stale side; the `keepsADiscard()` sentence is true for the rule it describes and changes nothing built. Four stale source comments filed as GHUB-0192. Open questions resolved clean: `m_drag` against `m_held`, and `announceLater`'s guard. Sweep: no copy of a rewritten sentence elsewhere. Loop 2 dispatched. |
+| 2 | 2026-09-10 | 3, cold — identical brief, packet rebuilt from disk; all three lanes again arrived holding the pre-split `CLAUDE.md` | 2 | 2 | 1 | n/a | **Five findings after merging: four verified and fixed, one dismissed. Two of the four landed on text loop 1 wrote.** Fixed: § Cards' caller duties said to clear the flight scratch where `cardflight.h` says size it to the flights and zero it (two lanes); the same sentence read as the whole list and left out `hasPendingAnimation()` for a game whose deal animates; § Klondike, Spider and FreeCell said the view lifts and restores a run, where the core's `lift()` and `putBack()` do (two lanes); § The hub never said `geometryKey()` and `saveKey()` build keys from the tile's name, so a rename orphans a player's save and window size (Q3). Dismissed: § Pinball again — the document is right and the header comment is the stale side, filed under GHUB-0192. GHUB-0191 and GHUB-0192 annotated with two more code-side cases. Sweep: no copy of a rewritten sentence elsewhere. Loop 3 dispatched. |

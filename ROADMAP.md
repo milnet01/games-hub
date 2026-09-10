@@ -3834,6 +3834,12 @@ inventing one.
   so both list forms stop the build until the loop is widened on purpose.
   docs/design.md section The donate prompt describes the current behaviour
   and names this item.
+  Progress (2026-09-10, loop 2 of the same gate): an unquoted
+  SINGLE-entry list is broken too. Run with cmake -P: custom:
+  [https://a.example] captures 'https://a.example]', keeping the closing
+  bracket. Today's FUNDING.yml uses the quoted form, so nothing ships
+  broken yet. The regex fix should refuse ']' as well as ',' inside the
+  capture.
   **Layman:** If a second custom donation link is ever added in one particular way, the build accepts it and shows people a single broken link.
   Kind: fix.
   Source: review-contract GHUB-0180 loop 1, 2026-09-10.
@@ -3852,6 +3858,10 @@ inventing one.
     fields it lists, so a field added to neither is not caught.
   - src/legibility.h: 'unlike Sound it is persisted'. Sound persists
     audio/muted.
+  Progress (2026-09-10, loop 2 of the same gate): a fifth.
+  src/hubwindow.cpp's comment above geometryKey() and saveKey() ends
+  'GHUB-0158', but GHUB-0158 is the shipped --help message-box item and
+  has nothing to do with renaming a game.
   **Layman:** A few notes inside the code describe things slightly wrongly, which could mislead whoever changes that code next.
   Kind: doc-fix.
   Source: review-contract GHUB-0180 loop 1, 2026-09-10.
