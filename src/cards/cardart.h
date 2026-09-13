@@ -46,9 +46,9 @@ double indexPipGap(const Card& c, const QRectF& r, const QFont& base);
 // How far the corner numeral's ink runs PAST the room it is allowed. Zero or
 // less is correct. This is the half a test may assert: the room is a fraction
 // of the card and the solve is this code's, so the answer is a property of the
-// code on every platform. indexPipGap() above is the half a test may only
-// REPORT -- it measures a suit glyph, and a runner with an empty font database
-// has no opinion worth asserting on.
+// code on every platform. Since GHUB-0064 indexPipGap() above may be asserted
+// too: the pip it measures is a drawn outline rather than a font glyph, and the
+// numeral it measures against never runs past the room this bounds.
 double indexOverflow(const Card& c, const QRectF& r, const QFont& base);
 
 // `deck` picks the colourway: 0 is blue, 1 is red. Games dealt from a single

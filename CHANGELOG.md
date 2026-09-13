@@ -24,6 +24,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **The club, diamond, heart and spade on every card are drawn by the game, not borrowed from a font** (GHUB-0064)
+  They used to be typed characters, so their weight and shape were
+  whatever the computer's font supplied, and they could differ between
+  Windows and Linux. Each is now an outline the game draws itself, sized
+  to match the symbols you are used to, so a card's pip pattern looks the
+  same everywhere. The court cards are unchanged.
+
 - **The project builds each of its files once instead of two or three times** (GHUB-0187)
   Nothing about the program changes; it is the same code built more
   sensibly. A build from scratch takes about half as long, which is what

@@ -2579,7 +2579,7 @@ draws, whether or not it has had one.
   Kind: ux.
   Source: user-request-2026-08-20.
 
-- 📋 [GHUB-0064] **The pip pattern is how he reads a card, and its shape is chosen by whatever font the operating system supplies.**
+- ✅ [GHUB-0064] **The pip pattern is how he reads a card, and its shape is chosen by whatever font the operating system supplies.**
   `CardArt::drawPip` sets a font size and calls `p.drawText()` with the Unicode
   character for the suit. So do both corner indices. The pips are typography, not
   artwork.
@@ -2612,6 +2612,22 @@ draws, whether or not it has had one.
   end -- with the legibility switch on and room to spare, a richer court could be
   shown -- and that is a separate question from getting the pips under our own
   control.
+  Resolved (2026-09-13). suitPath() in cardart.cpp holds four
+  QPainterPath outlines, each fitted to the ink box of the Noto Sans glyph
+  it replaced (measured here at 100 pt and 11 pt). Every suit a card face
+  draws goes through it: the pips, the ace, the court card's two pips and
+  the suit under the corner numeral, which keeps the glyph's measured
+  placement. indexPipGap() now measures the outline, so the index/pip
+  clearance became an ASSERTION in tests/uitest.cpp -- tightest 1.50 px, a
+  ten at a 62 px card. A new check draws a three through a rotated painter
+  under two fonts and requires the middle pip to match; it FAILED against
+  the old code in a worktree and passes now. Seeded Klondike and FreeCell
+  shots before and after match by eye, with 0.18% of Klondike's pixels
+  changed. Not done: the heavier outline under the legibility switch this
+  bullet mentions as possible. The face cache keys on rank and suit only,
+  so it would need the switch in the key. Suit characters outside a card
+  face (Canasta's centre strip, the hub's tiles) are text beside words
+  and stay text.
   **Layman:** The club, diamond, heart and spade symbols are typed as text, so they look different on different computers instead of being drawn by us.
   Kind: ux.
   Source: in-session-2026-08-20.

@@ -4603,13 +4603,55 @@ int main(int argc, char* argv[])
                              .arg(worstOverRank)
                              .arg(worstOverWidth)
                              .arg(worstOver, 0, 'f', 3)));
-        // REPORTED, never asserted. The clearance measures a SUIT glyph, whose
-        // width is the platform's answer and not this code's -- a runner with
-        // an empty font database returns something meaningless, and asserting
-        // on it is how three Windows legs went red before. Read it against the
-        // last run, not against zero.
+        // ASSERTED since GHUB-0064. It was only reported while a pip was a font
+        // glyph, whose width is the platform's answer -- a runner with an empty
+        // font database returned something meaningless. A pip is a drawn
+        // outline now, and the numeral never runs past the room indexOverflow
+        // bounds above, so the clearance is a property of this code alone.
         std::printf("      card index/pip clearance: tightest %.2f px (rank %d at %.0f px card)\n",
                     tightest, tightestRank, tightestWidth);
+        check(tightest >= 0.0,
+              qPrintable(QStringLiteral("card art: no corner index reaches a pip -- tightest is "
+                                        "%1 px, the %2 at a %3 px card")
+                             .arg(tightest, 0, 'f', 2)
+                             .arg(tightestRank)
+                             .arg(tightestWidth)));
+    }
+
+    // ---- GHUB-0064: a pip is drawn, not typed ----
+    //
+    // The pip pattern is how a card is read here, and a font's suit character
+    // differs in weight and shape between platforms -- so pips are outlines, and
+    // they must not change with the painter's font. Asked through a ROTATED
+    // painter, because that is the path that draws a face live: an unrotated
+    // face goes through the cache, whose own painter never sees the caller's
+    // font, and would pass whatever the pips were made of.
+    {
+        auto middlePip = [](const QFont& font) {
+            const double w = 120.0;
+            const double h = w * CardArt::kAspect;
+            QImage img(int(w), int(h), QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            p.setRenderHint(QPainter::Antialiasing, true);
+            p.setRenderHint(QPainter::TextAntialiasing, true);
+            p.setFont(font);
+            p.translate(w / 2.0, h / 2.0);
+            p.rotate(180.0);
+            p.translate(-w / 2.0, -h / 2.0);
+            CardArt::paintFace(p, QRectF(0, 0, w, h), Card { .suit = Suit::Clubs, .rank = 3 });
+            p.end();
+            // A three's middle pip, at the card's centre and clear of both
+            // corner indices, which are text and do follow the font.
+            return img.copy(QRect(int(w * 0.38), int(h * 0.38), int(w * 0.24), int(h * 0.24)));
+        };
+        QFont other;
+        other.setFamily(QStringLiteral("Serif"));
+        other.setStyleHint(QFont::Serif);
+        other.setWeight(QFont::Black);
+        other.setItalic(true);
+        check(middlePip(QFont()) == middlePip(other),
+              "card art: a pip is the same shape whatever font the painter holds");
     }
 
     // ---- cardArtKeyDecidesThePicture (GHUB-0048) ----

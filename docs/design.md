@@ -396,6 +396,13 @@ because there is nothing on a back to read.
 **Card corner text needs room for two characters and a descender.** A box half
 a card wide clipped "10" to a stray stroke and cut the tail off "Q".
 
+**A suit on a card is drawn, never typed** (GHUB-0064). `suitPath()` in
+`cardart.cpp` holds the four outlines, each fitted to the ink box of the Noto
+Sans glyph it replaced. A font's suit character changes weight and shape by
+platform, and draws as a box where no font has one — and the pip pattern is how
+a card is read here. `suitSymbol()` stays for a suit written beside words.
+`tests/uitest.cpp` checks that a pip does not change with the painter's font.
+
 **`CardArt::paintFace` stops drawing the face below `CardArt::kFaceMinWidth`
 (46) pixels wide** and leaves
 only the corner index, because pips are unreadable smaller than that. That

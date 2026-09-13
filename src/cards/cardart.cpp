@@ -137,25 +137,115 @@ IndexPlacement placeIndex(const Card& c, const QRectF& r, const QFont& base)
     return out;
 }
 
-// Draws a suit glyph centred on `centre`. Real decks invert the lower pips,
-// but an upside-down heart reads as a spade at this size, so these stay
-// upright — clearer, and still reads as a proper card.
-void drawPip(QPainter& p, const QPointF& centre, double size, const QString& suit)
+// A suit as a filled outline centred on the origin, in units of the size it is
+// drawn at. Drawn rather than typed (GHUB-0064): the pip pattern is how a card
+// is read here, and a font's suit character is whatever the platform hands over
+// -- a different weight on Windows, a whole pixel of hinting at the sizes a card
+// uses, and a box where no font has one.
+//
+// Each outline is scaled to the ink box of the Noto Sans glyph it replaced, as
+// measured on the owner's machine, so a card reads the way it did.
+QPainterPath fitted(const QPainterPath& raw, double width, double height)
+{
+    const QRectF b = raw.boundingRect();
+    QTransform t;
+    t.scale(width / b.width(), height / b.height());
+    t.translate(-b.center().x(), -b.center().y());
+    return t.map(raw);
+}
+
+QPainterPath heartOutline()
+{
+    QPainterPath p;
+    p.moveTo(0, 1);
+    p.cubicTo(-0.25, 0.65, -1, 0.25, -1, -0.35);
+    p.cubicTo(-1, -0.85, -0.35, -1.05, 0, -0.55);
+    p.cubicTo(0.35, -1.05, 1, -0.85, 1, -0.35);
+    p.cubicTo(1, 0.25, 0.25, 0.65, 0, 1);
+    p.closeSubpath();
+    return p;
+}
+
+QPainterPath diamondOutline()
+{
+    QPainterPath p;
+    p.moveTo(0, -1);
+    p.quadTo(0.35, -0.45, 1, 0);
+    p.quadTo(0.35, 0.45, 0, 1);
+    p.quadTo(-0.35, 0.45, -1, 0);
+    p.quadTo(-0.35, -0.45, 0, -1);
+    p.closeSubpath();
+    return p;
+}
+
+QPainterPath spadeOutline()
+{
+    QPainterPath p;
+    p.moveTo(0, -1);
+    p.cubicTo(0.25, -0.62, 1, -0.28, 1, 0.22);
+    p.cubicTo(1, 0.68, 0.42, 0.8, 0.1, 0.42);
+    p.quadTo(0.14, 0.82, 0.38, 1.0);
+    p.lineTo(-0.38, 1.0);
+    p.quadTo(-0.14, 0.82, -0.1, 0.42);
+    p.cubicTo(-0.42, 0.8, -1, 0.68, -1, 0.22);
+    p.cubicTo(-1, -0.28, -0.25, -0.62, 0, -1);
+    p.closeSubpath();
+    return p;
+}
+
+QPainterPath clubOutline()
+{
+    // Overlapping subpaths filled under WindingFill rather than merged with
+    // united(), which flattens each circle into a polygon whose facets showed
+    // at pip size.
+    QPainterPath p;
+    p.setFillRule(Qt::WindingFill);
+    const double lobe = 0.46;
+    p.addEllipse(QPointF(0, -0.50), lobe, lobe);
+    p.addEllipse(QPointF(-0.50, 0.10), lobe, lobe);
+    p.addEllipse(QPointF(0.50, 0.10), lobe, lobe);
+    p.addEllipse(QPointF(0, -0.02), 0.26, 0.26);
+    p.moveTo(0.06, 0.1);
+    p.quadTo(0.09, 0.82, 0.36, 1.0);
+    p.lineTo(-0.36, 1.0);
+    p.quadTo(-0.09, 0.82, -0.06, 0.1);
+    p.closeSubpath();
+    return p;
+}
+
+const QPainterPath& suitPath(Suit s)
+{
+    static const QPainterPath clubs = fitted(clubOutline(), 0.80, 0.80);
+    static const QPainterPath diamonds = fitted(diamondOutline(), 0.58, 0.80);
+    static const QPainterPath hearts = fitted(heartOutline(), 0.66, 0.75);
+    static const QPainterPath spades = fitted(spadeOutline(), 0.62, 0.79);
+    switch (s) {
+    case Suit::Clubs:    return clubs;
+    case Suit::Diamonds: return diamonds;
+    case Suit::Hearts:   return hearts;
+    case Suit::Spades:   return spades;
+    }
+    return spades;
+}
+
+// Draws a suit centred on `centre`, as large as a font of point size `size`
+// drew its glyph. Real decks invert the lower pips, but an upside-down heart
+// reads as a spade at this size, so these stay upright — clearer, and still
+// reads as a proper card.
+void drawPip(QPainter& p, const QPointF& centre, double size, Suit suit, const QColor& ink)
 {
     p.save();
     p.translate(centre);
-    QFont f = p.font();
-    f.setPointSizeF(size);
-    p.setFont(f);
-    const QRectF box(-size * 1.2, -size * 1.2, size * 2.4, size * 2.4);
-    p.drawText(box, Qt::AlignCenter, suit);
+    p.scale(size, size);
+    p.setPen(Qt::NoPen);
+    p.setBrush(ink);
+    p.drawPath(suitPath(suit));
     p.restore();
 }
 
 // A court card gets a ruled panel rather than figure art: it reads as a face
 // card at any size and never turns to mush when the cards are small.
-void drawCourt(QPainter& p, const QRectF& r, const QString& rank, const QString& suit,
-               const QColor& ink)
+void drawCourt(QPainter& p, const QRectF& r, const QString& rank, Suit suit, const QColor& ink)
 {
     const QRectF panel = r.adjusted(r.width() * 0.24, r.height() * 0.14,
                                     -r.width() * 0.24, -r.height() * 0.14);
@@ -178,8 +268,8 @@ void drawCourt(QPainter& p, const QRectF& r, const QString& rank, const QString&
     // Suit above and below, letter through the middle.
     const double pip = r.width() * 0.15;
     p.setPen(ink);
-    drawPip(p, QPointF(panel.center().x(), panel.top() + panel.height() * 0.15), pip, suit);
-    drawPip(p, QPointF(panel.center().x(), panel.bottom() - panel.height() * 0.15), pip, suit);
+    drawPip(p, QPointF(panel.center().x(), panel.top() + panel.height() * 0.15), pip, suit, ink);
+    drawPip(p, QPointF(panel.center().x(), panel.bottom() - panel.height() * 0.15), pip, suit, ink);
 
     QFont f = p.font();
     f.setPointSizeF(r.width() * 0.30);
@@ -256,13 +346,19 @@ static void drawFace(QPainter& p, const QRectF& r, const Card& c)
     const bool joker = isJoker(c);
     const QColor ink = isRed(c) ? kRed : kBlack;
     const QString rank = rankLabel(c.rank);
-    const QString suit = joker ? QString() : suitSymbol(c.suit);
     p.setPen(ink);
 
     // Corner index, top-left upright and bottom-right inverted, as on a real
     // card — it is what makes a fanned hand readable.
     const IndexPlacement index = placeIndex(c, r, p.font());
     const double indexSize = index.baseSize;
+
+    // Where the suit under the numeral sits, in units of its own size: its left
+    // edge this far in from the index box, its centre this far below the top of
+    // its band. Measured off the Noto Sans glyphs the outlines replaced, which
+    // is where the corner has always put it.
+    constexpr double kIndexSuitInset = 0.05;
+    constexpr double kIndexSuitDrop = 1.03;
 
     for (int i = 0; i < 2; ++i) {
         const bool inverted = (i == 1);
@@ -273,17 +369,19 @@ static void drawFace(QPainter& p, const QRectF& r, const Card& c)
             p.translate(-r.center());
         }
         const QRectF box = index.box;
-        QFont f = index.font;
-        p.setFont(f);
+        p.setFont(index.font);
         // With AlignLeft|AlignTop the origin does not move, so nothing else
         // about the layout changes. placeIndex() has already solved the size.
         p.drawText(box, Qt::AlignLeft | Qt::AlignTop | Qt::TextDontClip, rank);
 
-        f.setBold(false);
-        f.setPointSizeF(indexSize * 0.88);
-        p.setFont(f);
-        p.drawText(QRectF(box.left(), box.top() + r.height() * 0.125, box.width(), r.height() * 0.18),
-                   Qt::AlignLeft | Qt::AlignTop | Qt::TextDontClip, suit);
+        if (!joker) {
+            const double suitSize = indexSize * 0.88;
+            const QRectF shape = suitPath(c.suit).boundingRect();
+            drawPip(p,
+                    QPointF(box.left() + (kIndexSuitInset - shape.left()) * suitSize,
+                            box.top() + r.height() * 0.125 + kIndexSuitDrop * suitSize),
+                    suitSize, c.suit, ink);
+        }
         p.restore();
     }
 
@@ -298,15 +396,12 @@ static void drawFace(QPainter& p, const QRectF& r, const Card& c)
     }
 
     if (c.rank == kJack || c.rank == kQueen || c.rank == kKing) {
-        drawCourt(p, r, rank, suit, ink);
+        drawCourt(p, r, rank, c.suit, ink);
         return;
     }
 
     if (c.rank == kAce) {
-        QFont f = p.font();
-        f.setPointSizeF(r.width() * 0.44);
-        p.setFont(f);
-        p.drawText(r, Qt::AlignCenter, suit);
+        drawPip(p, r.center(), r.width() * 0.44, c.suit, ink);
         return;
     }
 
@@ -316,7 +411,7 @@ static void drawFace(QPainter& p, const QRectF& r, const Card& c)
     const double top = r.top() + r.height() * 0.145;
     const double span = r.height() * 0.71;
     for (const Pip& pip : pipLayout(c.rank))
-        drawPip(p, QPointF(r.left() + r.width() * pip.x, top + span * pip.y), pipSize, suit);
+        drawPip(p, QPointF(r.left() + r.width() * pip.x, top + span * pip.y), pipSize, c.suit, ink);
 }
 
 double indexOverflow(const Card& c, const QRectF& r, const QFont& base)
@@ -337,16 +432,13 @@ double indexPipGap(const Card& c, const QRectF& r, const QFont& base)
     // Only the TOP row can reach the index, and which column it sits in depends
     // on the rank -- a two and a three put theirs at the centre, where there is
     // plenty of room; everything from four up has one at the left column.
-    const double pipSize = r.width() * 0.125;
-    QFont pf = base;
-    pf.setPointSizeF(pipSize);
-    const double glyph = QFontMetricsF(pf).horizontalAdvance(suitSymbol(c.suit));
+    const double pipWidth = suitPath(c.suit).boundingRect().width() * r.width() * 0.125;
 
     double nearest = r.right();
     for (const Pip& pip : pipLayout(c.rank)) {
         if (pip.y > 0.0)
             continue;
-        nearest = std::min(nearest, r.left() + r.width() * pip.x - glyph * 0.5);
+        nearest = std::min(nearest, r.left() + r.width() * pip.x - pipWidth * 0.5);
     }
     return nearest - index.inkRight;
 }
