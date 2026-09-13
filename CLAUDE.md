@@ -330,6 +330,14 @@ it is a release PRACTICE and not a versioning rule. The machine-wide versioning
 standard's § 9 routes anything it names no home for — a release cadence, and
 this — to wherever the project keeps its own practices, which is this file.
 
+**Before step 1, check the Qt the downloads bundle** (GHUB-0055). Look up
+`QT_VERSION` from either workflow on
+[Qt's list of known vulnerabilities](https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products).
+Write the date and what you found into `SECURITY.md` § Bundled Qt, replacing
+the previous check. A pinned Qt named in an advisory gets a roadmap item for
+the bump. The CI actions need no step here: `.github/dependabot.yml` has
+Dependabot propose their updates monthly.
+
 Cutting a release is three edits, a check and a tag, **in this order**:
 
 1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`. **Which number**

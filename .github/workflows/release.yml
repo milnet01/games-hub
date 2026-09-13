@@ -13,6 +13,11 @@ on:
 permissions:
   contents: read
 
+# The Qt both downloads bundle. ci.yml carries the same line, and its lint job
+# fails when the two disagree (GHUB-0055).
+env:
+  QT_VERSION: '6.8.3'
+
 jobs:
   # Both build jobs need this, so a bad tag costs no build time and nothing
   # is ever published from a tree that disagrees with its own tag.
@@ -70,7 +75,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
         with:
-          version: '6.8.3'
+          version: ${{ env.QT_VERSION }}
           arch: linux_gcc_64
           modules: qtmultimedia
           cache: true
@@ -248,7 +253,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
         with:
-          version: '6.8.3'
+          version: ${{ env.QT_VERSION }}
           arch: win64_msvc2022_64
           modules: qtmultimedia
           cache: true

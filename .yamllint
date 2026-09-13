@@ -8,3 +8,9 @@ rules:
     max: 100
   truthy:
     check-keys: false
+  # FUNDING.yml is read line by line by two hand parsers -- cmake/funding.cmake
+  # and the donate check in tests/uitest.cpp -- and neither expects a `---`.
+  # The uitest one counted it as a fourth link (GHUB-0055).
+  document-start:
+    ignore: |
+      .github/FUNDING.yml

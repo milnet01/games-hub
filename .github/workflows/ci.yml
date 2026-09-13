@@ -18,6 +18,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# The Qt every leg tests against. release.yml carries the same line, and the
+# lint job below fails when the two disagree (GHUB-0055).
+env:
+  QT_VERSION: '6.8.3'
+
 jobs:
   # GHUB-0051. These three linters ran only in scripts/local-ci.sh, from a
   # pre-push hook each clone has to opt into and SKIP_LOCAL_CI=1 bypasses, so a
@@ -51,11 +56,46 @@ jobs:
           yamllint --version
           zizmor --version
 
+      # .github/ rather than .github/workflows/: dependabot.yml sits beside the
+      # workflows, and zizmor audits that too (GHUB-0055).
       - name: Lint the workflows
         run: |
           actionlint
-          yamllint .github/workflows/
-          zizmor --no-progress .github/workflows/
+          yamllint .github/
+          zizmor --no-progress .github/
+
+      # GHUB-0055. Qt is named once per workflow, in its top-level env, and
+      # every workflow must name the same one. Otherwise a bump can reach the
+      # test legs and miss the legs that build the downloads, green throughout.
+      - name: Check every workflow pins the same Qt
+        run: |
+          found=
+          for f in .github/workflows/*.yml; do
+            grep -q 'jurplel/install-qt-action' "$f" || continue
+            v=$(sed -n "s/^  QT_VERSION: '\([0-9][0-9.]*\)'$/\1/p" "$f")
+            if [ -z "$v" ]; then
+              echo "$f installs Qt but sets no top-level QT_VERSION" >&2
+              exit 1
+            fi
+            stray=$(grep -A4 'jurplel/install-qt-action' "$f" \
+              | grep 'version:' | grep -v 'env.QT_VERSION' || true)
+            if [ -n "$stray" ]; then
+              echo "$f names a Qt version in a step instead of env.QT_VERSION:" >&2
+              echo "$stray" >&2
+              exit 1
+            fi
+            found=$(printf '%s\n%s' "$found" "$v")
+          done
+          distinct=$(printf '%s\n' "$found" | grep . | sort -u || true)
+          if [ -z "$distinct" ]; then
+            echo "no workflow installs Qt, so there was nothing to compare" >&2
+            exit 1
+          fi
+          if [ "$(printf '%s\n' "$distinct" | wc -l)" -ne 1 ]; then
+            printf 'the workflows pin different Qt versions:\n%s\n' "$distinct" >&2
+            exit 1
+          fi
+          echo "every workflow pins Qt $distinct"
 
   build:
     name: ${{ matrix.name }}
@@ -96,7 +136,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
         with:
-          version: '6.8.3'
+          version: ${{ env.QT_VERSION }}
           arch: ${{ matrix.qt_arch }}
           modules: qtmultimedia
           cache: true
@@ -151,7 +191,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
         with:
-          version: '6.8.3'
+          version: ${{ env.QT_VERSION }}
           arch: linux_gcc_64
           modules: qtmultimedia
           cache: true
@@ -209,7 +249,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
         with:
-          version: '6.8.3'
+          version: ${{ env.QT_VERSION }}
           arch: linux_gcc_64
           modules: qtmultimedia
           cache: true

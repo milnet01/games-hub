@@ -1,0 +1,19 @@
+---
+# GHUB-0055. Every action in the workflows is pinned to a commit SHA, which
+# stops a moved tag running someone else's code -- and also leaves each pin
+# exactly as old as the last time anybody looked. Dependabot understands SHA
+# pins: its pull request moves the digest and the trailing version comment
+# together, and CI tests it like any other change. Monthly, the owner's call
+# (2026-09-11). Qt is not one of Dependabot's ecosystems; the release checklist
+# in CLAUDE.md covers that half.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    # A release is offered only once it is a week old, so one pulled for being
+    # compromised or broken is usually gone before it is proposed here. zizmor's
+    # dependabot-cooldown audit fails the lint job without this.
+    cooldown:
+      default-days: 7

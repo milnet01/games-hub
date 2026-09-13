@@ -56,6 +56,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Security
 
+- **Something now watches for out-of-date build tools, and Qt is checked before every release** (GHUB-0055)
+  Dependabot now proposes updates to the pinned GitHub actions once a
+  month, and only once a release is a week old. The Qt version the builds
+  use is written once per workflow instead of five times, and CI fails if
+  the test builds and the download builds ever name different ones.
+  Cutting a release now starts by checking that Qt against Qt's list of
+  known vulnerabilities, with the date recorded in SECURITY.md. The first
+  check found advisories against the Qt the downloads carry; none reaches
+  this app, and the upgrade is planned. SECURITY.md's link to Qt's
+  security page was dead and now points at the live one.
+
 - **The checks on the workflows that publish downloads now run on every push, not just on one PC** (GHUB-0051)
   actionlint, yamllint and zizmor used to run only from a pre-push
   hook each clone had to switch on, and could skip. A lint job in

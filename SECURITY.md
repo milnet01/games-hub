@@ -58,6 +58,15 @@ support commitment; older versions are not patched.
 ## Bundled Qt
 
 The downloads bundle Qt 6, so a Qt vulnerability is inherited here. Those
-are reported to [The Qt Project](https://www.qt.io/product/security), not
+are reported to The Qt Project under its
+[security policy](https://wiki.qt.io/Qt_Project_Security_Policy), not
 here — but do open an issue if a release is still shipping a Qt version with
 a known advisory, because bumping it is this project's job.
+
+**Last checked: 2026-09-13**, against Qt's
+[list of known vulnerabilities](https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products).
+The downloads carry Qt 6.8.3, and that list names 6.8.3 in advisories fixed
+by later Qt releases. Each one is in a part of Qt the app does not link, or
+needs outside input the app does not read: an image, an SVG or XML file,
+markdown, a `data:` URL or a network connection. The app's one outside input
+is a saved game, which it parses itself. The bump is planned anyway.

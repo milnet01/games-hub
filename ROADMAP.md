@@ -1486,7 +1486,7 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0055] **SECURITY.md promises to bump a vulnerable Qt, and nothing anywhere is watching for one.**
+- ✅ [GHUB-0055] **SECURITY.md promises to bump a vulnerable Qt, and nothing anywhere is watching for one.**
   SECURITY.md is straight about this and makes a commitment: the downloads bundle
   Qt 6, a Qt vulnerability is inherited here, and *bumping it is this project's
   job*. The mechanism for noticing is a person reading Qt security announcements.
@@ -1511,6 +1511,26 @@ than any amount of hardening applied to an app with no sockets.
   cannot land in the CI leg and be missed in the two release legs — which would
   publish downloads built against an older Qt than the one the tests ran on, and
   look green throughout.
+  Progress (2026-09-11): the owner chose Dependabot for the github-actions
+  ecosystem, checking MONTHLY. .github/dependabot.yml is written but
+  untracked and not yet linted -- run zizmor over it, and consider widening
+  the lint job to .github/ so it is checked. Still to do: Qt is pinned in
+  five places (ci.yml x3, release.yml x2); plan is a workflow-level
+  QT_VERSION env in each file plus a lint-job assertion that every copy
+  agrees. Add a release-checklist step to check the pinned Qt against
+  https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products (URL
+  checked, 200) and record the date in SECURITY.md's Bundled Qt section.
+  That section's link, https://www.qt.io/product/security, was not checked.
+  Resolved (2026-09-13). .github/dependabot.yml tracked, with a 7-day
+  cooldown zizmor's dependabot-cooldown audit asked for. CI's lint job now
+  lints .github/ rather than .github/workflows/, so that file is checked.
+  Qt is one workflow-level QT_VERSION per file, and a new lint step fails
+  when a workflow installing Qt sets none, names a version in a step, or
+  disagrees with the other; each case was proved red on a broken copy.
+  CLAUDE.md § Releasing gains the check-Qt-first step; SECURITY.md § Bundled
+  Qt records the first check and its dead qt.io/product/security link
+  (404) now points at wiki.qt.io/Qt_Project_Security_Policy. The check
+  found advisories against 6.8.3, filed as GHUB-0193.
   **Layman:** The downloads carry their own copy of Qt, and nothing tells you when that copy needs updating for a security fix.
   Kind: security.
   Source: in-session-2026-08-20.
@@ -1712,6 +1732,35 @@ than any amount of hardening applied to an app with no sockets.
   **Layman:** The Windows half of the build shows compiler warnings but is allowed to ignore them, because nobody has looked at what it says yet.
   Kind: security.
   Source: in-session-2026-09-07.
+
+- 📋 [GHUB-0193] **The downloads bundle Qt 6.8.3, which Qt's own advisory list names.**
+  Found by the first run of GHUB-0055's release-checklist step, 2026-09-13.
+  https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products names 6.8.3
+  in advisories fixed by 6.8.4 and later. The open-source mirror stops the 6.8
+  line at 6.8.3 (download.qt.io/online/qtsdkrepository/ lists qt6_690 onwards
+  and no qt6_684), so staying on 6.8 is not a route: the bump is to a newer
+  minor.
+
+  Exposure today looks nil, which is why this is planned rather than urgent.
+  The app links Widgets, Multimedia and Concurrent (CMakeLists.txt's
+  find_package). Each advisory against 6.8.3 is in a part of Qt it does not
+  link (Network, SVG, XML, Quick, NFC, Core5Compat) or needs outside input it
+  does not read (an image, markdown, a data: URL). SECURITY.md § Bundled Qt
+  records the check.
+
+  The candidate is 6.11.2. This machine already builds and tests against it
+  (qmake6 --version), so the suite is known green there on Linux. The mirror
+  carries qt6_6112_msvc2022_64 for Windows. With GHUB-0055 the change is one
+  QT_VERSION line in each workflow.
+
+  The risk is the release path. release.yml runs only on a tag, so a Qt bump
+  that breaks linuxdeploy-plugin-qt or windeployqt is found by the next
+  release and nowhere earlier. CI's two build legs cover the compile and the
+  tests, not the packaging. Worth either a throwaway pre-release tag or a
+  workflow_dispatch trigger on release.yml before the bump lands.
+  **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
+  Kind: security.
+  Source: in-session-2026-09-13.
 
 ### 🧠 Memory
 
