@@ -1,6 +1,6 @@
 # GHUB-0063 — Light whoever is playing
 
-**Status:** spec draft (2026-09-13).
+**Status:** accepted (2026-09-13).
 **Kind:** implement.
 **Source:** ROADMAP GHUB-0063 (the owner's suggestion, 2026-08-20).
 
@@ -160,8 +160,9 @@ computer turn.
   `m_turnFades`. The switch is read live, at paint time, and passed to
   `paintTurnLight` as `legible`.
 - `CanastaView::advanceForShot` sets `m_turnLevel` to 1 after its final
-  `refresh()`, immediately before returning. That `refresh()` sees the seat the
-  turns moved to, and would otherwise start a fade the shot never shows.
+  `refresh()` when `m_turnSeat` is 0 or more. That `refresh()` sees the seat the
+  turns moved to, and would otherwise start a fade the shot never shows. A run
+  that ends between hands or at game over stays unlit.
 - No save format changes. The light is not saved.
 
 ### 4.5 Where each light is painted
@@ -185,9 +186,13 @@ Each view paints the light before the cards or pieces over it.
   ```
 
   Your band fills the strip below the frame's bottom edge; the computer's fills
-  the strip above its top edge. Each is as wide as the frame. So a band never
-  covers the frame, Chess's file letters on it, or the caption band
-  `GameView::captionBand` reserves.
+  the strip above its top edge. Each is as wide as the frame. A band never
+  covers the frame or the caption band `GameView::captionBand` reserves.
+
+  **Chess's file letters overhang the frame.** They are drawn with
+  `Qt::TextDontClip`, and under the switch at larger board sizes their ink runs
+  past the frame's bottom edge. Chess's lower band starts below that ink, and
+  the strip Chess reserves grows by the overhang.
 
 ## 5. Invariants
 
@@ -205,11 +210,14 @@ creates. Each names the rule its fixture isolates.
   stale seat during Passing, or lights `m_human` whatever the turn.
 
 - **INV-2** — A light reaches level 1, and the view then asks for no repaints.
-  *Test:* `tests/uitest.cpp`, block `turnLightComesUpAndHolds`. Activate the
-  view, drive a turn change, and pump events until `turnLight().level` is 1,
-  failing after `kTurnLightFadeMs` plus a margin. Then count paint events with
-  `PaintCounter` over 200 ms on a view waiting for the player, and assert
-  zero. The fixture isolates the fade's stop condition.
+  *Test:* `tests/uitest.cpp`, block `turnLightComesUpAndHolds`. Show and
+  activate the view, install a `PaintCounter`, and drive a turn change that
+  lands on your seat, which then waits. Pump events until `turnLight().level`
+  is 1, failing after `kTurnLightFadeMs` plus a margin, and assert the counter
+  saw at least one paint during the fade. Then count paint events over 200 ms
+  and assert zero. On the four views with `m_turnTimer`, also assert
+  `activeTimers(view)` is zero. The positive control is what makes the zero
+  mean anything. The fixture isolates the fade's stop condition.
   *Breaks when:* the fade pulses, recomputes from a clock, or never stops its
   timer.
 
@@ -233,22 +241,25 @@ creates. Each names the rule its fixture isolates.
   *Breaks when:* the fade starts whatever `m_turnFades` says, so a game opened
   or a `--shot` shows no light.
 
-- **INV-5** — The legibility switch changes the light, and turning it back
-  restores the light exactly.
+- **INV-5** — The legibility switch changes the light, and leaves its state
+  alone.
   *Test:* `tests/uitest.cpp`, block `turnLightAnswersTheSwitch`. Paint
   `Theme::paintTurnLight` alone onto a transparent image at level 1, with
   `legible` false and then true, and assert the two images differ. Then, for
-  each view at level 1, render with the switch off, on, and off again, and
-  assert the first and third renders are identical. The first half isolates
-  `legible`, because every view's layout already moves with the switch.
+  each view, activate it, change the turn, pump one tick so the level is
+  part-way, and deactivate. Turn the switch on and off again. Assert
+  `turnLight()`'s seat and level are unchanged, and that the renders before and
+  after are identical. The first half isolates `legible`, because every view's
+  layout already moves with the switch; the second isolates the fade state,
+  which a level already at 1 would hide.
   *Breaks when:* `paintTurnLight` ignores `legible`, or `applyLegibility()`
   touches the fade state.
 
 - **INV-6** — The light is not colour alone: at level 1 its outline is drawn.
   *Test:* `tests/uitest.cpp`, inside `turnLightAnswersTheSwitch`: paint
   `Theme::paintTurnLight` alone onto a transparent image over a known
-  rectangle, and assert pixels on that rectangle's border are opaque while
-  pixels just inside the gradient's fade are not. The fixture isolates the
+  rectangle, and assert pixels on that rectangle's border are more opaque than
+  pixels just inside it, where the gradient fades. The fixture isolates the
   outline from the gradient.
   *Breaks when:* the painter draws the gradient only.
 
@@ -325,7 +336,7 @@ five views and must stay green.
 | INV-5 | `tests/uitest.cpp` block `turnLightAnswersTheSwitch`, an offscreen UI test |
 | INV-6 | `tests/uitest.cpp` block `turnLightAnswersTheSwitch`, an offscreen UI test |
 | A leaving game stops `m_turnTimer` | Partial: `tests/uitest.cpp` block `gamesStopTheirClocks`, an offscreen UI test, asserts no timer runs after leaving. It sees a fade left running only when the game was left part-way through one |
-| A board game's band stays off its frame and the caption band | **nothing mechanical** — whoever implements it reads a `--shot` of each board game with the switch on |
+| A board game's band stays off its frame, the caption band and Chess's file letters | **nothing mechanical** — whoever implements it reads a `--shot` of each board game with the switch on, Chess at a large window |
 | The owner can tell whose turn it is at a glance | **nothing mechanical** — the owner, playing |
 
 ## 11. Cross-doc impact
@@ -353,8 +364,10 @@ For the owner, since each is a preference rather than a deduction:
 - **Where the board games' light goes.** This spec puts yours below the board
   and the computer's above it, because that is where you sit. The board gives
   up a frame's width top and bottom to make the room.
-- **How long the fade takes.** § 4.1 sets `kTurnLightFadeMs`: long enough to
-  draw the eye, short enough to finish before the quickest computer move.
+- **How long the fade takes.** § 4.1 sets `kTurnLightFadeMs`, long enough to
+  draw the eye. Chess's computer starts its reply `kThinkDelayMs` after its
+  turn begins, which is sooner, so in Chess that fade is often cut short
+  (§ 6).
 - **Whether the old light should fade out** rather than go out at once.
 - **What lights while you choose cards to pass.** This spec lights you.
 - **Whether opening a game should fade its light in** rather than show it at

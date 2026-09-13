@@ -2589,6 +2589,20 @@ draws, whether or not it has had one.
   movement that draws it and costs nothing while it sits. In Canasta the fade must
   also keep clear of `m_flights` and `animating()`, which already own that view's
   timing.
+  Spec accepted (2026-09-13): docs/specs/GHUB-0063-turn-light.md, written
+  through write-spec and gated by two review-contract loops, which is the
+  cap for a spec. Loop 1 fixed twelve findings and dismissed one; loop 2
+  fixed seven. No deferred tail. The loop log is
+  docs/reviews/GHUB-0063-turn-light-loop-log.md.
+
+  This bullet's description of Canasta as text-only is out of date:
+  CanastaView::paintTable already paints a static gold glow at the current
+  seat, which the spec replaces with the shared fading light.
+
+  The item stays planned. The spec's § 15 lists five preference calls for
+  the owner to confirm before it is built: where the board games' band sits,
+  how long the fade takes, whether the old light fades out, what lights
+  during Hearts' pass, and whether opening a game fades its light in.
   **Layman:** The seat of the player whose turn it is gets a gentle glow, so you can see at a glance who is up.
   Kind: ux.
   Source: user-request-2026-08-20.
