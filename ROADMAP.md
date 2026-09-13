@@ -8524,7 +8524,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: enhancement.
   Source: in-session-2026-08-22 GHUB-0092 fix.
 
-- 📋 [GHUB-0105] **The self-test failed once under ctest and has not failed again in forty-five runs.**
+- ✅ [GHUB-0105] **The self-test failed once under ctest and has not failed again in forty-five runs.**
   Observed 2026-08-24 while shipping GHUB-0096. `ctest` reported
   `selftest ***Failed` once. The same binary had passed
   immediately before and has passed every time since: 25 direct
@@ -8554,6 +8554,24 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Next step is to catch it with output rather than to guess:
   loop ctest with --output-on-failure and keep the log until it
   reproduces.
+  Resolved (2026-09-13). Caught with output: a copy of gameshub_selftest
+  looped until it failed, on run 35 of 40, with one FAIL -- "minesweeper:
+  the first click hit a mine". The game was right and the check was wrong.
+  minesweeperRules() failed a first click whenever the field was no longer
+  Playing, and a first click that flood-fills every safe square leaves it
+  Won. Proved by pinning each seed from 0 to 199,999, building the 9x9
+  ten-mine field and clicking the centre: seven first clicks won (the
+  first at seed 527) and none lost. At 200 random fields a run, that is
+  roughly one red run in 140 with nothing broken.
+
+  Fixed in tests/selftest.cpp. firstClickSafe() holds the condition, now
+  "not Lost and not a mine", and the loop uses it. A new check,
+  minesweeperFirstClickMayWin(), pins seed 527, asserts that the first
+  click really does win, and asserts that firstClickSafe() accepts it.
+  With the old condition in the helper it FAILED; with the new one it
+  passes. It runs last in main(), because pinDealSeed() is process-wide
+  and would otherwise turn every later random board into a fixed one.
+  Not the canastaMatch or Reversi suspects this bullet ruled out.
   **Layman:** One test run went red and nothing since has reproduced it, so something in the suite is not as repeatable as it looks.
   Kind: investigate.
   Source: in-session-2026-08-24.

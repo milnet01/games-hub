@@ -5,6 +5,7 @@
 #include "canasta/canastaengine.h"
 #include "cards/card.h"
 #include "cards/cardcodec.h"
+#include "dealseed.h"
 #include "chess/chessai.h"
 #include "chess/chessboard.h"
 #include "hearts/heartsengine.h"
@@ -142,6 +143,36 @@ void reversiEngineStrength()
 // Minesweeper
 // ---------------------------------------------------------------------------
 
+// Whether a field's first click kept Minesweeper's promise: never a mine. A
+// first click that clears the whole field has WON, which keeps it too -- so
+// the test is "not lost", never "still playing".
+bool firstClickSafe(const Minefield& field, int row, int col)
+{
+    return field.state() != Minefield::State::Lost && !field.at(row, col).mine;
+}
+
+// GHUB-0105. An opening click can clear the whole field, and that is a win,
+// not a mine. Seed 527 is the first of seven in 200,000 that do it on a 9x9
+// field with ten mines, found by pinning each seed and clicking the centre.
+// minesweeperRules() builds 200 random fields a run, so a check that counted
+// a win as a failure went red now and then with nothing wrong.
+//
+// Called LAST from main(): pinDealSeed() is process-wide, and every check
+// after this one would otherwise lose its random boards.
+void minesweeperFirstClickMayWin()
+{
+    pinDealSeed(527);
+    Minefield g(9, 9, 10);
+    g.reveal(4, 4);
+    // The fixture first: if placement or the shuffle ever changes, seed 527
+    // may stop winning, and the check below would then pass on a field that
+    // is merely still in play.
+    check(g.state() == Minefield::State::Won,
+          "minesweeper: seed 527's first click clears the field");
+    check(firstClickSafe(g, 4, 4),
+          "minesweeper: a first click that wins the game counts as a safe one");
+}
+
 void minesweeperRules()
 {
     Minefield f(9, 9, 10);
@@ -152,7 +183,7 @@ void minesweeperRules()
     for (int attempt = 0; attempt < 200; ++attempt) {
         Minefield g(9, 9, 10);
         g.reveal(4, 4);
-        if (g.state() != Minefield::State::Playing || g.at(4, 4).mine) {
+        if (!firstClickSafe(g, 4, 4)) {
             check(false, "minesweeper: the first click hit a mine");
             return;
         }
@@ -6171,6 +6202,11 @@ int main()
     spiderHarvestsAFullRun();
     spiderRowNeedsEveryColumnOccupied();
     spiderPlaysOutWithoutLosingACard();
+
+    // LAST, and it must stay last: it pins the deal seed for the rest of the
+    // process, which would turn every random board after it into a fixed one.
+    section("Minesweeper, pinned");
+    minesweeperFirstClickMayWin();
 
     std::printf("\n%s\n", g_failures == 0 ? "All checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;
