@@ -9083,7 +9083,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Kind: fix.
   Source: in-session-2026-09-06, found while closing GHUB-0179.
 
-- 📋 [GHUB-0195] **A newer clang-tidy flags IndexPlacement's uninitialised fields in cardart.cpp.**
+- ✅ [GHUB-0195] **A newer clang-tidy flags IndexPlacement's uninitialised fields in cardart.cpp.**
   Seen 2026-09-13 running the locally installed clang-tidy over
   src/cards/cardart.cpp while shipping GHUB-0064:
   cppcoreguidelines-pro-type-member-init on struct IndexPlacement, whose
@@ -9096,6 +9096,11 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   filed. placeIndex() assigns every field before returning, so nothing
   reads an uninitialised value today. The fix is a default member
   initialiser on each of the three.
+  Resolved (2026-09-13): baseSize, room and inkRight carry a default member
+  initialiser of 0.0. The local clang-tidy reports nothing on
+  src/cards/cardart.cpp afterwards, the build passes with GAMESHUB_WERROR,
+  and gameshub_uitest passes. placeIndex() still assigns all three, so no
+  drawn card changes.
   **Layman:** A newer version of the code checker points at one small struct in the card-drawing code; it is not a bug today, and the version CI uses does not report it.
   Kind: chore.
   Source: in-session-2026-09-13.

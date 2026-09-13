@@ -75,9 +75,9 @@ std::vector<Pip> pipLayout(int rank)
 struct IndexPlacement {
     QRectF box;
     QFont font;
-    double baseSize;  // before any solving; the suit glyph under it scales off this
-    double room;      // how wide the numeral is allowed to be
-    double inkRight;  // where the numeral's ink actually ends
+    double baseSize = 0.0;  // before any solving; the suit under it scales off this
+    double room = 0.0;      // how wide the numeral is allowed to be
+    double inkRight = 0.0;  // where the numeral's ink actually ends
 };
 
 IndexPlacement placeIndex(const Card& c, const QRectF& r, const QFont& base)
