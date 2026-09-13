@@ -3997,6 +3997,19 @@ inventing one.
   Source: review-contract GHUB-0180 loop 1, 2026-09-10.
   Lanes: docs.
 
+- ✅ [GHUB-0194] **Three debugging screenshots from the first day sit at the top of the repository.**
+  p2_solitaire.png, p5.png and p5_zoom.png were added in 0b02c3c on
+  2026-08-10, "Add sound, persistent best scores, and a visual pass over
+  every game". They show a build from that day, window chrome included.
+  Nothing references any of them: a search of the whole tree, hidden
+  files included, finds no mention. docs/hub.png is the README's picture
+  and is not one of them.
+  Resolved (2026-09-13): all three removed with git rm; each was viewed first
+  and is a screenshot of the 2026-08-10 build.
+  **Layman:** Three old test pictures were saved into the project by accident and are being removed.
+  Kind: chore.
+  Source: in-session-2026-09-13.
+
 ## P03 — Considered
 
 Nothing here is agreed. 💭 means the scope, the value or the decision is still
