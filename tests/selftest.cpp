@@ -152,23 +152,27 @@ bool firstClickSafe(const Minefield& field, int row, int col)
 }
 
 // GHUB-0105. An opening click can clear the whole field, and that is a win,
-// not a mine. Seed 527 is the first of seven in 200,000 that do it on a 9x9
+// not a mine. Seed 127920 is the first of three in 200,000 that do it on a 9x9
 // field with ten mines, found by pinning each seed and clicking the centre.
 // minesweeperRules() builds 200 random fields a run, so a check that counted
 // a win as a failure went red now and then with nothing wrong.
+//
+// The seed means the same field on every compiler only because placeMines()
+// shuffles by hand. It used std::shuffle when this check was first written,
+// and the seed picked then won on Linux and not on the Windows runner.
 //
 // Called LAST from main(): pinDealSeed() is process-wide, and every check
 // after this one would otherwise lose its random boards.
 void minesweeperFirstClickMayWin()
 {
-    pinDealSeed(527);
+    pinDealSeed(127920);
     Minefield g(9, 9, 10);
     g.reveal(4, 4);
-    // The fixture first: if placement or the shuffle ever changes, seed 527
+    // The fixture first: if placement or the shuffle ever changes, this seed
     // may stop winning, and the check below would then pass on a field that
     // is merely still in play.
     check(g.state() == Minefield::State::Won,
-          "minesweeper: seed 527's first click clears the field");
+          "minesweeper: seed 127920's first click clears the field");
     check(firstClickSafe(g, 4, 4),
           "minesweeper: a first click that wins the game counts as a safe one");
 }

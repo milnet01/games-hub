@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <random>
+#include <utility>
 
 Minefield::Minefield(int width, int height, int mines)
     : m_width(width)
@@ -59,8 +60,14 @@ void Minefield::placeMines(int safeRow, int safeCol)
             if (std::abs(r - safeRow) > 1 || std::abs(c - safeCol) > 1)
                 candidates.push_back(r * m_width + c);
 
+    // Fisher-Yates by hand, not std::shuffle, for the reason shuffleCards()
+    // gives in card.cpp: the standard fixes what mt19937 emits but not how
+    // std::shuffle consumes it, so MSVC laid different mines from the same seed
+    // and a seeded self-test check failed on the Windows runner alone
+    // (GHUB-0105).
     std::mt19937 rng { m_seed };
-    std::shuffle(candidates.begin(), candidates.end(), rng);
+    for (std::size_t i = candidates.size(); i > 1; --i)
+        std::swap(candidates[i - 1], candidates[rng() % i]);
 
     const int count = std::min<int>(m_mines, int(candidates.size()));
     for (int i = 0; i < count; ++i)

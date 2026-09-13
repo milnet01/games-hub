@@ -8572,6 +8572,20 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   passes. It runs last in main(), because pinDealSeed() is process-wide
   and would otherwise turn every later random board into a fixed one.
   Not the canastaMatch or Reversi suspects this bullet ruled out.
+  Correction (2026-09-13). The seed above was wrong on Windows. CI's Windows
+  leg failed on 481a797 with one FAIL, "minesweeper: seed 527's first click
+  clears the field": Minefield::placeMines used std::shuffle, which MSVC's
+  library consumes differently from libstdc++, so seed 527 laid other mines
+  there. CLAUDE.md § Traps names minefield.cpp as needing exactly this
+  treatment before any test seeds it, and it was missed.
+
+  placeMines now shuffles by hand, as shuffleCards() in card.cpp does, so a
+  seed lays the same mines on every compiler. Re-running the seed search on
+  the new placement: 3 of 200,000 first clicks win, the first at seed
+  127920, and none lose. minesweeperFirstClickMayWin() pins 127920. The
+  self-test and gameshub_uitest both pass locally on it; the Windows leg is
+  confirmed by CI on the push that carries it, not here. sudokugrid.cpp
+  still calls std::shuffle, and nothing seeds it in a test today.
   **Layman:** One test run went red and nothing since has reproduced it, so something in the suite is not as repeatable as it looks.
   Kind: investigate.
   Source: in-session-2026-08-24.
