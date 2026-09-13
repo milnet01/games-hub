@@ -1890,7 +1890,7 @@ fourteen games and worth watching at thirty.
   Kind: investigate.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0058] **The sound effects are never deleted, and that will drown out the leak checking GHUB-0052 needs.**
+- ✅ [GHUB-0058] **The sound effects are never deleted, and that will drown out the leak checking GHUB-0052 needs.**
   `Sound::play()` builds `kVoices` (4) `QSoundEffect` objects the first time an
   effect is asked for, so a full session can reach 68 of them across the 17 files
   in `assets/sounds/`. Each is `new QSoundEffect` with **no parent**, held in a
@@ -1916,6 +1916,20 @@ fourteen games and worth watching at thirty.
   after Qt has gone. The offscreen guard in the constructor already means the test
   binaries build none of these at all, which is why the leak has never shown up in
   a test run.
+  Resolved (2026-09-13). Sound registers qAddPostRoutine in its
+  constructor, and the routine deletes every QSoundEffect and sets
+  m_available false so none is rebuilt. Not aboutToQuit, which this
+  bullet suggested: that signal comes from the event loop, and --shot
+  returns from main without running one. qAddPostRoutine runs from the
+  application's destructor on every exit, and is how CardArt already
+  empties its pixmap caches. Proved with an ASan build of gameshub
+  running --shot --game freecell on the real display, with detect_leaks=1:
+  leak records through Sound::play went from 2 to 0, and the whole leak
+  summary from 513080 bytes in 179 allocations to 448 bytes in 4. The app
+  wrote its shot and exited without a sanitizer error. No automated test:
+  the suite runs offscreen, where Sound builds no effects at all. CI's
+  sanitizer leg keeps detect_leaks=0 until GHUB-0057 closes too, as its
+  own comment says.
   **Layman:** Each sound is created and never cleaned up; harmless in itself, but it will make the new memory-error tests report noise.
   Kind: fix.
   Source: in-session-2026-08-20.
@@ -9050,6 +9064,23 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   **Layman:** A stricter version of one of our code checkers finds things the version we run on the build server does not.
   Kind: fix.
   Source: in-session-2026-09-06, found while closing GHUB-0179.
+
+- 📋 [GHUB-0195] **A newer clang-tidy flags IndexPlacement's uninitialised fields in cardart.cpp.**
+  Seen 2026-09-13 running the locally installed clang-tidy over
+  src/cards/cardart.cpp while shipping GHUB-0064:
+  cppcoreguidelines-pro-type-member-init on struct IndexPlacement, whose
+  baseSize, room and inkRight have no initialisers. The struct is
+  unchanged by that work and identical at c9ca6a9, whose CI tidy job
+  (clang-tidy 18, pinned) passed.
+
+  Filed rather than fixed, per CLAUDE.md § Releasing: the pinned version
+  is what "stay at zero" measures against, and a newer local finding is
+  filed. placeIndex() assigns every field before returning, so nothing
+  reads an uninitialised value today. The fix is a default member
+  initialiser on each of the three.
+  **Layman:** A newer version of the code checker points at one small struct in the card-drawing code; it is not a bug today, and the version CI uses does not report it.
+  Kind: chore.
+  Source: in-session-2026-09-13.
 
 ### 🎨 More games, if wanted
 

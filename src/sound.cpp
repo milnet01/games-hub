@@ -1,5 +1,6 @@
 #include "sound.h"
 
+#include <QCoreApplication>
 #include <QSettings>
 #include <QSoundEffect>
 #include <QUrl>
@@ -30,6 +31,25 @@ Sound::Sound()
     // the mute was discarded on every launch, while README introduces the two
     // as a pair and says the setting is remembered.
     m_muted = QSettings().value(mutedKey(), false).toBool();
+
+    // The effects are parentless QObjects held by a static, and a static is
+    // destroyed after main has returned and taken the application with it --
+    // so they were never deleted at all, and an AddressSanitizer run reported
+    // them as leaks at every exit (GHUB-0058). They are deleted from the
+    // application's own destructor instead, the way CardArt empties its pixmap
+    // caches. Not QCoreApplication::aboutToQuit: that comes from the event
+    // loop, and --shot returns from main without ever running one.
+    qAddPostRoutine([] { instance().releaseEffects(); });
+}
+
+void Sound::releaseEffects()
+{
+    for (Voices& voices : m_effects)
+        for (QSoundEffect* effect : voices.players)
+            delete effect;
+    m_effects.clear();
+    // Nothing may build a fresh set once the application is going away.
+    m_available = false;
 }
 
 void Sound::setMuted(bool muted)

@@ -40,6 +40,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **The sound effects are cleaned up when the app closes** (GHUB-0058)
+  Each sound the app had played was left behind when it closed. It was
+  harmless, but the memory checker counted every one as a leak, which
+  would have hidden a real one among them. They are now removed as the
+  app shuts down.
+
 - **A drawn chess game no longer plays the losing jingle** (GHUB-0190)
   Stalemate, repetition, the fifty-move rule and bare kings all
   sounded like a defeat. A draw now plays no jingle, as a drawn

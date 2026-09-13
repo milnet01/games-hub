@@ -50,6 +50,10 @@ public:
 private:
     Sound();
 
+    // Deletes every effect and stops new ones being built. Run from the
+    // application's destructor, while Qt is still there to delete them into.
+    void releaseEffects();
+
     // Each effect keeps a few players in rotation: QSoundEffect restarts
     // rather than overlapping, and pinball fires the same sound in bursts.
     static constexpr int kVoices = 4;
