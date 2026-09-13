@@ -477,9 +477,10 @@ then play a different game on Windows. That is not theory: Canasta's AI
 strength ladder passed on this machine and failed on the Windows runner with
 no difference in the engine at all, which reads as a broken AI rather than a
 broken shuffle. `card.cpp` now draws its index from `rng()` directly.
-**`minefield.cpp` and `sudokugrid.cpp` still call `std::shuffle`** — nothing
-asserts their sequence across platforms today, but a new test that seeds
-either one needs the same treatment first.
+**`sudokugrid.cpp` still calls `std::shuffle`** — nothing asserts its
+sequence across platforms today, but a new test that seeds it needs the same
+treatment first. `minefield.cpp` got it in GHUB-0105, after a seeded self-test
+check passed here and failed on the Windows runner.
 
 **`QSettings` has no file on Windows.** It writes to the registry there, so
 `QFile::exists(QSettings().fileName())` is false however well saving works —
