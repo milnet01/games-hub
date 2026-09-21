@@ -2653,6 +2653,17 @@ draws, whether or not it has had one.
   rests on reading refresh().
 
   ctest all-pass; gameshub_uitest "All UI checks passed".
+  Owner's call (2026-09-21) on the board-size trade: KEEP IT AS BUILT.
+  Asked directly, with the figure -- a Chess board at 900x760 goes from
+  about 712 pixels to about 616, roughly 13%, to make room for the light
+  above and below the frame. Three alternatives were offered and all
+  three declined: halving the strip, moving the light onto the felt
+  inside the board, and giving the board games no light at all.
+
+  So the 13% is a priced decision rather than an oversight, and a later
+  session should not "reclaim" it. What would re-open it is the owner
+  saying a board has become hard to read, not a reviewer noticing the
+  number.
   **Layman:** The seat of the player whose turn it is gets a gentle glow, so you can see at a glance who is up.
   Kind: ux.
   Source: user-request-2026-08-20.
@@ -3518,6 +3529,22 @@ inventing one.
   docs/hub.png is a real desktop capture that has both. So the open
   question is how the owner wants the picture to look, not whether
   anything can produce one. Left 📋 pending that.
+  Owner's call (2026-09-21): UNPARKED, and the route is --shot.
+  Generate docs/hub.png with the app's own screenshot flag and accept
+  that it has no window decorations and no drop shadow, unlike the real
+  desktop capture committed there today. He was offered four routes and
+  picked this one: capturing it himself, --shot as-is, --shot with a
+  frame composited on afterwards, and leaving it parked.
+
+  So the open question this bullet recorded on 2026-09-07 -- "how the
+  owner wants the picture to look" -- is answered. Flatter is fine.
+
+  The command is the one this bullet already names:
+  QT_QPA_PLATFORM=offscreen ./build/gameshub --shot docs/hub.png
+  --size 1200x1100. Check the last row of tiles is not cut off; 1200x900
+  cropped it.
+
+  NOT DONE as of 2026-09-21. The file still shows six games.
 
 - ✅ [GHUB-0029] **cardart.h says it serves three games; it serves six.**
   The header comment on src/cards/cardart.h reads "Shared card drawing
@@ -5197,6 +5224,37 @@ open.
   what the cursor looks like, whether it answers the legibility switch,
   and whether the card games get the same treatment or a different one.
   Doing the four board games first would be a sensible first slice.
+  Owner answered every open question on 2026-09-21. This bullet said
+  these were "open for the owner, and worth deciding before any of it is
+  built"; they are decided, and nothing here is waiting on him.
+
+  FIRST SLICE: the four board games -- Chess, Reversi, Draughts,
+  Minesweeper. Chosen over the card games and over all ten at once,
+  because they share one shape and Sudoku already implements it.
+
+  THE CURSOR: a thick gold outline on the cell, in the same gold as the
+  turn light so the two read as one system, and THICKER under the Large
+  switch. Chosen over a filled tint (sits under the piece and makes the
+  piece harder to read) and over a ring plus corner brackets (crowds the
+  piece on a small board).
+
+  NO SPEC, owner's call. spec-format.md § 1 fires twice here -- four
+  subsystems, and a real design choice this bullet names itself -- so a
+  spec was owed and was declined deliberately, on the grounds that
+  Sudoku is a working precedent to copy and the three design questions
+  were already answered. Offered a build-one-first middle route and
+  declined that too. Do not re-open this as an oversight.
+
+  NOT YET DECIDED, and still genuinely open: whether the CARD games get
+  the same treatment or a different one. That is the half GHUB-0069
+  shares, and it was not asked because the first slice does not need it.
+
+  NOT STARTED. No code written for this item as of 2026-09-21.
+  Sudoku's keyPressEvent is the pattern: a row/column cursor, arrow keys
+  clamped to the board, Space or Return to act, and Qt::StrongFocus set
+  in the constructor. Note HubWindow::openGame already calls setFocus()
+  on every view, which does nothing under the default NoFocus policy --
+  so the focus policy is the one line that makes the rest reachable.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
