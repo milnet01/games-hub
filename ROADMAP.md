@@ -1734,7 +1734,7 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-09-07.
 
-- 📋 [GHUB-0193] **The downloads bundle Qt 6.8.3, which Qt's own advisory list names.**
+- 🚧 [GHUB-0193] **The downloads bundle Qt 6.8.3, which Qt's own advisory list names.**
   Found by the first run of GHUB-0055's release-checklist step, 2026-09-13.
   https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products names 6.8.3
   in advisories fixed by 6.8.4 and later. The open-source mirror stops the 6.8
@@ -1759,6 +1759,26 @@ than any amount of hardening applied to an app with no sockets.
   release and nowhere earlier. CI's two build legs cover the compile and the
   tests, not the packaging. Worth either a throwaway pre-release tag or a
   workflow_dispatch trigger on release.yml before the bump lands.
+  Progress (2026-09-21): the PIN is bumped and on master in de2afe3 --
+  one QT_VERSION line in each workflow, 6.8.3 to 6.11.2. Qt's list of
+  known vulnerabilities was re-read that day and does not name 6.11.2 as
+  affected; the advisories that mention it name it as the release that
+  fixes them. SECURITY.md section Bundled Qt carries the check and
+  replaced the previous one. ctest 11/11 green here, which is a real
+  signal for the Linux leg because this machine's system Qt is 6.11.2.
+
+  NOT shipped, deliberately. The sign is the DOWNLOADS carrying a Qt no
+  advisory names, and the downloads are built by release.yml, which runs
+  only on a tag. So this closes at the next release and not before.
+
+  Two things unverified when this note was written. The CI run for
+  de2afe3 was still in progress -- the Windows leg is the open question,
+  since nothing local drives MSVC and install-qt-action has to have
+  6.11.2 for msvc2022_64. And the packaging path is untouched by CI:
+  linuxdeploy-plugin-qt and windeployqt do not see the new Qt until a
+  tag. The item's own risk paragraph names that, and its suggestion
+  stands -- a workflow_dispatch trigger on release.yml, or a throwaway
+  pre-release tag, before the next real release relies on it.
   **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
   Kind: security.
   Source: in-session-2026-09-13.
