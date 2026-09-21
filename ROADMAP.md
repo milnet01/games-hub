@@ -5295,6 +5295,13 @@ open.
   -- Klondike, Spider, FreeCell, Pyramid, Canasta -- and Hearts get the
   same treatment or a different one. GHUB-0069 shares that answer. Not
   asked, because the first slice did not need it.
+  Owner's call (2026-09-21), answering the question this item left
+  open: the card games and Hearts take the SAME scheme as the boards, not
+  a different one. An arrow-key cursor stepping left and right between
+  piles and up and down within a fanned column, Space to lift a card and
+  Space again to drop it, so there is one thing to learn across all
+  fourteen. GHUB-0069 shares that answer and is settled by it. Not
+  started; the first slice's four boards are unaffected.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
