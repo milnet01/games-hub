@@ -25,6 +25,7 @@ public:
     QList<QAction*> gameActions() override { return m_actions; }
     void activate() override;
     void deactivate() override;
+    TurnLight turnLight() const override { return m_turn.value(); }
     // Canasta caches nothing, but it does hold cards in the air whose
     // destinations were worked out from the old geometry, and the switch moves
     // the geometry — so this is a re-layout point rather than a repaint.
@@ -206,6 +207,10 @@ private:
 
     // --- animation ---
     bool animating() const;
+    // Whose turn § 4.2 lights, and the square its light fills. Clipping an
+    // edge seat's square against the table is what makes its light elliptical.
+    int litSeat() const;
+    QRectF turnArea(int seat) const;
     void addFlight(Flight f);
     // Flights for every card that has just arrived. Both walk the destination
     // as it now stands and match against what was gained, so several cards
@@ -304,6 +309,11 @@ private:
     QTimer* m_timer = nullptr;
     double m_pause = 0.0;    // seconds to wait before the next computer move
     double m_celebrate = 0.0; // countdown on the canasta flourish
+    // GHUB-0063. Rides m_timer rather than owning one: this game already ticks
+    // at a frame's pace. m_turnFades is false until activate() has run, so a
+    // table opened, restored or photographed shows its light at once.
+    TurnLightState m_turn;
+    bool m_turnFades = false;
     int m_canastasShown = 0;
     QString m_message;
     bool m_awaitingContinue = false;

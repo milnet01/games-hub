@@ -1,14 +1,97 @@
 #pragma once
 
+#include "theme.h"
+
 #include <QAction>
 #include <QFont>
 #include <QList>
 #include <QString>
 #include <QWidget>
 
+#include <algorithm>
 #include <functional>
 
 class QPainter;
+
+// Whose turn is lit, how far its light has come up, and whose light is still
+// going out behind it. GHUB-0063 § 4.2.
+struct TurnLight {
+    int seat = -1;              // -1 when it is nobody's turn
+    double level = 0.0;         // 0 to 1: how far the arriving light has come
+    int leavingSeat = -1;       // -1 when no light is on its way out
+    double leavingLevel = 0.0;  // 1 down to 0: what is left of it
+};
+
+// The cross-fade GHUB-0063 § 4.3 describes, held in one place rather than
+// copied into each of the five games that has turns. The stepping is identical
+// in all of them; all a view supplies is which seat § 4.2's rules light and
+// how long its own tick was.
+class TurnLightState
+{
+public:
+    TurnLight value() const { return m_light; }
+
+    // Call from refresh() with the seat § 4.2's rules pick. `fades` is the
+    // view's m_turnFades — false until activate() has run, so a game opened,
+    // restored or photographed shows its light without waiting.
+    void setSeat(int seat, bool fades)
+    {
+        if (seat == m_light.seat)
+            return;
+        if (!fades) {
+            m_light = { seat, seat < 0 ? 0.0 : 1.0, -1, 0.0 };
+            return;
+        }
+        // The seat being replaced goes out from wherever it had reached; the
+        // arriving one starts at nothing. One leaving slot is enough — a
+        // second turn change replaces the first light before it has finished
+        // going out, so two are never leaving at once. A leaving light never
+        // becomes the arriving one, so a turn coming straight back restarts
+        // that seat from 0.
+        m_light.leavingSeat = m_light.seat;
+        m_light.leavingLevel = m_light.seat < 0 ? 0.0 : m_light.level;
+        m_light.seat = seat;
+        m_light.level = 0.0;
+    }
+
+    // Advance both levels by `ms` of the fade, stopping at 1 and at 0.
+    // Returns whether anything is still moving, which is the caller's timer
+    // stop condition. Stepped, never clocked: a level worked out from elapsed
+    // time would change between two renders of a stopped game.
+    bool step(int ms)
+    {
+        const double delta = double(ms) / double(Theme::kTurnLightFadeMs);
+        if (m_light.seat >= 0 && m_light.level < 1.0)
+            m_light.level = std::min(1.0, m_light.level + delta);
+        if (m_light.leavingSeat >= 0) {
+            m_light.leavingLevel -= delta;
+            if (m_light.leavingLevel <= 0.0) {
+                m_light.leavingLevel = 0.0;
+                m_light.leavingSeat = -1;
+            }
+        }
+        return moving();
+    }
+
+    bool moving() const
+    {
+        return (m_light.seat >= 0 && m_light.level < 1.0) || m_light.leavingSeat >= 0;
+    }
+
+    // For --shot: land the arriving light and drop the leaving one, so a
+    // picture taken after playing a game forward is lit rather than caught
+    // half-way through a cross-fade.
+    void land()
+    {
+        if (m_light.seat >= 0)
+            m_light.level = 1.0;
+        m_light.leavingSeat = -1;
+        m_light.leavingLevel = 0.0;
+    }
+
+private:
+    TurnLight m_light;
+};
 
 // Every game in the hub is a GameView. The hub supplies the window, the
 // toolbar and the status line; a game supplies its board and the handful of
@@ -105,6 +188,18 @@ public:
     // leave it looking unresponsive for a second, which is a worse trade for
     // the reader the switch is for.
     virtual bool hasPendingAnimation() const { return false; }
+
+    // Whose turn is lit, how far its light has come up, and whose light is
+    // still going out behind it. GHUB-0063: whose turn it is was mostly text,
+    // and text has to be read. The default is "nobody", which is right for
+    // every game without turns — the nine of them never override this.
+    //
+    // It is not reported by hasPendingAnimation(): a cross-fade can be stopped
+    // and picked up where it was, which is exactly what that comment reserves
+    // a false answer for. Nothing in the app waits on it, and --shot does not
+    // wait either — a view that was never activated opens at full level, which
+    // is what keeps a photograph lit.
+    virtual TurnLight turnLight() const { return {}; }
 
     // The narrowest card this game draws at its current size, measured at the
     // SMALLEST scale it draws one at — Canasta's melds are at 0.74, so its

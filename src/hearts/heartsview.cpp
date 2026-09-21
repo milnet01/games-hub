@@ -1,5 +1,6 @@
 #include "heartsview.h"
 
+#include "legibility.h"
 #include "scores.h"
 #include "sound.h"
 #include "cards/cardart.h"
@@ -80,6 +81,9 @@ HeartsView::HeartsView(QWidget* parent)
     m_timer = new QTimer(this);
     m_timer->setSingleShot(true);
     connect(m_timer, &QTimer::timeout, this, &HeartsView::step);
+    m_turnTimer = new QTimer(this);
+    m_turnTimer->setInterval(Theme::kTurnLightTickMs);
+    connect(m_turnTimer, &QTimer::timeout, this, &HeartsView::stepTurnLight);
 
     buildActions();
     newGame();
@@ -124,6 +128,9 @@ void HeartsView::newGame()
 
 void HeartsView::activate()
 {
+    m_turnFades = true;
+    if (m_turn.moving())
+        m_turnTimer->start();
     // Pick the hand back up. deactivate() stops the clock wherever it stood,
     // so without this the computers stay frozen mid-trick and the game is
     // stuck — a worse bug than the one stopping them fixes.
@@ -141,6 +148,9 @@ void HeartsView::activate()
 void HeartsView::deactivate()
 {
     m_timer->stop();
+    // The cross-fade freezes rather than finishing, as the AI's clock does.
+    m_turnFades = false;
+    m_turnTimer->stop();
 }
 
 void HeartsView::startNextHand()
@@ -349,8 +359,60 @@ QString HeartsView::captionText() const
         .arg(turn);
 }
 
+int HeartsView::litSeat() const
+{
+    switch (m_engine.phase()) {
+    case HeartsEngine::Phase::Passing:
+        // Everyone passes at once, but the game is waiting on YOUR three
+        // cards: confirmPass() chooses the computers' at the moment you
+        // confirm yours. So you are the seat being waited on (GHUB-0063
+        // § 4.2, the owner's call 2026-09-21).
+        return 0;
+    case HeartsEngine::Phase::Playing:
+        // A complete trick is nobody's turn -- the cards are on the table
+        // waiting to be gathered. trickComplete() has to be read as well as
+        // the flag: step() calls refresh() after the card that completes a
+        // trick and only THEN sets m_awaitingCollect, so the flag alone is
+        // never set when refresh() looks.
+        if (m_awaitingCollect || m_engine.trickComplete())
+            return -1;
+        return m_engine.currentPlayer();
+    case HeartsEngine::Phase::HandOver:
+    case HeartsEngine::Phase::GameOver:
+        break;
+    }
+    return -1;
+}
+
+QRectF HeartsView::turnArea(int seat) const
+{
+    QRectF area;
+    if (seat == 0) {
+        for (int i = 0; i < int(m_engine.hand(0).size()); ++i)
+            area = area.isNull() ? handCardRect(i) : area.united(handCardRect(i));
+    } else if (seat > 0 && seat < HeartsEngine::kPlayers) {
+        area = opponentStackRect(seat);
+    }
+    if (area.isNull() || area.width() <= 0.0)
+        return {};
+    const double grow = cardWidth() * 0.5;
+    return area.adjusted(-grow, -grow, grow, grow).intersected(QRectF(rect()));
+}
+
+void HeartsView::stepTurnLight()
+{
+    if (!m_turn.step(Theme::kTurnLightTickMs))
+        m_turnTimer->stop();
+    update();
+}
+
 void HeartsView::refresh()
 {
+    m_turn.setSeat(litSeat(), m_turnFades);
+    if (m_turnFades && m_turn.moving() && !m_turnTimer->isActive())
+        m_turnTimer->start();
+    update();
+
     QString state;
     switch (m_engine.phase()) {
     case HeartsEngine::Phase::Passing:
@@ -538,6 +600,15 @@ void HeartsView::paintEvent(QPaintEvent*)
     p.setRenderHint(QPainter::Antialiasing, true);
 
     Theme::paintFelt(p, rect(), Theme::kFeltBlueTop, Theme::kFeltBlueBottom);
+
+    // Whose turn it is, on the felt and under every card. The leaving light is
+    // painted first so the arriving one sits on top where they meet.
+    const TurnLight lit = m_turn.value();
+    const bool legible = Legibility::instance().enabled();
+    if (lit.leavingSeat >= 0)
+        Theme::paintTurnLight(p, turnArea(lit.leavingSeat), lit.leavingLevel, legible);
+    if (lit.seat >= 0)
+        Theme::paintTurnLight(p, turnArea(lit.seat), lit.level, legible);
 
     // Opponents: a fanned stack of backs plus a name and card count.
     for (int seat = 1; seat < HeartsEngine::kPlayers; ++seat) {

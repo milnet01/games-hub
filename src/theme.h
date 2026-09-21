@@ -5,6 +5,8 @@
 #include <QPainter>
 #include <QRectF>
 
+#include <algorithm>
+
 // Shared materials. Reversi set the house style — felt under a wooden frame,
 // with pieces that carry a contact shadow — and these helpers are how the rest
 // of the collection speaks the same visual language.
@@ -44,6 +46,43 @@ void paintDropShadow(QPainter& p, const QRectF& r, double radius, double depth =
 
 // A thin engraved line, used for inlays and panel edges.
 void paintInlay(QPainter& p, const QRectF& r, double radius, const QColor& colour);
+
+// How long an arriving turn light takes to come up, and a leaving one to go
+// out. GHUB-0063 § 4.3: the two cross, so the turn reads as passing rather
+// than jumping.
+inline constexpr int kTurnLightFadeMs = 300;
+
+// How often a game that has no clock of its own steps the cross-fade. Canasta
+// rides its existing tick instead; the other four own a QTimer at this.
+inline constexpr int kTurnLightTickMs = 16;
+
+// The deepest a board game's turn band gets, outside the frame. Deeper than
+// any board's own kFrameWidth — Chess draws the thickest at 18 — so the light
+// reads as a light rather than as a second frame.
+inline constexpr int kTurnBandDepth = 30;
+
+// How deep the band actually is, given the height the view has to play in.
+// It scales rather than sitting at kTurnBandDepth always: two fixed bands are
+// a seventh of the height at Chess's 360-pixel minimum, which is a lot of
+// board to give up for a cue, and barely a mark on a full-screen window. The
+// floor is what stops it vanishing on a small one.
+inline int turnBandDepth(int room)
+{
+    return std::clamp(room / 16, 16, kTurnBandDepth);
+}
+
+// A soft light filling `area`: one radial gradient in kGold shaped to the
+// ellipse inscribed in `area`, plus a gold outline of that ellipse so the cue
+// survives any colour vision. Both scale with `level` (0 to 1); a level of 0
+// draws nothing. `legible` raises the gradient's peak and doubles the outline
+// width. Hands the painter back as it found it.
+//
+// The light is shaped to its area rather than drawn as a circle inside it, so
+// an oblong area gives an ellipse and a square one a circle — the owner asked
+// for a bigger light and for a shape other than a small round one
+// (2026-09-21). One gradient, never a computed blur, on paintDropShadow's
+// precedent.
+void paintTurnLight(QPainter& p, const QRectF& area, double level, bool legible);
 
 // Ink and plate for paintCaption(). Measured at 13.15:1 by
 // scripts/legibility-check.py, which holds the pair and requires 4.5 of it —

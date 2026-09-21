@@ -35,6 +35,7 @@ public:
     // The computers stop playing when nobody is watching. Without it a hand
     // finishes while you are in another game and you come back to a score.
     void deactivate() override;
+    TurnLight turnLight() const override { return m_turn.value(); }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -69,6 +70,13 @@ private:
     void refresh();
     void announceHand();
 
+    // Whose turn § 4.2 lights, and the area its light fills. The area is the
+    // seat's own cards grown by half a card's width on every side and clipped
+    // to the table, so the light spreads well past them without running off.
+    int litSeat() const;
+    QRectF turnArea(int seat) const;
+    void stepTurnLight();
+
     double cardWidth() const;
     double cardHeight() const { return cardWidth() * 1.4; }
     QRectF opponentRect(int seat) const;
@@ -85,4 +93,11 @@ private:
     // The hand-over box came due while the hub was on another page; activate()
     // raises it when we are back.
     bool m_announcePending = false;
+    // GHUB-0063. m_turnFades is false until activate() has run, so a game
+    // opened, restored or photographed shows its light at once instead of
+    // fading it in. m_timer is the AI's clock and cannot carry the fade: it is
+    // single-shot and runs at the computer's pace, not at a frame's.
+    TurnLightState m_turn;
+    bool m_turnFades = false;
+    QTimer* m_turnTimer = nullptr;
 };

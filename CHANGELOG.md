@@ -10,6 +10,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **A soft gold light settles on whoever is playing** (GHUB-0063)
+  Hearts, Canasta, Chess, Draughts and Reversi now light the seat whose
+  turn it is, so you can see whose move it is without reading anything.
+  When the turn passes the leaving light fades out as the arriving one
+  fades in, which reads as the turn passing rather than jumping. The
+  light is stronger under the Large switch, and it carries a gold
+  outline as well as a glow, so it does not rely on seeing the colour.
+  Canasta's old static glow is replaced by it. The three board games
+  give up a little board height to make room for the light below and
+  above the frame.
+
 - **Draughts can end in a draw: forty moves each with no capture and no man moved.** (GHUB-0169)
   Two lone kings used to shuffle for ever. The board now counts down the
   last ten moves each before the draw, the computer steers away from a

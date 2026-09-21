@@ -58,6 +58,8 @@
 #include <QTranslator>
 
 #include <algorithm>
+#include <memory>
+#include <vector>
 #include <functional>
 #include <cstdlib>
 #include <random>
@@ -79,6 +81,28 @@ int activeTimers(QWidget* w)
             ++running;
     return running;
 }
+
+// The three boards, with their own boardRect() reachable. A test that clicks a
+// square has to know where the squares are, and the only safe source for that
+// is the view itself: the copies of this arithmetic that used to sit inline
+// went stale the moment GHUB-0063 reserved room outside the frame for the turn
+// bands, and eleven checks failed on geometry none of them is about. Same
+// shape as the HeartsView probe that exposes handCardRect().
+class ChessProbe : public ChessView
+{
+public:
+    using ChessView::boardRect;
+};
+class ReversiProbe : public ReversiView
+{
+public:
+    using ReversiView::boardRect;
+};
+class DraughtsProbe : public DraughtsView
+{
+public:
+    using DraughtsView::boardRect;
+};
 
 void check(bool ok, const char* what)
 {
@@ -506,17 +530,34 @@ void nudgeIntoPlay(GameView* view)
 
     // Select-then-move, which is how Chess, Draughts and the board games take a
     // move: one click picks a piece up and a second puts it down.
-    for (int r = 0; r < kRows; ++r) {
-        for (int c = 0; c < kCols; ++c) {
+    //
+    // On a FINER grid than the rest of this driver, and that is the whole
+    // point: a pile is a large target, but a board square is one eighth of a
+    // board, and the 9x7 grid above steps further than a square is wide. It
+    // straddled White's pawn rank on a 640x480 Chess board -- every grid row
+    // landing in the empty ranks either side of it -- so no piece could be
+    // picked up at all, and a block that only wanted a started game failed for
+    // a reason that had nothing to do with what it was testing. The spacing
+    // has to be closer than a cell, and 15 rows over a window whose board is
+    // at most eight squares tall is comfortably that. Costs clicks, which are
+    // sent without pumping and are cheap.
+    const int kFineCols = 15;
+    const int kFineRows = 15;
+    const auto fine = [&](int c, int r) {
+        return QPointF(size.width() * (c + 0.5) / kFineCols,
+                       size.height() * (r + 0.5) / kFineRows);
+    };
+    for (int r = 0; r < kFineRows; ++r) {
+        for (int c = 0; c < kFineCols; ++c) {
             for (int step = 1; step <= 2; ++step) {
                 if (r - step < 0)
                     continue;
-                click(at(c, r));
-                click(at(c, r - step));
+                click(fine(c, r));
+                click(fine(c, r - step));
                 if (started())
                     return;
-                click(at(c, r));
-                click(at(std::min(c + step, kCols - 1), r - step));
+                click(fine(c, r));
+                click(fine(std::min(c + step, kFineCols - 1), r - step));
                 if (started())
                     return;
             }
@@ -1200,6 +1241,294 @@ void fuzzSavedGames(int rounds)
     // flipped inside a card's rank is usually still a legal position.
     std::printf("      %d of %d mutants were accepted as playable positions\n", totalAccepted,
                 totalMutants);
+}
+
+// ---- the turn light (GHUB-0063) ----
+//
+// The five games with turns, built one way so each block below covers all of
+// them rather than whichever one happened to be convenient.
+struct LitGame {
+    QString name;
+    std::function<GameView*()> make;
+    // Whether YOU are the seat lit the moment the game opens. Canasta deals to
+    // whichever seat its engine picks, so it is the one that cannot say.
+    bool youOpen;
+};
+
+std::vector<LitGame> litGames()
+{
+    return {
+        { QStringLiteral("chess"), [] { return static_cast<GameView*>(new ChessView); }, true },
+        { QStringLiteral("draughts"), [] { return static_cast<GameView*>(new DraughtsView); }, true },
+        { QStringLiteral("reversi"), [] { return static_cast<GameView*>(new ReversiView); }, true },
+        { QStringLiteral("hearts"), [] { return static_cast<GameView*>(new HeartsView); }, true },
+        { QStringLiteral("canasta"), [] { return static_cast<GameView*>(new CanastaView); }, false },
+    };
+}
+
+// Reversi is the subject wherever one game has to stand for the board games:
+// its move is the cheapest to make, its engine answers fastest, and it takes a
+// human move by a single click, so nudgeIntoPlay reaches it in one pass.
+// Returns the seat that was lit before the move, or -1 if the nudge failed to
+// move the game on -- which the caller reports rather than passing over.
+int nudgeOneTurn(GameView* view)
+{
+    const int before = view->turnLight().seat;
+    nudgeIntoPlay(view);
+    return view->turnLight().seat == before ? -1 : before;
+}
+
+// Pump until the cross-fade has actually moved, and say whether it did.
+// A fixed pump asserts that a 16 ms tick lands inside the window chosen for
+// it, which is a property of the machine rather than of this code -- the rule
+// the three red Windows runs taught. The deadline is half a fade, so a light
+// caught this way is always still short of full.
+bool tickTurnLight(GameView* view)
+{
+    const TurnLight before = view->turnLight();
+    QDeadlineTimer deadline(Theme::kTurnLightFadeMs / 2);
+    while (!deadline.hasExpired()) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+        const TurnLight now = view->turnLight();
+        if (now.level != before.level || now.leavingLevel != before.leavingLevel)
+            return true;
+    }
+    return false;
+}
+
+// ---- turnLightFollowsTheTurn (INV-1) ----
+//
+// NOT covered here: "a game that is over lights nobody". Reaching a finished
+// Chess, Hearts or Canasta means playing one out, which costs more than this
+// suite spends on any single check. The -1 rule is covered in the form that is
+// cheap -- every game with no turns at all answers it -- and the game-over limb
+// rests on reading refresh().
+void turnLightFollowsTheTurn()
+{
+    for (const LitGame& game : litGames()) {
+        std::unique_ptr<GameView> view(game.make());
+        view->resize(900, 700);
+        view->show();
+        pump(40);
+
+        const TurnLight lit = view->turnLight();
+        check(lit.seat >= 0,
+              qPrintable(game.name + QStringLiteral(": somebody is lit the moment it deals")));
+        if (game.youOpen)
+            check(lit.seat == 0,
+                  qPrintable(game.name + QStringLiteral(": and it is you, because you open")));
+    }
+
+    // The turn moving moves the light. Driven on the three boards that take a
+    // human move by click; Hearts and Canasta wait on a pass or a deal that
+    // this driver cannot make.
+    for (const QString& name : { QStringLiteral("chess"), QStringLiteral("draughts"),
+                                 QStringLiteral("reversi") }) {
+        std::unique_ptr<GameView> view;
+        for (const LitGame& game : litGames())
+            if (game.name == name)
+                view.reset(game.make());
+        view->resize(900, 700);
+        view->show();
+        view->activate();
+        pump(40);
+
+        const int was = nudgeOneTurn(view.get());
+        check(was == 0, qPrintable(name + QStringLiteral(": your move hands the light over")));
+        check(view->turnLight().seat == 1,
+              qPrintable(name + QStringLiteral(": to the computer")));
+        view->deactivate();
+    }
+
+    // Nobody's turn is -1, in the form that is cheap to reach: a game with no
+    // turns at all never overrides the accessor.
+    KlondikeView klondike;
+    SudokuView sudoku;
+    SnakeView snake;
+    check(klondike.turnLight().seat == -1 && sudoku.turnLight().seat == -1
+              && snake.turnLight().seat == -1,
+          "a game with no turns lights nobody");
+}
+
+// ---- turnLightComesUpAndHolds (INV-2) ----
+//
+// The positive control is what makes the zero mean anything: without it, a
+// counter that never fires under the offscreen platform would pass the
+// at-rest half for free.
+void turnLightComesUpAndHolds()
+{
+    ReversiView view;
+    view.resize(900, 700);
+    view.show();
+    view.activate();
+    pump(40);
+
+    PaintCounter counter;
+    view.installEventFilter(&counter);
+
+    // Your move hands the light to the computer; the computer answers and
+    // hands it back, and then the game waits for you.
+    nudgeIntoPlay(&view);
+
+    QDeadlineTimer deadline(Theme::kTurnLightFadeMs * 8);
+    while (!deadline.hasExpired()) {
+        const TurnLight lit = view.turnLight();
+        if (lit.seat == 0 && lit.level >= 1.0 && lit.leavingSeat == -1)
+            break;
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+
+    const TurnLight settled = view.turnLight();
+    check(settled.seat == 0 && settled.level >= 1.0,
+          "reversi: the light comes back up on your seat and reaches full");
+    check(settled.leavingSeat == -1, "reversi: and the computer's light has gone out");
+    check(counter.count > 0, "reversi: the cross-fade asked for repaints while it ran");
+
+    pump(50); // let anything already queued drain
+    counter.count = 0;
+    pump(200);
+    check(counter.count == 0, "reversi: and a finished light asks for none at all");
+    check(activeTimers(&view) == 0, "reversi: the turn timer stops itself");
+    view.deactivate();
+}
+
+// ---- turnLightFreezesWhenLeft (INV-3) ----
+void turnLightFreezesWhenLeft()
+{
+    ReversiView view;
+    view.resize(900, 700);
+    view.show();
+    view.activate();
+    pump(40);
+
+    nudgeIntoPlay(&view);
+    check(tickTurnLight(&view), "reversi: the cross-fade steps at all");
+
+    const TurnLight midway = view.turnLight();
+    const bool caught = midway.seat >= 0 && midway.level > 0.0 && midway.level < 1.0;
+    check(caught, "reversi: a cross-fade can be caught part-way");
+
+    view.deactivate();
+    const QImage first = renderOf(&view);
+    bool still = true;
+    for (int i = 0; i < 3; ++i) {
+        pump(25);
+        still = still && renderOf(&view) == first;
+    }
+    const TurnLight frozen = view.turnLight();
+    check(still, "reversi: a view the hub has left does not move its light");
+    check(frozen.level == midway.level && frozen.leavingLevel == midway.leavingLevel,
+          "reversi: and both levels stay exactly where they were");
+}
+
+// ---- turnLightStartsLitWhenNotActive (INV-4) ----
+//
+// This is what keeps a --shot lit: a picture is taken of a view that was
+// never activated, and a light that faded in would be photographed dark.
+void turnLightStartsLitWhenNotActive()
+{
+    for (const LitGame& game : litGames()) {
+        std::unique_ptr<GameView> view(game.make());
+        view->resize(900, 700);
+        pump(20);
+
+        const TurnLight lit = view->turnLight();
+        check(lit.seat >= 0 && lit.level >= 1.0,
+              qPrintable(game.name + QStringLiteral(": a game nobody activated opens fully lit")));
+        check(lit.leavingSeat == -1,
+              qPrintable(game.name + QStringLiteral(": with nothing fading out behind it")));
+    }
+}
+
+// ---- turnLightCrossesOver (INV-7) ----
+void turnLightCrossesOver()
+{
+    ReversiView view;
+    view.resize(900, 700);
+    view.show();
+    view.activate();
+    pump(Theme::kTurnLightFadeMs + 80); // settle, so the leaving light starts at full
+
+    const int was = view.turnLight().seat;
+    nudgeIntoPlay(&view);
+    check(tickTurnLight(&view), "reversi: the cross-fade steps at all");
+
+    const TurnLight crossing = view.turnLight();
+    check(crossing.leavingSeat == was,
+          "reversi: the seat that was lit is the one going out");
+    check(crossing.seat != was && crossing.seat >= 0,
+          "reversi: and the new seat is the one coming up");
+    check(crossing.level > 0.0 && crossing.level < 1.0 && crossing.leavingLevel > 0.0
+              && crossing.leavingLevel < 1.0,
+          "reversi: both lights are up at once, mid-cross");
+
+    check(tickTurnLight(&view), "reversi: and it steps again");
+    const TurnLight later = view.turnLight();
+    check(later.level > crossing.level, "reversi: the arriving light is still rising");
+    check(later.leavingLevel < crossing.leavingLevel,
+          "reversi: while the leaving one is still falling");
+    view.deactivate();
+}
+
+// ---- turnLightAnswersTheSwitch (INV-5 and INV-6) ----
+void turnLightAnswersTheSwitch()
+{
+    // INV-6 first, on the painter alone. The area is deliberately oblong, so
+    // the shape of what gets drawn is visible in the result: an ellipse
+    // inscribed in it touches the midpoint of each edge and leaves the corners
+    // bare, where an outline of the rectangle itself would ink them.
+    const QRectF area(20, 20, 260, 90);
+    const auto paintAlone = [&area](bool legible) {
+        QImage canvas(300, 130, QImage::Format_ARGB32);
+        canvas.fill(Qt::transparent);
+        QPainter p(&canvas);
+        Theme::paintTurnLight(p, area, 1.0, legible);
+        p.end();
+        return canvas;
+    };
+
+    const QImage plain = paintAlone(false);
+    const QImage large = paintAlone(true);
+    check(plain != large, "the turn light is drawn differently under the legibility switch");
+
+    const int midX = int(area.center().x());
+    const int onEllipse = qAlpha(plain.pixel(midX, int(area.top())));
+    const int justInside = qAlpha(plain.pixel(midX, int(area.top()) + 12));
+    check(onEllipse > justInside,
+          "the turn light carries an outline, so it is not colour alone");
+    check(qAlpha(plain.pixel(int(area.left()) + 1, int(area.top()) + 1)) == 0,
+          "and the outline is the ellipse inside the area, not the area's own border");
+
+    // INV-5: the switch is read at paint time, so it must not disturb the
+    // cross-fade it is read during. A level already at 1 would hide that.
+    for (const LitGame& game : litGames()) {
+        std::unique_ptr<GameView> view(game.make());
+        view->resize(900, 700);
+        view->show();
+        view->activate();
+        pump(40);
+        nudgeIntoPlay(view.get());
+        tickTurnLight(view.get());
+        view->deactivate();
+
+        const TurnLight before = view->turnLight();
+        const QImage shot = renderOf(view.get());
+        Legibility::instance().setEnabled(true);
+        Legibility::instance().setEnabled(false);
+        const TurnLight after = view->turnLight();
+
+        check(before.seat == after.seat && before.level == after.level
+                  && before.leavingSeat == after.leavingSeat
+                  && before.leavingLevel == after.leavingLevel,
+              qPrintable(game.name + QStringLiteral(": the switch leaves the cross-fade alone")));
+        // Canasta is excluded from the picture half, and only from that half:
+        // its applyLegibility CLEARS cards in flight by contract, so a switch
+        // toggled mid-deal legitimately changes what it draws. The cross-fade
+        // half above is what this block is really about, and Canasta runs it.
+        if (game.name != QStringLiteral("canasta"))
+            check(renderOf(view.get()) == shot,
+                  qPrintable(game.name + QStringLiteral(": and the picture comes back the same")));
+    }
 }
 
 } // namespace
@@ -2972,7 +3301,7 @@ int main(int argc, char* argv[])
         // Chess is driven by clicking one square then another, so the check is
         // that a real pawn move lands and the engine answers it — the whole
         // loop, not just that the widget paints.
-        ChessView chess;
+        ChessProbe chess;
         check(paints(&chess), "chess view paints");
         check(!chess.gameActions().isEmpty(), "chess view offers toolbar actions");
 
@@ -2981,13 +3310,10 @@ int main(int argc, char* argv[])
                          [&chessStatus](const QString& text) { chessStatus = text; });
 
         chess.resize(640, 640);
-        // Mirrors ChessView::boardRect: a square board centred in the widget,
-        // inside an 18px frame and a 4px margin.
-        const auto square = [](const QWidget* w, int row, int col) {
-            const int side = ((std::min(w->width(), w->height()) - 2 * (18 + 4)) / 8) * 8;
-            const double cell = side / 8.0;
-            return QPointF((w->width() - side) / 2.0 + (col + 0.5) * cell,
-                           (w->height() - side) / 2.0 + (row + 0.5) * cell);
+        const auto square = [](const ChessProbe* w, int row, int col) {
+            const QRect r = w->boardRect();
+            const double cell = r.width() / 8.0;
+            return QPointF(r.x() + (col + 0.5) * cell, r.y() + (row + 0.5) * cell);
         };
 
         clickAt(&chess, square(&chess, 6, 4), Qt::LeftButton);   // the pawn on e2
@@ -5175,18 +5501,13 @@ int main(int argc, char* argv[])
         // one of them lands a row out.
         Legibility::instance().setEnabled(false);
 
-        const auto square = [](const QWidget* w, int row, int col) {
-            const int side = ((std::min(w->width(), w->height()) - 2 * (18 + 4)) / 8) * 8;
-            const double cell = side / 8.0;
-            return QPointF((w->width() - side) / 2.0 + (col + 0.5) * cell,
-                           (w->height() - side) / 2.0 + (row + 0.5) * cell);
-        };
-        const auto cellCentre = [](const QWidget* w, int row, int col) {
-            const int available = std::min(w->width(), w->height()) - 2 * (10 + 4);
-            const int side = std::max(8, (available / 8) * 8);
-            const double cell = side / 8.0;
-            return QPointF((w->width() - side) / 2 + (col + 0.5) * cell,
-                           (w->height() - side) / 2 + (row + 0.5) * cell);
+        // Each view's OWN boardRect, never a copy of its arithmetic. The copies
+        // that used to sit here went stale the moment GHUB-0063 reserved room
+        // outside the frame for the turn bands, and the checks below failed on
+        // geometry none of them is about.
+        const auto centreOf = [](const QRect& r, int row, int col) {
+            const double cell = r.width() / 8.0;
+            return QPointF(r.x() + (col + 0.5) * cell, r.y() + (row + 0.5) * cell);
         };
 
         // Two views per game rather than one: the control keeps its move and
@@ -5267,35 +5588,38 @@ int main(int argc, char* argv[])
         };
 
         {
-            ChessView control;
-            ChessView subject;
+            ChessProbe control;
+            ChessProbe subject;
             control.resize(640, 640);
             subject.resize(640, 640);
             lockStaleTimer("chess", &control, &subject, [&](GameView* v) {
-                clickAt(v, square(v, 6, 4), Qt::LeftButton);   // the pawn on e2
-                clickAt(v, square(v, 4, 4), Qt::LeftButton);   // push it to e4
+                const QRect r = static_cast<ChessProbe*>(v)->boardRect();
+                clickAt(v, centreOf(r, 6, 4), Qt::LeftButton);   // the pawn on e2
+                clickAt(v, centreOf(r, 4, 4), Qt::LeftButton);   // push it to e4
             });
         }
 
         {
-            ReversiView control;
-            ReversiView subject;
+            ReversiProbe control;
+            ReversiProbe subject;
             control.resize(520, 520);
             subject.resize(520, 520);
             lockStaleTimer("reversi", &control, &subject, [&](GameView* v) {
-                clickAt(v, cellCentre(v, 2, 3), Qt::LeftButton);   // a legal opening
+                clickAt(v, centreOf(static_cast<ReversiProbe*>(v)->boardRect(), 2, 3),
+                        Qt::LeftButton);   // a legal opening
             });
         }
 
         {
-            DraughtsView control;
-            DraughtsView subject;
+            DraughtsProbe control;
+            DraughtsProbe subject;
             control.resize(560, 560);
             subject.resize(560, 560);
             lockStaleTimer("draughts", &control, &subject, [&](GameView* v) {
                 // Red starts at the bottom and moves up.
-                clickAt(v, cellCentre(v, 5, 2), Qt::LeftButton);
-                clickAt(v, cellCentre(v, 4, 3), Qt::LeftButton);
+                const QRect r = static_cast<DraughtsProbe*>(v)->boardRect();
+                clickAt(v, centreOf(r, 5, 2), Qt::LeftButton);
+                clickAt(v, centreOf(r, 4, 3), Qt::LeftButton);
             });
         }
 
@@ -5334,6 +5658,13 @@ int main(int argc, char* argv[])
     aFullSpiderTableStaysOnTheSurface();
 
     idsAndKeysSurviveATranslation();
+
+    turnLightFollowsTheTurn();
+    turnLightComesUpAndHolds();
+    turnLightFreezesWhenLeft();
+    turnLightStartsLitWhenNotActive();
+    turnLightCrossesOver();
+    turnLightAnswersTheSwitch();
 
     savesFromOlderBuildsStillLoad();
 

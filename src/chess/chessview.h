@@ -5,6 +5,7 @@
 #include "gameview.h"
 
 #include <QFutureWatcher>
+#include <QTimer>
 
 #include <optional>
 #include <vector>
@@ -28,6 +29,7 @@ public:
     // Not a QTimer, but the same duty: an answer arriving for a board the hub
     // has left must not move a piece on it.
     void deactivate() override;
+    TurnLight turnLight() const override { return m_turn.value(); }
     // A game in progress is kept as the moves that made it, and replayed to
     // restore it — see saveState() for why that beats storing the position.
     QByteArray saveState() const override;
@@ -43,6 +45,13 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     QSize sizeHint() const override { return { 620, 620 }; }
     QSize minimumSizeHint() const override { return { 360, 360 }; }
+
+    // Protected rather than private so a test can click a square without
+    // keeping its own copy of this arithmetic. It had one, and GHUB-0063 moved
+    // the board: the copy went stale and eight checks failed on geometry that
+    // had nothing to do with what they assert. Same reason HeartsView exposes
+    // handCardRect().
+    QRect boardRect() const;
 
 private:
     void buildActions();
@@ -79,7 +88,11 @@ private:
     void refresh(const QString& message = {});
     void announceResult();
 
-    QRect boardRect() const;
+    // The strip outside the frame that carries a seat's turn light: yours
+    // below the board, the computer's above it, because that is where you
+    // sit (GHUB-0063 § 4.5). boardRect() reserves the room for both.
+    QRectF turnBand(int seat) const;
+    void stepTurnLight();
     std::optional<chess::Square> squareAt(QPointF pos) const;
     std::vector<chess::Move> movesFrom(chess::Square s) const;
     // Four moves share a destination when a pawn promotes, so the player has
@@ -109,4 +122,10 @@ private:
     bool m_paused = false;
     bool m_finished = false;
     QString m_caption;
+    // GHUB-0063. m_turnFades is false until activate() has run, so a game
+    // opened, restored or photographed shows its light at once instead of
+    // fading it in.
+    TurnLightState m_turn;
+    bool m_turnFades = false;
+    QTimer* m_turnTimer = nullptr;
 };

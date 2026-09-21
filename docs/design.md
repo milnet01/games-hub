@@ -116,6 +116,32 @@ has lulls where every remaining card is counting down its delay, so two
 matching renders mean nothing. That mistake passed here every time and
 reddened both CI legs.
 
+**Whose turn it is is a LIGHT, not a sentence** (GHUB-0063). `turnLight()`
+answers whose seat is lit, how far its light has come up, and whose light is
+still going out behind it; the default is "nobody", which is right for the
+nine games with no turns. `TurnLightState` in `src/gameview.h` holds the
+cross-fade and steps it — one copy, not five, because the stepping is
+identical everywhere and only the lit seat differs. `Theme::paintTurnLight`
+draws it, shaped to the ellipse inscribed in whatever area the view hands
+over.
+
+Three things about it are easy to get wrong.
+
+**It is NOT reported by `hasPendingAnimation()`**, and that is deliberate: a
+cross-fade can be stopped and picked up where it was, which is exactly what
+that method's comment reserves a false answer for. Canasta's `animating()`
+stays flights only for the same reason — reporting the fade there would delay
+every computer turn by a fade.
+
+**A view that was never activated opens at full level.** `m_turnFades` is
+false until `activate()` runs, so a game opened, restored or photographed
+shows its light at once. That is what keeps a `--shot` lit; `--shot` never
+waits for an animation.
+
+**The level is stepped, never clocked.** A level worked out from elapsed time
+changes between two renders of a stopped game, which `everyGameAnswersTheSwitch`
+fails as restless.
+
 ### The hub
 
 `src/hubwindow.*` — the tile grid and one page per game in a `QStackedWidget`.
@@ -641,6 +667,13 @@ which is what the Rules in force panel shows, and a mutation in
 `canastaRulesInForceNamesEveryRule` — that check flips each field on its own
 and fails a field no sentence names, so it catches a wrong sentence but
 cannot catch a field added to neither.
+**The turn light rides `m_timer` rather than owning one** — this game already
+ticks at a frame's pace, so `tick()` steps the cross-fade alongside the
+flights and the flourish. It replaced a static glow that appeared at full
+strength at once and carried no outline. `advanceForShot` lands the light
+after its final `refresh()`, or a `--shot` catches the seat the turns just
+moved to half-way through a cross-fade.
+
 `canasta/canastaai.*` is judgement rather than search, so unlike Chess it
 needs no work budget. **Its four levels are checked against each other, not
 just described** — `canastaLevelsDiffer()` plays four rungs -- each level

@@ -80,6 +80,9 @@ ChessView::ChessView(QWidget* parent)
     : GameView(parent)
 {
     setMinimumSize(ChessView::minimumSizeHint());
+    m_turnTimer = new QTimer(this);
+    m_turnTimer->setInterval(Theme::kTurnLightTickMs);
+    connect(m_turnTimer, &QTimer::timeout, this, &ChessView::stepTurnLight);
     buildActions();
     newGame();
 }
@@ -170,11 +173,18 @@ void ChessView::deactivate()
     // activate() starts the thinking again, so the game is not left stuck on
     // the computer's turn.
     abandonSearch();
+    // The cross-fade freezes rather than finishing: deactivate() stops a game
+    // where it stands, and both levels stay put until activate() picks them up.
+    m_turnFades = false;
+    m_turnTimer->stop();
 }
 
 void ChessView::activate()
 {
     m_paused = false;
+    m_turnFades = true;
+    if (m_turn.moving())
+        m_turnTimer->start();
     // Picks the search back up if it was abandoned on the way out.
     if (!m_finished && m_game.toMove() != m_human) {
         advance();
@@ -454,6 +464,11 @@ void ChessView::announceResult()
 
 void ChessView::refresh(const QString& message)
 {
+    // Seat 0 is you, seat 1 the computer; a finished game lights nobody
+    // (GHUB-0063 § 4.2).
+    m_turn.setSeat(m_finished ? -1 : (m_game.toMove() == m_human ? 0 : 1), m_turnFades);
+    if (m_turnFades && m_turn.moving() && !m_turnTimer->isActive())
+        m_turnTimer->start();
     update();
 
     QString state;
@@ -481,14 +496,55 @@ void ChessView::refresh(const QString& message)
 // Geometry
 // ---------------------------------------------------------------------------
 
+void ChessView::stepTurnLight()
+{
+    if (!m_turn.step(Theme::kTurnLightTickMs))
+        m_turnTimer->stop();
+    update();
+}
+
+QRectF ChessView::turnBand(int seat) const
+{
+    const QRect r = boardRect();
+    if (r.width() <= 0)
+        return {};
+    const QRectF frame = QRectF(r).adjusted(-kFrameWidth, -kFrameWidth, kFrameWidth, kFrameWidth);
+    const double depth = Theme::turnBandDepth(height() - int(captionBand(QRectF(rect()))));
+    // Your band starts a frame's width BELOW the frame, not on it. The file
+    // letters are drawn centred in a box only kFrameWidth deep with
+    // Qt::TextDontClip, so under the switch at a large board their ink runs
+    // past the frame's bottom edge -- and a gold band there would be gold on
+    // gold, on the one board he reads by its notation. kFrameWidth of
+    // clearance covers the overhang at any window this app can be opened at;
+    // it is a fixed allowance rather than a measurement, so a far larger board
+    // than a desktop offers would eventually reach it. The rank numbers are
+    // drawn to the LEFT, so the computer's band above needs no such room.
+    // Three times the depth, positioned so exactly `depth` of it shows outside
+    // the frame and the rest is hidden behind the board. The hidden part is
+    // what does the work: it gives the visible arc the gentle curvature of a
+    // big light while costing the board only the strip that shows.
+    const double wide = depth;
+    if (seat == 0)
+        return { frame.left() - wide, frame.bottom() + kFrameWidth - 2 * depth,
+                 frame.width() + 2 * wide, depth * 3 };
+    return { frame.left() - wide, frame.top() - depth, frame.width() + 2 * wide, depth * 3 };
+}
+
 QRect ChessView::boardRect() const
 {
     // Under the legibility switch the board gives up a strip at the bottom for
     // the caption, and moves up by it, so the sentence never covers a piece.
     const int band = int(captionBand(QRectF(rect())));
-    const int available = std::min(width(), height() - band) - 2 * (kFrameWidth + 4);
+    // Room outside the frame for the two turn bands, plus kFrameWidth spent
+    // BELOW only: turnBand() puts the lower band under the file letters' ink,
+    // and the rank numbers are drawn to the left, so the top needs no such
+    // room. The board moves up by half that extra to stay centred between the
+    // two bands rather than between the window's edges.
+    const int depth = Theme::turnBandDepth(height() - band);
+    const int available = std::min(width(), height() - band - 2 * depth - kFrameWidth)
+        - 2 * (kFrameWidth + 4);
     const int side = std::max(kFiles, (available / kFiles) * kFiles);
-    return { (width() - side) / 2, (height() - band - side) / 2, side, side };
+    return { (width() - side) / 2, (height() - band - kFrameWidth - side) / 2, side, side };
 }
 
 std::optional<Square> ChessView::squareAt(QPointF pos) const
@@ -523,6 +579,16 @@ void ChessView::paintEvent(QPaintEvent*)
     const QRect r = boardRect();
     if (r.width() <= 0)
         return;
+
+    // Whose turn it is, before the board goes over it. The leaving light is
+    // painted first so the arriving one sits on top where they meet.
+    const TurnLight lit = m_turn.value();
+    const bool legible = Legibility::instance().enabled();
+    if (lit.leavingSeat >= 0)
+        Theme::paintTurnLight(p, turnBand(lit.leavingSeat), lit.leavingLevel, legible);
+    if (lit.seat >= 0)
+        Theme::paintTurnLight(p, turnBand(lit.seat), lit.level, legible);
+
     const double cell = r.width() / double(kFiles);
 
     Theme::paintWoodFrame(p, r, kFrameWidth, 7);

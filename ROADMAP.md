@@ -1,4 +1,5 @@
 <!-- ants-roadmap-format: 1 -->
+<!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
 # Games Hub — Roadmap
 
 A collection of desktop games in one window. Pre-1.0 (0.2.0), so the blocks
@@ -16,7 +17,7 @@ only, so they are not in order and are never renumbered.
   Castling, en passant, promotion and every draw rule. The move
   generator is proved by perft against the published node counts for four
   reference positions rather than by playing it.
-  Layman: A proper game of chess against the computer.
+  **Layman:** A proper game of chess against the computer.
   Kind: feature.
   Source: user-request-2026-08-10.
 
@@ -34,7 +35,7 @@ only, so they are not in order and are never renumbered.
   Reversi,
   Draughts, Minesweeper, Klondike, Spider, FreeCell, Pyramid, Sudoku, Hearts,
   Snake, 2048 and Pinball, all behind one hub window and one toolbar.
-  Layman: Twelve more games, all in the same window.
+  **Layman:** Twelve more games, all in the same window.
   Kind: feature.
   Source: user-request-2026-08-10.
 
@@ -91,7 +92,7 @@ only, so they are not in order and are never renumbered.
   game is opened. No save dialog and nothing to remember to press; an empty
   state means "nothing worth keeping" and clears any stale save, which is how
   a finished game avoids resuming onto its own result.
-  Layman: Games can remember where you left off, with nothing to press.
+  **Layman:** Games can remember where you left off, with nothing to press.
   Kind: implement.
   Source: user-request-2026-08-11.
 
@@ -101,7 +102,7 @@ only, so they are not in order and are never renumbered.
   save rather than misreading it. Rules added later append to a counted tail,
   so a save from an earlier build still loads and comes back without the rules
   it predates.
-  Layman: Close Canasta mid-game and the whole table comes back.
+  **Layman:** Close Canasta mid-game and the whole table comes back.
   Kind: implement.
   Source: user-request-2026-08-11.
 
@@ -2541,7 +2542,7 @@ the twelve remaining per-game passes; these three are about what every game
 
 draws, whether or not it has had one.
 
-- 📋 [GHUB-0063] **A soft light on whoever is playing, so whose turn it is needs no reading.**
+- ✅ [GHUB-0063] **A soft light on whoever is playing, so whose turn it is needs no reading.**
   The owner's suggestion, and it is the right answer to a problem this project
   keeps hitting from other directions.
 
@@ -2603,6 +2604,55 @@ draws, whether or not it has had one.
   the owner to confirm before it is built: where the board games' band sits,
   how long the fade takes, whether the old light fades out, what lights
   during Hearts' pass, and whether opening a game fades its light in.
+  Shipped 2026-09-21. Five games light the seat whose turn it is:
+  Hearts, Canasta, Chess, Draughts and Reversi.
+
+  The owner answered the spec's five open questions the same day and
+  changed two things while doing it. The light CROSSES OVER -- the
+  leaving seat fades out as the arriving one fades in, where the spec
+  had it go out at once and § 8 had rejected the cross-fade outright.
+  And the light is BIGGER and need not be round: it is now shaped to
+  the ellipse inscribed in whatever area a view hands over, so an
+  oblong area gives an ellipse. The spec was amended for both. No
+  review-contract gate on that amendment, at the owner's instruction.
+
+  Theme::paintTurnLight is the painter and TurnLightState in
+  gameview.h is the cross-fade -- one copy of the stepping rather than
+  five, since all a view supplies is which seat is lit and how long
+  its tick was. Canasta rides its existing 16ms clock; the other four
+  own a QTimer that stops itself once nothing is moving.
+
+  Three things photographs settled that no arithmetic here could.
+  A centre-peaked gradient hides its brightest part under the cards
+  and shows only its faintest, which reads as a wireframe oval rather
+  than a light -- the pool is now flat most of the way out. A flat
+  lens the depth of a board's band reads as a drawn line, so the
+  ellipse is three times the band depth and two thirds of it sits
+  hidden behind the board. And the alpha that looked right on felt
+  was invisible on the pale window background the board games' bands
+  sit on.
+
+  The board games pay for it in board size: at 900x760 a Chess board
+  goes from about 712 pixels to about 616, roughly 13%. That is the
+  price of the spec's § 8 refusal to lay the band ON the frame, and
+  it is a real cost for a player who reads the board slowly. Worth
+  revisiting if the owner would rather keep the board.
+
+  Eleven existing checks reddened on geometry none of them was about:
+  three inline copies of a view's boardRect arithmetic went stale the
+  moment the bands reserved room. Replaced with ChessProbe,
+  ReversiProbe and DraughtsProbe, which read each view's own
+  boardRect. The suite's nudgeIntoPlay driver also stepped further
+  than a board square is wide and straddled White's pawn rank; its
+  select-then-move phase now uses a finer grid.
+
+  NOT covered mechanically: a finished game lights nobody. Reaching a
+  played-out Chess, Hearts or Canasta costs more than this suite
+  spends on any check, so INV-1 covers the -1 rule in the cheap form
+  -- every game with no turns answers it -- and the game-over limb
+  rests on reading refresh().
+
+  ctest all-pass; gameshub_uitest "All UI checks passed".
   **Layman:** The seat of the player whose turn it is gets a gentle glow, so you can see at a glance who is up.
   Kind: ux.
   Source: user-request-2026-08-20.
@@ -3154,26 +3204,26 @@ public-domain; see the standing rules for why each is safe.
 - 📋 [GHUB-0011] **Gin Rummy, two-handed against the computer.**
   Knocking,
   deadwood, gin and undercut. Medium.
-  Layman: The classic two-player rummy game.
+  **Layman:** The classic two-player rummy game.
   Kind: feature.
   Source: user-request-2026-08-10.
 
 - 📋 [GHUB-0012] **Cribbage, two-handed, with the pegging board.**
   The crib and
   the show included. Medium.
-  Layman: Cribbage, board and all.
+  **Layman:** Cribbage, board and all.
   Kind: feature.
   Source: user-request-2026-08-10.
 
 - 📋 [GHUB-0013] **Blackjack against a dealer.**
   Traditional twenty-one. Small.
-  Layman: Twenty-one against the house.
+  **Layman:** Twenty-one against the house.
   Kind: feature.
   Source: user-request-2026-08-10.
 
 - 📋 [GHUB-0014] **Spades, four-handed partnership trick-taking with bidding.**
   Reuses the Hearts shape almost wholesale. Medium.
-  Layman: Partnership card game where you bid how many tricks you will win.
+  **Layman:** Partnership card game where you bid how many tricks you will win.
   Kind: feature.
   Source: user-request-2026-08-10.
 
@@ -3181,7 +3231,7 @@ public-domain; see the standing rules for why each is safe.
   Three more solitaires, and the
   cheapest work on this page: they reuse the card engine and the drag-and-drop
   wholesale. Small each.
-  Layman: Three more games of patience.
+  **Layman:** Three more games of patience.
   Kind: feature.
   Source: user-request-2026-08-10.
 
@@ -9145,7 +9195,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   called Fan Tan; **Whist** and **Euchre**, both reusing the Hearts shape;
   then **Rummy 500**, **Cassino**, **Pinochle**, **Bezique**, **Scopa** and
   **Briscola**, each needing its own scoring. All reuse `src/cards/`.
-  Layman: A long list of traditional card games that would be cheap to add.
+  **Layman:** A long list of traditional card games that would be cheap to add.
   Kind: research.
   Source: user-request-2026-08-10.
 

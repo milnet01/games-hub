@@ -114,6 +114,56 @@ void paintInlay(QPainter& p, const QRectF& r, double radius, const QColor& colou
     p.drawRoundedRect(r, radius, radius);
 }
 
+void paintTurnLight(QPainter& p, const QRectF& area, double level, bool legible)
+{
+    if (level <= 0.0 || area.width() <= 0.0 || area.height() <= 0.0)
+        return;
+
+    const double lit = std::clamp(level, 0.0, 1.0);
+
+    // The gradient, shaped to the ellipse inscribed in `area`. Scaling the
+    // painter by the half-extents and drawing a unit circle is what makes an
+    // oblong area give an ellipse; a QRadialGradient with one radius would
+    // give a circle in the middle of it whatever the shape.
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.translate(area.center());
+    p.scale(area.width() / 2.0, area.height() / 2.0);
+
+    // The pool is FLAT most of the way out and then falls off, rather than
+    // peaking at the centre. On a card game the centre of the area is under
+    // the cards, so a centre-peaked gradient hides its brightest part and
+    // shows only its faintest -- which reads as a wireframe oval rather than
+    // as a light. Photographed before and after to settle it.
+    QRadialGradient glow(QPointF(0, 0), 1.0);
+    QColor core = kGold;
+    core.setAlphaF(float(lit * (legible ? 0.82 : 0.58)));
+    QColor mid = kGold;
+    mid.setAlphaF(float(lit * (legible ? 0.68 : 0.48)));
+    QColor rim = kGold;
+    rim.setAlphaF(0.0);
+    glow.setColorAt(0.0, core);
+    glow.setColorAt(0.62, mid);
+    glow.setColorAt(1.0, rim);
+    p.setPen(Qt::NoPen);
+    p.setBrush(glow);
+    p.drawEllipse(QPointF(0, 0), 1.0, 1.0);
+    p.restore();
+
+    // The outline, drawn unscaled so its width is even all the way round: a
+    // stroke under the transform above would be thin at the ends of a long
+    // ellipse and thick at its sides. It is the half of the cue that does not
+    // depend on seeing the colour.
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+    QColor edge = kGold;
+    edge.setAlphaF(float(lit * (legible ? 0.95 : 0.72)));
+    p.setPen(QPen(edge, legible ? 6.0 : 3.0));
+    p.setBrush(Qt::NoBrush);
+    p.drawEllipse(area);
+    p.restore();
+}
+
 namespace {
 
 // The joints a status sentence already has: a run of two or more spaces, or

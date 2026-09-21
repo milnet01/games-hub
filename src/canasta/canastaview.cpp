@@ -1006,6 +1006,10 @@ bool CanastaView::advanceForShot(int turns)
     m_awaitingContinue = m_engine.phase() == ca::Engine::Phase::HandOver;
     sortHand();
     refresh();
+    // That refresh() saw the seat the turns moved to, and would otherwise
+    // start a cross-fade the shot catches half-way. A run that ends between
+    // hands or at game over stays unlit, because litSeat() answered -1.
+    m_turn.land();
     return true;
 }
 
@@ -1157,14 +1161,17 @@ bool CanastaView::restoreState(const QByteArray& blob)
 
 void CanastaView::activate()
 {
+    m_turnFades = true;
     m_timer->start();
     refresh();
 }
 
 void CanastaView::deactivate()
 {
-    // The computers stop playing when nobody is watching.
+    // The computers stop playing when nobody is watching. The cross-fade
+    // freezes with them: both levels stay where they stood.
     m_timer->stop();
+    m_turnFades = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1173,7 +1180,27 @@ void CanastaView::deactivate()
 
 bool CanastaView::animating() const
 {
+    // Deliberately flights only. The cross-fade is not animation this game
+    // waits on -- reporting it here would delay every computer turn by a fade.
     return !m_flights.empty();
+}
+
+int CanastaView::litSeat() const
+{
+    // Any phase but Draw and Play is nobody's turn (GHUB-0063 § 4.2).
+    const ca::Engine::Phase ph = m_engine.phase();
+    if (ph != ca::Engine::Phase::Draw && ph != ca::Engine::Phase::Play)
+        return -1;
+    return m_engine.currentSeat();
+}
+
+QRectF CanastaView::turnArea(int seat) const
+{
+    if (seat < 0)
+        return {};
+    const QPointF a = seatAnchor(seat);
+    const double half = cardHeight() * 2.2;
+    return QRectF(a.x() - half, a.y() - half, half * 2, half * 2).intersected(tableRect());
 }
 
 void CanastaView::tick()
@@ -1200,6 +1227,11 @@ void CanastaView::tick()
         m_celebrate = std::max(0.0, m_celebrate - kTick);
         redraw = true;
     }
+
+    // The cross-fade rides this clock rather than owning one. kTick is in
+    // seconds, so the step is that in milliseconds.
+    if (m_turn.step(int(kTick * 1000.0)) || m_turn.moving())
+        redraw = true;
 
     if (!animating() && !m_awaitingContinue) {
         if (m_pause > 0.0) {
@@ -2136,6 +2168,8 @@ void CanastaView::announce(const QString& text)
 
 void CanastaView::refresh()
 {
+    m_turn.setSeat(litSeat(), m_turnFades);
+
     // Before anything reads the layout: a canasta completed since the last
     // refresh decides where every card in the stack is drawn.
     trackCanastas();
@@ -2460,20 +2494,16 @@ void CanastaView::paintTable(QPainter& p)
         Theme::paintInlay(p, bandFor(team).adjusted(-4, -4, 4, 4), 8.0, edge);
     }
 
-    // Whose turn it is.
-    if (m_engine.phase() == ca::Engine::Phase::Draw
-        || m_engine.phase() == ca::Engine::Phase::Play) {
-        const QPointF a = seatAnchor(m_engine.currentSeat());
-        QRadialGradient glow(a, cardHeight() * 1.5);
-        QColor c = Theme::kGold;
-        c.setAlpha(60);
-        glow.setColorAt(0.0, c);
-        c.setAlpha(0);
-        glow.setColorAt(1.0, c);
-        p.setBrush(glow);
-        p.setPen(Qt::NoPen);
-        p.drawEllipse(a, cardHeight() * 1.5, cardHeight() * 1.5);
-    }
+    // Whose turn it is. This replaces a static glow that appeared at full
+    // strength at once and carried no outline; the light now crosses over as
+    // the turn passes, and is bigger. The leaving light is painted first so
+    // the arriving one sits on top where they meet.
+    const TurnLight lit = m_turn.value();
+    const bool legible = Legibility::instance().enabled();
+    if (lit.leavingSeat >= 0)
+        Theme::paintTurnLight(p, turnArea(lit.leavingSeat), lit.leavingLevel, legible);
+    if (lit.seat >= 0)
+        Theme::paintTurnLight(p, turnArea(lit.seat), lit.level, legible);
 }
 
 void CanastaView::paintMeldBadge(QPainter& p, const ca::Meld& m, const QPointF& topCentre,
