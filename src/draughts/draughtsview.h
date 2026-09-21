@@ -35,6 +35,11 @@ public:
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    // GHUB-0168. Arrow keys move the cursor, Space or Return does to the square
+    // under it what a click does, and Escape puts a lifted piece back down.
+    // Sudoku is the pattern; the focus policy set in the constructor is what
+    // makes any of it reachable.
+    void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 560, 560 }; }
     QSize minimumSizeHint() const override { return { 320, 320 }; }
 
@@ -44,6 +49,10 @@ protected:
     // built on it failed on geometry none of them is about. Same reason
     // HeartsView exposes handCardRect().
     QRect boardRect() const;
+
+    // Where the keyboard cursor is, as (column, row). Protected so a test can
+    // read it without a copy of the geometry, the same reason boardRect() is.
+    QPoint cursorCell() const { return { m_cursorCol, m_cursorRow }; }
 
 private:
     void buildActions();
@@ -58,6 +67,10 @@ private:
     // The one place a human move is applied. Two click paths reach it now --
     // an unambiguous destination, and a route chosen from several.
     void playMove(const DraughtsMove& m);
+    // What a press on one square does: narrow a route, play a destination,
+    // pick up a piece, or put down whatever was lifted. Reached by a click and
+    // by the keyboard alike, so the two cannot drift apart.
+    void pressSquare(Square pressed);
 
     // The strip outside the frame that carries a seat's turn light: yours
     // below the board, the computer's above it, because that is where you
@@ -92,6 +105,13 @@ private:
 
     std::optional<Square> m_selected;
     std::vector<DraughtsMove> m_selectedMoves;
+    // The keyboard cursor. Red is the human and starts on rows 5 to 7, so row 5
+    // puts the first press of Space on a piece that can move. Deliberately not
+    // saved: the cursor is where you are looking, not part of the position, and
+    // adding it to saveState() would break every save in tests/saves/ for
+    // nothing a player would notice.
+    int m_cursorRow = 5;
+    int m_cursorCol = 0;
     // Two capture chains from one square can finish on the SAME square while
     // taking different pieces -- routine for a king, and English draughts lets
     // you play either. The board used to take the first one it found. These

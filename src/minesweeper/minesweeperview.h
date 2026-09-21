@@ -38,8 +38,19 @@ protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    // GHUB-0168. Arrow keys move the cursor, Space or Return digs, F flags.
+    // Flagging needs a key of its own because the mouse flags with the RIGHT
+    // button, and a board you can dig but not flag is not playable. Sudoku is
+    // the pattern; the focus policy set in the constructor is what makes any of
+    // it reachable.
+    void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 560, 520 }; }
     QSize minimumSizeHint() const override { return { 300, 280 }; }
+
+    // Where the keyboard cursor is, as (column, row). Protected so a test can
+    // read it without a copy of the geometry, the same reason the board games
+    // expose boardRect().
+    QPoint cursorCell() const { return { m_cursorCol, m_cursorRow }; }
 
 private:
     void buildActions();
@@ -48,12 +59,23 @@ private:
     QRect fieldRect() const;
     double cellSize() const;
     bool cellAt(QPointF pos, int& row, int& col) const;
+    // What a dig on one cell does -- reveal, or chord an already-open number.
+    // Reached by a left click and by Space alike, so the two cannot drift
+    // apart. Flagging is one call and needs no such function.
+    void digAt(int row, int col);
 
     QList<QAction*> m_actions;
     QAction* m_pauseAction = nullptr;
     QActionGroup* m_levelGroup = nullptr;
     std::unique_ptr<Minefield> m_field;
     int m_level = 1;
+    // The keyboard cursor. Clamped by newGame(), because the levels are
+    // different sizes and Expert's board is not Beginner's. Deliberately not
+    // saved: the cursor is where you are looking, not part of the position, and
+    // adding it to saveState() would break every save in tests/saves/ for
+    // nothing a player would notice.
+    int m_cursorRow = 0;
+    int m_cursorCol = 0;
     QElapsedTimer m_clock;
     QTimer* m_tick = nullptr;
     bool m_started = false;

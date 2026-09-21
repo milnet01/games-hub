@@ -10,6 +10,7 @@
 #include <QCoreApplication>
 #include <QDataStream>
 #include <QIODevice>
+#include <QKeyEvent>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -24,6 +25,11 @@ using namespace chess;
 
 namespace {
 constexpr int kFrameWidth = 18;
+
+// Blob version 2 adds the keyboard cursor (GHUB-0168). A version 1 save still
+// restores and leaves the cursor where a fresh game puts it -- the corpus in
+// tests/saves/ is version 1, and this is what keeps it readable.
+constexpr quint32 kBlobVersion = 2;
 constexpr int kThinkDelayMs = 260;
 
 // A function rather than a file-scope constant, which is the shape scores.h
@@ -80,6 +86,10 @@ ChessView::ChessView(QWidget* parent)
     : GameView(parent)
 {
     setMinimumSize(ChessView::minimumSizeHint());
+    // GHUB-0168. Without this the board takes no keys at all: HubWindow::openGame
+    // already calls setFocus() on every view, and setFocus() does nothing under
+    // the default Qt::NoFocus policy.
+    setFocusPolicy(Qt::StrongFocus);
     m_turnTimer = new QTimer(this);
     m_turnTimer->setInterval(Theme::kTurnLightTickMs);
     connect(m_turnTimer, &QTimer::timeout, this, &ChessView::stepTurnLight);
@@ -210,11 +220,12 @@ QByteArray ChessView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_level) << qint32(m_game.history().size());
+    out << kBlobVersion << qint32(m_level) << qint32(m_game.history().size());
     for (const chess::Move& m : m_game.history()) {
         out << qint8(m.from.row) << qint8(m.from.col) << qint8(m.to.row) << qint8(m.to.col)
             << qint8(m.promotion);
     }
+    out << qint8(m_cursorRow) << qint8(m_cursorCol);
     return blob;
 }
 
@@ -228,7 +239,8 @@ bool ChessView::restoreState(const QByteArray& blob)
     in >> version >> level >> count;
     // 1024 plies is far beyond any real game; a count from a corrupt file must
     // not be trusted into a loop.
-    if (version != 1 || in.status() != QDataStream::Ok || count < 0 || count > 1024)
+    if (version < 1 || version > kBlobVersion || in.status() != QDataStream::Ok || count < 0
+        || count > 1024)
         return false;
 
     // Played into a game of its own, so a stream that turns out to be nonsense
@@ -260,6 +272,18 @@ bool ChessView::restoreState(const QByteArray& blob)
     }
     if (game.isOver())
         return false; // decided since it was saved; nothing to resume into
+
+    // The cursor, where the save carries one. Read after the moves so a
+    // version 1 blob -- which has nothing here -- is still a clean read.
+    if (version >= 2) {
+        qint8 cursorRow = 0;
+        qint8 cursorCol = 0;
+        in >> cursorRow >> cursorCol;
+        if (in.status() != QDataStream::Ok || !chess::Square { cursorRow, cursorCol }.valid())
+            return false;
+        m_cursorRow = cursorRow;
+        m_cursorCol = cursorCol;
+    }
 
     m_game = game;
     abandonSearch();
@@ -676,24 +700,70 @@ void ChessView::paintEvent(QPaintEvent*)
         }
     }
 
+    // The keyboard cursor, over the pieces: it says where the next Space lands,
+    // so nothing may sit on top of it. The lifted-piece highlight above is a
+    // plain line UNDER the pieces, which is what keeps the two cues apart.
+    Theme::paintCellCursor(p, squareRect({ m_cursorRow, m_cursorCol }),
+                           Legibility::instance().enabled());
+
     paintStatusCaption(p, QRectF(rect()));
 }
 
 void ChessView::mousePressEvent(QMouseEvent* event)
 {
-    if (m_finished || m_thinking || m_game.toMove() != m_human
-        || event->button() != Qt::LeftButton)
+    if (event->button() != Qt::LeftButton)
         return;
 
     const std::optional<Square> clicked = squareAt(event->position());
     if (!clicked)
         return;
 
-    // Clicking a highlighted destination plays that move.
+    // The cursor follows the mouse, so the two ways of playing never disagree
+    // about where you are on the board.
+    m_cursorRow = clicked->row;
+    m_cursorCol = clicked->col;
+    update();
+    pressSquare(*clicked);
+}
+
+void ChessView::keyPressEvent(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_Left:  m_cursorCol = std::max(0, m_cursorCol - 1); break;
+    case Qt::Key_Right: m_cursorCol = std::min(kFiles - 1, m_cursorCol + 1); break;
+    case Qt::Key_Up:    m_cursorRow = std::max(0, m_cursorRow - 1); break;
+    case Qt::Key_Down:  m_cursorRow = std::min(kRanks - 1, m_cursorRow + 1); break;
+    case Qt::Key_Space:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        pressSquare(Square { m_cursorRow, m_cursorCol });
+        return;
+    case Qt::Key_Escape:
+        // Putting a lifted piece back down. The mouse does this by clicking an
+        // empty square, which the keyboard can do too -- but a player who has
+        // moved the cursor onto a destination and changed their mind should
+        // not have to hunt for a square that means "no".
+        m_selected.reset();
+        m_selectedMoves.clear();
+        refresh();
+        return;
+    default:
+        GameView::keyPressEvent(event);
+        return;
+    }
+    update();
+}
+
+void ChessView::pressSquare(Square pressed)
+{
+    if (m_finished || m_thinking || m_game.toMove() != m_human)
+        return;
+
+    // Pressing a highlighted destination plays that move.
     if (m_selected) {
         std::vector<Move> matching;
         for (const Move& m : m_selectedMoves)
-            if (m.to == *clicked)
+            if (m.to == pressed)
                 matching.push_back(m);
 
         if (!matching.empty()) {
@@ -719,15 +789,15 @@ void ChessView::mousePressEvent(QMouseEvent* event)
     }
 
     // Otherwise select one of the player's own pieces that has a move.
-    if (m_game.board().at(*clicked).is(m_human)) {
-        std::vector<Move> moves = movesFrom(*clicked);
+    if (m_game.board().at(pressed).is(m_human)) {
+        std::vector<Move> moves = movesFrom(pressed);
         if (moves.empty()) {
             refresh(m_game.board().inCheck()
                         ? tr("You are in check — that piece cannot help.")
                         : tr("That piece has no legal move."));
             return;
         }
-        m_selected = clicked;
+        m_selected = pressed;
         m_selectedMoves = std::move(moves);
         refresh();
         return;

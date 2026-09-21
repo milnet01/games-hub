@@ -8,6 +8,7 @@
 #include <QActionGroup>
 #include <QCoreApplication>
 #include <QDataStream>
+#include <QKeyEvent>
 #include <QLinearGradient>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -27,6 +28,11 @@ constexpr QColor kWhiteDisc { 0xf4, 0xf3, 0xee };
 
 constexpr int kFrameWidth = 10;
 
+// Blob version 2 adds the keyboard cursor (GHUB-0168). A version 1 save still
+// restores and leaves the cursor where a fresh game puts it -- the corpus in
+// tests/saves/ is version 1, and this is what keeps it readable.
+constexpr quint32 kBlobVersion = 2;
+
 // A short pause before the computer answers — an instant reply feels jarring.
 constexpr int kThinkDelayMs = 320;
 
@@ -41,6 +47,10 @@ ReversiView::ReversiView(QWidget* parent)
     : GameView(parent)
 {
     setMinimumSize(ReversiView::minimumSizeHint());
+    // GHUB-0168. Without this the board takes no keys at all: HubWindow::openGame
+    // already calls setFocus() on every view, and setFocus() does nothing under
+    // the default Qt::NoFocus policy.
+    setFocusPolicy(Qt::StrongFocus);
     m_turnTimer = new QTimer(this);
     m_turnTimer->setInterval(Theme::kTurnLightTickMs);
     connect(m_turnTimer, &QTimer::timeout, this, &ReversiView::stepTurnLight);
@@ -490,6 +500,12 @@ void ReversiView::paintEvent(QPaintEvent*)
         p.drawEllipse(centre, cell * 0.45, cell * 0.45);
     }
 
+    // The keyboard cursor, over everything else on the board: it says where the
+    // next Space lands, so nothing may sit on top of it.
+    Theme::paintCellCursor(p, QRectF(r.x() + m_cursorCol * cell, r.y() + m_cursorRow * cell,
+                                     cell, cell),
+                           legible);
+
     // Reversi's status line is already the right sentence for the board: whose
     // turn it is AND the score, which is the number a player checks most and
     // the one the corner counters make you add up by eye.
@@ -498,18 +514,52 @@ void ReversiView::paintEvent(QPaintEvent*)
 
 void ReversiView::mousePressEvent(QMouseEvent* event)
 {
-    if (m_finished || m_thinking || m_toMove != m_human || event->button() != Qt::LeftButton)
+    if (event->button() != Qt::LeftButton)
         return;
 
     const std::optional<Move> m = cellAt(event->position());
-    if (!m || m_board.flipCount(m_human, *m) == 0)
+    if (!m)
+        return;
+
+    // The cursor follows the mouse, so the two ways of playing never disagree
+    // about where you are on the board.
+    m_cursorRow = m->row;
+    m_cursorCol = m->col;
+    update();
+    playAt(*m);
+}
+
+void ReversiView::keyPressEvent(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_Left:  m_cursorCol = std::max(0, m_cursorCol - 1); break;
+    case Qt::Key_Right: m_cursorCol = std::min(kSize - 1, m_cursorCol + 1); break;
+    case Qt::Key_Up:    m_cursorRow = std::max(0, m_cursorRow - 1); break;
+    case Qt::Key_Down:  m_cursorRow = std::min(kSize - 1, m_cursorRow + 1); break;
+    case Qt::Key_Space:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        playAt(Move { m_cursorRow, m_cursorCol });
+        return;
+    default:
+        GameView::keyPressEvent(event);
+        return;
+    }
+    update();
+}
+
+void ReversiView::playAt(Move m)
+{
+    if (m_finished || m_thinking || m_toMove != m_human)
+        return;
+    if (m_board.flipCount(m_human, m) == 0)
         return;
 
     m_history.push_back({ m_board, m_toMove, m_lastMove });
     m_undoAction->setEnabled(true);
     m_passNotice.clear();
 
-    const int flipped = m_board.play(m_human, *m);
+    const int flipped = m_board.play(m_human, m);
     Sound::instance().play(Sound::kDiscPlace);
     if (flipped > 2)
         Sound::instance().play(Sound::kDiscFlip);
@@ -538,11 +588,12 @@ QByteArray ReversiView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint8(m_toMove) << qint8(m_human) << qint8(m_difficulty)
+    out << kBlobVersion << qint8(m_toMove) << qint8(m_human) << qint8(m_difficulty)
         << qint8(m_lastMove ? 1 : 0) << qint8(m_lastMove ? m_lastMove->row : 0)
         << qint8(m_lastMove ? m_lastMove->col : 0);
     for (Cell c : m_board.cells())
         out << qint8(c);
+    out << qint8(m_cursorRow) << qint8(m_cursorCol);
     return blob;
 }
 
@@ -558,7 +609,7 @@ bool ReversiView::restoreState(const QByteArray& blob)
     qint8 lastRow = 0;
     qint8 lastCol = 0;
     in >> version >> toMove >> human >> difficulty >> hasLast >> lastRow >> lastCol;
-    if (version != 1 || in.status() != QDataStream::Ok)
+    if (version < 1 || version > kBlobVersion || in.status() != QDataStream::Ok)
         return false;
     if ((toMove != 1 && toMove != -1) || (human != 1 && human != -1))
         return false;
@@ -583,6 +634,18 @@ bool ReversiView::restoreState(const QByteArray& blob)
     Board board;
     if (!board.restore(cells) || board.gameOver())
         return false;
+
+    // The cursor, where the save carries one. Read after the board so a
+    // version 1 blob -- which has nothing here -- is still a clean read.
+    if (version >= 2) {
+        qint8 cursorRow = 0;
+        qint8 cursorCol = 0;
+        in >> cursorRow >> cursorCol;
+        if (in.status() != QDataStream::Ok || !Board::inBounds(cursorRow, cursorCol))
+            return false;
+        m_cursorRow = cursorRow;
+        m_cursorCol = cursorCol;
+    }
 
     m_board = board;
     m_toMove = Player(toMove);

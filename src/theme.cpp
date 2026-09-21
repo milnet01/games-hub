@@ -164,6 +164,33 @@ void paintTurnLight(QPainter& p, const QRectF& area, double level, bool legible)
     p.restore();
 }
 
+void paintCellCursor(QPainter& p, const QRectF& cell, bool legible)
+{
+    // Thick enough to be a band rather than a line, and thicker again under
+    // the switch. The floor keeps it visible on Minesweeper's smallest cells,
+    // and there are TWO floors rather than one: Expert's cells are small
+    // enough that a single floor swallowed the difference between the two
+    // modes, so the switch drew the same cursor it drew with the switch off.
+    const double band = legible ? std::max(3.0, cell.width() * 0.12)
+                                : std::max(2.0, cell.width() * 0.07);
+
+    p.save();
+    // Qt::NoBrush before every shape: drawRect fills with whatever brush was
+    // last set as well as stroking, so a brush left by the caller would flood
+    // the cell the cursor is supposed to outline.
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(kGold, band));
+    p.drawRect(cell.adjusted(band / 2, band / 2, -band / 2, -band / 2));
+
+    // A dark hairline along each edge of the gold band, drawn over it. Gold on
+    // a pale board square is nearly the same colour, and without these the
+    // cursor disappears on half of Draughts and half of Chess.
+    p.setPen(QPen(QColor(0, 0, 0, 160), 1));
+    p.drawRect(cell.adjusted(0.5, 0.5, -0.5, -0.5));
+    p.drawRect(cell.adjusted(band + 0.5, band + 0.5, -band - 0.5, -band - 0.5));
+    p.restore();
+}
+
 namespace {
 
 // The joints a status sentence already has: a run of two or more spaces, or

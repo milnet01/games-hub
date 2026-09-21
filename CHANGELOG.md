@@ -10,6 +10,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Chess, Reversi, Draughts and Minesweeper can be played without a mouse**
+  Arrow keys move a gold cursor around the board, Space or Return plays
+  the square under it. Chess and Draughts take Escape to put a lifted
+  piece back down; Minesweeper takes F to plant a flag. The cursor is
+  thicker with Large play switched on, and a resumed game puts it back
+  where you left it. The first slice of GHUB-0168, which covers ten
+  games -- the card games are still mouse-only, and how they should take
+  the keyboard is still the owner's to decide.
+
 - **A soft gold light settles on whoever is playing** (GHUB-0063)
   Hearts, Canasta, Chess, Draughts and Reversi now light the seat whose
   turn it is, so you can see whose move it is without reading anything.

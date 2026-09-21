@@ -92,16 +92,26 @@ class ChessProbe : public ChessView
 {
 public:
     using ChessView::boardRect;
+    using ChessView::cursorCell;
 };
 class ReversiProbe : public ReversiView
 {
 public:
     using ReversiView::boardRect;
+    using ReversiView::cursorCell;
 };
 class DraughtsProbe : public DraughtsView
 {
 public:
     using DraughtsView::boardRect;
+    using DraughtsView::cursorCell;
+};
+// Minesweeper has no board rectangle to expose -- fieldRect() is private and
+// nothing clicks it -- so this probe exists for the cursor alone (GHUB-0168).
+class MinesweeperProbe : public MinesweeperView
+{
+public:
+    using MinesweeperView::cursorCell;
 };
 
 void check(bool ok, const char* what)
@@ -1294,6 +1304,171 @@ bool tickTurnLight(GameView* view)
             return true;
     }
     return false;
+}
+
+// ---- boardsTakeTheKeyboard (GHUB-0168) ----
+//
+// The four board games are playable without a mouse. Three things have to hold
+// and the first is the one everything else rests on: a view whose focus policy
+// is Qt::NoFocus never sees a key at all, however well its keyPressEvent is
+// written. HubWindow::openGame has been calling setFocus() on every view for
+// months, and on ten of them it did nothing.
+//
+// NOT covered here: what the cursor LOOKS like. A gold band of the right width
+// is a painting question, and the shot harness is what answers it --
+// `--shot --game chess` with and without `--legible`.
+void boardsTakeTheKeyboard()
+{
+    // 1. The focus policy, on every view that now claims keyboard play.
+    {
+        ChessProbe chess;
+        ReversiProbe reversi;
+        DraughtsProbe draughts;
+        MinesweeperProbe mines;
+        SudokuView sudoku;
+        const std::pair<GameView*, const char*> boards[] = {
+            { &chess, "chess" },     { &reversi, "reversi" }, { &draughts, "draughts" },
+            { &mines, "minesweeper" }, { &sudoku, "sudoku" },
+        };
+        for (const auto& [view, name] : boards)
+            check(view->focusPolicy() == Qt::StrongFocus,
+                  qPrintable(QStringLiteral("%1: takes keyboard focus, so setFocus() reaches it")
+                                 .arg(QString::fromUtf8(name))));
+    }
+
+    // 2. Arrows move the cursor by one cell and stop at the edge. Asserted on
+    // the cursor itself rather than on the pixels: a painted cursor is a
+    // property of the theme, a clamped index is a property of this code.
+    {
+        ReversiProbe reversi;
+        reversi.resize(600, 600);
+        reversi.show();
+        pump(20);
+
+        const QPoint start = reversi.cursorCell();
+        pressKey(&reversi, Qt::Key_Right);
+        check(reversi.cursorCell() == start + QPoint(1, 0),
+              "reversi: Right moves the cursor one column");
+        pressKey(&reversi, Qt::Key_Down);
+        check(reversi.cursorCell() == start + QPoint(1, 1),
+              "reversi: Down moves it one row");
+
+        // Twelve presses against an eight-wide board: the clamp is what stops
+        // the cursor walking off the edge, and a wrap would show up here too.
+        for (int i = 0; i < 12; ++i)
+            pressKey(&reversi, Qt::Key_Left);
+        check(reversi.cursorCell().x() == 0, "reversi: and Left stops at the first column");
+        for (int i = 0; i < 12; ++i)
+            pressKey(&reversi, Qt::Key_Up);
+        check(reversi.cursorCell().y() == 0, "reversi: and Up stops at the first row");
+    }
+
+    const auto undoAction = [](GameView& view) -> QAction* {
+        for (QAction* a : view.gameActions())
+            if (a->text() == QStringLiteral("Undo"))
+                return a;
+        return nullptr;
+    };
+
+    // 3. Space plays. Undo turning from disabled to enabled is the observable:
+    // it is set by the one path a human move takes, so nothing else can move it.
+    {
+        ReversiProbe reversi;
+        reversi.resize(600, 600);
+        reversi.show();
+        pump(20);
+        QAction* undo = undoAction(reversi);
+        check(undo != nullptr && !undo->isEnabled(), "reversi: nothing to undo before a move");
+        // The cursor opens on one of Black's four legal openings, so Space
+        // plays without the test steering it there first.
+        pressKey(&reversi, Qt::Key_Space);
+        check(undo != nullptr && undo->isEnabled(), "reversi: Space plays the cell under the cursor");
+    }
+
+    {
+        ChessProbe chess;
+        chess.resize(600, 680);
+        chess.show();
+        pump(20);
+        QAction* undo = undoAction(chess);
+        check(undo != nullptr && !undo->isEnabled(), "chess: nothing to undo before a move");
+        // The cursor opens on e2. Space lifts the pawn, two presses of Up put
+        // the cursor on e4, and Space puts it down: 1. e4, played on the
+        // keyboard alone.
+        pressKey(&chess, Qt::Key_Space);
+        pressKey(&chess, Qt::Key_Up);
+        pressKey(&chess, Qt::Key_Up);
+        pressKey(&chess, Qt::Key_Space);
+        check(undo != nullptr && undo->isEnabled(),
+              "chess: Space lifts a piece and Space puts it down");
+    }
+
+    {
+        DraughtsProbe draughts;
+        draughts.resize(600, 640);
+        draughts.show();
+        pump(20);
+        QAction* undo = undoAction(draughts);
+        check(undo != nullptr && !undo->isEnabled(), "draughts: nothing to undo before a move");
+        // The cursor opens on a red man at row 5. Red moves up the board, so
+        // Up then Right is its one diagonal.
+        pressKey(&draughts, Qt::Key_Space);
+        pressKey(&draughts, Qt::Key_Up);
+        pressKey(&draughts, Qt::Key_Right);
+        pressKey(&draughts, Qt::Key_Space);
+        check(undo != nullptr && undo->isEnabled(),
+              "draughts: Space lifts a piece and Space puts it down");
+    }
+
+    // Escape puts a lifted piece back down. Without it the keyboard can pick a
+    // piece up and has no way to change its mind that does not move something.
+    {
+        ChessProbe chess;
+        chess.resize(600, 680);
+        chess.show();
+        pump(20);
+        QAction* undo = undoAction(chess);
+        pressKey(&chess, Qt::Key_Space);     // lift the e2 pawn
+        pressKey(&chess, Qt::Key_Escape);    // put it back
+        pressKey(&chess, Qt::Key_Up);
+        pressKey(&chess, Qt::Key_Up);
+        pressKey(&chess, Qt::Key_Space);     // e4 is now an empty square, not a destination
+        check(undo != nullptr && !undo->isEnabled(),
+              "chess: Escape puts a lifted piece back down");
+    }
+
+    // Minesweeper digs with Space and flags with F. Flagging needs its own key
+    // because the mouse flags with the right button, and a field you can dig
+    // but not flag is not playable.
+    {
+        MinesweeperProbe mines;
+        mines.resize(700, 640);
+        mines.show();
+        pump(20);
+
+        QString status;
+        QObject::connect(&mines, &GameView::statusChanged,
+                         [&status](const QString& s) { status = s; });
+
+        // An arrow first, for a baseline: the status line is emitted by
+        // refresh(), and nothing has called it since this connection was made.
+        // The cursor is not in the sentence, so moving it cannot change it.
+        pressKey(&mines, Qt::Key_Right);
+        const QString atRest = status;
+        check(!atRest.isEmpty(), "minesweeper: the field says where it stands");
+
+        // The mine count rather than a number written here: the level is
+        // whatever the stored preference says, so Beginner's 10 and Expert's 99
+        // are both correct and neither can be asserted.
+        pressKey(&mines, Qt::Key_F);
+        check(status != atRest, "minesweeper: F flags the cell under the cursor");
+        pressKey(&mines, Qt::Key_F);
+        check(status == atRest, "minesweeper: and F again takes the flag back");
+
+        pressKey(&mines, Qt::Key_Space);
+        check(status.contains(QStringLiteral("Digging")),
+              "minesweeper: Space digs, which starts the clock");
+    }
 }
 
 // ---- turnLightFollowsTheTurn (INV-1) ----
@@ -3664,10 +3839,19 @@ int main(int argc, char* argv[])
                                  [&said](const QString& t) { said = t; });
                 check(choose.restoreState(blob), "draughts: the two-route position loads");
 
-                const QByteArray settled = choose.saveState();
+                // The position a draughts save carries, without the two bytes of
+                // keyboard cursor it now ends with. The cursor is where the
+                // player is LOOKING (GHUB-0168) and every click moves it, so a
+                // whole-blob comparison stopped meaning "the board did not
+                // change" the moment the cursor joined the blob.
+                const auto positionOf = [](const QByteArray& blob) {
+                    return blob.left(blob.size() - 2);
+                };
+
+                const QByteArray settled = positionOf(choose.saveState());
                 clickAt(&choose, cellCentre(&choose, 5, 2), Qt::LeftButton);
                 clickAt(&choose, cellCentre(&choose, 1, 2), Qt::LeftButton);
-                check(choose.saveState() == settled,
+                check(positionOf(choose.saveState()) == settled,
                       "draughts: clicking a square two chains reach plays neither of them");
                 check(said.contains(QStringLiteral("Two ways")),
                       "draughts: it asks which route instead of choosing for you");
@@ -3677,7 +3861,7 @@ int main(int argc, char* argv[])
                 // was the left, so choosing that would agree with the bug and
                 // the two checks below would pass either way.
                 clickAt(&choose, cellCentre(&choose, 3, 4), Qt::LeftButton);
-                const QByteArray after = choose.saveState();
+                const QByteArray after = positionOf(choose.saveState());
                 check(after != settled, "draughts: naming the route plays it");
 
                 // And it played THAT route: the two men on the right are still
@@ -3743,7 +3927,9 @@ int main(int argc, char* argv[])
                 check(quiet.restoreState(blobWith(70)), "draughts: a version 2 save loads");
                 check(said.contains(QStringLiteral("35 of 40")),
                       "draughts: close to the draw, the board says how close");
-                const QByteArray back = quiet.saveState();
+                // Without the trailing keyboard cursor: the count is the last
+                // thing in the POSITION, not the last thing in the blob.
+                const QByteArray back = quiet.saveState().chopped(2);
                 check(!back.isEmpty() && qint8(back.back()) == 70,
                       "draughts: and the save writes the count back out");
                 check(!quiet.restoreState(blobWith(80)),
@@ -5658,6 +5844,8 @@ int main(int argc, char* argv[])
     aFullSpiderTableStaysOnTheSurface();
 
     idsAndKeysSurviveATranslation();
+
+    boardsTakeTheKeyboard();
 
     turnLightFollowsTheTurn();
     turnLightComesUpAndHolds();

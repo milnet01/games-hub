@@ -35,8 +35,16 @@ public:
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    // GHUB-0168. Arrow keys move the cursor, Space or Return plays the cell
+    // under it. Sudoku is the pattern; the focus policy set in the constructor
+    // is what makes any of it reachable.
+    void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 520, 520 }; }
     QSize minimumSizeHint() const override { return { 280, 280 }; }
+
+    // Where the keyboard cursor is, as (column, row). Protected so a test can
+    // read it without a copy of the geometry, the same reason boardRect() is.
+    QPoint cursorCell() const { return { m_cursorCol, m_cursorRow }; }
 
     // Protected rather than private so a test can click a cell without keeping
     // its own copy of this arithmetic. It had one, and GHUB-0063 reserved room
@@ -55,6 +63,10 @@ private:
     void playEngineMove();
     void refresh(const QString& message = {});
     void announceResult();
+    // The one place a human move is applied, reached by a click and by the
+    // keyboard alike. Both paths had the same guards and the same body; two
+    // copies of that is how one of them goes stale.
+    void playAt(Move m);
 
     // The strip outside the frame that carries a seat's turn light: yours
     // below the board, the computer's above it, because that is where you sit
@@ -82,6 +94,13 @@ private:
     Difficulty m_difficulty = Difficulty::Medium;
     std::optional<Move> m_lastMove;
     std::vector<Move> m_hints;
+    // The keyboard cursor. It starts on one of Black's four opening moves, so
+    // the first press of Space plays rather than doing nothing. Deliberately
+    // not saved: the cursor is where you are looking, not part of the
+    // position, and adding it to saveState() would break every save in
+    // tests/saves/ for nothing a player would notice.
+    int m_cursorRow = 3;
+    int m_cursorCol = 2;
     // A pass leaves the board looking exactly as it did, so the sentence is the
     // only sign it happened. Held here and carried into the next status rather
     // than emitted once, because the message after it used to arrive 320ms

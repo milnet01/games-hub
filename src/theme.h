@@ -84,6 +84,17 @@ inline int turnBandDepth(int room)
 // precedent.
 void paintTurnLight(QPainter& p, const QRectF& area, double level, bool legible);
 
+// The keyboard cursor: a thick outline around one cell of a board, in the
+// turn light's kGold so the two cues read as one system (GHUB-0168). `legible`
+// thickens it, because it marks where the keyboard is and that is the thing
+// the switch is for.
+//
+// A dark hairline is drawn either side of the gold band. Gold on a pale board
+// square is nearly the same colour -- Draughts' kLightSquare is 0xd9be96
+// against kGold's 0xd8b064 -- so the band alone disappears on half the board.
+// Hands the painter back as it found it.
+void paintCellCursor(QPainter& p, const QRectF& cell, bool legible);
+
 // Ink and plate for paintCaption(). Measured at 13.15:1 by
 // scripts/legibility-check.py, which holds the pair and requires 4.5 of it —
 // WCAG's bar for body text rather than the 3.0 a large glyph would need,

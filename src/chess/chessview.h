@@ -43,8 +43,17 @@ public:
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    // GHUB-0168. Arrow keys move the cursor, Space or Return does to the square
+    // under it what a click does, and Escape puts a lifted piece back down.
+    // Sudoku is the pattern; the focus policy set in the constructor is what
+    // makes any of it reachable.
+    void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 620, 620 }; }
     QSize minimumSizeHint() const override { return { 360, 360 }; }
+
+    // Where the keyboard cursor is, as (column, row). Protected so a test can
+    // read it without a copy of the geometry, the same reason boardRect() is.
+    QPoint cursorCell() const { return { m_cursorCol, m_cursorRow }; }
 
     // Protected rather than private so a test can click a square without
     // keeping its own copy of this arithmetic. It had one, and GHUB-0063 moved
@@ -87,6 +96,10 @@ private:
     void engineMoveReady(const SearchResult& result);
     void refresh(const QString& message = {});
     void announceResult();
+    // What a press on one square does: play a highlighted destination, or pick
+    // up one of your own pieces, or put down whatever was lifted. Reached by a
+    // click and by the keyboard alike, so the two cannot drift apart.
+    void pressSquare(chess::Square s);
 
     // The strip outside the frame that carries a seat's turn light: yours
     // below the board, the computer's above it, because that is where you
@@ -108,6 +121,13 @@ private:
 
     std::optional<chess::Square> m_selected;
     std::vector<chess::Move> m_selectedMoves;
+    // The keyboard cursor. Row 0 is rank 8, so row 6 is White's pawn rank and
+    // the first press of Space lifts a piece that can move. Deliberately not
+    // saved: the cursor is where you are looking, not part of the position, and
+    // adding it to saveState() would break every save in tests/saves/ for
+    // nothing a player would notice.
+    int m_cursorRow = 6;
+    int m_cursorCol = 4;
     std::optional<chess::Move> m_lastMove;
     bool m_thinking = false;
     QFutureWatcher<SearchResult>* m_search = nullptr;

@@ -142,6 +142,42 @@ waits for an animation.
 changes between two renders of a stopped game, which `everyGameAnswersTheSwitch`
 fails as restless.
 
+**A game that can be played without a mouse sets `Qt::StrongFocus` in its
+constructor, and that one line is what makes the rest reachable** (GHUB-0168).
+`HubWindow::openGame` calls `setFocus()` on every view it opens, and `setFocus()`
+does nothing under the default `Qt::NoFocus` policy — so a view can carry a
+complete `keyPressEvent` and never see a key. Ten views were in that state, and
+Canasta's Space and Return shortcuts were written, correct and unreachable.
+`boardsTakeTheKeyboard` in `tests/uitest.cpp` asserts the policy on every view
+that claims keyboard play, because nothing else fails when it is missing.
+
+**The four board games share one shape, and Sudoku is where it was written
+first**: a row and column cursor held on the view, arrow keys clamped to the
+board, Space or Return acting on the cell under it. Chess and Draughts add
+Escape, which puts a lifted piece back down — the mouse says "no" by clicking
+an empty square, and a keyboard player who has moved onto a destination and
+changed their mind should not have to hunt for one. Minesweeper adds `F`,
+because the mouse flags with the RIGHT button and a field you can dig but not
+flag is not playable.
+
+**The mouse and the keyboard go through one function, and the mouse moves the
+cursor.** `ReversiView::playAt`, `ChessView::pressSquare`,
+`DraughtsView::pressSquare` and `MinesweeperView::digAt` each hold what a press
+on one cell does, and both input paths call it. Two copies of that logic is how
+one of them goes stale; a cursor that ignored the mouse is how the two paths
+come to disagree about where you are.
+
+**The cursor is drawn by `Theme::paintCellCursor`, and it is in the save.** One
+painter for all four, so the cue reads as one system with the turn light it
+shares its gold with. It carries a dark hairline along each edge of the gold
+band, because gold on a pale board square is nearly the same colour and the band
+alone disappears on half of Chess and half of Draughts. It has TWO floors rather
+than one: Minesweeper's Expert cells are small enough that a single floor left
+the legibility switch drawing the same cursor it drew with the switch off.
+Saving it follows Sudoku, which has always saved its own — the blob version of
+each of the four went up by one, every earlier version still loads with the
+cursor left where a fresh game puts it, and `tests/saves/` is untouched.
+
 ### The hub
 
 `src/hubwindow.*` — the tile grid and one page per game in a `QStackedWidget`.
@@ -320,6 +356,8 @@ Each of these has one home:
   and anything a program reads instead carries `// untranslated: <reason>`.
   `docs/specs/GHUB-0161-translatable-text.md` owns the rules; the
   `translatable` ctest case enforces them.
+- **Playing without a mouse** — § The game contract. A new game that takes
+  keys sets `Qt::StrongFocus`; nothing else makes `setFocus()` work.
 - **Saves** — below.
 
 ### Saves

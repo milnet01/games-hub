@@ -8,6 +8,7 @@
 #include <QActionGroup>
 #include <QDataStream>
 #include <QMessageBox>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
@@ -30,10 +31,11 @@ constexpr int kThinkDelayMs = 340;
 // copy this returns costs nothing.
 QString winsKey() { return QStringLiteral("draughts/wins"); } // untranslated: settings key
 
-// Version 2 appends the draw rule's count (GHUB-0169). Version 1 predates it
-// and still loads, with the count at nought -- Canasta's route, a migration
-// rather than a break (docs/standards/versioning-overrides.md § 1).
-constexpr quint32 kBlobVersion = 2;
+// Version 2 appends the draw rule's count (GHUB-0169); version 3 appends the
+// keyboard cursor (GHUB-0168). Every earlier version still loads, with what it
+// lacks left at its default -- Canasta's route, a migration rather than a break
+// (docs/standards/versioning-overrides.md § 1).
+constexpr quint32 kBlobVersion = 3;
 // The draw should not arrive as a surprise, so the board counts down the last
 // ten moves each.
 constexpr int kDrawWarnPlies = kDrawPlies - 20;
@@ -43,6 +45,10 @@ DraughtsView::DraughtsView(QWidget* parent)
     : GameView(parent)
 {
     setMinimumSize(DraughtsView::minimumSizeHint());
+    // GHUB-0168. Without this the board takes no keys at all: HubWindow::openGame
+    // already calls setFocus() on every view, and setFocus() does nothing under
+    // the default Qt::NoFocus policy.
+    setFocusPolicy(Qt::StrongFocus);
     m_turnTimer = new QTimer(this);
     m_turnTimer->setInterval(Theme::kTurnLightTickMs);
     connect(m_turnTimer, &QTimer::timeout, this, &DraughtsView::stepTurnLight);
@@ -516,6 +522,12 @@ void DraughtsView::paintEvent(QPaintEvent*)
         }
     }
 
+    // The keyboard cursor, over the pieces: it says where the next Space lands,
+    // so nothing may sit on top of it.
+    Theme::paintCellCursor(p, QRectF(r.x() + m_cursorCol * cell, r.y() + m_cursorRow * cell,
+                                     cell, cell),
+                           Legibility::instance().enabled());
+
     paintStatusCaption(p, QRectF(rect()));
 }
 
@@ -569,11 +581,54 @@ void DraughtsView::playMove(const DraughtsMove& m)
 
 void DraughtsView::mousePressEvent(QMouseEvent* event)
 {
-    if (m_finished || m_thinking || m_toMove != m_human || event->button() != Qt::LeftButton)
+    if (event->button() != Qt::LeftButton)
         return;
 
     const std::optional<Square> clicked = squareAt(event->position());
     if (!clicked)
+        return;
+
+    // The cursor follows the mouse, so the two ways of playing never disagree
+    // about where you are on the board.
+    m_cursorRow = clicked->row;
+    m_cursorCol = clicked->col;
+    update();
+    pressSquare(*clicked);
+}
+
+void DraughtsView::keyPressEvent(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_Left:  m_cursorCol = std::max(0, m_cursorCol - 1); break;
+    case Qt::Key_Right: m_cursorCol = std::min(kBoardSize - 1, m_cursorCol + 1); break;
+    case Qt::Key_Up:    m_cursorRow = std::max(0, m_cursorRow - 1); break;
+    case Qt::Key_Down:  m_cursorRow = std::min(kBoardSize - 1, m_cursorRow + 1); break;
+    case Qt::Key_Space:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        pressSquare(Square { m_cursorRow, m_cursorCol });
+        return;
+    case Qt::Key_Escape:
+        // Putting a lifted piece back down, and abandoning a route being
+        // chosen. The mouse does this by clicking elsewhere; a player who has
+        // moved the cursor onto a destination and changed their mind should not
+        // have to hunt for a square that means "no".
+        m_selected.reset();
+        m_selectedMoves.clear();
+        m_choices.clear();
+        m_chooseStep = -1;
+        refresh();
+        return;
+    default:
+        GameView::keyPressEvent(event);
+        return;
+    }
+    update();
+}
+
+void DraughtsView::pressSquare(Square pressed)
+{
+    if (m_finished || m_thinking || m_toMove != m_human)
         return;
 
     // Already being asked which route: the dots are on the squares the
@@ -583,7 +638,7 @@ void DraughtsView::mousePressEvent(QMouseEvent* event)
         std::vector<DraughtsMove> still;
         for (const DraughtsMove& m : m_choices) {
             if (std::size_t(m_chooseStep) < m.steps.size()
-                && m.steps[std::size_t(m_chooseStep)] == *clicked)
+                && m.steps[std::size_t(m_chooseStep)] == pressed)
                 still.push_back(m);
         }
         if (still.size() > 1) {
@@ -607,7 +662,7 @@ void DraughtsView::mousePressEvent(QMouseEvent* event)
     if (m_selected) {
         std::vector<DraughtsMove> ending;
         for (const DraughtsMove& m : m_selectedMoves)
-            if (m.destination() == *clicked)
+            if (m.destination() == pressed)
                 ending.push_back(m);
 
         if (ending.size() > 1) {
@@ -624,15 +679,15 @@ void DraughtsView::mousePressEvent(QMouseEvent* event)
     }
 
     // Otherwise select one of the player's own pieces that has a move.
-    if (belongsTo(m_board.at(clicked->row, clicked->col), m_human)) {
-        std::vector<DraughtsMove> moves = movesFrom(*clicked);
+    if (belongsTo(m_board.at(pressed.row, pressed.col), m_human)) {
+        std::vector<DraughtsMove> moves = movesFrom(pressed);
         if (moves.empty()) {
             refresh(m_board.legalMoves(m_human).front().isCapture()
                         ? tr("A capture is available — you must take it.")
                         : tr("That piece has no move."));
             return;
         }
-        m_selected = clicked;
+        m_selected = pressed;
         m_selectedMoves = std::move(moves);
         refresh();
         return;
@@ -684,6 +739,7 @@ QByteArray DraughtsView::saveState() const
         out << qint8(p);
     // Version 2's tail.
     out << qint8(m_board.pliesWithoutProgress());
+    out << qint8(m_cursorRow) << qint8(m_cursorCol);
     return blob;
 }
 
@@ -749,6 +805,16 @@ bool DraughtsView::restoreState(const QByteArray& blob)
     qint8 sinceProgress = 0;
     if (version >= 2)
         in >> sinceProgress;
+
+    // The cursor, where the save carries one. A version 1 or 2 blob has
+    // nothing here and is still a clean read.
+    qint8 cursorRow = -1;
+    qint8 cursorCol = -1;
+    if (version >= 3) {
+        in >> cursorRow >> cursorCol;
+        if (in.status() != QDataStream::Ok || !DraughtsBoard::inBounds(cursorRow, cursorCol))
+            return false;
+    }
     if (in.status() != QDataStream::Ok)
         return false;
 
@@ -775,6 +841,10 @@ bool DraughtsView::restoreState(const QByteArray& blob)
     m_history.clear();
     m_thinking = false;
     m_finished = false;
+    if (cursorRow >= 0) {
+        m_cursorRow = cursorRow;
+        m_cursorCol = cursorCol;
+    }
     m_resumed = true;
     m_undoAction->setEnabled(false);
     if (m_levelGroup != nullptr)

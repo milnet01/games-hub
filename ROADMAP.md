@@ -5194,7 +5194,7 @@ open.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
 
-- 📋 [GHUB-0168] **Ten games can only be played with a mouse.**
+- 🚧 [GHUB-0168] **Ten games can only be played with a mouse.**
   Split out of GHUB-0132, whose accessible-name half shipped. This is
   a feature with design choices in it, not a sweep fix, and pretending
   otherwise is how it would get built badly.
@@ -5255,6 +5255,46 @@ open.
   in the constructor. Note HubWindow::openGame already calls setFocus()
   on every view, which does nothing under the default NoFocus policy --
   so the focus policy is the one line that makes the rest reachable.
+  Progress (2026-09-21): FIRST SLICE SHIPPED -- Chess, Reversi,
+  Draughts and Minesweeper. Each sets Qt::StrongFocus in its
+  constructor, holds a row/column cursor, clamps the arrow keys to the
+  board and acts on Space or Return. Chess and Draughts take Escape to
+  put a lifted piece back down; Minesweeper takes F, because the mouse
+  flags with the right button. Mouse and keyboard go through one
+  function per game -- playAt, pressSquare, pressSquare, digAt -- and a
+  click moves the cursor, so the two paths cannot disagree about where
+  you are. Theme::paintCellCursor draws the cue for all four, in the
+  turn light's gold with a dark hairline along each edge of the band:
+  gold on a pale square is nearly the same colour, so the band alone
+  vanishes on half of Chess and half of Draughts. It has two floors
+  rather than one, because Minesweeper's Expert cells are small enough
+  that a single floor left the legibility switch drawing the same
+  cursor it drew with the switch off.
+
+  The cursor is SAVED, which the brief did not ask for and which is the
+  one thing here worth a second look. The render-equality checks in
+  tests/uitest.cpp compare a restored game against the original pixel
+  for pixel, and an unsaved cursor breaks them. Sudoku has always saved
+  its own. So the blob version of each of the four went up by one, the
+  cursor is appended last, and every earlier version still loads with
+  the cursor left where a fresh game puts it -- a migration on the
+  route docs/standards/versioning-overrides.md section 1 and GHUB-0169
+  already took, not a break. tests/saves/ is untouched and restores
+  green.
+
+  Two checks in tests/uitest.cpp read a draughts blob positionally -- a
+  whole-blob equality and a last-byte read -- and both meant the
+  POSITION rather than the bytes. Both now strip the trailing cursor
+  and say why.
+
+  boardsTakeTheKeyboard in tests/uitest.cpp asserts the focus policy on
+  all five keyboard-playable views, the arrow clamp, Space on each of
+  the four, Escape on Chess, and F on Minesweeper. ctest 11/11 green.
+
+  STILL OPEN, unchanged and still the owner's: whether the card games
+  -- Klondike, Spider, FreeCell, Pyramid, Canasta -- and Hearts get the
+  same treatment or a different one. GHUB-0069 shares that answer. Not
+  asked, because the first slice did not need it.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.

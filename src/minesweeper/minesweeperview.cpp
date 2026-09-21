@@ -3,12 +3,14 @@
 #include "legibility.h"
 #include "scores.h"
 #include "sound.h"
+#include "theme.h"
 #include <QActionGroup>
 #include <QDataStream>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QSettings>
+#include <QKeyEvent>
 #include <QMouseEvent>
+#include <QSettings>
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
@@ -29,6 +31,11 @@ const QColor kNumberColours[9] = {
     QColor(0xff, 0x6f, 0xa5), QColor(0xd0, 0xd6, 0xdc),
 };
 
+// Blob version 2 adds the keyboard cursor (GHUB-0168). A version 1 save still
+// restores and leaves the cursor where a fresh field puts it -- the corpus in
+// tests/saves/ is version 1, and this is what keeps it readable.
+constexpr quint32 kBlobVersion = 2;
+
 constexpr QColor kCovered { 0x6b, 0x74, 0x7d };
 constexpr QColor kCoveredEdge { 0x92, 0x9d, 0xa7 };
 constexpr QColor kDug { 0x33, 0x38, 0x3d };
@@ -47,6 +54,10 @@ MinesweeperView::MinesweeperView(QWidget* parent)
 {
     setMinimumSize(MinesweeperView::minimumSizeHint());
     setMouseTracking(false);
+    // GHUB-0168. Without this the field takes no keys at all: HubWindow::openGame
+    // already calls setFocus() on every view, and setFocus() does nothing under
+    // the default Qt::NoFocus policy.
+    setFocusPolicy(Qt::StrongFocus);
 
     m_tick = new QTimer(this);
     m_tick->setInterval(500);
@@ -126,6 +137,10 @@ void MinesweeperView::newGame(int levelIndex)
     QSettings().setValue(QStringLiteral("minesweeper/level"), m_level);
     const Level& l = kLevels[m_level];
     m_field = std::make_unique<Minefield>(l.width, l.height, l.mines);
+    // The levels are different sizes, so a cursor left where Expert had it
+    // would sit off the edge of Beginner's board.
+    m_cursorRow = std::clamp(m_cursorRow, 0, l.height - 1);
+    m_cursorCol = std::clamp(m_cursorCol, 0, l.width - 1);
     m_started = false;
     m_announced = false;
     m_paused = false;
@@ -379,6 +394,13 @@ void MinesweeperView::paintEvent(QPaintEvent*)
         }
     }
 
+    // The keyboard cursor, over the squares: it says where the next Space digs,
+    // so nothing may sit on top of it. Nothing is drawn while the field is
+    // covered -- the paused branch above has already returned.
+    Theme::paintCellCursor(p, QRectF(r.x() + m_cursorCol * cell, r.y() + m_cursorRow * cell,
+                                     cell, cell),
+                           Legibility::instance().enabled());
+
     paintStatusCaption(p, QRectF(rect()));
 }
 
@@ -392,27 +414,67 @@ void MinesweeperView::mousePressEvent(QMouseEvent* event)
     if (!cellAt(event->position(), row, col))
         return;
 
+    // The cursor follows the mouse, so the two ways of playing never disagree
+    // about where you are on the field.
+    m_cursorRow = row;
+    m_cursorCol = col;
+
     if (event->button() == Qt::RightButton) {
         m_field->toggleFlag(row, col);
         Sound::instance().play(Sound::kFlag);
     } else if (event->button() == Qt::MiddleButton) {
         m_field->chord(row, col);
     } else if (event->button() == Qt::LeftButton) {
-        if (!m_started) {
-            m_started = true;
-            m_elapsedMs = 0;
-            m_clock.start();
-            m_tick->start();
-        }
-        // A left click on an already-open number chords, which is what most
-        // players expect from a modern Minesweeper.
-        if (m_field->at(row, col).revealed)
-            m_field->chord(row, col);
-        else
-            m_field->reveal(row, col);
-        if (m_field->state() != Minefield::State::Lost)
-            Sound::instance().play(Sound::kDig);
+        digAt(row, col);
     } else {
+        return;
+    }
+
+    update();
+    refresh();
+}
+
+void MinesweeperView::digAt(int row, int col)
+{
+    if (!m_started) {
+        m_started = true;
+        m_elapsedMs = 0;
+        m_clock.start();
+        m_tick->start();
+    }
+    // A dig on an already-open number chords, which is what most players
+    // expect from a modern Minesweeper.
+    if (m_field->at(row, col).revealed)
+        m_field->chord(row, col);
+    else
+        m_field->reveal(row, col);
+    if (m_field->state() != Minefield::State::Lost)
+        Sound::instance().play(Sound::kDig);
+}
+
+void MinesweeperView::keyPressEvent(QKeyEvent* event)
+{
+    if (!m_field || m_paused || m_field->state() != Minefield::State::Playing) {
+        GameView::keyPressEvent(event);
+        return;
+    }
+
+    switch (event->key()) {
+    case Qt::Key_Left:  m_cursorCol = std::max(0, m_cursorCol - 1); break;
+    case Qt::Key_Right: m_cursorCol = std::min(m_field->width() - 1, m_cursorCol + 1); break;
+    case Qt::Key_Up:    m_cursorRow = std::max(0, m_cursorRow - 1); break;
+    case Qt::Key_Down:  m_cursorRow = std::min(m_field->height() - 1, m_cursorRow + 1); break;
+    case Qt::Key_Space:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        digAt(m_cursorRow, m_cursorCol);
+        break;
+    case Qt::Key_F:
+        m_field->toggleFlag(m_cursorRow, m_cursorCol);
+        Sound::instance().play(Sound::kFlag);
+        break;
+    default:
+        GameView::keyPressEvent(event);
         return;
     }
 
@@ -446,12 +508,13 @@ QByteArray MinesweeperView::saveState() const
     out.setVersion(QDataStream::Qt_6_0);
     // The banked time, not the running clock: elapsedMs() is what the player has
     // actually spent, and it is what the best-time table will be judged against.
-    out << quint32(1) << qint32(m_level) << qint64(elapsedMs()) << m_paused;
+    out << kBlobVersion << qint32(m_level) << qint64(elapsedMs()) << m_paused;
 
     const std::vector<Minefield::Square>& squares = m_field->squares();
     out << quint32(squares.size());
     for (const Minefield::Square& s : squares)
         out << quint8((s.mine ? 1u : 0u) | (s.revealed ? 2u : 0u) | (s.flagged ? 4u : 0u));
+    out << qint16(m_cursorRow) << qint16(m_cursorCol);
     return blob;
 }
 
@@ -465,7 +528,7 @@ bool MinesweeperView::restoreState(const QByteArray& blob)
     bool paused = false;
     quint32 count = 0;
     in >> version >> level >> elapsed >> paused >> count;
-    if (version != 1 || in.status() != QDataStream::Ok)
+    if (version < 1 || version > kBlobVersion || in.status() != QDataStream::Ok)
         return false;
     // Bounded above as well as below. elapsedMs() is narrowed to int before it
     // is shown and before it is offered to Scores::recordLow, so an unbounded
@@ -497,6 +560,20 @@ bool MinesweeperView::restoreState(const QByteArray& blob)
     auto field = std::make_unique<Minefield>(l.width, l.height, l.mines);
     if (!field->restore(std::move(squares)) || field->state() != Minefield::State::Playing)
         return false;
+
+    // The cursor, where the save carries one. Read after the squares so a
+    // version 1 blob -- which has nothing here -- is still a clean read. Two
+    // bytes each, not one: Expert's field is 30 wide and 16 deep today, and a
+    // qint8 would put a wider level silently out of range.
+    if (version >= 2) {
+        qint16 cursorRow = 0;
+        qint16 cursorCol = 0;
+        in >> cursorRow >> cursorCol;
+        if (in.status() != QDataStream::Ok || !field->inBounds(cursorRow, cursorCol))
+            return false;
+        m_cursorRow = cursorRow;
+        m_cursorCol = cursorCol;
+    }
 
     m_field = std::move(field);
     m_level = level;
