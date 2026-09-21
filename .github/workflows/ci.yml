@@ -21,7 +21,7 @@ concurrency:
 # The Qt every leg tests against. release.yml carries the same line, and the
 # lint job below fails when the two disagree (GHUB-0055).
 env:
-  QT_VERSION: '6.8.3'
+  QT_VERSION: '6.11.2'
 
 jobs:
   # GHUB-0051. These three linters ran only in scripts/local-ci.sh, from a

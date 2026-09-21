@@ -63,10 +63,10 @@ are reported to The Qt Project under its
 here — but do open an issue if a release is still shipping a Qt version with
 a known advisory, because bumping it is this project's job.
 
-**Last checked: 2026-09-13**, against Qt's
+**Last checked: 2026-09-21**, against Qt's
 [list of known vulnerabilities](https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products).
-The downloads carry Qt 6.8.3, and that list names 6.8.3 in advisories fixed
-by later Qt releases. Each one is in a part of Qt the app does not link, or
-needs outside input the app does not read: an image, an SVG or XML file,
-markdown, a `data:` URL or a network connection. The app's one outside input
-is a saved game, which it parses itself. The bump is planned anyway.
+The downloads carry Qt 6.11.2, and that list does not name it as affected:
+the advisories that mention 6.11.2 name it as the release that fixes them.
+The previous pin was 6.8.3, which the list did name. The 6.8 line's fix is
+6.8.9, and the open-source mirror stops that line at 6.8.3, so the bump went
+to a newer minor instead.
