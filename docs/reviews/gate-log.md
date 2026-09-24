@@ -14,3 +14,4 @@ from a self-read.
 
 | Run | Date | Subject | Lanes | Outcome |
 |---|---|---|---|---|
+| A-20260924-8459 | 2026-09-24 | v2 adoption of Games_Hub | 0 | stopped at stage 4: hook install refused by permissions; stages 1-3 in 4246132 |
