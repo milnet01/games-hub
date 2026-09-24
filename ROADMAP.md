@@ -5,12 +5,1066 @@
 
 Genre: record
 
-A collection of desktop games in one window. Pre-1.0 (0.2.0), so the blocks
-below are phases rather than releases. Shipped items stay in the file and flip
-to ✅; `CHANGELOG.md` is the separate user-facing record.
+A collection of desktop games in one window. Open work is grouped by the
+release it is planned for, nearest first, then the work promised to no
+release. The P01 to P03 sections below hold finished and considered work,
+where it was filed before 1.0.0. Shipped items stay in the file and flip to
+✅; `CHANGELOG.md` is the separate user-facing record.
 
-Execution order is positional: work a phase top to bottom. IDs are identity
+Execution order is positional: work a release top to bottom. IDs are identity
 only, so they are not in order and are never renumbered.
+
+## 1.1.0 — Play without a mouse
+
+The next release. Its new capability is already on master, in the changelog's
+[Unreleased]: the four board games play from the keyboard, and a light shows
+whose turn it is.
+
+What remains is the Qt bump, which closes only when a tagged build carries it,
+and a current screenshot for the README.
+
+- 🚧 [GHUB-0193] **The downloads bundle Qt 6.8.3, which Qt's own advisory list names.**
+  Found by the first run of GHUB-0055's release-checklist step, 2026-09-13.
+  https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products names 6.8.3
+  in advisories fixed by 6.8.4 and later. The open-source mirror stops the 6.8
+  line at 6.8.3 (download.qt.io/online/qtsdkrepository/ lists qt6_690 onwards
+  and no qt6_684), so staying on 6.8 is not a route: the bump is to a newer
+  minor.
+
+  Exposure today looks nil, which is why this is planned rather than urgent.
+  The app links Widgets, Multimedia and Concurrent (CMakeLists.txt's
+  find_package). Each advisory against 6.8.3 is in a part of Qt it does not
+  link (Network, SVG, XML, Quick, NFC, Core5Compat) or needs outside input it
+  does not read (an image, markdown, a data: URL). SECURITY.md § Bundled Qt
+  records the check.
+
+  The candidate is 6.11.2. This machine already builds and tests against it
+  (qmake6 --version), so the suite is known green there on Linux. The mirror
+  carries qt6_6112_msvc2022_64 for Windows. With GHUB-0055 the change is one
+  QT_VERSION line in each workflow.
+
+  The risk is the release path. release.yml runs only on a tag, so a Qt bump
+  that breaks linuxdeploy-plugin-qt or windeployqt is found by the next
+  release and nowhere earlier. CI's two build legs cover the compile and the
+  tests, not the packaging. Worth either a throwaway pre-release tag or a
+  workflow_dispatch trigger on release.yml before the bump lands.
+  Progress (2026-09-21): the PIN is bumped and on master in de2afe3 --
+  one QT_VERSION line in each workflow, 6.8.3 to 6.11.2. Qt's list of
+  known vulnerabilities was re-read that day and does not name 6.11.2 as
+  affected; the advisories that mention it name it as the release that
+  fixes them. SECURITY.md section Bundled Qt carries the check and
+  replaced the previous one. ctest 11/11 green here, which is a real
+  signal for the Linux leg because this machine's system Qt is 6.11.2.
+
+  NOT shipped, deliberately. The sign is the DOWNLOADS carrying a Qt no
+  advisory names, and the downloads are built by release.yml, which runs
+  only on a tag. So this closes at the next release and not before.
+
+  Two things unverified when this note was written. The CI run for
+  de2afe3 was still in progress -- the Windows leg is the open question,
+  since nothing local drives MSVC and install-qt-action has to have
+  6.11.2 for msvc2022_64. And the packaging path is untouched by CI:
+  linuxdeploy-plugin-qt and windeployqt do not see the new Qt until a
+  tag. The item's own risk paragraph names that, and its suggestion
+  stands -- a workflow_dispatch trigger on release.yml, or a throwaway
+  pre-release tag, before the next real release relies on it.
+  **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
+  Kind: security.
+  Source: in-session-2026-09-13.
+
+- 📋 [GHUB-0028] **The README's screenshot is from a six-game build.**
+  docs/hub.png shows Reversi, Minesweeper, Solitaire, Spider, Hearts and
+  Pinball, over a status bar reading "Six games. Pick one." It is the
+  first thing anyone sees on the repository page, and it undersells the
+  collection by eight games. Everything else in README.md was brought up
+  to date on 2026-08-12; this was not, because it cannot be.
+
+  No session on this machine can replace it unaided. The existing image
+  is a real desktop capture, with KDE window decorations and a shadow,
+  and the offscreen platform an agent can drive produces no decorations
+  and cannot be screenshotted the same way. Two routes, and the choice is
+  the owner's: either he captures the hub himself and drops the file at
+  docs/hub.png, or the app gains a small --screenshot <file> option that
+  grabs its own window, which is one QWidget::grab plus a save and would
+  also make future refreshes a single command.
+
+  Worth doing either way when a game is added, since the same staleness
+  returns silently: nothing checks that the picture matches the tile
+  grid, and no test can, so it is a standing manual step.
+  **Layman:** The picture at the top of the README shows six games when there are fourteen.
+  Kind: doc-fix.
+  Source: in-session-2026-08-12.
+  Owner's call (2026-08-12): parked, neither route taken. Asked
+  directly which of the two the bullet offers he wanted — capture it
+  himself, or a --screenshot option — and the answer was to leave it for
+  now and let the README keep the six-game picture. So the --screenshot
+  option is NOT declined on its merits, it is simply unbuilt; if this is
+  picked up later both routes are still open. Stays 📋.
+  Progress (2026-09-07): the second route this bullet offers now exists,
+  built for something else. --shot photographs the hub with no --game at
+  all, so one command produces a current tile grid:
+  QT_QPA_PLATFORM=offscreen ./build/gameshub --shot docs/hub.png --size
+  1200x1100. Run today at 1200x900 and inspected: the grid is current, the
+  status bar reads "14 games. Pick one.", and only the last row is cut off,
+  which a taller --size fixes.
+
+  What has NOT changed is the reason it was parked. The shot is offscreen,
+  so it has no window decorations and no shadow, and the committed
+  docs/hub.png is a real desktop capture that has both. So the open
+  question is how the owner wants the picture to look, not whether
+  anything can produce one. Left 📋 pending that.
+  Owner's call (2026-09-21): UNPARKED, and the route is --shot.
+  Generate docs/hub.png with the app's own screenshot flag and accept
+  that it has no window decorations and no drop shadow, unlike the real
+  desktop capture committed there today. He was offered four routes and
+  picked this one: capturing it himself, --shot as-is, --shot with a
+  frame composited on afterwards, and leaving it parked.
+
+  So the open question this bullet recorded on 2026-09-07 -- "how the
+  owner wants the picture to look" -- is answered. Flatter is fine.
+
+  The command is the one this bullet already names:
+  QT_QPA_PLATFORM=offscreen ./build/gameshub --shot docs/hub.png
+  --size 1200x1100. Check the last row of tiles is not cut off; 1200x900
+  cropped it.
+
+  NOT DONE as of 2026-09-21. The file still shows six games.
+
+## 1.2.0 — The card games, by keyboard and in motion
+
+The card games and Hearts take the keyboard scheme the owner chose on
+2026-09-21: arrows between piles, Space to lift and Space again to drop.
+
+The same views gain card flights. All three items work on one lift-and-drop
+path, so they land together.
+
+- 🚧 [GHUB-0168] **Ten games can only be played with a mouse.**
+  Split out of GHUB-0132, whose accessible-name half shipped. This is
+  a feature with design choices in it, not a sweep fix, and pretending
+  otherwise is how it would get built badly.
+
+  TEN, not the nine the sweep listed -- Hearts has no keyPressEvent and
+  no focus policy either. Measured across every view: only Pinball,
+  Snake, Sudoku and 2048 have both. Canasta, Chess, Draughts, FreeCell,
+  Hearts, Klondike, Minesweeper, Pyramid, Reversi and Spider have
+  neither, and HubWindow::openGame calls setFocus() on them, which does
+  nothing under the default NoFocus policy.
+
+  Two groups, and they are not the same problem.
+
+  The four board games -- Chess, Reversi, Draughts, Minesweeper -- share
+  one shape: a cell cursor, arrow keys, Space or Return to act. Sudoku
+  already does exactly this and is the pattern to copy rather than
+  invent. Tractable, and the bigger win per line.
+
+  The card games -- Klondike, Spider, FreeCell, Pyramid, Canasta -- and
+  Hearts are harder, because their input is drag-and-drop and a keyboard
+  equivalent needs a source-then-target model that does not exist yet.
+  Canasta is the sharpest case: its Space and Return shortcuts are
+  already written and are gated on a selection only a mouse can make, so
+  they cannot be reached at all today.
+
+  Open for the owner, and worth deciding before any of it is built:
+  what the cursor looks like, whether it answers the legibility switch,
+  and whether the card games get the same treatment or a different one.
+  Doing the four board games first would be a sensible first slice.
+  Owner answered every open question on 2026-09-21. This bullet said
+  these were "open for the owner, and worth deciding before any of it is
+  built"; they are decided, and nothing here is waiting on him.
+
+  FIRST SLICE: the four board games -- Chess, Reversi, Draughts,
+  Minesweeper. Chosen over the card games and over all ten at once,
+  because they share one shape and Sudoku already implements it.
+
+  THE CURSOR: a thick gold outline on the cell, in the same gold as the
+  turn light so the two read as one system, and THICKER under the Large
+  switch. Chosen over a filled tint (sits under the piece and makes the
+  piece harder to read) and over a ring plus corner brackets (crowds the
+  piece on a small board).
+
+  NO SPEC, owner's call. spec-format.md § 1 fires twice here -- four
+  subsystems, and a real design choice this bullet names itself -- so a
+  spec was owed and was declined deliberately, on the grounds that
+  Sudoku is a working precedent to copy and the three design questions
+  were already answered. Offered a build-one-first middle route and
+  declined that too. Do not re-open this as an oversight.
+
+  NOT YET DECIDED, and still genuinely open: whether the CARD games get
+  the same treatment or a different one. That is the half GHUB-0069
+  shares, and it was not asked because the first slice does not need it.
+
+  NOT STARTED. No code written for this item as of 2026-09-21.
+  Sudoku's keyPressEvent is the pattern: a row/column cursor, arrow keys
+  clamped to the board, Space or Return to act, and Qt::StrongFocus set
+  in the constructor. Note HubWindow::openGame already calls setFocus()
+  on every view, which does nothing under the default NoFocus policy --
+  so the focus policy is the one line that makes the rest reachable.
+  Progress (2026-09-21): FIRST SLICE SHIPPED -- Chess, Reversi,
+  Draughts and Minesweeper. Each sets Qt::StrongFocus in its
+  constructor, holds a row/column cursor, clamps the arrow keys to the
+  board and acts on Space or Return. Chess and Draughts take Escape to
+  put a lifted piece back down; Minesweeper takes F, because the mouse
+  flags with the right button. Mouse and keyboard go through one
+  function per game -- playAt, pressSquare, pressSquare, digAt -- and a
+  click moves the cursor, so the two paths cannot disagree about where
+  you are. Theme::paintCellCursor draws the cue for all four, in the
+  turn light's gold with a dark hairline along each edge of the band:
+  gold on a pale square is nearly the same colour, so the band alone
+  vanishes on half of Chess and half of Draughts. It has two floors
+  rather than one, because Minesweeper's Expert cells are small enough
+  that a single floor left the legibility switch drawing the same
+  cursor it drew with the switch off.
+
+  The cursor is SAVED, which the brief did not ask for and which is the
+  one thing here worth a second look. The render-equality checks in
+  tests/uitest.cpp compare a restored game against the original pixel
+  for pixel, and an unsaved cursor breaks them. Sudoku has always saved
+  its own. So the blob version of each of the four went up by one, the
+  cursor is appended last, and every earlier version still loads with
+  the cursor left where a fresh game puts it -- a migration on the
+  route docs/standards/versioning-overrides.md section 1 and GHUB-0169
+  already took, not a break. tests/saves/ is untouched and restores
+  green.
+
+  Two checks in tests/uitest.cpp read a draughts blob positionally -- a
+  whole-blob equality and a last-byte read -- and both meant the
+  POSITION rather than the bytes. Both now strip the trailing cursor
+  and say why.
+
+  boardsTakeTheKeyboard in tests/uitest.cpp asserts the focus policy on
+  all five keyboard-playable views, the arrow clamp, Space on each of
+  the four, Escape on Chess, and F on Minesweeper. ctest 11/11 green.
+
+  STILL OPEN, unchanged and still the owner's: whether the card games
+  -- Klondike, Spider, FreeCell, Pyramid, Canasta -- and Hearts get the
+  same treatment or a different one. GHUB-0069 shares that answer. Not
+  asked, because the first slice did not need it.
+  Owner's call (2026-09-21), answering the question this item left
+  open: the card games and Hearts take the SAME scheme as the boards, not
+  a different one. An arrow-key cursor stepping left and right between
+  piles and up and down within a fanned column, Space to lift a card and
+  Space again to drop it, so there is one thing to learn across all
+  fourteen. GHUB-0069 shares that answer and is settled by it. Not
+  started; the first slice's four boards are unaffected.
+  **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
+  Kind: accessibility.
+  Source: review-code sweep 2026-08-31, split from GHUB-0132.
+
+- 📋 [GHUB-0069] **Every card move needs a drag, except the one move that does not.**
+  Klondike and FreeCell already answer part of this: a double-click sends a card
+  to its foundation, which is the most frequent move in both games and the one
+  players most resent dragging. Everything else — a run between tableau columns, a
+  card into a free cell, a Spider sequence onto another column, a Pyramid pairing
+  — is drag-only. Press, hold, travel, release, and if the release lands wrong the
+  run goes back where it came from.
+
+  A press-hold-drag over a long distance is a fine interaction for someone with a
+  steady hand and a clear view of both ends of the journey, and a poor one
+  otherwise. This project already treats that as a design constraint rather than a
+  preference everywhere else — it is why melds are drawn large, why the computer
+  pauses long enough to follow, and why the last discard is spelled out in words.
+  The input side has not had the same attention.
+
+  Click-to-select then click-to-place, alongside dragging rather than instead of
+  it. The selected run lifts exactly as it does mid-drag, the legal destinations
+  can be marked while it is held, and the second click completes or a click
+  elsewhere cancels. Chess already works this way — `ChessView` highlights
+  destinations on selection — so the interaction exists in the codebase and the
+  question is bringing the card games in line with the board games.
+
+  It costs nothing to keep drag working, and the two can share a path: a drag is
+  already a lift plus a drop, and this makes the lift and the drop independent of
+  whether the button stayed down. Whichever game gets a rules core first under
+  GHUB-0066 is the natural place to try it, since the lift/drop logic is exactly
+  what that extraction has to pull out of the mouse handlers anyway.
+  **Layman:** You have to drag cards with the mouse held down; only sending a card to a foundation can be done with a double-click.
+  Kind: accessibility.
+  Source: in-session-2026-08-20.
+
+- 🚧 [GHUB-0065] **One game animates and thirteen teleport.**
+  Canasta has card flights. Nothing else does. In every other game a card is in
+  one place, and then it is in another, with nothing in between: a deal arrives
+  fully formed, a run lands on a foundation, a trick gathers itself up. The move
+  happened and the screen reports the result.
+
+  Motion is information, and it is the kind this player can use. It answers *what
+  just changed and where did it go* -- which a redraw of the finished position
+  does not answer at all, because by the time you look, the change is over. An
+  auto-move to a foundation in Klondike, FreeCell or Spider is the clearest case:
+  cards leave on their own, several at a time, with no indication of which ones
+  went or where from.
+
+  **Reuse Canasta's design, and read its traps before writing a second
+  implementation.** They are documented and they were expensive. A card in the air
+  must be suppressed at its destination or the eye sees it twice. The match
+  between a flight and a card is consumed one per flight -- without that, two
+  identical cards arriving together suppress both destination copies and one card
+  vanishes, which is routine rather than exotic in a two-pack game. And a flight
+  carries a captured destination point, so anything that moves the layout has to
+  clear the flights first or a card lands where its target used to be.
+
+  Two boundaries. **An animation timer is a timer**, so whatever gets built here
+  owes GHUB-0046 a `deactivate()` that stops it -- adding motion to thirteen games
+  without that would multiply the exact fault that section is about. And this is a
+  large surface if taken all at once; the auto-moves above are where the ambiguity
+  actually is, and dealing animations are the pretty part rather than the useful
+  part. Start where a player currently cannot tell what happened.
+  Progress (2026-08-28): the auto-move half is done — the part the
+  bullet says to start with. Left open deliberately; the rest of the
+  surface it describes is untouched.
+
+  A correction first. The bullet's clearest case — "an auto-move to a
+  foundation, cards leave on their own, SEVERAL AT A TIME" — is not
+  behaviour this app has. KlondikeTable::autoFinishStep() exists and
+  is called by the self-test and by nothing else; no view offers it.
+  So the teleports a player actually meets are a double-click sending
+  ONE card home, and Spider harvesting a completed run. Both are now
+  animated.
+
+  src/cards/cardflight.* is the shared piece: a card, where it left,
+  where it is going, an eased position and a stagger. Presentation, so
+  it sits in GAME_VIEW_SOURCES even though it needs nothing from
+  QtWidgets — the reasoning legibility.cpp already carries. Two of
+  Canasta's three traps are handled inside it: suppressAt() consumes
+  ONE flight per answer, so two identical cards arriving together
+  suppress two destination copies rather than one twice, and a locked
+  test covers exactly that. The third cannot be — a flight carries a
+  destination captured when the card left, so the caller must clear
+  them when the layout moves. All three views therefore clear on both
+  deactivate() and applyLegibility(); the caption band comes off the
+  height these games solve their card size from, so the switch moves
+  every rect on the surface.
+
+  Each view owns a QTimer and so overrides deactivate(), which is
+  GHUB-0046's boundary and the rule CLAUDE.md states structurally
+  rather than by observation.
+
+  Spider is the starkest and got the most care: thirteen cards leave a
+  column at once, staggered so it reads as a sequence. They fly to the
+  stock corner, which is the only anchor on that surface meaning "put
+  away" — Spider draws no completed-runs pile, and the count lives in
+  the status bar, the one place this project knows the owner does not
+  read. Giving those runs a home on the play surface is a layout change
+  and a bigger item; the motion at least answers where they went.
+
+  Tested rather than eyeballed, because --shot photographs a game the
+  moment it opens and can never see a flight. flightsInTheAir() exists
+  so a check can ask what no rendered picture can answer, on the
+  precedent of SudokuView::marksFitAt. Klondike and FreeCell open fresh
+  deals until one has a home-able ace (three, both times) and assert
+  the card flies, lands and stops the timer. Spider's position is
+  BUILT — a one-suit game, King down to Two in the first column, the
+  Ace alone in the second — because no amount of poking at a random
+  deal completes a run; it then asserts all thirteen fly, that they are
+  still going after a tick that would have finished one unstaggered
+  card, and that they all arrive.
+
+  Still to do, and why this stays open: dealing animations (the bullet
+  calls them the pretty part rather than the useful part), Klondike's
+  stock and waste, Pyramid's matched pairs, the board games, and
+  Spider's harvest via dealRow rather than a drop — that path can
+  complete several runs across several columns at once and needs the
+  table to say which, where the drop path already reports its column.
+
+  Frame cost unchanged: canasta at rest 7.69 against the 7.70 recorded
+  on 2026-08-25. It costs nothing when nothing is flying. ctest 6/6.
+  Shipped in 0.5.0 (2026-08-31): the auto-move half only, so this
+  stays open. The release notes describe the work but deliberately do
+  NOT cite this id on the entry's bullet line — cut-release reads a
+  bullet-line id as a claim that the item closed, and stops the release
+  when the roadmap disagrees. The id sits in the entry's prose instead,
+  which that gate treats as a cross-reference rather than a claim. Put
+  the citation back on the bullet line when the rest lands: the deals,
+  the board games, Klondike's stock and waste, Pyramid's matched pairs,
+  and Spider's harvest via dealRow.
+  **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
+  Kind: ux.
+  Source: in-session-2026-08-20.
+
+## 1.3.0 — Getting around the app
+
+One window, one place for settings, and quicker ways between games.
+
+GHUB-0060 carries the old remembered size across rather than dropping it. That
+was the owner's call on 2026-09-24. Nothing breaks for a player who upgrades, so
+this stays a MINOR.
+
+GHUB-0030 lands with GHUB-0068, because that settings dialog is the second
+writer it waits for.
+
+- 📋 [GHUB-0060] **One window that stays where you put it, instead of fifteen remembered shapes fighting each other.**
+  **This reverses a deliberate feature, and the owner has asked for it.**
+  `hubwindow.cpp`'s `geometryKey()` stores a separate geometry per page --
+  `window/geometry/<game>` for each of the fourteen, plus `window/geometry/menu`
+  for the tile grid -- and `applyPageGeometry()` restores it on every switch. The
+  intention was that each game reopens at the size it was last played at, and
+  CLAUDE.md records it as a feature of the hub.
+
+  In use it produces exactly the reported symptom, and two details make it worse
+  than it sounds. `restoreGeometry()` restores POSITION as well as size, so the
+  window does not merely resize -- it jumps across the screen. And the tile grid
+  owns a geometry too, so a round trip of grid to Chess to grid to Spider resizes
+  and relocates the window four times. Fifteen geometries drifting apart
+  independently is not a set of remembered preferences; it is a window that will
+  not sit still.
+
+  The replacement is one key. One window geometry for the whole app, written when
+  it closes, restored when it opens, and untouched by switching pages.
+
+  **The trap that will break a naive version of this, and the pattern that already
+  solves it.** Games have different minimum sizes -- Canasta's `minimumSizeHint()`
+  returns 900x656 while the legibility switch is on -- and Qt CLAMPS a window up
+  to the current page's minimum. With one shared geometry, opening Canasta once
+  would grow the window, `rememberPage()` would write that grown size back as the
+  user's preference, and every other game would inherit it permanently. That is
+  the identical trap CLAUDE.md documents for the legibility switch, and
+  `applyLegibility` already solves it: keep the pre-clamp size and put the window
+  back on the way out. Copy that, do not reinvent it.
+
+  Two smaller things to carry. The fifteen old keys should be removed rather than
+  left behind, and CLAUDE.md warns that anything sweeping stored state has four
+  families to handle -- `display/legibility`, `donate/*`, `window/geometry/*` and
+  `saved/*` -- so touch only the one. And the first-run default is 880x680 while
+  `kFitsBesideYourWork` is 960x1000; a single remembered size makes that opening
+  number matter more than it did, since it is now the shape everything starts in.
+  Owner's call (2026-09-24): carry the old size across rather than drop
+  it. Which of the fifteen old sizes seeds the new key is still to decide when
+  this is built. Nothing breaks for an upgrading player, so this is a MINOR and
+  lands in 1.3.0. Dropping the old sizes instead would make that
+  release 2.0.0.
+  **Layman:** The window should stay the size and place you left it, rather than resizing and hopping about every time you open a game.
+  Kind: ux.
+  Source: user-request-2026-08-20.
+
+- 📋 [GHUB-0068] **There are five places to change a setting and no place to change settings.**
+  Sound is a toolbar toggle. Legibility is the toolbar toggle beside it.
+  Minesweeper's difficulty is a toolbar action inside Minesweeper. Canasta's house
+  rules are a dialog reached from inside Canasta. The donate prompt's on/off lives
+  in the donate dialog under Help. Each one is sensibly placed for the moment you
+  want it, and there is nowhere to go to see what the app can be told.
+
+  That has been survivable at fourteen games and two app-wide switches. It gets
+  worse on a schedule: GHUB-0043 adds "check for updates automatically", which is
+  the first setting with no natural home at all — it belongs to no game and to no
+  toolbar — and the first-run question it asks has to be changeable afterwards or
+  it is a decision the player is stuck with.
+
+  A single Preferences dialog, reached from a menu, holding the app-wide switches
+  — sound, volume, legibility, update checking, the donate prompt — with per-game
+  rules staying where they are. The toolbar toggles stay too; a settings dialog
+  that removes the one-click sound switch is a worse app, and this is about having
+  a place where everything is visible, not about taking the shortcuts away.
+
+  One thing to get right, because the app already has a rule about it. CLAUDE.md
+  notes that stored state comes in four families — `display/legibility`,
+  `donate/*`, `window/geometry/*` and `saved/*` — and that anything sweeping them
+  has all four to handle. A Preferences dialog is where somebody eventually adds a
+  "reset everything" button, and the warning already written down is that clearing
+  the donate switch while leaving the counter fires the prompt on the very next
+  start. If that button is built, it handles all four or it is not built.
+  **Layman:** Preferences are scattered across the toolbar, a menu and a dialog, with no single settings window.
+  Kind: ux.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
+  Not a defect today, and deliberately not fixed while filing: the
+  toolbar action is the only writer of Legibility, so its own toggled
+  signal keeps the label right, and spec GHUB-0017 §4.3 specifies
+  exactly that code after three cold-review loops.
+
+  It is a hazard for the per-game passes. The action subscribes to
+  itself, not to Legibility::changed, so a second writer — a keyboard
+  shortcut, a settings dialog, a game offering its own toggle — leaves
+  the button reading "🔍 Normal" while large play is on. Seen directly:
+  driving Legibility::instance().setEnabled(true) from a test renders a
+  toolbar still labelled Normal and unchecked.
+
+  The fix is one connect from Legibility::changed to the label, guarded
+  against the loop back through setEnabled. Worth doing the moment a
+  second writer appears, not before. Spec §10 already records that
+  nothing checks this label — it was found by rendering the toolbar,
+  which is the only thing that can see it.
+  **Layman:** The 'Large / Normal' button would show the wrong word if the setting were ever changed from somewhere other than that button.
+  Kind: accessibility.
+  Source: in-session-2026-08-14 (observed while rendering the hub for GHUB-0017).
+  Checked, not fixed (2026-09-08). This bullet's own condition is "the
+  moment a second writer appears, not before", so the question is whether
+  one has, and the answer is no.
+
+  Searched src/ for Legibility::instance().setEnabled: the only production
+  caller is still HubWindow::buildChrome's toolbar action. main.cpp reaches
+  setEnabledForSession instead, which is a different method and only inside
+  takeShot -- a --shot run exits without ever showing a toolbar, so it
+  cannot leave a label stale in front of anybody.
+
+  So the hazard is unchanged rather than realised. The trigger to watch for
+  is GHUB-0068, the settings dialog: a legibility control there is the
+  second writer this bullet predicts, and the one connect should land in the
+  same change rather than after it.
+
+- 📋 [GHUB-0061] **There is no way to get from one game to another without going back to the front door.**
+  The menu bar holds one menu, `&Help`. Every move between games goes through the
+  tile grid: Escape or the toolbar's back button to the grid, scroll to the tile,
+  click it. For a collection whose whole premise is fourteen games in one place,
+  the only route between any two of them is via the lobby.
+
+  A `&Games` menu listing all of them, each opening its page directly, is a small
+  addition that does most of the work of making this feel like one application
+  rather than a launcher. The tile grid stays exactly as it is -- it is a good
+  front door, and the miniatures are part of the character of the thing. This is
+  the route for someone who already knows where they are going.
+
+  Three things it gets for free. It makes the REGISTERED game names visible, which
+  is what `--game` takes and is a documented trip hazard -- Klondike is registered
+  as "Solitaire" and the flag wants the registered name. It gives every game a
+  natural home for a `Ctrl+<n>` accelerator if that turns out to be wanted. And it
+  scales where the grid does not: fourteen tiles at 190 pixels are already five
+  rows deep and the first-run window is 880x680, so the bottom rows need scrolling
+  on a fresh install today. Nine more games are queued and Bridge has just joined
+  them -- at twenty-four tiles the grid is a scrolling list with pictures, while a
+  menu is still a menu.
+
+  The grid's own density is worth a look at that point, but it is a separate
+  question and should not be bundled here.
+  **Layman:** To switch games you must always return to the tile screen first; there is no menu listing the games.
+  Kind: ux.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0062] **The hub knows which games you have left half-played and shows it in the one place he does not look.**
+  The save machinery works and is invisible. A game that overrides `saveState()`
+  is stored on close and restored the next time it is opened, with no dialogue
+  anywhere -- which is the right design. But the hub then announces it with
+  `m_status->setText("Carried on from where you left off.")`, and the status bar is
+  specifically the place the owner does not read during play. So the one signal
+  that a half-finished game came back sits where it will not be seen, and the
+  first indication that anything resumed is recognising the position on the board.
+
+  The tiles have the same gap in the other direction. Each paints its name, its
+  blurb and its miniature, and a game with a hand in progress is indistinguishable
+  from one that has never been opened. The information exists -- `openGame()`
+  already reads `QSettings().value(saveKey(e.name))` -- it is simply never shown
+  until you are inside.
+
+  So: mark a game that has something stored, on its tile and on the `&Games` menu
+  entry above. "Continue" rather than "Play", or a small corner mark; the wording
+  matters less than the fact that the front door stops lying about what is behind
+  it. And say it on the play surface when a game resumes rather than only in the
+  status bar.
+
+  Two cautions. **Do not read settings from `paintEvent`** -- fourteen QSettings
+  lookups per repaint of the grid, which hovers repaint constantly, is exactly the
+  kind of cost the Performance section is about; read once when the grid is shown
+  and hold it. And the existing rule that an empty state clears the stored save is
+  what keeps this honest: a finished game correctly carries no mark, so the
+  indicator means "in progress" rather than "has ever been played".
+  **Layman:** Games you have in progress look exactly like games you have never opened, and the only notice that a game resumed appears in the status bar.
+  Kind: ux.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0167] **Filter the tile grid, including a favourites filter.**
+  The grid lists every game and nothing narrows it; it already
+  scrolls, and the roadmap queue adds more.
+
+  Filter by a category the game itself declares at registration, not
+  by a list held in the filter bar -- a list is a second copy that
+  goes stale the day a game is added, and the grid is built from the
+  registry. Proposed categories, one per game: Board (Chess, Reversi,
+  Draughts), Cards (Solitaire, Spider, FreeCell, Pyramid, Hearts,
+  Canasta), Puzzle (Minesweeper, Sudoku, 2048) and Arcade (Snake,
+  Pinball). A game names exactly one, so the filters partition the
+  grid rather than overlapping.
+
+  Favourites is the second filter and is per player, so it is stored
+  state rather than a registry property -- a starred-name list beside
+  the other app-wide settings, toggled from the tile. Note the reset
+  sweep in CLAUDE.md: a new app-wide settings family has to be added
+  to whatever clears stored state, or a reset leaves it standing.
+
+  Open for the owner: whether the filters are toggle buttons above
+  the grid or a combo box, and whether "All" is a filter or the
+  absence of one.
+  **Layman:** The game list gets buttons to show only one kind of game, and a star to keep your favourites together.
+  Kind: feature.
+  Source: user-request-2026-09-02.
+
+## 1.4.0 — Getting it to other people
+
+Packages and updates.
+
+GHUB-0044 goes first, because it fixes the app-ID that the Flathub listing
+reuses.
+
+The updater follows the 1.3.0 settings dialog, which is where its first-run
+question can be changed afterwards.
+
+- 📋 [GHUB-0044] **Native packages on the openSUSE Build Service, for as many distributions as it will build for.**
+  An AppImage is a file you have to find, download and mark executable. A
+  package is one line in a terminal or one click in a software centre, and it
+  is how most Linux users expect to get software.
+
+  finbreak already publishes this way from home:milnet on build.opensuse.org
+  (FIBR-0155), so the account, the layout and the submit scripts exist; this
+  is a sibling subproject beside home:milnet:finbreak and
+  home:milnet:ants-terminal. Its recipes are far simpler than finbreak's,
+  and that is the point worth writing down: finbreak vendors a wheel closure
+  and ships a frozen Python runtime, while this is a C++ CMake project that
+  builds from source against the distribution's own Qt 6. No vendoring, no
+  bundling decision, no offline-build service -- an RPM spec, a debian/
+  recipe, an OBS _service that fetches the tagged tarball and sets the
+  version, and the reverse-DNS .desktop and AppStream metainfo files that a
+  software centre reads.
+
+  Targets follow finbreak's repository list as far as their Qt allows:
+  openSUSE Tumbleweed, Fedora, Debian and Ubuntu. Each one is a build that
+  either goes green or does not, so "as many as possible" is answered by
+  trying them rather than by predicting -- but a distribution shipping a Qt
+  older than the 6.5 CMakeLists.txt requires is a deferral with a reason
+  rather than a failure, the way Leap 15.6 was deferred for finbreak.
+
+  The app-ID is fixed at this step and every later packaging step inherits it,
+  Flathub included.
+  **Layman:** Install Games Hub with your distribution's own package manager instead of downloading a file.
+  Kind: package.
+  Source: user-request-2026-08-20.
+
+- 📋 [GHUB-0045] **On Flathub, so the software centre finds it.**
+  The distribution-agnostic half of the item above. OBS reaches users who
+  install by package manager; Flathub reaches everyone else, and it is the
+  one listing that puts the collection in front of somebody who was not
+  looking for it.
+
+  finbreak's manifest (FIBR-0159) is the model, and again this is the easier
+  case. finbreak builds on org.freedesktop.Platform carrying its own pinned
+  PySide6 wheel closure, because a finance app will not take a substituted
+  Qt; a C++ Qt Widgets game hub builds on org.kde.Platform, which ships Qt 6
+  already, so the manifest is a cmake module against a tagged release and
+  little else.
+
+  The sandbox is where the thinking goes, and it points the other way from
+  finbreak's. That app's permission list is deliberately empty of network and
+  filesystem because it holds bank statements; this one needs a display, GPU
+  acceleration and -- unlike finbreak -- sound, and it stores nothing but
+  QSettings. Whether it gets --share=network at all is the real question:
+  without it the auto-update above is unreachable inside Flatpak, which is
+  the correct answer, since Flatpak updates itself and an app that
+  overwrites its own runtime inside a sandbox is fighting the packaging.
+  So the updater must detect a Flatpak the same way it detects a distro
+  package, and stay inert.
+
+  Carries the same app-ID, .desktop and metainfo as the OBS work, which is
+  why that item fixes them and this one reuses them. A screenshot set and a
+  summary that reads well in a software centre are part of the deliverable
+  rather than an afterthought -- this is a shop window.
+  **Layman:** Games Hub appears in GNOME Software, KDE Discover and flathub.org like any other app.
+  Kind: package.
+  Source: user-request-2026-08-20.
+
+- 📋 [GHUB-0043] **The app tells you a new version exists, shows what changed, and installs it for you.**
+  A published AppImage today is a file someone downloaded once. There is no
+  route from that copy to the next one except noticing the releases page, so
+  every player is frozen at whichever version they happened to fetch.
+
+  The shape is finbreak's (FIBR-0054 / FIBR-0131), read across on 2026-08-20
+  and adapted: a check against the GitHub releases API, an offer carrying the
+  accumulated release notes for every version between the installed one and
+  the latest, and on Update now a download, an Ed25519 signature check and an
+  in-place swap of $APPIMAGE followed by a detached relaunch. Four decisions
+  were taken with the owner before any of it was written:
+
+    - Linux AppImage installs itself; Windows offers the download page. The
+      Windows artifact is a portable zip rather than one .exe, so installing
+      means replacing a whole directory. That is a separate item, not a wider
+      version of this one.
+    - Releases are signed. A public-domain Ed25519 verifier ships in-tree so
+      this needs no new library, the private key never enters the repo, and a
+      download that does not verify is deleted rather than installed.
+    - The first launch asks whether to check automatically. Nothing reaches
+      the network before that answer, and Help -> Check for updates works
+      whichever way it was answered.
+    - One check a day, not one a launch. A hub opened five times an evening
+      should cost one network call.
+
+  Inert wherever it cannot work -- a cmake --install copy, a distro package, a
+  build directory -- because an updater that overwrites a file it does not own
+  is worse than no updater. That is the same detect_installer() seam finbreak
+  uses, and it is what keeps the OBS and Flathub builds below free of any
+  outbound surface at all.
+
+  The traps finbreak paid for and this must not re-learn: a fresh AppImage
+  started before the old one has finished tearing down collides with the still
+  mounted image and dies, which reads to a player as "it closed and never came
+  back"; and the relaunch has to wait for the old process rather than assume
+  it.
+  Note (2026-08-20, found while filing the Security section): shipping this
+  falsifies the first line of SECURITY.md, which currently reads "**No
+  network.** Nothing in the app opens a socket, fetches a URL or phones home.
+  There is no telemetry and no update check." That paragraph is what tells a
+  reporter which findings matter, so it has to be rewritten in the same change
+  rather than swept afterwards — the new text owes the reader what is fetched,
+  from where, on whose consent, and how the download is verified. GHUB-0054
+  extends this item's signing key to the artifacts a person downloads by hand,
+  which is the other half of the same story.
+  **Layman:** Games Hub checks GitHub for a newer release, shows the changelog for every version you have missed, and updates itself when you say yes.
+  Kind: feature.
+  Source: user-request-2026-08-20.
+
+## 1.5.0 — Five more card games
+
+The five agreed games ship together, in one release. That was the owner's call
+on 2026-09-24.
+
+The in-app rules come first, so every new game ships with its instructions.
+
+- 📋 [GHUB-0016] **Every game explains its own rules, inside the app.**
+  Fourteen
+  games ship with no instructions anywhere — a player who has never met Reversi
+  or Canasta has to leave the program to learn it. Give `GameView` a virtual
+  returning the game's rules as rich text, so a game carries its explanation in
+  its own directory and adding a game means writing its rules next to its code;
+  the hub shows them in one shared dialog so they all look the same. Worth a
+  short line on the *controls* too — which button, what a click on the stock
+  does — because that is what a player actually gets stuck on. **Standing rule
+  2 binds harder here than anywhere else in this file: rule text is exactly
+  what a rulebook author owns, so every word is written fresh.** Medium, and
+  most of it is writing rather than code.
+  Layman: A Rules button that tells you how to play whichever game is on
+  screen.
+  Kind: doc.
+  Source: user-request-2026-08-10.
+
+- 📋 [GHUB-0011] **Gin Rummy, two-handed against the computer.**
+  Knocking,
+  deadwood, gin and undercut. Medium.
+  **Layman:** The classic two-player rummy game.
+  Kind: feature.
+  Source: user-request-2026-08-10.
+
+- 📋 [GHUB-0012] **Cribbage, two-handed, with the pegging board.**
+  The crib and
+  the show included. Medium.
+  **Layman:** Cribbage, board and all.
+  Kind: feature.
+  Source: user-request-2026-08-10.
+
+- 📋 [GHUB-0013] **Blackjack against a dealer.**
+  Traditional twenty-one. Small.
+  **Layman:** Twenty-one against the house.
+  Kind: feature.
+  Source: user-request-2026-08-10.
+
+- 📋 [GHUB-0014] **Spades, four-handed partnership trick-taking with bidding.**
+  Reuses the Hearts shape almost wholesale. Medium.
+  **Layman:** Partnership card game where you bid how many tricks you will win.
+  Kind: feature.
+  Source: user-request-2026-08-10.
+
+- 📋 [GHUB-0015] **TriPeaks, Golf and Yukon.**
+  Three more solitaires, and the
+  cheapest work on this page: they reuse the card engine and the drag-and-drop
+  wholesale. Small each.
+  **Layman:** Three more games of patience.
+  Kind: feature.
+  Source: user-request-2026-08-10.
+
+## Unscheduled
+
+Work not promised to any release. Each item names what it waits on in its own
+text: an owner decision, a measurement, or a better approach than the one tried.
+
+- 📋 [GHUB-0036] **Poker against three computer players, with chips and betting.**
+  Asked for 2026-08-19, after the owner noticed the collection has
+  no poker. Clears the standing-rules test outright: poker's rules are
+  public domain and "Poker" is a generic name, as are "five-card draw" and
+  "Texas hold'em" (a place plus a game). Nothing here needs a new asset -
+  the shared deck in cards/card.* and cards/cardart.* already draws
+  everything a poker table shows.
+
+  VARIANT NOT YET CHOSEN, and it decides most of the work. Five-card draw
+  is the smallest honest poker: one draw, two betting rounds, no shared
+  cards, and it is the variant most people learn first. Texas hold'em is
+  what most people now mean by the word, needs community cards and four
+  betting rounds, and has far more written about its strategy for an AI to
+  be measured against. Seven-card stud sits between them. Pick one and
+  ship it rather than building a variant framework nobody asked for.
+
+  What is genuinely new, and why this is bigger than another solitaire.
+  None of the fourteen games has money in it, so a chip stack, a pot, side
+  pots when someone is all-in, and a betting round that goes round until
+  the bets are level are all new machinery. A hand evaluator that ranks
+  any five of seven cards is new too, and is the one part with an exact
+  right answer - it should be checked exhaustively in the selftest rather
+  than by playing, the way chess move generation is checked by perft
+  rather than by eye.
+
+  The AI is the interesting half and the reason to give this room. Every
+  other opponent here plays a game of complete or nearly complete
+  information; poker is the first where the computer must bet on what it
+  CANNOT see, and where bluffing is part of correct play rather than a
+  flourish. Expect the four-rung ladder Canasta uses - and expect it to
+  need canastaLevelsDiffer()'s treatment, each rung played against the one
+  below it, because a poker AI that is merely described as harder is
+  indistinguishable from one that is not.
+
+  Legibility is a first-class constraint here, not a pass to be done
+  afterwards. The owner is partially sighted and reads cards by their pip
+  pattern, so the table must SAY what you hold - "two pair, kings and
+  fours" in words under the hand, the way Canasta names the last discard -
+  rather than leaving the player to read five cards and rank them. The
+  same goes for the bet: what it costs to call, in figures, without
+  arithmetic. Design that in from the start; GHUB-0017's per-game passes
+  exist because it was not.
+
+  Saving follows Chess's shape where it can: a hand in progress is a
+  position plus a betting history, and the pack check that cardcodec's
+  matchesPack does for the solitaires applies here too.
+
+  Open question for the owner beyond the variant: play money only, with a
+  stack that resets, or a running bankroll across sessions the way best
+  scores persist?
+  **Layman:** A poker table against three computer opponents, with chips to bet and a hand that says in words what you are holding.
+  Kind: feature.
+  Source: user-request-2026-08-19.
+
+- 📋 [GHUB-0059] **Bridge, with a computer partner and two computer opponents.**
+  **Safe, and on the same footing as Canasta.** Rules cannot be copyrighted, which
+  is this project's whole test, and Contract Bridge is a century old with no
+  owner: no trademark is enforced on the name the way it is on Monopoly or
+  Scrabble, and the game is played and published freely everywhere. The one thing
+  that *is* owned is the wording — the WBF's Laws of Duplicate Bridge and the
+  ACBL's publications are copyrighted as text — which is standing rule 2 and
+  nothing new. Write the rules in our own words, as every other game here already
+  does. Bridge is missing from the safe list in § Standing rules only because
+  nobody had asked for it; Whist and Euchre, its immediate relatives, are both
+  already on it.
+
+  Two-thirds of it is already built. Trick-taking, following suit, and a trick
+  resolved to a winner are the Hearts engine's shape; partnership scoring against
+  a target is Canasta's. Neither is reusable as code, but both are proven designs
+  in this codebase, and the AI approach is Canasta's rather than Chess's —
+  judgement, not search, with the four levels played against each other rather
+  than described, the way `canastaLevelsDiffer()` caught Hard being weaker than
+  Medium.
+
+  **The bidding is the game, and it is the risk.** An auction is a language, and a
+  computer partner that bids badly makes the whole thing unplayable in a way a
+  weak Hearts opponent never does — your partner's bid is information you are
+  required to act on. Pick one simple published system, implement its opening
+  bids, responses and basic conventions, and say plainly in the blurb which system
+  it plays. A vague bidder is worse than a limited one.
+
+  **The dummy is a UI shape nothing here has.** After the opening lead, declarer's
+  partner lays their hand face up and declarer plays both. So one player controls
+  two hands, one of them exposed, and when the human is dummy they watch a hand
+  they can see being played by someone else. Every other game in the collection is
+  one hand, one player.
+
+  **Size it before building it, because this is the densest screen in the
+  collection and it is the thing most likely to sink it.** Four hands of thirteen,
+  a bidding history, a contract, a trick in progress and an exposed dummy —
+  against `HubWindow::kFitsBesideYourWork` at 960 wide, and against
+  `CardArt::kFaceMinWidth` (46), below which a card has no face at all. Canasta
+  already sits at 900 wide with 60 pixels of headroom and needed a whole
+  legibility pass of its own (GHUB-0038) to get there. The owner reads cards by
+  their pip pattern rather than the corner index, so thirteen fanned cards at a
+  readable width is a hard constraint, not a layout preference. Work out whether
+  the hand fits at all before any engine is written; if it does not, the answer is
+  a different presentation rather than smaller cards.
+
+  Rubber bridge rather than duplicate: duplicate scoring compares your result
+  against other tables playing the same deal, and there are no other tables in a
+  single-player game.
+  **Layman:** The classic four-player partnership card game — you and a computer partner against two others.
+  Kind: feature.
+  Source: user-request-2026-08-20.
+
+- 📋 [GHUB-0080] **Play against another person — same machine, same network, or over the internet — with Windows and Linux in the same game.**
+  Large, and deliberately filed rather than started. What follows is
+  what is already known so a later session does not re-derive it.
+
+  **Scope is the five games that already have an opponent, and only
+  those.** Owner's call, 2026-08-20. Chess, Reversi, Draughts and
+  Hearts have one computer player; Canasta has three. In each of them
+  a human simply takes a seat the game already deals with, which is
+  what makes the work tractable.
+
+  **The other nine are out of scope and are not a later phase.** The
+  four solitaires, Sudoku, Minesweeper, Snake, 2048 and Pinball are
+  single-player by design: a second player there would mean inventing
+  a mode that does not exist (shared board, race, best-of-three on
+  score), which is a game-design question rather than a networking
+  one. Do not carry them along "for completeness".
+
+  **Cross-platform dealing is already solved for these five, and
+  narrowing the scope is what solved it.** Measured 2026-08-20. A seed
+  does not mean the same deal on two compilers -- the standard pins
+  what std::mt19937 emits but not how std::shuffle consumes it, so
+  libstdc++ and MSVC deal different hands from identical state, which
+  this project found the hard way when Canasta's AI ladder passed on
+  Linux and failed on the Windows runner with no engine change.
+
+  The fix already exists where it is needed. Hearts and Canasta are
+  the only two in-scope games that deal at all, and both go through
+  cards/card.cpp's hand-written Fisher-Yates
+  (heartsengine.cpp:52, canastaengine.cpp:457). The two remaining
+  std::shuffle sites are sudokugrid.cpp and minefield.cpp -- Sudoku
+  and Minesweeper, both out of scope. Chess, Reversi and Draughts hold
+  one mt19937 each and all three are inside the AI, picking among
+  near-equal moves; no AI runs in a human-versus-human game, and
+  nothing about it is shared state.
+
+  So the RNG hazard CLAUDE.md documents does not reach this work. It
+  would return the moment an out-of-scope game was added, which is one
+  more reason the scope line is worth holding.
+
+  **Send moves, not positions.** Chess already saves its game as the
+  move list and replays it through ChessGame::play(), which rebuilds
+  the board, the undo stack and the threefold-repetition keys from
+  one list -- and every move is re-checked against legalMoves() on
+  the way in, so a move the build would not play is refused rather
+  than half-applied. That is exactly the shape a wire protocol wants,
+  and it is the shape to prefer where a game offers the choice.
+  Canasta cannot do it (no move log, so its engine serialises
+  directly), which is why the two look different.
+
+  **The security cost is real and lands on code that has never seen a
+  stranger.** Today restoreState() only ever reads bytes this app
+  wrote. Networked play means parsing input from an untrusted peer,
+  and GHUB-0052 already records ten hand-audited parsers with nothing
+  but hands checking them. Fuzzing those is close to a prerequisite
+  rather than a nice-to-have, and SECURITY.md would need to say what
+  the app does and does not accept over a socket.
+
+  **A wire protocol is a new breaking surface.** See
+  docs/standards/versioning-overrides.md section 1 -- it would join
+  the saved game, the settings store and the command line, and
+  changing it after two people have installed different versions is
+  the thing a version number exists to warn about.
+
+  **Nothing in the tree is networked.** No QTcpSocket, no QNetwork
+  anything, and Qt6::Network is not linked. That is a clean start
+  rather than a problem, but it means CMakeLists.txt, the AppImage
+  bundle and the Windows zip all grow, and the release smoke tests
+  would want something to say about it.
+
+  **Pacing is a design constraint here, not a preference.** The
+  computer pauses nearly a second on purpose because the owner reads
+  a card by its pip pattern and needs time. A human opponent will not
+  wait, so no move clock by default, and the on-surface captions
+  added under GHUB-0071 -- what was just played, whose turn it is --
+  matter more with a person on the other end, not less.
+
+  **Three decisions needed before any of this is scoped, and they
+  change the work completely:**
+
+  1. What "local" means -- two people at one keyboard (hot-seat, no
+     networking at all, much the cheapest and worth doing first), or
+     two machines on a home network.
+  2. How two machines find each other over the internet -- a typed
+     IP and port forwarding, which is free and most people cannot do;
+     or a relay/matchmaking service, which works and is an ongoing
+     cost and an operational burden for a project shipped as an
+     AppImage and a zip.
+  3. Whether a disconnected game is abandoned, resumable, or handed
+     to the AI.
+
+  Suggested order if it goes ahead: hot-seat first (proves the games
+  can take a second human at all, no network, no security surface),
+  then direct connection on a LAN, then the internet question. Each
+  of those is its own bullet under this section when it is picked up.
+  Filed 2026-08-20 on the owner's request, for later. Not started,
+  and the three decisions listed above are what a session picking
+  this up should ask before scoping anything.
+  **Layman:** Play Chess or Hearts against a real person instead of the computer, whether they are sitting beside you or on the other side of the world, and it should not matter which system either of you uses.
+  Kind: feature.
+  Source: user-request-2026-08-20.
+
+- 📋 [GHUB-0057] **A game you have opened is never freed, which is fine at fourteen and worth watching at thirty.**
+  Games are built on first open and live for the session by design -- the lazy
+  construction is deliberate and good, and `hubwindow.cpp` contains no `delete`,
+  no `deleteLater` and no `removeWidget`. Nothing is ever taken back down.
+
+  Measured rather than feared. The tile grid holds 55.6 MB resident; opening
+  Canasta -- the heaviest game here by a distance, 2265 lines of view over a
+  108-card two-pack table -- takes it to 57.6 MB. Chess measured no increase at
+  all. So the worst case today is a couple of megabytes per game against a Qt
+  baseline of fifty-five, and a player who opens all fourteen is still nowhere
+  near a number anyone would notice. **This item is filed as a thing to know, not
+  a thing to fix.**
+
+  Two reasons it is worth a bullet anyway. It is the mechanism behind GHUB-0046:
+  the reason a Pinball table can keep simulating while you play Chess is that the
+  Pinball view is still there, fully alive, holding a running timer. Fixing the
+  timers is the fix; this is why the timers can run at all.
+
+  And the curve is the part to watch rather than the current number. Nine more
+  games are already queued in the sections above, and Bridge has just joined them.
+  Thirty games at Canasta's weight is a different conversation from fourteen. The
+  honest trigger to revisit is a measurement, not a feeling: if the roadmap's game
+  count doubles, take this reading again before deciding whether an idle game
+  should be torn down and rebuilt from its saved state -- which the save/restore
+  machinery already makes possible, since every game that keeps anything worth
+  keeping can already serialise itself and come back.
+  **Layman:** Every game you try stays in memory for the rest of the session, even if you never go back to it.
+  Kind: investigate.
+  Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0108] **How dangerous a throw is does not scale with how big the pack has grown.**
+  SUGGESTED, NOT REQUESTED. Offered to the owner on
+  2026-08-24 and not yet answered; filed as considered so it
+  survives the session rather than as planned work.
+
+  chooseDiscard weighs a card's danger as a fixed judgement.
+  But the stake is the pack, and the pack grows all hand: the
+  same throw that is nearly free on turn two can hand over
+  fifteen cards on turn twenty.
+
+  So the bar a throw has to clear should tighten with the size
+  of the pack rather than being one number. Early in a hand
+  almost anything is safe, which is also why the first-round
+  rule the owner plays (noMeldingFirstRound) costs so little.
+
+  Note the interaction with GHUB-0104 and Expert's existing
+  +50 x countRank(pile, rank) term, which is already a
+  pack-aware safety term -- this generalises it rather than
+  adding a second one beside it.
+  Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
+  Attempted 2026-08-24 and NOT shipped. The bullet's own instruction --
+  "this generalises it rather than adding a second one beside it" -- was
+  implemented literally: the per-term (1 + 0.12 * pileSize) came off the
+  unseen reading in chooseDiscard and became one weight over the whole
+  `safety` accumulator.
+
+  It measured worse, and unlike GHUB-0101 and GHUB-0104 the loss is on the
+  rung that can actually see it. Bisected against a measured baseline of
+  hard v easy 23/24 +3489, hard v medium 70/120, expert v hard 129/240:
+
+    - with GHUB-0121 only:  23/24 +3594, 67/120, 118/240
+    - with this half added: 20/24 +2959, 67/120, 113/240
+
+  hard v easy wins by thousands of points a game, so three games and a
+  sixth of the margin there carries far more information than the same
+  swing on expert v hard, which GHUB-0110 showed cannot separate anything.
+
+  The cause is understood rather than guessed, which is why this is a
+  finding and not just a failed try. discardRisk ALREADY scales with pack
+  size -- `25.0 + 0.4 * pileSize` -- so weighting the accumulator scaled
+  that term a second time and made feeding a near-canasta grow roughly
+  quadratically with the pack, drowning the hand-value terms that decide
+  an ordinary throw.
+
+  So the bullet's premise is right and its prescription is wrong: the
+  accumulator is not one thing that can take one weight, because one of
+  its terms already carries the reading. A future attempt has to either
+  take discardRisk's own pileSize term out first (it is checked directly
+  by canastaDiscardRisk, so that is a visible change, not a quiet one), or
+  weight only the terms that lack one -- Hard's -2.5 * shown and Expert's
+  +50 * countRank -- and leave discardRisk alone.
+
+  The single pack-size weight that DOES ship is the one that was always
+  there, on the unseen term, and it now carries a comment pointing here.
+  **Layman:** Handing over three cards is a nuisance; handing over fifteen can lose the hand -- so a throw should have to be safer as the pack grows.
+  Kind: feature.
+  Source: claude-suggestion-2026-08-24.
 
 ## P01 — Shipped
 
@@ -127,50 +1181,21 @@ only, so they are not in order and are never renumbered.
 
 The number is DERIVED from the work, not chosen. Since 1.0.0 shipped on
 2026-09-08 the global ladder in ~/.claude/standards/versioning.md § 2 is in
-force, and it is the OPPOSITE of the one this project used inside 0.x: a new
-game is now a MINOR, where it used to be a PATCH. Three ordered tests over the
-whole [Unreleased] section decide it. Does anything stop working for someone who
-upgrades? MAJOR. Does anything let a user do something they could not before, or
-mark something deprecated? MINOR. Otherwise PATCH.
+force. Three ordered tests over the whole [Unreleased] section decide it. Does
+anything stop working for someone who upgrades? MAJOR. Does anything let a user
+do something they could not before, or mark something deprecated? MINOR.
+Otherwise PATCH. So a new game is a MINOR on its own, and a release of fixes,
+docs, CI or memory work alone is a PATCH.
 
-So there is no bar to set the way there was for 1.0. The next release carrying
-any capability is 1.1.0, whatever else is in it. What follows is the ORDER the
-work is meant to land in; the numbers fall out of it.
+The numbers on the release headings at the top of this file are therefore a
+forecast, and the ORDER is the plan. A release that turns out to carry a break
+becomes the next MAJOR, and every heading after it moves up with it.
 
 Releases are NAMED as well as numbered, from 2026-09-08. SemVer deliberately
 refuses to say how big a release was, and a name says it without corrupting the
 number that warns about breakage. Put a Theme: line in the changelog section and
-cut-release reads it into the release title — "1.1.0 — Play without a mouse".
-
-Group 1, play without a mouse. GHUB-0168 (ten games are mouse-only), GHUB-0069
-(every card move needs a drag except one), GHUB-0030 (the toolbar label goes
-stale), GHUB-0063 (a soft light on whose turn it is), GHUB-0064 (the pip shape
-depends on the OS font). First, because the owner is partially sighted and this
-is the group where the current state is a barrier rather than an inconvenience.
-GHUB-0168 is the one that wants a spec before anyone builds: ten views binding
-to one shared pattern is spec-format.md § 1's own test.
-
-Group 2, getting around the app. GHUB-0060 (one window, not fifteen remembered
-shapes), GHUB-0061 (no way between games without the front door), GHUB-0062
-(half-played games are invisible), GHUB-0068 (five places to change a setting),
-GHUB-0167 (filter the tile grid).
-
-Group 3, getting it to other people. GHUB-0044 (openSUSE Build Service),
-GHUB-0045 (Flathub), GHUB-0043 (the app tells you a new version exists). 1.0.0
-made a downloaded build checkable, which is the precondition this group was
-waiting on.
-
-Group 4, new games. GHUB-0011 Gin Rummy, GHUB-0012 Cribbage, GHUB-0013
-Blackjack, GHUB-0014 Spades, GHUB-0015 TriPeaks/Golf/Yukon, GHUB-0036 Poker,
-GHUB-0059 Bridge. Each ONE is a MINOR on its own now, so seven games alone walk
-the number from 1.x to roughly 1.11. Batching them is a choice worth making
-deliberately; inside 0.x it made no difference and now it does.
-
-Group 5, playing other people. GHUB-0080, and it is much larger than anything
-above it.
-
-Everything else — fixes, docs, CI and the memory items — carries a PATCH on its
-own.
+cut-release reads it into the release title. The theme on each release heading
+is that name.
 
 2.0.0 is a COST, not a goal. It arrives when a break is worth taking, and
 docs/standards/versioning-overrides.md § 1 names the surfaces that would force
@@ -179,10 +1204,11 @@ settings key or the meaning of its value, --game's registered names, --version's
 "Games " prefix, the keyboard shortcuts, and — once GHUB-0044 and GHUB-0045 land
 — install paths and option names, because an integrator counts.
 
-Two open items sit on that surface: GHUB-0060 changes how window geometry is
-remembered, and GHUB-0068 could re-home settings keys. If both are taken, take
-them in the SAME release. Doing them separately costs a 2.0.0 and later a 3.0.0
-for one kind of change.
+GHUB-0060 sits on that surface, because it retires fifteen window-geometry keys.
+The owner chose on 2026-09-24 to carry the old size across instead, which keeps
+1.3.0 a MINOR. GHUB-0068 could re-home settings keys too, which is why the two
+share a release: taken separately, a break in each would cost two majors for one
+kind of change.
 
 ## P02 — Queued
 
@@ -570,117 +1596,6 @@ double-clicking a file.
   **Layman:** A way to support the project from inside the game, using the same donation links the repository already lists.
   Kind: feature.
   Source: user-request-2026-08-19.
-
-- 📋 [GHUB-0043] **The app tells you a new version exists, shows what changed, and installs it for you.**
-  A published AppImage today is a file someone downloaded once. There is no
-  route from that copy to the next one except noticing the releases page, so
-  every player is frozen at whichever version they happened to fetch.
-
-  The shape is finbreak's (FIBR-0054 / FIBR-0131), read across on 2026-08-20
-  and adapted: a check against the GitHub releases API, an offer carrying the
-  accumulated release notes for every version between the installed one and
-  the latest, and on Update now a download, an Ed25519 signature check and an
-  in-place swap of $APPIMAGE followed by a detached relaunch. Four decisions
-  were taken with the owner before any of it was written:
-
-    - Linux AppImage installs itself; Windows offers the download page. The
-      Windows artifact is a portable zip rather than one .exe, so installing
-      means replacing a whole directory. That is a separate item, not a wider
-      version of this one.
-    - Releases are signed. A public-domain Ed25519 verifier ships in-tree so
-      this needs no new library, the private key never enters the repo, and a
-      download that does not verify is deleted rather than installed.
-    - The first launch asks whether to check automatically. Nothing reaches
-      the network before that answer, and Help -> Check for updates works
-      whichever way it was answered.
-    - One check a day, not one a launch. A hub opened five times an evening
-      should cost one network call.
-
-  Inert wherever it cannot work -- a cmake --install copy, a distro package, a
-  build directory -- because an updater that overwrites a file it does not own
-  is worse than no updater. That is the same detect_installer() seam finbreak
-  uses, and it is what keeps the OBS and Flathub builds below free of any
-  outbound surface at all.
-
-  The traps finbreak paid for and this must not re-learn: a fresh AppImage
-  started before the old one has finished tearing down collides with the still
-  mounted image and dies, which reads to a player as "it closed and never came
-  back"; and the relaunch has to wait for the old process rather than assume
-  it.
-  Note (2026-08-20, found while filing the Security section): shipping this
-  falsifies the first line of SECURITY.md, which currently reads "**No
-  network.** Nothing in the app opens a socket, fetches a URL or phones home.
-  There is no telemetry and no update check." That paragraph is what tells a
-  reporter which findings matter, so it has to be rewritten in the same change
-  rather than swept afterwards — the new text owes the reader what is fetched,
-  from where, on whose consent, and how the download is verified. GHUB-0054
-  extends this item's signing key to the artifacts a person downloads by hand,
-  which is the other half of the same story.
-  **Layman:** Games Hub checks GitHub for a newer release, shows the changelog for every version you have missed, and updates itself when you say yes.
-  Kind: feature.
-  Source: user-request-2026-08-20.
-
-- 📋 [GHUB-0044] **Native packages on the openSUSE Build Service, for as many distributions as it will build for.**
-  An AppImage is a file you have to find, download and mark executable. A
-  package is one line in a terminal or one click in a software centre, and it
-  is how most Linux users expect to get software.
-
-  finbreak already publishes this way from home:milnet on build.opensuse.org
-  (FIBR-0155), so the account, the layout and the submit scripts exist; this
-  is a sibling subproject beside home:milnet:finbreak and
-  home:milnet:ants-terminal. Its recipes are far simpler than finbreak's,
-  and that is the point worth writing down: finbreak vendors a wheel closure
-  and ships a frozen Python runtime, while this is a C++ CMake project that
-  builds from source against the distribution's own Qt 6. No vendoring, no
-  bundling decision, no offline-build service -- an RPM spec, a debian/
-  recipe, an OBS _service that fetches the tagged tarball and sets the
-  version, and the reverse-DNS .desktop and AppStream metainfo files that a
-  software centre reads.
-
-  Targets follow finbreak's repository list as far as their Qt allows:
-  openSUSE Tumbleweed, Fedora, Debian and Ubuntu. Each one is a build that
-  either goes green or does not, so "as many as possible" is answered by
-  trying them rather than by predicting -- but a distribution shipping a Qt
-  older than the 6.5 CMakeLists.txt requires is a deferral with a reason
-  rather than a failure, the way Leap 15.6 was deferred for finbreak.
-
-  The app-ID is fixed at this step and every later packaging step inherits it,
-  Flathub included.
-  **Layman:** Install Games Hub with your distribution's own package manager instead of downloading a file.
-  Kind: package.
-  Source: user-request-2026-08-20.
-
-- 📋 [GHUB-0045] **On Flathub, so the software centre finds it.**
-  The distribution-agnostic half of the item above. OBS reaches users who
-  install by package manager; Flathub reaches everyone else, and it is the
-  one listing that puts the collection in front of somebody who was not
-  looking for it.
-
-  finbreak's manifest (FIBR-0159) is the model, and again this is the easier
-  case. finbreak builds on org.freedesktop.Platform carrying its own pinned
-  PySide6 wheel closure, because a finance app will not take a substituted
-  Qt; a C++ Qt Widgets game hub builds on org.kde.Platform, which ships Qt 6
-  already, so the manifest is a cmake module against a tagged release and
-  little else.
-
-  The sandbox is where the thinking goes, and it points the other way from
-  finbreak's. That app's permission list is deliberately empty of network and
-  filesystem because it holds bank statements; this one needs a display, GPU
-  acceleration and -- unlike finbreak -- sound, and it stores nothing but
-  QSettings. Whether it gets --share=network at all is the real question:
-  without it the auto-update above is unreachable inside Flatpak, which is
-  the correct answer, since Flatpak updates itself and an app that
-  overwrites its own runtime inside a sandbox is fighting the packaging.
-  So the updater must detect a Flatpak the same way it detects a distro
-  package, and stay inert.
-
-  Carries the same app-ID, .desktop and metainfo as the OBS work, which is
-  why that item fixes them and this one reuses them. A screenshot set and a
-  summary that reads well in a software centre are part of the deliverable
-  rather than an afterthought -- this is a shop window.
-  **Layman:** Games Hub appears in GNOME Software, KDE Discover and flathub.org like any other app.
-  Kind: package.
-  Source: user-request-2026-08-20.
 
 - 💭 [GHUB-0076] **A release candidate cannot be tagged at all — the verify job rejects the suffix.**
   release.yml's verify job compares the WHOLE tag against
@@ -1737,55 +2652,6 @@ than any amount of hardening applied to an app with no sockets.
   Kind: security.
   Source: in-session-2026-09-07.
 
-- 🚧 [GHUB-0193] **The downloads bundle Qt 6.8.3, which Qt's own advisory list names.**
-  Found by the first run of GHUB-0055's release-checklist step, 2026-09-13.
-  https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products names 6.8.3
-  in advisories fixed by 6.8.4 and later. The open-source mirror stops the 6.8
-  line at 6.8.3 (download.qt.io/online/qtsdkrepository/ lists qt6_690 onwards
-  and no qt6_684), so staying on 6.8 is not a route: the bump is to a newer
-  minor.
-
-  Exposure today looks nil, which is why this is planned rather than urgent.
-  The app links Widgets, Multimedia and Concurrent (CMakeLists.txt's
-  find_package). Each advisory against 6.8.3 is in a part of Qt it does not
-  link (Network, SVG, XML, Quick, NFC, Core5Compat) or needs outside input it
-  does not read (an image, markdown, a data: URL). SECURITY.md § Bundled Qt
-  records the check.
-
-  The candidate is 6.11.2. This machine already builds and tests against it
-  (qmake6 --version), so the suite is known green there on Linux. The mirror
-  carries qt6_6112_msvc2022_64 for Windows. With GHUB-0055 the change is one
-  QT_VERSION line in each workflow.
-
-  The risk is the release path. release.yml runs only on a tag, so a Qt bump
-  that breaks linuxdeploy-plugin-qt or windeployqt is found by the next
-  release and nowhere earlier. CI's two build legs cover the compile and the
-  tests, not the packaging. Worth either a throwaway pre-release tag or a
-  workflow_dispatch trigger on release.yml before the bump lands.
-  Progress (2026-09-21): the PIN is bumped and on master in de2afe3 --
-  one QT_VERSION line in each workflow, 6.8.3 to 6.11.2. Qt's list of
-  known vulnerabilities was re-read that day and does not name 6.11.2 as
-  affected; the advisories that mention it name it as the release that
-  fixes them. SECURITY.md section Bundled Qt carries the check and
-  replaced the previous one. ctest 11/11 green here, which is a real
-  signal for the Linux leg because this machine's system Qt is 6.11.2.
-
-  NOT shipped, deliberately. The sign is the DOWNLOADS carrying a Qt no
-  advisory names, and the downloads are built by release.yml, which runs
-  only on a tag. So this closes at the next release and not before.
-
-  Two things unverified when this note was written. The CI run for
-  de2afe3 was still in progress -- the Windows leg is the open question,
-  since nothing local drives MSVC and install-qt-action has to have
-  6.11.2 for msvc2022_64. And the packaging path is untouched by CI:
-  linuxdeploy-plugin-qt and windeployqt do not see the new Qt until a
-  tag. The item's own risk paragraph names that, and its suggestion
-  stands -- a workflow_dispatch trigger on release.yml, or a throwaway
-  pre-release tag, before the next real release relies on it.
-  **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
-  Kind: security.
-  Source: in-session-2026-09-13.
-
 ### 🧠 Memory
 
 Measured before written, on 2026-08-20: the hub sitting on the tile grid holds
@@ -1884,36 +2750,6 @@ fourteen games and worth watching at thirty.
   Kind: perf.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0057] **A game you have opened is never freed, which is fine at fourteen and worth watching at thirty.**
-  Games are built on first open and live for the session by design -- the lazy
-  construction is deliberate and good, and `hubwindow.cpp` contains no `delete`,
-  no `deleteLater` and no `removeWidget`. Nothing is ever taken back down.
-
-  Measured rather than feared. The tile grid holds 55.6 MB resident; opening
-  Canasta -- the heaviest game here by a distance, 2265 lines of view over a
-  108-card two-pack table -- takes it to 57.6 MB. Chess measured no increase at
-  all. So the worst case today is a couple of megabytes per game against a Qt
-  baseline of fifty-five, and a player who opens all fourteen is still nowhere
-  near a number anyone would notice. **This item is filed as a thing to know, not
-  a thing to fix.**
-
-  Two reasons it is worth a bullet anyway. It is the mechanism behind GHUB-0046:
-  the reason a Pinball table can keep simulating while you play Chess is that the
-  Pinball view is still there, fully alive, holding a running timer. Fixing the
-  timers is the fix; this is why the timers can run at all.
-
-  And the curve is the part to watch rather than the current number. Nine more
-  games are already queued in the sections above, and Bridge has just joined them.
-  Thirty games at Canasta's weight is a different conversation from fourteen. The
-  honest trigger to revisit is a measurement, not a feeling: if the roadmap's game
-  count doubles, take this reading again before deciding whether an idle game
-  should be torn down and rebuilt from its saved state -- which the save/restore
-  machinery already makes possible, since every game that keeps anything worth
-  keeping can already serialise itself and come back.
-  **Layman:** Every game you try stays in memory for the rest of the session, even if you never go back to it.
-  Kind: investigate.
-  Source: in-session-2026-08-20.
-
 - ✅ [GHUB-0058] **The sound effects are never deleted, and that will drown out the leak checking GHUB-0052 needs.**
   `Sound::play()` builds `kVoices` (4) `QSoundEffect` objects the first time an
   effect is asked for, so a full session can reach 68 of them across the 17 files
@@ -1983,104 +2819,6 @@ the same complaint from a different angle, which is that the app gives you no
 way to go from one game to another and no sign of what you already have in
 
 progress.
-
-- 📋 [GHUB-0060] **One window that stays where you put it, instead of fifteen remembered shapes fighting each other.**
-  **This reverses a deliberate feature, and the owner has asked for it.**
-  `hubwindow.cpp`'s `geometryKey()` stores a separate geometry per page --
-  `window/geometry/<game>` for each of the fourteen, plus `window/geometry/menu`
-  for the tile grid -- and `applyPageGeometry()` restores it on every switch. The
-  intention was that each game reopens at the size it was last played at, and
-  CLAUDE.md records it as a feature of the hub.
-
-  In use it produces exactly the reported symptom, and two details make it worse
-  than it sounds. `restoreGeometry()` restores POSITION as well as size, so the
-  window does not merely resize -- it jumps across the screen. And the tile grid
-  owns a geometry too, so a round trip of grid to Chess to grid to Spider resizes
-  and relocates the window four times. Fifteen geometries drifting apart
-  independently is not a set of remembered preferences; it is a window that will
-  not sit still.
-
-  The replacement is one key. One window geometry for the whole app, written when
-  it closes, restored when it opens, and untouched by switching pages.
-
-  **The trap that will break a naive version of this, and the pattern that already
-  solves it.** Games have different minimum sizes -- Canasta's `minimumSizeHint()`
-  returns 900x656 while the legibility switch is on -- and Qt CLAMPS a window up
-  to the current page's minimum. With one shared geometry, opening Canasta once
-  would grow the window, `rememberPage()` would write that grown size back as the
-  user's preference, and every other game would inherit it permanently. That is
-  the identical trap CLAUDE.md documents for the legibility switch, and
-  `applyLegibility` already solves it: keep the pre-clamp size and put the window
-  back on the way out. Copy that, do not reinvent it.
-
-  Two smaller things to carry. The fifteen old keys should be removed rather than
-  left behind, and CLAUDE.md warns that anything sweeping stored state has four
-  families to handle -- `display/legibility`, `donate/*`, `window/geometry/*` and
-  `saved/*` -- so touch only the one. And the first-run default is 880x680 while
-  `kFitsBesideYourWork` is 960x1000; a single remembered size makes that opening
-  number matter more than it did, since it is now the shape everything starts in.
-  **Layman:** The window should stay the size and place you left it, rather than resizing and hopping about every time you open a game.
-  Kind: ux.
-  Source: user-request-2026-08-20.
-
-- 📋 [GHUB-0061] **There is no way to get from one game to another without going back to the front door.**
-  The menu bar holds one menu, `&Help`. Every move between games goes through the
-  tile grid: Escape or the toolbar's back button to the grid, scroll to the tile,
-  click it. For a collection whose whole premise is fourteen games in one place,
-  the only route between any two of them is via the lobby.
-
-  A `&Games` menu listing all of them, each opening its page directly, is a small
-  addition that does most of the work of making this feel like one application
-  rather than a launcher. The tile grid stays exactly as it is -- it is a good
-  front door, and the miniatures are part of the character of the thing. This is
-  the route for someone who already knows where they are going.
-
-  Three things it gets for free. It makes the REGISTERED game names visible, which
-  is what `--game` takes and is a documented trip hazard -- Klondike is registered
-  as "Solitaire" and the flag wants the registered name. It gives every game a
-  natural home for a `Ctrl+<n>` accelerator if that turns out to be wanted. And it
-  scales where the grid does not: fourteen tiles at 190 pixels are already five
-  rows deep and the first-run window is 880x680, so the bottom rows need scrolling
-  on a fresh install today. Nine more games are queued and Bridge has just joined
-  them -- at twenty-four tiles the grid is a scrolling list with pictures, while a
-  menu is still a menu.
-
-  The grid's own density is worth a look at that point, but it is a separate
-  question and should not be bundled here.
-  **Layman:** To switch games you must always return to the tile screen first; there is no menu listing the games.
-  Kind: ux.
-  Source: in-session-2026-08-20.
-
-- 📋 [GHUB-0062] **The hub knows which games you have left half-played and shows it in the one place he does not look.**
-  The save machinery works and is invisible. A game that overrides `saveState()`
-  is stored on close and restored the next time it is opened, with no dialogue
-  anywhere -- which is the right design. But the hub then announces it with
-  `m_status->setText("Carried on from where you left off.")`, and the status bar is
-  specifically the place the owner does not read during play. So the one signal
-  that a half-finished game came back sits where it will not be seen, and the
-  first indication that anything resumed is recognising the position on the board.
-
-  The tiles have the same gap in the other direction. Each paints its name, its
-  blurb and its miniature, and a game with a hand in progress is indistinguishable
-  from one that has never been opened. The information exists -- `openGame()`
-  already reads `QSettings().value(saveKey(e.name))` -- it is simply never shown
-  until you are inside.
-
-  So: mark a game that has something stored, on its tile and on the `&Games` menu
-  entry above. "Continue" rather than "Play", or a small corner mark; the wording
-  matters less than the fact that the front door stops lying about what is behind
-  it. And say it on the play surface when a game resumes rather than only in the
-  status bar.
-
-  Two cautions. **Do not read settings from `paintEvent`** -- fourteen QSettings
-  lookups per repaint of the grid, which hovers repaint constantly, is exactly the
-  kind of cost the Performance section is about; read once when the grid is shown
-  and hold it. And the existing rule that an empty state clears the stored save is
-  what keeps this honest: a finished game correctly carries no mark, so the
-  indicator means "in progress" rather than "has ever been played".
-  **Layman:** Games you have in progress look exactly like games you have never opened, and the only notice that a game resumed appears in the status bar.
-  Kind: ux.
-  Source: in-session-2026-08-20.
 
 - ✅ [GHUB-0067] **A saved game survives a clean exit and nothing else, and two copies of the app quietly overwrite each other.**
   Two halves of one question: when is progress actually written to disk?
@@ -2155,36 +2893,6 @@ progress.
   asserts the timer runs on a game page and stops on the tile grid.
   **Layman:** If the app crashes, the game you were in is lost — and opening it twice means whichever copy you close last wipes the other's saves.
   Kind: fix.
-  Source: in-session-2026-08-20.
-
-- 📋 [GHUB-0068] **There are five places to change a setting and no place to change settings.**
-  Sound is a toolbar toggle. Legibility is the toolbar toggle beside it.
-  Minesweeper's difficulty is a toolbar action inside Minesweeper. Canasta's house
-  rules are a dialog reached from inside Canasta. The donate prompt's on/off lives
-  in the donate dialog under Help. Each one is sensibly placed for the moment you
-  want it, and there is nowhere to go to see what the app can be told.
-
-  That has been survivable at fourteen games and two app-wide switches. It gets
-  worse on a schedule: GHUB-0043 adds "check for updates automatically", which is
-  the first setting with no natural home at all — it belongs to no game and to no
-  toolbar — and the first-run question it asks has to be changeable afterwards or
-  it is a decision the player is stuck with.
-
-  A single Preferences dialog, reached from a menu, holding the app-wide switches
-  — sound, volume, legibility, update checking, the donate prompt — with per-game
-  rules staying where they are. The toolbar toggles stay too; a settings dialog
-  that removes the one-click sound switch is a worse app, and this is about having
-  a place where everything is visible, not about taking the shortcuts away.
-
-  One thing to get right, because the app already has a rule about it. CLAUDE.md
-  notes that stored state comes in four families — `display/legibility`,
-  `donate/*`, `window/geometry/*` and `saved/*` — and that anything sweeping them
-  has all four to handle. A Preferences dialog is where somebody eventually adds a
-  "reset everything" button, and the warning already written down is that clearing
-  the donate switch while leaving the counter fires the prompt on the very next
-  start. If that button is built, it handles all four or it is not built.
-  **Layman:** Preferences are scattered across the toolbar, a menu and a dialog, with no single settings window.
-  Kind: ux.
   Source: in-session-2026-08-20.
 
 - ✅ [GHUB-0074] **Snake and Hearts kept playing after you left them.**
@@ -2442,32 +3150,6 @@ progress.
   **Layman:** On Windows a typo in a command-line option pops a dialog and hangs rather than printing an error.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
-
-- 📋 [GHUB-0167] **Filter the tile grid, including a favourites filter.**
-  The grid lists every game and nothing narrows it; it already
-  scrolls, and the roadmap queue adds more.
-
-  Filter by a category the game itself declares at registration, not
-  by a list held in the filter bar -- a list is a second copy that
-  goes stale the day a game is added, and the grid is built from the
-  registry. Proposed categories, one per game: Board (Chess, Reversi,
-  Draughts), Cards (Solitaire, Spider, FreeCell, Pyramid, Hearts,
-  Canasta), Puzzle (Minesweeper, Sudoku, 2048) and Arcade (Snake,
-  Pinball). A game names exactly one, so the filters partition the
-  grid rather than overlapping.
-
-  Favourites is the second filter and is per player, so it is stored
-  state rather than a registry property -- a starred-name list beside
-  the other app-wide settings, toggled from the tile. Note the reset
-  sweep in CLAUDE.md: a new app-wide settings family has to be added
-  to whatever clears stored state, or a reset leaves it standing.
-
-  Open for the owner: whether the filters are toggle buttons above
-  the grid or a combo box, and whether "All" is a filter or the
-  absence of one.
-  **Layman:** The game list gets buttons to show only one kind of game, and a star to keep your favourites together.
-  Kind: feature.
-  Source: user-request-2026-09-02.
 
 - ✅ [GHUB-0184] **Canasta's toolbar is dense enough to push the legibility switch out of reach.**
   Measured with --shot at three widths. At 1920 the whole toolbar fits with
@@ -2741,106 +3423,6 @@ draws, whether or not it has had one.
   face (Canasta's centre strip, the hub's tiles) are text beside words
   and stay text.
   **Layman:** The club, diamond, heart and spade symbols are typed as text, so they look different on different computers instead of being drawn by us.
-  Kind: ux.
-  Source: in-session-2026-08-20.
-
-- 🚧 [GHUB-0065] **One game animates and thirteen teleport.**
-  Canasta has card flights. Nothing else does. In every other game a card is in
-  one place, and then it is in another, with nothing in between: a deal arrives
-  fully formed, a run lands on a foundation, a trick gathers itself up. The move
-  happened and the screen reports the result.
-
-  Motion is information, and it is the kind this player can use. It answers *what
-  just changed and where did it go* -- which a redraw of the finished position
-  does not answer at all, because by the time you look, the change is over. An
-  auto-move to a foundation in Klondike, FreeCell or Spider is the clearest case:
-  cards leave on their own, several at a time, with no indication of which ones
-  went or where from.
-
-  **Reuse Canasta's design, and read its traps before writing a second
-  implementation.** They are documented and they were expensive. A card in the air
-  must be suppressed at its destination or the eye sees it twice. The match
-  between a flight and a card is consumed one per flight -- without that, two
-  identical cards arriving together suppress both destination copies and one card
-  vanishes, which is routine rather than exotic in a two-pack game. And a flight
-  carries a captured destination point, so anything that moves the layout has to
-  clear the flights first or a card lands where its target used to be.
-
-  Two boundaries. **An animation timer is a timer**, so whatever gets built here
-  owes GHUB-0046 a `deactivate()` that stops it -- adding motion to thirteen games
-  without that would multiply the exact fault that section is about. And this is a
-  large surface if taken all at once; the auto-moves above are where the ambiguity
-  actually is, and dealing animations are the pretty part rather than the useful
-  part. Start where a player currently cannot tell what happened.
-  Progress (2026-08-28): the auto-move half is done — the part the
-  bullet says to start with. Left open deliberately; the rest of the
-  surface it describes is untouched.
-
-  A correction first. The bullet's clearest case — "an auto-move to a
-  foundation, cards leave on their own, SEVERAL AT A TIME" — is not
-  behaviour this app has. KlondikeTable::autoFinishStep() exists and
-  is called by the self-test and by nothing else; no view offers it.
-  So the teleports a player actually meets are a double-click sending
-  ONE card home, and Spider harvesting a completed run. Both are now
-  animated.
-
-  src/cards/cardflight.* is the shared piece: a card, where it left,
-  where it is going, an eased position and a stagger. Presentation, so
-  it sits in GAME_VIEW_SOURCES even though it needs nothing from
-  QtWidgets — the reasoning legibility.cpp already carries. Two of
-  Canasta's three traps are handled inside it: suppressAt() consumes
-  ONE flight per answer, so two identical cards arriving together
-  suppress two destination copies rather than one twice, and a locked
-  test covers exactly that. The third cannot be — a flight carries a
-  destination captured when the card left, so the caller must clear
-  them when the layout moves. All three views therefore clear on both
-  deactivate() and applyLegibility(); the caption band comes off the
-  height these games solve their card size from, so the switch moves
-  every rect on the surface.
-
-  Each view owns a QTimer and so overrides deactivate(), which is
-  GHUB-0046's boundary and the rule CLAUDE.md states structurally
-  rather than by observation.
-
-  Spider is the starkest and got the most care: thirteen cards leave a
-  column at once, staggered so it reads as a sequence. They fly to the
-  stock corner, which is the only anchor on that surface meaning "put
-  away" — Spider draws no completed-runs pile, and the count lives in
-  the status bar, the one place this project knows the owner does not
-  read. Giving those runs a home on the play surface is a layout change
-  and a bigger item; the motion at least answers where they went.
-
-  Tested rather than eyeballed, because --shot photographs a game the
-  moment it opens and can never see a flight. flightsInTheAir() exists
-  so a check can ask what no rendered picture can answer, on the
-  precedent of SudokuView::marksFitAt. Klondike and FreeCell open fresh
-  deals until one has a home-able ace (three, both times) and assert
-  the card flies, lands and stops the timer. Spider's position is
-  BUILT — a one-suit game, King down to Two in the first column, the
-  Ace alone in the second — because no amount of poking at a random
-  deal completes a run; it then asserts all thirteen fly, that they are
-  still going after a tick that would have finished one unstaggered
-  card, and that they all arrive.
-
-  Still to do, and why this stays open: dealing animations (the bullet
-  calls them the pretty part rather than the useful part), Klondike's
-  stock and waste, Pyramid's matched pairs, the board games, and
-  Spider's harvest via dealRow rather than a drop — that path can
-  complete several runs across several columns at once and needs the
-  table to say which, where the drop path already reports its column.
-
-  Frame cost unchanged: canasta at rest 7.69 against the 7.70 recorded
-  on 2026-08-25. It costs nothing when nothing is flying. ctest 6/6.
-  Shipped in 0.5.0 (2026-08-31): the auto-move half only, so this
-  stays open. The release notes describe the work but deliberately do
-  NOT cite this id on the entry's bullet line — cut-release reads a
-  bullet-line id as a claim that the item closed, and stops the release
-  when the roadmap disagrees. The id sits in the entry's prose instead,
-  which that gate treats as a cross-reference rather than a claim. Put
-  the citation back on the bullet line when the rest lands: the deals,
-  the board games, Klondike's stock and waste, Pyramid's matched pairs,
-  and Spider's harvest via dealRow.
-  **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
 
@@ -3230,344 +3812,7 @@ draws, whether or not it has had one.
   Kind: fix.
   Source: close-findings sweep on GHUB-0154, 2026-09-08.
 
-### 🎨 Games agreed and not yet started
-
-Asked for on 2026-08-10, in the order agreed. All are traditional or
-public-domain; see the standing rules for why each is safe.
-
-- 📋 [GHUB-0011] **Gin Rummy, two-handed against the computer.**
-  Knocking,
-  deadwood, gin and undercut. Medium.
-  **Layman:** The classic two-player rummy game.
-  Kind: feature.
-  Source: user-request-2026-08-10.
-
-- 📋 [GHUB-0012] **Cribbage, two-handed, with the pegging board.**
-  The crib and
-  the show included. Medium.
-  **Layman:** Cribbage, board and all.
-  Kind: feature.
-  Source: user-request-2026-08-10.
-
-- 📋 [GHUB-0013] **Blackjack against a dealer.**
-  Traditional twenty-one. Small.
-  **Layman:** Twenty-one against the house.
-  Kind: feature.
-  Source: user-request-2026-08-10.
-
-- 📋 [GHUB-0014] **Spades, four-handed partnership trick-taking with bidding.**
-  Reuses the Hearts shape almost wholesale. Medium.
-  **Layman:** Partnership card game where you bid how many tricks you will win.
-  Kind: feature.
-  Source: user-request-2026-08-10.
-
-- 📋 [GHUB-0015] **TriPeaks, Golf and Yukon.**
-  Three more solitaires, and the
-  cheapest work on this page: they reuse the card engine and the drag-and-drop
-  wholesale. Small each.
-  **Layman:** Three more games of patience.
-  Kind: feature.
-  Source: user-request-2026-08-10.
-
-- 📋 [GHUB-0036] **Poker against three computer players, with chips and betting.**
-  Asked for 2026-08-19, after the owner noticed the collection has
-  no poker. Clears the standing-rules test outright: poker's rules are
-  public domain and "Poker" is a generic name, as are "five-card draw" and
-  "Texas hold'em" (a place plus a game). Nothing here needs a new asset -
-  the shared deck in cards/card.* and cards/cardart.* already draws
-  everything a poker table shows.
-
-  VARIANT NOT YET CHOSEN, and it decides most of the work. Five-card draw
-  is the smallest honest poker: one draw, two betting rounds, no shared
-  cards, and it is the variant most people learn first. Texas hold'em is
-  what most people now mean by the word, needs community cards and four
-  betting rounds, and has far more written about its strategy for an AI to
-  be measured against. Seven-card stud sits between them. Pick one and
-  ship it rather than building a variant framework nobody asked for.
-
-  What is genuinely new, and why this is bigger than another solitaire.
-  None of the fourteen games has money in it, so a chip stack, a pot, side
-  pots when someone is all-in, and a betting round that goes round until
-  the bets are level are all new machinery. A hand evaluator that ranks
-  any five of seven cards is new too, and is the one part with an exact
-  right answer - it should be checked exhaustively in the selftest rather
-  than by playing, the way chess move generation is checked by perft
-  rather than by eye.
-
-  The AI is the interesting half and the reason to give this room. Every
-  other opponent here plays a game of complete or nearly complete
-  information; poker is the first where the computer must bet on what it
-  CANNOT see, and where bluffing is part of correct play rather than a
-  flourish. Expect the four-rung ladder Canasta uses - and expect it to
-  need canastaLevelsDiffer()'s treatment, each rung played against the one
-  below it, because a poker AI that is merely described as harder is
-  indistinguishable from one that is not.
-
-  Legibility is a first-class constraint here, not a pass to be done
-  afterwards. The owner is partially sighted and reads cards by their pip
-  pattern, so the table must SAY what you hold - "two pair, kings and
-  fours" in words under the hand, the way Canasta names the last discard -
-  rather than leaving the player to read five cards and rank them. The
-  same goes for the bet: what it costs to call, in figures, without
-  arithmetic. Design that in from the start; GHUB-0017's per-game passes
-  exist because it was not.
-
-  Saving follows Chess's shape where it can: a hand in progress is a
-  position plus a betting history, and the pack check that cardcodec's
-  matchesPack does for the solitaires applies here too.
-
-  Open question for the owner beyond the variant: play money only, with a
-  stack that resets, or a running bankroll across sessions the way best
-  scores persist?
-  **Layman:** A poker table against three computer opponents, with chips to bet and a hand that says in words what you are holding.
-  Kind: feature.
-  Source: user-request-2026-08-19.
-
-- 📋 [GHUB-0059] **Bridge, with a computer partner and two computer opponents.**
-  **Safe, and on the same footing as Canasta.** Rules cannot be copyrighted, which
-  is this project's whole test, and Contract Bridge is a century old with no
-  owner: no trademark is enforced on the name the way it is on Monopoly or
-  Scrabble, and the game is played and published freely everywhere. The one thing
-  that *is* owned is the wording — the WBF's Laws of Duplicate Bridge and the
-  ACBL's publications are copyrighted as text — which is standing rule 2 and
-  nothing new. Write the rules in our own words, as every other game here already
-  does. Bridge is missing from the safe list in § Standing rules only because
-  nobody had asked for it; Whist and Euchre, its immediate relatives, are both
-  already on it.
-
-  Two-thirds of it is already built. Trick-taking, following suit, and a trick
-  resolved to a winner are the Hearts engine's shape; partnership scoring against
-  a target is Canasta's. Neither is reusable as code, but both are proven designs
-  in this codebase, and the AI approach is Canasta's rather than Chess's —
-  judgement, not search, with the four levels played against each other rather
-  than described, the way `canastaLevelsDiffer()` caught Hard being weaker than
-  Medium.
-
-  **The bidding is the game, and it is the risk.** An auction is a language, and a
-  computer partner that bids badly makes the whole thing unplayable in a way a
-  weak Hearts opponent never does — your partner's bid is information you are
-  required to act on. Pick one simple published system, implement its opening
-  bids, responses and basic conventions, and say plainly in the blurb which system
-  it plays. A vague bidder is worse than a limited one.
-
-  **The dummy is a UI shape nothing here has.** After the opening lead, declarer's
-  partner lays their hand face up and declarer plays both. So one player controls
-  two hands, one of them exposed, and when the human is dummy they watch a hand
-  they can see being played by someone else. Every other game in the collection is
-  one hand, one player.
-
-  **Size it before building it, because this is the densest screen in the
-  collection and it is the thing most likely to sink it.** Four hands of thirteen,
-  a bidding history, a contract, a trick in progress and an exposed dummy —
-  against `HubWindow::kFitsBesideYourWork` at 960 wide, and against
-  `CardArt::kFaceMinWidth` (46), below which a card has no face at all. Canasta
-  already sits at 900 wide with 60 pixels of headroom and needed a whole
-  legibility pass of its own (GHUB-0038) to get there. The owner reads cards by
-  their pip pattern rather than the corner index, so thirteen fanned cards at a
-  readable width is a hard constraint, not a layout preference. Work out whether
-  the hand fits at all before any engine is written; if it does not, the answer is
-  a different presentation rather than smaller cards.
-
-  Rubber bridge rather than duplicate: duplicate scoring compares your result
-  against other tables playing the same deal, and there are no other tables in a
-  single-player game.
-  **Layman:** The classic four-player partnership card game — you and a computer partner against two others.
-  Kind: feature.
-  Source: user-request-2026-08-20.
-
-### 🌐 Playing against other people
-
-Every game here plays against the computer or against nobody. This section is
-
-for playing against a person — at the same machine, on the same network, or
-
-over the internet — and for the pieces that need to exist first.
-
-Four games have an opponent at all today (Chess, Reversi, Draughts, Hearts,
-
-and Canasta makes five with three computer seats); the other nine are
-
-solitaire, puzzle or arcade games where a second player has no meaning without
-
-inventing one.
-
-- 📋 [GHUB-0080] **Play against another person — same machine, same network, or over the internet — with Windows and Linux in the same game.**
-  Large, and deliberately filed rather than started. What follows is
-  what is already known so a later session does not re-derive it.
-
-  **Scope is the five games that already have an opponent, and only
-  those.** Owner's call, 2026-08-20. Chess, Reversi, Draughts and
-  Hearts have one computer player; Canasta has three. In each of them
-  a human simply takes a seat the game already deals with, which is
-  what makes the work tractable.
-
-  **The other nine are out of scope and are not a later phase.** The
-  four solitaires, Sudoku, Minesweeper, Snake, 2048 and Pinball are
-  single-player by design: a second player there would mean inventing
-  a mode that does not exist (shared board, race, best-of-three on
-  score), which is a game-design question rather than a networking
-  one. Do not carry them along "for completeness".
-
-  **Cross-platform dealing is already solved for these five, and
-  narrowing the scope is what solved it.** Measured 2026-08-20. A seed
-  does not mean the same deal on two compilers -- the standard pins
-  what std::mt19937 emits but not how std::shuffle consumes it, so
-  libstdc++ and MSVC deal different hands from identical state, which
-  this project found the hard way when Canasta's AI ladder passed on
-  Linux and failed on the Windows runner with no engine change.
-
-  The fix already exists where it is needed. Hearts and Canasta are
-  the only two in-scope games that deal at all, and both go through
-  cards/card.cpp's hand-written Fisher-Yates
-  (heartsengine.cpp:52, canastaengine.cpp:457). The two remaining
-  std::shuffle sites are sudokugrid.cpp and minefield.cpp -- Sudoku
-  and Minesweeper, both out of scope. Chess, Reversi and Draughts hold
-  one mt19937 each and all three are inside the AI, picking among
-  near-equal moves; no AI runs in a human-versus-human game, and
-  nothing about it is shared state.
-
-  So the RNG hazard CLAUDE.md documents does not reach this work. It
-  would return the moment an out-of-scope game was added, which is one
-  more reason the scope line is worth holding.
-
-  **Send moves, not positions.** Chess already saves its game as the
-  move list and replays it through ChessGame::play(), which rebuilds
-  the board, the undo stack and the threefold-repetition keys from
-  one list -- and every move is re-checked against legalMoves() on
-  the way in, so a move the build would not play is refused rather
-  than half-applied. That is exactly the shape a wire protocol wants,
-  and it is the shape to prefer where a game offers the choice.
-  Canasta cannot do it (no move log, so its engine serialises
-  directly), which is why the two look different.
-
-  **The security cost is real and lands on code that has never seen a
-  stranger.** Today restoreState() only ever reads bytes this app
-  wrote. Networked play means parsing input from an untrusted peer,
-  and GHUB-0052 already records ten hand-audited parsers with nothing
-  but hands checking them. Fuzzing those is close to a prerequisite
-  rather than a nice-to-have, and SECURITY.md would need to say what
-  the app does and does not accept over a socket.
-
-  **A wire protocol is a new breaking surface.** See
-  docs/standards/versioning-overrides.md section 1 -- it would join
-  the saved game, the settings store and the command line, and
-  changing it after two people have installed different versions is
-  the thing a version number exists to warn about.
-
-  **Nothing in the tree is networked.** No QTcpSocket, no QNetwork
-  anything, and Qt6::Network is not linked. That is a clean start
-  rather than a problem, but it means CMakeLists.txt, the AppImage
-  bundle and the Windows zip all grow, and the release smoke tests
-  would want something to say about it.
-
-  **Pacing is a design constraint here, not a preference.** The
-  computer pauses nearly a second on purpose because the owner reads
-  a card by its pip pattern and needs time. A human opponent will not
-  wait, so no move clock by default, and the on-surface captions
-  added under GHUB-0071 -- what was just played, whose turn it is --
-  matter more with a person on the other end, not less.
-
-  **Three decisions needed before any of this is scoped, and they
-  change the work completely:**
-
-  1. What "local" means -- two people at one keyboard (hot-seat, no
-     networking at all, much the cheapest and worth doing first), or
-     two machines on a home network.
-  2. How two machines find each other over the internet -- a typed
-     IP and port forwarding, which is free and most people cannot do;
-     or a relay/matchmaking service, which works and is an ongoing
-     cost and an operational burden for a project shipped as an
-     AppImage and a zip.
-  3. Whether a disconnected game is abandoned, resumable, or handed
-     to the AI.
-
-  Suggested order if it goes ahead: hot-seat first (proves the games
-  can take a second human at all, no network, no security surface),
-  then direct connection on a LAN, then the internet question. Each
-  of those is its own bullet under this section when it is picked up.
-  Filed 2026-08-20 on the owner's request, for later. Not started,
-  and the three decisions listed above are what a session picking
-  this up should ask before scoping anything.
-  **Layman:** Play Chess or Hearts against a real person instead of the computer, whether they are sitting beside you or on the other side of the world, and it should not matter which system either of you uses.
-  Kind: feature.
-  Source: user-request-2026-08-20.
-
 ### 📚 Documentation
-
-- 📋 [GHUB-0016] **Every game explains its own rules, inside the app.**
-  Fourteen
-  games ship with no instructions anywhere — a player who has never met Reversi
-  or Canasta has to leave the program to learn it. Give `GameView` a virtual
-  returning the game's rules as rich text, so a game carries its explanation in
-  its own directory and adding a game means writing its rules next to its code;
-  the hub shows them in one shared dialog so they all look the same. Worth a
-  short line on the *controls* too — which button, what a click on the stock
-  does — because that is what a player actually gets stuck on. **Standing rule
-  2 binds harder here than anywhere else in this file: rule text is exactly
-  what a rulebook author owns, so every word is written fresh.** Medium, and
-  most of it is writing rather than code.
-  Layman: A Rules button that tells you how to play whichever game is on
-  screen.
-  Kind: doc.
-  Source: user-request-2026-08-10.
-
-- 📋 [GHUB-0028] **The README's screenshot is from a six-game build.**
-  docs/hub.png shows Reversi, Minesweeper, Solitaire, Spider, Hearts and
-  Pinball, over a status bar reading "Six games. Pick one." It is the
-  first thing anyone sees on the repository page, and it undersells the
-  collection by eight games. Everything else in README.md was brought up
-  to date on 2026-08-12; this was not, because it cannot be.
-
-  No session on this machine can replace it unaided. The existing image
-  is a real desktop capture, with KDE window decorations and a shadow,
-  and the offscreen platform an agent can drive produces no decorations
-  and cannot be screenshotted the same way. Two routes, and the choice is
-  the owner's: either he captures the hub himself and drops the file at
-  docs/hub.png, or the app gains a small --screenshot <file> option that
-  grabs its own window, which is one QWidget::grab plus a save and would
-  also make future refreshes a single command.
-
-  Worth doing either way when a game is added, since the same staleness
-  returns silently: nothing checks that the picture matches the tile
-  grid, and no test can, so it is a standing manual step.
-  **Layman:** The picture at the top of the README shows six games when there are fourteen.
-  Kind: doc-fix.
-  Source: in-session-2026-08-12.
-  Owner's call (2026-08-12): parked, neither route taken. Asked
-  directly which of the two the bullet offers he wanted — capture it
-  himself, or a --screenshot option — and the answer was to leave it for
-  now and let the README keep the six-game picture. So the --screenshot
-  option is NOT declined on its merits, it is simply unbuilt; if this is
-  picked up later both routes are still open. Stays 📋.
-  Progress (2026-09-07): the second route this bullet offers now exists,
-  built for something else. --shot photographs the hub with no --game at
-  all, so one command produces a current tile grid:
-  QT_QPA_PLATFORM=offscreen ./build/gameshub --shot docs/hub.png --size
-  1200x1100. Run today at 1200x900 and inspected: the grid is current, the
-  status bar reads "14 games. Pick one.", and only the last row is cut off,
-  which a taller --size fixes.
-
-  What has NOT changed is the reason it was parked. The shot is offscreen,
-  so it has no window decorations and no shadow, and the committed
-  docs/hub.png is a real desktop capture that has both. So the open
-  question is how the owner wants the picture to look, not whether
-  anything can produce one. Left 📋 pending that.
-  Owner's call (2026-09-21): UNPARKED, and the route is --shot.
-  Generate docs/hub.png with the app's own screenshot flag and accept
-  that it has no window decorations and no drop shadow, unlike the real
-  desktop capture committed there today. He was offered four routes and
-  picked this one: capturing it himself, --shot as-is, --shot with a
-  frame composited on afterwards, and leaving it parked.
-
-  So the open question this bullet recorded on 2026-09-07 -- "how the
-  owner wants the picture to look" -- is answered. Flatter is fine.
-
-  The command is the one this bullet already names:
-  QT_QPA_PLATFORM=offscreen ./build/gameshub --shot docs/hub.png
-  --size 1200x1100. Check the last row of tiles is not cut off; 1200x900
-  cropped it.
-
-  NOT DONE as of 2026-09-21. The file still shows six games.
 
 - ✅ [GHUB-0029] **cardart.h says it serves three games; it serves six.**
   The header comment on src/cards/cardart.h reads "Shared card drawing
@@ -4382,42 +4627,6 @@ open.
   count correction note above already records that it became twelve
   when Sudoku shipped, and it is now zero.
 
-- 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
-  Not a defect today, and deliberately not fixed while filing: the
-  toolbar action is the only writer of Legibility, so its own toggled
-  signal keeps the label right, and spec GHUB-0017 §4.3 specifies
-  exactly that code after three cold-review loops.
-
-  It is a hazard for the per-game passes. The action subscribes to
-  itself, not to Legibility::changed, so a second writer — a keyboard
-  shortcut, a settings dialog, a game offering its own toggle — leaves
-  the button reading "🔍 Normal" while large play is on. Seen directly:
-  driving Legibility::instance().setEnabled(true) from a test renders a
-  toolbar still labelled Normal and unchecked.
-
-  The fix is one connect from Legibility::changed to the label, guarded
-  against the loop back through setEnabled. Worth doing the moment a
-  second writer appears, not before. Spec §10 already records that
-  nothing checks this label — it was found by rendering the toolbar,
-  which is the only thing that can see it.
-  **Layman:** The 'Large / Normal' button would show the wrong word if the setting were ever changed from somewhere other than that button.
-  Kind: accessibility.
-  Source: in-session-2026-08-14 (observed while rendering the hub for GHUB-0017).
-  Checked, not fixed (2026-09-08). This bullet's own condition is "the
-  moment a second writer appears, not before", so the question is whether
-  one has, and the answer is no.
-
-  Searched src/ for Legibility::instance().setEnabled: the only production
-  caller is still HubWindow::buildChrome's toolbar action. main.cpp reaches
-  setEnabledForSession instead, which is a different method and only inside
-  takeShot -- a --shot run exits without ever showing a toolbar, so it
-  cannot leave a label stale in front of anybody.
-
-  So the hazard is unchanged rather than realised. The trigger to watch for
-  is GHUB-0068, the settings dialog: a legibility control there is the
-  second writer this bullet predicts, and the one connect should land in the
-  same change rather than after it.
-
 - ✅ [GHUB-0037] **The legibility switch itself, hub-owned and read by every game that has had its pass.**
   Split out of GHUB-0017 (2026-08-19) so the release ledger can say what
   actually shipped. GHUB-0017 stays open: it tracks the fourteen per-game
@@ -4575,37 +4784,6 @@ open.
   **Layman:** When the game refuses a move it explains why in a place he never looks; the explanation should be on the table.
   Kind: accessibility.
   Source: in-session-2026-08-19 (owner: "with a game my focus is on the play area and thus I never look at the status bar").
-
-- 📋 [GHUB-0069] **Every card move needs a drag, except the one move that does not.**
-  Klondike and FreeCell already answer part of this: a double-click sends a card
-  to its foundation, which is the most frequent move in both games and the one
-  players most resent dragging. Everything else — a run between tableau columns, a
-  card into a free cell, a Spider sequence onto another column, a Pyramid pairing
-  — is drag-only. Press, hold, travel, release, and if the release lands wrong the
-  run goes back where it came from.
-
-  A press-hold-drag over a long distance is a fine interaction for someone with a
-  steady hand and a clear view of both ends of the journey, and a poor one
-  otherwise. This project already treats that as a design constraint rather than a
-  preference everywhere else — it is why melds are drawn large, why the computer
-  pauses long enough to follow, and why the last discard is spelled out in words.
-  The input side has not had the same attention.
-
-  Click-to-select then click-to-place, alongside dragging rather than instead of
-  it. The selected run lifts exactly as it does mid-drag, the legal destinations
-  can be marked while it is held, and the second click completes or a click
-  elsewhere cancels. Chess already works this way — `ChessView` highlights
-  destinations on selection — so the interaction exists in the codebase and the
-  question is bringing the card games in line with the board games.
-
-  It costs nothing to keep drag working, and the two can share a path: a drag is
-  already a lift plus a drop, and this makes the lift and the drop independent of
-  whether the button stayed down. Whichever game gets a rules core first under
-  GHUB-0066 is the natural place to try it, since the lift/drop logic is exactly
-  what that extraction has to pull out of the mouse handlers anyway.
-  **Layman:** You have to drag cards with the mouse held down; only sending a card to a foundation can be done with a double-click.
-  Kind: accessibility.
-  Source: in-session-2026-08-20.
 
 - ✅ [GHUB-0070] **Nothing in the app has a name a screen reader could read — recorded, with an honest doubt about whether it is wanted.**
   There is not one `setAccessibleName`, `setAccessibleDescription` or
@@ -5216,118 +5394,6 @@ open.
   **Layman:** At wide, short windows the sentence on the table can cover your own card, and the obvious fix broke Windows twice.
   Kind: fix.
   Source: review-code sweep 2026-08-31.
-
-- 🚧 [GHUB-0168] **Ten games can only be played with a mouse.**
-  Split out of GHUB-0132, whose accessible-name half shipped. This is
-  a feature with design choices in it, not a sweep fix, and pretending
-  otherwise is how it would get built badly.
-
-  TEN, not the nine the sweep listed -- Hearts has no keyPressEvent and
-  no focus policy either. Measured across every view: only Pinball,
-  Snake, Sudoku and 2048 have both. Canasta, Chess, Draughts, FreeCell,
-  Hearts, Klondike, Minesweeper, Pyramid, Reversi and Spider have
-  neither, and HubWindow::openGame calls setFocus() on them, which does
-  nothing under the default NoFocus policy.
-
-  Two groups, and they are not the same problem.
-
-  The four board games -- Chess, Reversi, Draughts, Minesweeper -- share
-  one shape: a cell cursor, arrow keys, Space or Return to act. Sudoku
-  already does exactly this and is the pattern to copy rather than
-  invent. Tractable, and the bigger win per line.
-
-  The card games -- Klondike, Spider, FreeCell, Pyramid, Canasta -- and
-  Hearts are harder, because their input is drag-and-drop and a keyboard
-  equivalent needs a source-then-target model that does not exist yet.
-  Canasta is the sharpest case: its Space and Return shortcuts are
-  already written and are gated on a selection only a mouse can make, so
-  they cannot be reached at all today.
-
-  Open for the owner, and worth deciding before any of it is built:
-  what the cursor looks like, whether it answers the legibility switch,
-  and whether the card games get the same treatment or a different one.
-  Doing the four board games first would be a sensible first slice.
-  Owner answered every open question on 2026-09-21. This bullet said
-  these were "open for the owner, and worth deciding before any of it is
-  built"; they are decided, and nothing here is waiting on him.
-
-  FIRST SLICE: the four board games -- Chess, Reversi, Draughts,
-  Minesweeper. Chosen over the card games and over all ten at once,
-  because they share one shape and Sudoku already implements it.
-
-  THE CURSOR: a thick gold outline on the cell, in the same gold as the
-  turn light so the two read as one system, and THICKER under the Large
-  switch. Chosen over a filled tint (sits under the piece and makes the
-  piece harder to read) and over a ring plus corner brackets (crowds the
-  piece on a small board).
-
-  NO SPEC, owner's call. spec-format.md § 1 fires twice here -- four
-  subsystems, and a real design choice this bullet names itself -- so a
-  spec was owed and was declined deliberately, on the grounds that
-  Sudoku is a working precedent to copy and the three design questions
-  were already answered. Offered a build-one-first middle route and
-  declined that too. Do not re-open this as an oversight.
-
-  NOT YET DECIDED, and still genuinely open: whether the CARD games get
-  the same treatment or a different one. That is the half GHUB-0069
-  shares, and it was not asked because the first slice does not need it.
-
-  NOT STARTED. No code written for this item as of 2026-09-21.
-  Sudoku's keyPressEvent is the pattern: a row/column cursor, arrow keys
-  clamped to the board, Space or Return to act, and Qt::StrongFocus set
-  in the constructor. Note HubWindow::openGame already calls setFocus()
-  on every view, which does nothing under the default NoFocus policy --
-  so the focus policy is the one line that makes the rest reachable.
-  Progress (2026-09-21): FIRST SLICE SHIPPED -- Chess, Reversi,
-  Draughts and Minesweeper. Each sets Qt::StrongFocus in its
-  constructor, holds a row/column cursor, clamps the arrow keys to the
-  board and acts on Space or Return. Chess and Draughts take Escape to
-  put a lifted piece back down; Minesweeper takes F, because the mouse
-  flags with the right button. Mouse and keyboard go through one
-  function per game -- playAt, pressSquare, pressSquare, digAt -- and a
-  click moves the cursor, so the two paths cannot disagree about where
-  you are. Theme::paintCellCursor draws the cue for all four, in the
-  turn light's gold with a dark hairline along each edge of the band:
-  gold on a pale square is nearly the same colour, so the band alone
-  vanishes on half of Chess and half of Draughts. It has two floors
-  rather than one, because Minesweeper's Expert cells are small enough
-  that a single floor left the legibility switch drawing the same
-  cursor it drew with the switch off.
-
-  The cursor is SAVED, which the brief did not ask for and which is the
-  one thing here worth a second look. The render-equality checks in
-  tests/uitest.cpp compare a restored game against the original pixel
-  for pixel, and an unsaved cursor breaks them. Sudoku has always saved
-  its own. So the blob version of each of the four went up by one, the
-  cursor is appended last, and every earlier version still loads with
-  the cursor left where a fresh game puts it -- a migration on the
-  route docs/standards/versioning-overrides.md section 1 and GHUB-0169
-  already took, not a break. tests/saves/ is untouched and restores
-  green.
-
-  Two checks in tests/uitest.cpp read a draughts blob positionally -- a
-  whole-blob equality and a last-byte read -- and both meant the
-  POSITION rather than the bytes. Both now strip the trailing cursor
-  and say why.
-
-  boardsTakeTheKeyboard in tests/uitest.cpp asserts the focus policy on
-  all five keyboard-playable views, the arrow clamp, Space on each of
-  the four, Escape on Chess, and F on Minesweeper. ctest 11/11 green.
-
-  STILL OPEN, unchanged and still the owner's: whether the card games
-  -- Klondike, Spider, FreeCell, Pyramid, Canasta -- and Hearts get the
-  same treatment or a different one. GHUB-0069 shares that answer. Not
-  asked, because the first slice did not need it.
-  Owner's call (2026-09-21), answering the question this item left
-  open: the card games and Hearts take the SAME scheme as the boards, not
-  a different one. An arrow-key cursor stepping left and right between
-  piles and up and down within a fanned column, Space to lift a card and
-  Space again to drop it, so there is one thing to learn across all
-  fourteen. GHUB-0069 shares that answer and is settled by it. Not
-  started; the first slice's four boards are unaffected.
-  **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
-  Kind: accessibility.
-  Source: review-code sweep 2026-08-31, split from GHUB-0132.
 
 - 💭 [GHUB-0183] **The games themselves still tell a screen reader nothing.**
   GHUB-0070 delivered the floor -- the tiles and the toolbar have spoken
@@ -6232,64 +6298,6 @@ open.
 
   Suite green at 544 checks, ctest 6/6.
   **Layman:** If being caught with no canasta turns your whole table against you, getting any canasta down early is worth far more than its bonus.
-  Kind: feature.
-  Source: claude-suggestion-2026-08-24.
-
-- 📋 [GHUB-0108] **How dangerous a throw is does not scale with how big the pack has grown.**
-  SUGGESTED, NOT REQUESTED. Offered to the owner on
-  2026-08-24 and not yet answered; filed as considered so it
-  survives the session rather than as planned work.
-
-  chooseDiscard weighs a card's danger as a fixed judgement.
-  But the stake is the pack, and the pack grows all hand: the
-  same throw that is nearly free on turn two can hand over
-  fifteen cards on turn twenty.
-
-  So the bar a throw has to clear should tighten with the size
-  of the pack rather than being one number. Early in a hand
-  almost anything is safe, which is also why the first-round
-  rule the owner plays (noMeldingFirstRound) costs so little.
-
-  Note the interaction with GHUB-0104 and Expert's existing
-  +50 x countRank(pile, rank) term, which is already a
-  pack-aware safety term -- this generalises it rather than
-  adding a second one beside it.
-  Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
-  Attempted 2026-08-24 and NOT shipped. The bullet's own instruction --
-  "this generalises it rather than adding a second one beside it" -- was
-  implemented literally: the per-term (1 + 0.12 * pileSize) came off the
-  unseen reading in chooseDiscard and became one weight over the whole
-  `safety` accumulator.
-
-  It measured worse, and unlike GHUB-0101 and GHUB-0104 the loss is on the
-  rung that can actually see it. Bisected against a measured baseline of
-  hard v easy 23/24 +3489, hard v medium 70/120, expert v hard 129/240:
-
-    - with GHUB-0121 only:  23/24 +3594, 67/120, 118/240
-    - with this half added: 20/24 +2959, 67/120, 113/240
-
-  hard v easy wins by thousands of points a game, so three games and a
-  sixth of the margin there carries far more information than the same
-  swing on expert v hard, which GHUB-0110 showed cannot separate anything.
-
-  The cause is understood rather than guessed, which is why this is a
-  finding and not just a failed try. discardRisk ALREADY scales with pack
-  size -- `25.0 + 0.4 * pileSize` -- so weighting the accumulator scaled
-  that term a second time and made feeding a near-canasta grow roughly
-  quadratically with the pack, drowning the hand-value terms that decide
-  an ordinary throw.
-
-  So the bullet's premise is right and its prescription is wrong: the
-  accumulator is not one thing that can take one weight, because one of
-  its terms already carries the reading. A future attempt has to either
-  take discardRisk's own pileSize term out first (it is checked directly
-  by canastaDiscardRisk, so that is a visible change, not a quiet one), or
-  weight only the terms that lack one -- Hard's -2.5 * shown and Expert's
-  +50 * countRank -- and leave discardRisk alone.
-
-  The single pack-size weight that DOES ship is the one that was always
-  there, on the unseen term, and it now carries a comment pointing here.
-  **Layman:** Handing over three cards is a nuisance; handing over fifteen can lose the hand -- so a throw should have to be safer as the pack grows.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
 
