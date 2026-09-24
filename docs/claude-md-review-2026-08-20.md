@@ -1,5 +1,7 @@
 # CLAUDE.md review loop log
 
+Genre: record
+
 `CLAUDE.md` is loaded into every session on every turn, so its review history
 is kept here rather than in the document — a table appended to forever is a
 permanent context cost carried by every future session against an audit trail

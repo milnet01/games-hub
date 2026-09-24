@@ -1,0 +1,23 @@
+{
+  "version_files": ["CMakeLists.txt", "README.md"],
+  "boundaries": [
+    "saved games read from disk (restoreState in every saving game)",
+    "command-line options (--game, --size, --seed, --turns, --shot)",
+    "the stored settings read back at startup (QSettings)",
+    "scorepad/: the phone score book and its hosted database"
+  ],
+  "release_checks": [
+    {
+      "owed": "the bundled Qt is named in no known advisory",
+      "how": "CLAUDE.md § Releasing, 'Before step 1': look QT_VERSION up on Qt's vulnerability list and record the date in SECURITY.md § Bundled Qt"
+    },
+    {
+      "owed": "every version-bearing file agrees",
+      "how": "run .claude/bump.json's post_check and see it print 'version X.Y.Z consistent'"
+    }
+  ],
+  "not_documents": ["tests/funding-test.md"],
+  "check_doc": {
+    "id_prefix": "GHUB"
+  }
+}

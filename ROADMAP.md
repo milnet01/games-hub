@@ -1,6 +1,9 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
+
 # Games Hub — Roadmap
+
+Genre: record
 
 A collection of desktop games in one window. Pre-1.0 (0.2.0), so the blocks
 below are phases rather than releases. Shipped items stay in the file and flip

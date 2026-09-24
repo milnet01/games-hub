@@ -1,6 +1,11 @@
 # GHUB-0161 — Every word a player reads can be translated
 
-**Status:** accepted (2026-09-10).
+Genre: spec
+Purpose: so every word a player reads can be translated; wrong, some text is stranded in English.
+Status: active
+Describes: current
+
+Accepted 2026-09-10.
 **Kind:** implement.
 **Source:** ROADMAP GHUB-0161 (review-code sweep 2026-08-31; the owner's
 decisions of 2026-09-02 and 2026-09-10).

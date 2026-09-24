@@ -1,5 +1,9 @@
 # Canasta score book
 
+Genre: instructions
+Purpose: so the score book can be served and installed on a phone; wrong, it opens with no offline shell.
+Status: active
+
 A phone replacement for the paper score book kept at the table. Four people
 play with real cards; this keeps the book.
 

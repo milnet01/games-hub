@@ -1,5 +1,9 @@
 # Games
 
+Genre: instructions
+Purpose: so someone can build, install and run the games; wrong, they cannot.
+Status: active
+
 A small collection of desktop games for Linux and Windows, in one window
 sized to sit beside whatever you are actually working on — every game can be
 made as small as half a 1920x1080 screen, so it fits next to a browser or an

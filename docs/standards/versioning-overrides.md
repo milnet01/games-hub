@@ -1,5 +1,9 @@
 # Versioning Overrides — Games Hub
 
+Genre: standard
+Purpose: so a release picks the right version number for this project; wrong, a save-breaking change ships as a minor bump.
+Status: active
+
 Answers the two questions `~/.claude/standards/versioning.md` deliberately
 refuses to answer for a project — **§ 3, what a breaking change can break
 here**, and **§ 4, what would make this `1.0`** — and records the local facts a

@@ -1,6 +1,11 @@
 # GHUB-0025 — Publish Games Hub as a downloadable file for Linux and Windows
 
-**Status:** accepted (2026-08-12).
+Genre: spec
+Purpose: so a version tag publishes a Linux and a Windows download that run; wrong, a broken or empty release goes out.
+Status: active
+Describes: current
+
+Accepted 2026-08-12.
 **Kind:** release.
 **Source:** ROADMAP GHUB-0025 (user request, 2026-08-12).
 

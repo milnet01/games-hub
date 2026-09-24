@@ -1,6 +1,11 @@
 # GHUB-0017 — A hub-owned legibility switch every game reads
 
-**Status:** accepted (2026-08-13) — the review gate reached its three-loop
+Genre: spec
+Purpose: so every game reads one legibility switch the hub owns; wrong, a game draws past what the owner can read.
+Status: active
+Describes: current
+
+Accepted 2026-08-13 — the review gate reached its three-loop
 cap without an empty loop; §12 records why that is growth rather than an
 unsettled contract. **§4's mechanism was built on 2026-08-14** and §12 carries
 a fold-back row for the three clauses that survived the gate and were proved

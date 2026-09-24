@@ -1,6 +1,11 @@
 # GHUB-0063 — Light whoever is playing
 
-**Status:** accepted (2026-09-13). Amended 2026-09-21 with the owner's answers
+Genre: spec
+Purpose: so whose turn it is shows as light, not text; wrong, the owner has to read to know when to play.
+Status: active
+Describes: current
+
+Accepted 2026-09-13. Amended 2026-09-21 with the owner's answers
 to § 15 — the light now crosses over and is shaped to its area. No review gate
 on the amendment, at the owner's instruction.
 **Kind:** implement.

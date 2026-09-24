@@ -1,5 +1,7 @@
 # Third-party software in this download
 
+Genre: record
+
 Games itself is MIT-licensed — see `LICENSE` beside this file. Every game
 here is a traditional one whose rules are in the public domain, the code is
 written from scratch, and the sound effects are synthesised by a script in

@@ -1,5 +1,7 @@
 # Changelog
 
+Genre: record
+
 Notable changes to the Games hub. Newest first, in the shape
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) sets out.
 

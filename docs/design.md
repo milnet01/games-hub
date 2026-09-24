@@ -1,14 +1,15 @@
 # Games Hub — Design
 
-> **Purpose — so the shape is decided once, and anyone can tell where a
-> new piece of work belongs and what it is allowed to touch.**
+Genre: adr
+Purpose: so the shape is decided once, and anyone can tell where a new piece of work belongs and what it is allowed to touch.
+Status: active
 
 **This document is a gate.** Work is not broken into items until it is
 agreed — `~/.claude/workflow.md` § 2. It passes when someone can take any
 item off the queue and say which part it belongs in and what it may
 touch.
 
-**Status:** in force. These notes lived in `CLAUDE.md` until GHUB-0180 moved
+These notes lived in `CLAUDE.md` until GHUB-0180 moved
 them here on 2026-09-10. `CLAUDE.md` keeps what every session needs on every
 turn: building, testing, the local gate, committing, releasing and the core
 rules.

@@ -1,5 +1,7 @@
 # Security
 
+Genre: record
+
 Games is a single-player desktop game collection. It is worth being honest
 about how small its attack surface is, because that is what tells you which
 reports matter.
