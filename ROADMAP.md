@@ -68,6 +68,11 @@ and a current screenshot for the README.
   tag. The item's own risk paragraph names that, and its suggestion
   stands -- a workflow_dispatch trigger on release.yml, or a throwaway
   pre-release tag, before the next real release relies on it.
+  Owed before 1.1.0 is cut (found 2026-09-24): CHANGELOG.md's
+  [Unreleased] says nothing about this bump. It needs a Security entry
+  saying the downloads now bundle Qt 6.11.2 in place of 6.8.3, which
+  Qt's advisory list names. Without it, the release closes this item
+  with no user-facing record that it happened.
   **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
   Kind: security.
   Source: in-session-2026-09-13.
