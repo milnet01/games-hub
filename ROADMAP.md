@@ -77,7 +77,7 @@ and a current screenshot for the README.
   Kind: security.
   Source: in-session-2026-09-13.
 
-- 📋 [GHUB-0028] **The README's screenshot is from a six-game build.**
+- ✅ [GHUB-0028] **The README's screenshot is from a six-game build.**
   docs/hub.png shows Reversi, Minesweeper, Solitaire, Spider, Hearts and
   Pinball, over a status bar reading "Six games. Pick one." It is the
   first thing anyone sees on the repository page, and it undersells the
@@ -134,6 +134,13 @@ and a current screenshot for the README.
   cropped it.
 
   NOT DONE as of 2026-09-21. The file still shows six games.
+  Resolved (2026-09-25): docs/hub.png regenerated with
+  QT_QPA_PLATFORM=offscreen ./build/gameshub --shot docs/hub.png
+  --size 1200x1260, run with XDG_CONFIG_HOME pointed at an empty scratch
+  directory so no stored setting reached the picture. 1200x1100 still cut
+  the last row; 1200x1260 shows all fourteen tiles and no scrollbar. The
+  status bar reads "14 games. Pick one." The staleness this bullet warns
+  about returns with the next game, so re-run the same command then.
 
 ## 1.2.0 — The card games, by keyboard and in motion
 
