@@ -22,6 +22,8 @@ concurrency:
 # lint job below fails when the two disagree (GHUB-0055).
 env:
   QT_VERSION: '6.11.2'
+  # aqtinstall for the Windows Qt install; see ci.yml's Install Qt step.
+  AQT_SRC: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
 
 jobs:
   # GHUB-0051. These three linters ran only in scripts/local-ci.sh, from a
@@ -133,6 +135,13 @@ jobs:
       # Qt from apt is 6.4 on ubuntu-24.04, below this project's
       # find_package(Qt6 6.5 REQUIRED) floor, so both legs take the same
       # prebuilt Qt instead.
+      #
+      # From 6.11 Qt keeps each Windows compiler's packages in a folder of
+      # its own. aqtinstall 3.3.0, the newest release, looks in the old
+      # folder and cannot find 6.11.x for Windows. Its fix (miurahr/aqtinstall
+      # PR 1000) is merged but unreleased, so aqtsource pins that commit.
+      # Drop it once a release carries the fix. release.yml's Windows step
+      # carries the same line for the same reason.
       - name: Install Qt
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
         with:
@@ -140,6 +149,7 @@ jobs:
           arch: ${{ matrix.qt_arch }}
           modules: qtmultimedia
           cache: true
+          aqtsource: ${{ env.AQT_SRC }}
 
       # The Qt that lands here links these and finds nothing bundled beside
       # it. ninja-build is not guaranteed on the image either.

@@ -73,6 +73,17 @@ and a current screenshot for the README.
   saying the downloads now bundle Qt 6.11.2 in place of 6.8.3, which
   Qt's advisory list names. Without it, the release closes this item
   with no user-facing record that it happened.
+  Progress (2026-09-25): the Windows CI leg has been red on every
+  push since de2afe3. aqtinstall 3.3.0, the newest release, fails with
+  "Failed to locate XML data for Qt version '6.11.2'". From 6.11 Qt keeps
+  Windows packages under qt6_6112/qt6_6112_msvc2022_64/, not under
+  qt6_6112/qt6_6112/. Linux kept the old layout, so only Windows broke.
+  The fix is aqtinstall PR 1000, merged upstream and unreleased.
+  Reproduced locally: 3.3.0 cannot list 6.11.2 for Windows, and upstream
+  commit 076e165980 lists it with qtmultimedia. Both Windows install
+  steps, in ci.yml and release.yml, now pin that commit through
+  install-qt-action's aqtsource input. release.yml's Windows step would
+  have failed the same way at the 1.1.0 tag.
   **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
   Kind: security.
   Source: in-session-2026-09-13.

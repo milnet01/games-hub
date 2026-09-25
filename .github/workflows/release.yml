@@ -17,6 +17,8 @@ permissions:
 # fails when the two disagree (GHUB-0055).
 env:
   QT_VERSION: '6.11.2'
+  # aqtinstall for the Windows Qt install; see ci.yml's Install Qt step.
+  AQT_SRC: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
 
 jobs:
   # Both build jobs need this, so a bad tag costs no build time and nothing
@@ -250,6 +252,8 @@ jobs:
         with:
           persist-credentials: false
 
+      # aqtsource: see the Install Qt step in ci.yml. aqtinstall 3.3.0 cannot
+      # find Qt 6.11.x for Windows, so this pins the unreleased fix.
       - name: Install Qt
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
         with:
@@ -257,6 +261,7 @@ jobs:
           arch: win64_msvc2022_64
           modules: qtmultimedia
           cache: true
+          aqtsource: ${{ env.AQT_SRC }}
 
       # Was ilammy/msvc-dev-cmd until GHUB-0031; the script carries the
       # reasoning and is shared with ci.yml so the two cannot drift.
