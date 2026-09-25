@@ -91,7 +91,7 @@ trap 'rm -f "$STEPS_FILE"' EXIT
 STEPS_RUN=0
 
 python3 - "$WORKFLOW" > "$STEPS_FILE" <<'PY'
-import sys, re, yaml
+import sys, re, shlex, yaml
 wf = yaml.safe_load(open(sys.argv[1]))
 
 # The build job is a matrix and this script runs its LINUX row, so a
@@ -119,9 +119,23 @@ known = ('lint', 'build', 'sanitizers', 'tidy')
 for name in wf['jobs']:
     if name not in known:
         sys.stdout.write('\x1e'.join(['UNKNOWNJOB', name, '']) + '\0')
+# GitHub applies the workflow's `env:` and then the job's to every step. A
+# step that reads one of them would otherwise see it unset here and set on
+# the runner -- so export both ahead of each body, job over workflow, as
+# GitHub orders them. A value holding a ${{ }} expression is refused by the
+# expression guard below, because it travels inside the body.
+def exports(job):
+    merged = dict(wf.get('env') or {})
+    merged.update(job.get('env') or {})
+    return ''.join(f'export {k}={shlex.quote(str(v))}\n' for k, v in merged.items())
 for job_name in known:
     job = wf['jobs'].get(job_name)
     if job is None:
+        continue
+    # `defaults:` changes the shell or directory of every run step, and this
+    # script applies neither -- refuse it rather than run the steps wrongly.
+    if wf.get('defaults') or job.get('defaults'):
+        sys.stdout.write('\x1e'.join(['HASDEFAULTS', job_name, '', job_name]) + '\0')
         continue
     for step in job['steps']:
         cond = step.get('if', '')
@@ -134,7 +148,11 @@ for job_name in known:
         name = step.get('name') or step.get('uses', '').split('@')[0]
         body = step.get('run', '') if kind == 'RUN' else step.get('uses', '')
         if kind == 'RUN':
-            body = resolve(body, job_name)
+            body = exports(job) + resolve(body, job_name)
+            # Every body runs under bash here. A step naming another shell,
+            # or another directory, would run differently from CI -- refuse.
+            if step.get('shell', 'bash') != 'bash' or 'working-directory' in step:
+                kind = 'HASSHELL'
         # This script runs a `run:` body and applies nothing around it, so a
         # step carrying an `env:` block would execute here WITHOUT it and
         # differ from CI quietly. Refuse rather than mirror it wrongly; put
@@ -161,6 +179,14 @@ while IFS= read -r -d '' REC; do
 
     if [ "$KIND" = "HASENV" ]; then
         bad "step '$NAME' carries an env: block, which this script does not apply — inline it in the run body"
+        continue
+    fi
+    if [ "$KIND" = "HASSHELL" ]; then
+        bad "step '$NAME' sets shell: or working-directory:, which this script does not apply — use bash in the repo root, or teach $0"
+        continue
+    fi
+    if [ "$KIND" = "HASDEFAULTS" ]; then
+        bad "job '$NAME' (or the workflow) carries defaults:, which this script does not apply — teach $0 or drop it"
         continue
     fi
     if [ "$KIND" = "UNKNOWNJOB" ]; then
@@ -256,7 +282,9 @@ while IFS= read -r -d '' REC; do
     fi
 
     echo "  → $NAME"
-    if bash -eo pipefail -c "$BODY" 2>&1 | sed 's/^/      /'; then
+    # GitHub's own invocation for a bash step, flag for flag, so no profile
+    # or rc file on this machine changes what the step does.
+    if bash --noprofile --norc -eo pipefail -c "$BODY" 2>&1 | sed 's/^/      /'; then
         ok "$NAME"
     else
         bad "$NAME"
@@ -274,6 +302,7 @@ fi
 if [ "$LINT_ONLY" -eq 1 ]; then
     echo
     bold "Lint-only run (documentation change) — build and tests not run."
+    [ "$FAILED" -eq 0 ] || bold "Local CI FAILED — do not push."
     exit $FAILED
 fi
 
