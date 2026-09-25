@@ -1133,7 +1133,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: security.
   Source: in-session-2026-09-25.
 
-- 📋 [GHUB-0197] **On a dark desktop theme the hub's toolbar and menu bar are close to unreadable.**
+- 🚫 [GHUB-0197] **On a dark desktop theme the hub's toolbar and menu bar are close to unreadable.**
   Seen in a demo video recorded by the demoreel session on a private
   virtual display with a dark palette, at 1600x1000, and confirmed from
   its frame at 2 s. The hub's own tile grid is drawn in fixed dark colours
@@ -1162,6 +1162,18 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   432' -a 'wait 1' -a 'click' -a 'wait 4' -a 'key Escape' -a 'wait 2' --
   env XDG_CONFIG_HOME=(empty dir) PULSE_SERVER=unix:/nonexistent
   build/gameshub
+  Dropped (2026-09-25), owner's call: not a fault in the app.
+  Reproduced on a private Xvfb display, same build, same size. With the
+  owner's real config (Breeze Dark in ~/.config/kdeglobals) the toolbar
+  and menu bar read clearly: Help, Sound and Normal are all light on
+  dark. With XDG_CONFIG_HOME pointed at an empty directory, as the
+  recording did, the window background stays dark but the text colours
+  fall back to light-theme ones. That mixed palette is the recording's,
+  not the desktop's. The app sets no colours on its chrome.
+  The Spider highlight is hover: a fresh Xvfb puts the pointer at the
+  screen centre, which at 1600x1000 lies inside the Spider tile.
+  Passed to the demoreel session: a scratch config needs a copy of
+  kdeglobals, or Qt recordings come out half-dark.
   **Layman:** With a dark desktop theme, the Sound button is grey on grey, the text-size button loses its words, and the Help menu disappears.
   Kind: accessibility.
   Source: demoreel-df recording, 2026-09-25.
