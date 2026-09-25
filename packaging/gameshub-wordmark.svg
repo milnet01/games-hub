@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 541 200" width="541" height="200">
+  <title>Games Hub</title>
+  <g transform="scale(1.5625)">
+  <title>Games</title>
+  <defs>
+    <linearGradient id="frame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b4660"/>
+      <stop offset="1" stop-color="#1d2434"/>
+    </linearGradient>
+    <linearGradient id="felt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a9160"/>
+      <stop offset="1" stop-color="#16663f"/>
+    </linearGradient>
+    <linearGradient id="table" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#31406e"/>
+      <stop offset="1" stop-color="#1a2140"/>
+    </linearGradient>
+    <radialGradient id="ball" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#7d8794"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="3" y="3" width="122" height="122" rx="19" fill="url(#frame)"/>
+
+  <!-- Four quadrants, one per game family: board, cards, minesweeper, pinball.
+       A collection reads better as a grid than as one crowded scene. -->
+  <g>
+    <rect x="10" y="10" width="52" height="52" rx="9" fill="url(#felt)"/>
+    <circle cx="29" cy="29" r="10" fill="#f4f3ee"/>
+    <circle cx="45" cy="45" r="10" fill="#20242a"/>
+  </g>
+
+  <g>
+    <rect x="66" y="10" width="52" height="52" rx="9" fill="#f5f3ec"/>
+    <path d="M92 51c-9-7-15-12-15-19a7.5 7.5 0 0 1 15-4 7.5 7.5 0 0 1 15 4c0 7-6 12-15 19z" fill="#cf3535"/>
+  </g>
+
+  <g>
+    <rect x="10" y="66" width="52" height="52" rx="9" fill="#5d666f"/>
+    <g stroke="#1b1e22" stroke-width="4" stroke-linecap="round">
+      <path d="M36 78v32M20 92h32M25 81l22 22M47 81L25 103"/>
+    </g>
+    <circle cx="36" cy="92" r="10" fill="#1b1e22"/>
+    <circle cx="32" cy="88" r="3" fill="#8b939c"/>
+  </g>
+
+  <g>
+    <rect x="66" y="66" width="52" height="52" rx="9" fill="url(#table)"/>
+    <circle cx="82" cy="82" r="8" fill="#e8514f"/>
+    <circle cx="102" cy="94" r="6" fill="#f2b13c"/>
+    <g stroke="#cfd6e0" stroke-width="5" stroke-linecap="round">
+      <path d="M75 110l9-5M109 110l-9-5"/>
+    </g>
+    <circle cx="92" cy="100" r="6" fill="url(#ball)"/>
+  </g>
+</g>
+  <g fill="none" stroke="#f5f3ec" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(226,88)"><path d="M52.45,-52.45 A27.5,27.5 0 1 0 60.5,-33 H36"/></g><g transform="translate(302,88)"><circle cx="24" cy="-24" r="18.5"/><path d="M42.5,-42.5 V-5.5"/></g><g transform="translate(360,88)"><path d="M5.5,-42.5 V-5.5 M5.5,-29.5 A13,13 0 0 1 31.5,-29.5 V-5.5 M31.5,-29.5 A13,13 0 0 1 57.5,-29.5 V-5.5"/></g><g transform="translate(433,88)"><path d="M5.5,-24 H42.5 A18.5,18.5 0 1 0 37.08,-10.92"/></g><g transform="translate(491,88)"><path d="M38.16,-37.88 A17.5,9.25 0 1 0 23,-24 A17.5,9.25 0 1 1 7.85,-10.12"/></g></g>
+  <g fill="none" stroke="#f2b13c" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(226,178)"><path d="M5.5,-60.5 V-5.5 M49.5,-60.5 V-5.5 M5.5,-33 H49.5"/></g><g transform="translate(291,178)"><path d="M5.5,-42.5 V-24 A18.5,18.5 0 0 0 42.5,-24 M42.5,-42.5 V-5.5"/></g><g transform="translate(349,178)"><circle cx="24" cy="-24" r="18.5"/><path d="M5.5,-60.5 V-5.5"/></g></g>
+</svg>
