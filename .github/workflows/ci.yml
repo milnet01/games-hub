@@ -22,7 +22,7 @@ concurrency:
 # lint job below fails when the two disagree (GHUB-0055).
 env:
   QT_VERSION: '6.11.2'
-  # aqtinstall for the Windows Qt install; see ci.yml's Install Qt step.
+  # The one aqtinstall commit scripts/install-qt.py installs (GHUB-0196).
   AQT_SRC: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
 
 jobs:
@@ -69,35 +69,36 @@ jobs:
       # GHUB-0055. Qt is named once per workflow, in its top-level env, and
       # every workflow must name the same one. Otherwise a bump can reach the
       # test legs and miss the legs that build the downloads, green throughout.
+      # The same for AQT_SRC, the installer those legs run (GHUB-0196).
+      # scripts/install-qt.py reads both from the environment and takes no
+      # version argument, so a step cannot name a different one.
       - name: Check every workflow pins the same Qt
         run: |
-          found=
+          qt='' aqt=''
           for f in .github/workflows/*.yml; do
-            grep -q 'jurplel/install-qt-action' "$f" || continue
+            grep -q 'scripts/install-qt.py' "$f" || continue
             v=$(sed -n "s/^  QT_VERSION: '\([0-9][0-9.]*\)'$/\1/p" "$f")
-            if [ -z "$v" ]; then
-              echo "$f installs Qt but sets no top-level QT_VERSION" >&2
+            a=$(sed -n 's/^  AQT_SRC: \(.*\)$/\1/p' "$f")
+            if [ -z "$v" ] || [ -z "$a" ]; then
+              echo "$f installs Qt but lacks a top-level QT_VERSION or AQT_SRC" >&2
               exit 1
             fi
-            stray=$(grep -A4 'jurplel/install-qt-action' "$f" \
-              | grep 'version:' | grep -v 'env.QT_VERSION' || true)
-            if [ -n "$stray" ]; then
-              echo "$f names a Qt version in a step instead of env.QT_VERSION:" >&2
-              echo "$stray" >&2
-              exit 1
-            fi
-            found=$(printf '%s\n%s' "$found" "$v")
+            qt=$(printf '%s\n%s' "$qt" "$v")
+            aqt=$(printf '%s\n%s' "$aqt" "$a")
           done
-          distinct=$(printf '%s\n' "$found" | grep . | sort -u || true)
-          if [ -z "$distinct" ]; then
-            echo "no workflow installs Qt, so there was nothing to compare" >&2
-            exit 1
-          fi
-          if [ "$(printf '%s\n' "$distinct" | wc -l)" -ne 1 ]; then
-            printf 'the workflows pin different Qt versions:\n%s\n' "$distinct" >&2
-            exit 1
-          fi
-          echo "every workflow pins Qt $distinct"
+          for pair in "Qt:$qt" "aqtinstall:$aqt"; do
+            what=${pair%%:*}
+            distinct=$(printf '%s\n' "${pair#*:}" | grep . | sort -u || true)
+            if [ -z "$distinct" ]; then
+              echo "no workflow installs Qt, so there was nothing to compare" >&2
+              exit 1
+            fi
+            if [ "$(printf '%s\n' "$distinct" | wc -l)" -ne 1 ]; then
+              printf 'the workflows pin different %s:\n%s\n' "$what" "$distinct" >&2
+              exit 1
+            fi
+            echo "every workflow pins $what $distinct"
+          done
 
   build:
     name: ${{ matrix.name }}
@@ -120,10 +121,12 @@ jobs:
           # minutes into CI -- reach for that flag before touching this again.
           - name: Linux
             os: ubuntu-24.04
+            qt_host: linux
             qt_arch: linux_gcc_64
             werror: 'ON'
           - name: Windows
             os: windows-2022
+            qt_host: windows
             qt_arch: win64_msvc2022_64
             werror: 'ON'
 
@@ -134,22 +137,26 @@ jobs:
 
       # Qt from apt is 6.4 on ubuntu-24.04, below this project's
       # find_package(Qt6 6.5 REQUIRED) floor, so both legs take the same
-      # prebuilt Qt instead.
-      #
-      # From 6.11 Qt keeps each Windows compiler's packages in a folder of
-      # its own. aqtinstall 3.3.0, the newest release, looks in the old
-      # folder and cannot find 6.11.x for Windows. Its fix (miurahr/aqtinstall
-      # PR 1000) is merged but unreleased, so aqtsource pins that commit.
-      # Drop it once a release carries the fix. release.yml's Windows step
-      # carries the same line for the same reason.
-      - name: Install Qt
-        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
+      # prebuilt Qt instead. scripts/install-qt.py installs it with every
+      # piece of code it runs pinned (GHUB-0196); its header says why that
+      # replaced jurplel/install-qt-action. The cache saves the download on
+      # the test legs only -- release.yml installs fresh, so nothing cached
+      # can reach a published file.
+      - name: Cache Qt
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          version: ${{ env.QT_VERSION }}
-          arch: ${{ matrix.qt_arch }}
-          modules: qtmultimedia
-          cache: true
-          aqtsource: ${{ env.AQT_SRC }}
+          path: ${{ runner.temp }}/Qt
+          key: >-
+            qt-${{ env.QT_VERSION }}-${{ matrix.qt_arch }}-${{ hashFiles('scripts/install-qt.py') }}
+
+      # bash on both runners, so one line serves both. Windows has no
+      # python3 worth trusting (it can be the Store stub); Ubuntu has no
+      # python.
+      - name: Install Qt
+        shell: bash
+        run: |
+          py=python; command -v python >/dev/null || py=python3
+          "$py" scripts/install-qt.py ${{ matrix.qt_host }} ${{ matrix.qt_arch }}
 
       # The Qt that lands here links these and finds nothing bundled beside
       # it. ninja-build is not guaranteed on the image either.
@@ -198,13 +205,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
+      - name: Cache Qt
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          version: ${{ env.QT_VERSION }}
-          arch: linux_gcc_64
-          modules: qtmultimedia
-          cache: true
+          path: ${{ runner.temp }}/Qt
+          key: qt-${{ env.QT_VERSION }}-linux_gcc_64-${{ hashFiles('scripts/install-qt.py') }}
+
+      - name: Install Qt
+        run: python3 scripts/install-qt.py linux linux_gcc_64
 
       - name: Install Linux build and runtime dependencies
         run: |
@@ -256,13 +264,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
+      - name: Cache Qt
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          version: ${{ env.QT_VERSION }}
-          arch: linux_gcc_64
-          modules: qtmultimedia
-          cache: true
+          path: ${{ runner.temp }}/Qt
+          key: qt-${{ env.QT_VERSION }}-linux_gcc_64-${{ hashFiles('scripts/install-qt.py') }}
+
+      - name: Install Qt
+        run: python3 scripts/install-qt.py linux linux_gcc_64
 
       - name: Install Linux build and runtime dependencies
         run: |

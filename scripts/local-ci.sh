@@ -73,7 +73,8 @@ note() { printf '  \033[33m-\033[0m %s\n' "$1"; }
 #   action     — a `uses:` step; the real action cannot run outside Actions
 STEP_RULES=$(cat <<'RULES'
 Install the workflow linters|provision|actionlint --version && yamllint --version && zizmor --version
-Install Qt|action|qmake6 --version
+Cache Qt|action|qmake6 --version
+Install Qt|provision|qmake6 --version
 Install Linux build and runtime dependencies|provision|ninja --version
 Install clang-tidy|provision|clang-tidy --version
 Set up MSVC environment|windows-only|

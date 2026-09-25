@@ -9,6 +9,11 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # A trial run from the Actions tab: builds, tests and smoke-tests both
+  # downloads and publishes nothing, so a change to the packaging path is
+  # proven before a real tag relies on it. The files are kept on the run
+  # page as artifacts, labelled <version>-trial.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,7 +22,7 @@ permissions:
 # fails when the two disagree (GHUB-0055).
 env:
   QT_VERSION: '6.11.2'
-  # aqtinstall for the Windows Qt install; see ci.yml's Install Qt step.
+  # The one aqtinstall commit scripts/install-qt.py installs (GHUB-0196).
   AQT_SRC: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
 
 jobs:
@@ -36,8 +41,14 @@ jobs:
       - name: Check tag matches CMake version
         id: check
         run: |
-          tag="${GITHUB_REF_NAME#v}"
           cmake_version=$(sed -n 's/^project(gameshub VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          # A trial run has no tag to check and publishes nothing, so the
+          # tag and changelog checks below are for a real release only.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            echo "version=$cmake_version-trial" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tag="${GITHUB_REF_NAME#v}"
           if [ "$tag" != "$cmake_version" ]; then
             echo "tag $tag != CMakeLists.txt $cmake_version" >&2
             exit 1
@@ -74,13 +85,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # No cache here, unlike ci.yml: a cache written by any branch's run
+      # could otherwise reach a published file. See scripts/install-qt.py.
       - name: Install Qt
-        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
-        with:
-          version: ${{ env.QT_VERSION }}
-          arch: linux_gcc_64
-          modules: qtmultimedia
-          cache: true
+        run: python3 scripts/install-qt.py linux linux_gcc_64
 
       - name: Install build dependencies
         run: |
@@ -252,16 +260,10 @@ jobs:
         with:
           persist-credentials: false
 
-      # aqtsource: see the Install Qt step in ci.yml. aqtinstall 3.3.0 cannot
-      # find Qt 6.11.x for Windows, so this pins the unreleased fix.
+      # Uncached, as on Linux. `python` because a Windows python3 can be the
+      # Store stub.
       - name: Install Qt
-        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730  # v4.3.1
-        with:
-          version: ${{ env.QT_VERSION }}
-          arch: win64_msvc2022_64
-          modules: qtmultimedia
-          cache: true
-          aqtsource: ${{ env.AQT_SRC }}
+        run: python scripts/install-qt.py windows win64_msvc2022_64
 
       # Was ilammy/msvc-dev-cmd until GHUB-0031; the script carries the
       # reasoning and is shared with ci.yml so the two cannot drift.
@@ -376,6 +378,8 @@ jobs:
   publish:
     name: Publish
     needs: [verify, linux, windows]
+    # Never from a trial run: only a pushed tag publishes.
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
