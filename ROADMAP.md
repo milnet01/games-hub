@@ -1133,6 +1133,39 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: security.
   Source: in-session-2026-09-25.
 
+- 📋 [GHUB-0197] **On a dark desktop theme the hub's toolbar and menu bar are close to unreadable.**
+  Seen in a demo video recorded by the demoreel session on a private
+  virtual display with a dark palette, at 1600x1000, and confirmed from
+  its frame at 2 s. The hub's own tile grid is drawn in fixed dark colours
+  and reads well. The Qt-styled chrome around it does not:
+  - the toolbar's "Sound" button text is mid-grey on dark grey;
+  - the text-size toggle beside it shows only its magnifier icon, with no
+    "Normal" label visible;
+  - the menu bar's "Help" is not visible at all.
+  The same build photographed with --shot (offscreen, light palette)
+  shows all three clearly, so the fault follows the desktop palette. The
+  owner reads the screen partially sighted, so this is a legibility
+  defect, not polish.
+
+  Also seen, and not yet explained: the Spider tile carries the
+  highlighted border before any input, while the pointer sits elsewhere.
+  The offscreen --shot highlights Chess instead. Find out what the border
+  means (focus, hover or last played) before treating it as a fault.
+
+  To reproduce: run the hub under a dark Qt palette (a dark KDE colour
+  scheme, or QT_QPA_PLATFORMTHEME unset on a display whose palette is
+  dark). --shot always uses the offscreen light palette, so it cannot
+  show this.
+
+  Re-record command (from demoreel-df): demoreel record -o
+  games-hub-demo.mp4 -d 2 -s 1600x1000 --cursor -a 'wait 3' -a 'move 789
+  432' -a 'wait 1' -a 'click' -a 'wait 4' -a 'key Escape' -a 'wait 2' --
+  env XDG_CONFIG_HOME=(empty dir) PULSE_SERVER=unix:/nonexistent
+  build/gameshub
+  **Layman:** With a dark desktop theme, the Sound button is grey on grey, the text-size button loses its words, and the Help menu disappears.
+  Kind: accessibility.
+  Source: demoreel-df recording, 2026-09-25.
+
 ## P01 — Shipped
 
 ### 🎨 Games
