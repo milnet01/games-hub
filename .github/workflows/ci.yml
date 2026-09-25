@@ -159,13 +159,16 @@ jobs:
           "$py" scripts/install-qt.py ${{ matrix.qt_host }} ${{ matrix.qt_arch }}
 
       # The Qt that lands here links these and finds nothing bundled beside
-      # it. ninja-build is not guaranteed on the image either.
+      # it. ninja-build is not guaranteed on the image either. libpulse0:
+      # Qt 6.11's Multimedia links PulseAudio directly, and the link fails
+      # without it. jurplel/install-qt-action installed it unasked, which is
+      # why nothing named it until GHUB-0196 replaced that action.
       - name: Install Linux build and runtime dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ninja-build libgl1-mesa-dev \
-            libxkbcommon-x11-0 libxcb-cursor0
+            libxkbcommon-x11-0 libxcb-cursor0 libpulse0
 
       # Was ilammy/msvc-dev-cmd until GHUB-0031; the script carries the
       # reasoning and is shared with release.yml so the two cannot drift.
@@ -218,7 +221,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ninja-build libgl1-mesa-dev \
-            libxkbcommon-x11-0 libxcb-cursor0
+            libxkbcommon-x11-0 libxcb-cursor0 libpulse0
 
       - name: Configure with sanitizers
         run: >
@@ -277,7 +280,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ninja-build libgl1-mesa-dev \
-            libxkbcommon-x11-0 libxcb-cursor0
+            libxkbcommon-x11-0 libxcb-cursor0 libpulse0
 
       # Put the pinned binary FIRST on the path rather than calling it by its
       # versioned name below. scripts/local-ci.sh executes this workflow's own
