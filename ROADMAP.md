@@ -84,6 +84,14 @@ and a current screenshot for the README.
   steps, in ci.yml and release.yml, now pin that commit through
   install-qt-action's aqtsource input. release.yml's Windows step would
   have failed the same way at the 1.1.0 tag.
+  Progress (2026-09-25): the release-path risk this item named is
+  retired. release.yml gained a workflow_dispatch trial run, which the
+  owner chose that day. It builds, tests and smoke-tests both downloads
+  and publishes nothing. Its first run found an AppImage fault (missing
+  xcb libraries, fixed in 7ddc339). Its second, 36112765363 at 7ddc339,
+  passed both downloads on Qt 6.11.2. The Windows CI leg is green again
+  too. What is left: cut 1.1.0, which ships the new Qt and closes this
+  item. The changelog's Security entry is already in [Unreleased].
   **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
   Kind: security.
   Source: in-session-2026-09-13.
@@ -1089,7 +1097,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
 
-- 📋 [GHUB-0196] **The Qt install action is pinned, but the code it runs is not.**
+- ✅ [GHUB-0196] **The Qt install action is pinned, but the code it runs is not.**
   jurplel/install-qt-action is pinned to a commit SHA in ci.yml and
   release.yml. That commit's action.yml is a composite whose steps run
   `uses: jurplel/install-qt-action/action@v4` and
@@ -1107,6 +1115,20 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   install from that source plus `aqt install-qt ... -m qtmultimedia`
   replaces it. Caching would need actions/cache, pinned by SHA. The other
   route is to accept the gap and correct CLAUDE.md's claim.
+  Resolved (2026-09-25), on the owner's choice of the recommended route.
+  scripts/install-qt.py replaces jurplel/install-qt-action in all five
+  install steps (c09e866). It installs aqtinstall from AQT_SRC, one
+  commit, with its dependencies held to exact versions. ci.yml caches
+  the download with actions/cache pinned by SHA; release.yml installs
+  uncached. The lint job now also requires every workflow to pin the
+  same AQT_SRC.
+
+  Replacing the action exposed what it had installed unasked on Linux:
+  libpulse0, which Qt 6.11's Multimedia links (2dc1e1c), and the xcb
+  libraries linuxdeploy needs to bundle the desktop plugin (7ddc339).
+  Verified: CI green on all five checks at 7ddc339. Trial release run
+  36112765363 passed verify, AppImage and Portable zip, with publish
+  skipped.
   **Layman:** One of the tools that builds the downloads can be changed by its author without this project noticing.
   Kind: security.
   Source: in-session-2026-09-25.

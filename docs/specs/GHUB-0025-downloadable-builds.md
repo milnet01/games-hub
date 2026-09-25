@@ -115,12 +115,20 @@ The matrix:
 | `ubuntu-24.04` | `linux_gcc_64` | not `ubuntu-22.04`: deprecation begins 2026-09-17 |
 | `windows-2022` | `win64_msvc2022_64` | MSVC, the default Qt Windows build |
 
-Steps: `actions/checkout`; `jurplel/install-qt-action` with
-`version: 6.8.3` and `modules: qtmultimedia`; **on the Windows leg only,
+Steps: `actions/checkout`; `actions/cache` over the Qt install;
+`scripts/install-qt.py <host> <arch>`, which installs the Qt the workflow's
+top-level `QT_VERSION` names, with `qtmultimedia`; **on the Windows leg only,
 `scripts/setup-msvc.ps1`**; `cmake -S . -B build -G Ninja
 -DCMAKE_BUILD_TYPE=Release`; `cmake --build build`; `ctest --test-dir build
---output-on-failure`. Qt 6.8.3 satisfies the existing
+--output-on-failure`. The pinned Qt satisfies the existing
 `find_package(Qt6 6.5 REQUIRED ...)` floor.
+
+`scripts/install-qt.py` replaced `jurplel/install-qt-action` in GHUB-0196.
+That action was pinned by SHA, but its `action.yml` runs
+`jurplel/install-qt-action/action@v4`, a movable tag. The script installs
+aqtinstall from the commit the top-level `AQT_SRC` names, holds its
+dependencies to exact versions, and puts Qt's `bin` on `PATH`, which is how
+CMake finds Qt.
 
 The MSVC setup step is not optional and is the whole reason Ninja can be
 used on both legs: outside a developer command prompt CMake cannot find
@@ -137,8 +145,8 @@ platforms.
 binaries run headless on both runners with no workflow-side environment
 fiddling.
 The Linux runner additionally needs `libgl1-mesa-dev libxkbcommon-x11-0
-libxcb-cursor0` installed with `apt-get`, because the Qt that
-`install-qt-action` unpacks there links them and finds nothing bundled
+libxcb-cursor0 libpulse0` installed with `apt-get`, because the Qt that
+`scripts/install-qt.py` unpacks there links them and finds nothing bundled
 beside it.
 
 **The AppImage does not carry the *excluded* ones, and INV-5's container
@@ -162,7 +170,11 @@ the Linux leg adds `ninja-build` to its `apt-get` line; on Windows
 
 ### 4.3 `.github/workflows/release.yml` — a tag becomes two files
 
-Triggers on `push: tags: ['v*']`. The workflow declares
+Triggers on `push: tags: ['v*']`, and on `workflow_dispatch` for a trial
+run. A trial run skips `verify`'s two assertions, labels its files
+`<CMake version>-trial`, and never reaches `publish`, which runs only when
+the event is a push. It exists so a change to the packaging path is proven
+before a real tag relies on it (GHUB-0193). The workflow declares
 `permissions: contents: read` at the top and raises it to
 `contents: write` on the `publish` job alone, which is what `gh release
 create` needs; a repository whose default `GITHUB_TOKEN` is read-only fails
@@ -626,7 +638,7 @@ this reason and not as a style choice.
 | Assumption | When it breaks | What happens |
 |---|---|---|
 | MSVC's only complaint is `M_PI` | Fourteen games have never seen this compiler | The Windows CI job goes red on first push. Fix and re-push; nothing is published, because publishing is tag-triggered and CI is not. |
-| The Qt mirrors serve 6.8.3 | Mirror outage, or Qt withdraws the version | `install-qt-action` fails; the job is re-run or the version pinned forward. No artifact is published from a partial build. |
+| The Qt mirrors serve the pinned Qt where aqtinstall looks | Mirror outage, Qt withdraws the version, or Qt changes its folder layout (6.11 did, for Windows) | `scripts/install-qt.py` fails; the job is re-run, or the version or `AQT_SRC` is pinned forward. No artifact is published from a partial build. |
 | `linuxdeploy --plugin qt` finds the multimedia backend | Qt moves it, or the plugin lags a Qt release | INV-7 fails the job before publishing. |
 | The AppImage's glibc floor is low enough | Built on `ubuntu-24.04` (glibc 2.39) | It will not start on Debian 12 or Ubuntu 22.04. Not fixed — documented in the README, see §10. |
 | The tag matches the CMake version | Human cuts the tag first | INV-2 fails the job. |
@@ -680,7 +692,7 @@ assertion, since it carries no offscreen plugin and would fail it.
   an installer is the opposite of one.
 - **Flatpak or Snap for Linux.** Rejected: neither is a single downloadable
   file, and both want a store account.
-- **The runner's `apt` Qt instead of `install-qt-action`.** Rejected:
+- **The runner's `apt` Qt instead of a prebuilt one.** Rejected:
   `ubuntu-24.04` packages Qt 6.4, below this project's
   `find_package(Qt6 6.5 REQUIRED ...)` floor.
 - **`ubuntu-22.04` runners, for a lower glibc floor and wider AppImage

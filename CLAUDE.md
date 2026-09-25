@@ -340,6 +340,16 @@ the previous check. A pinned Qt named in an advisory gets a roadmap item for
 the bump. The CI actions need no step here: `.github/dependabot.yml` has
 Dependabot propose their updates monthly.
 
+**Dependabot cannot see the Qt installer's pins** (GHUB-0196): `AQT_SRC` in
+both workflows, and the `CONSTRAINTS` list in `scripts/install-qt.py`. Check
+[aqtinstall's releases](https://github.com/miurahr/aqtinstall/releases) at
+the same time. `AQT_SRC` points at an unreleased commit only because 3.3.0
+cannot find Qt 6.11 for Windows; a release that can should replace it.
+
+**Then run the release workflow by hand before tagging**: Actions tab →
+Release → Run workflow. It builds, tests and smoke-tests both downloads and
+publishes nothing. A packaging fault is found there rather than by the tag.
+
 Cutting a release is three edits, a check and a tag, **in this order**:
 
 1. Bump `project(gameshub VERSION ...)` in `CMakeLists.txt`. **Which number**
