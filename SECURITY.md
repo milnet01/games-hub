@@ -65,10 +65,10 @@ are reported to The Qt Project under its
 here — but do open an issue if a release is still shipping a Qt version with
 a known advisory, because bumping it is this project's job.
 
-**Last checked: 2026-09-21**, against Qt's
+**Last checked: 2026-09-25**, against Qt's
 [list of known vulnerabilities](https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products).
-The downloads carry Qt 6.11.2, and that list does not name it as affected:
-the advisories that mention 6.11.2 name it as the release that fixes them.
-The previous pin was 6.8.3, which the list did name. The 6.8 line's fix is
-6.8.9, and the open-source mirror stops that line at 6.8.3, so the bump went
-to a newer minor instead.
+The list's newest advisory, CVE-2026-79680, names 6.11.2: an
+authentication bypass in the Qt VNC Server module, fixed in 6.11.3. This
+app does not link that module, so it was never reachable here. The
+downloads moved to 6.11.3 anyway, and no advisory on the list names 6.11.3
+as affected.

@@ -21,7 +21,7 @@ permissions:
 # The Qt both downloads bundle. ci.yml carries the same line, and its lint job
 # fails when the two disagree (GHUB-0055).
 env:
-  QT_VERSION: '6.11.2'
+  QT_VERSION: '6.11.3'
   # The one aqtinstall commit scripts/install-qt.py installs (GHUB-0196).
   AQT_SRC: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
 

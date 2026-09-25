@@ -97,11 +97,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   replaced by a project script that installs a fixed version of the
   installer with fixed versions of its dependencies.
 
-- **The downloads now carry Qt 6.11.2 in place of 6.8.3**
-  Qt's own list of known vulnerabilities names 6.8.3. None of those
-  advisories reaches a part of Qt this app uses, but the downloads should
-  not carry a version with published fixes it lacks. SECURITY.md § Bundled
-  Qt records the check. Tracked as GHUB-0193.
+- **The downloads now carry Qt 6.11.3 in place of 6.8.3**
+  Qt's own list of known vulnerabilities names 6.8.3, and by the time
+  of this release it named 6.11.2 as well. None of those advisories
+  reaches a part of Qt this app uses, but the downloads should not carry
+  a version with published fixes it lacks. SECURITY.md § Bundled Qt records the
+  check. Tracked as GHUB-0193.
 
 - **Something now watches for out-of-date build tools, and Qt is checked before every release** (GHUB-0055)
   Dependabot now proposes updates to the pinned GitHub actions once a
