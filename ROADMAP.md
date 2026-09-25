@@ -1089,6 +1089,28 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: feature.
   Source: claude-suggestion-2026-08-24.
 
+- 📋 [GHUB-0196] **The Qt install action is pinned, but the code it runs is not.**
+  jurplel/install-qt-action is pinned to a commit SHA in ci.yml and
+  release.yml. That commit's action.yml is a composite whose steps run
+  `uses: jurplel/install-qt-action/action@v4` and
+  `uses: actions/setup-python@v6` -- both movable tags. The run log shows
+  it: "Download action repository 'jurplel/install-qt-action@v4'". So the
+  code that installs Qt, in the job that builds the published binaries, is
+  whatever the v4 tag points at on the day. CLAUDE.md § Releasing states
+  the opposite: that every action is pinned so a moved tag cannot run code
+  against the downloads.
+
+  Found 2026-09-25 while diagnosing GHUB-0193's Windows failure.
+
+  Route recommended: drop the action and run aqtinstall directly. The
+  workflows already pin aqtinstall by commit (env AQT_SRC), so one pip
+  install from that source plus `aqt install-qt ... -m qtmultimedia`
+  replaces it. Caching would need actions/cache, pinned by SHA. The other
+  route is to accept the gap and correct CLAUDE.md's claim.
+  **Layman:** One of the tools that builds the downloads can be changed by its author without this project noticing.
+  Kind: security.
+  Source: in-session-2026-09-25.
+
 ## P01 — Shipped
 
 ### 🎨 Games
