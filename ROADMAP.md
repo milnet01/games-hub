@@ -102,6 +102,20 @@ and a current screenshot for the README.
   so the server has not finished publishing 6.11.3's checksums. Owner's
   call: wait for Qt, keep the checksum check on, then re-run CI and the
   trial release before the cut. Master is red until then.
+  Progress (2026-09-25, 17:24): the .sha256 for the Linux 6.11.3
+  multimedia package now returns 200 (since 15:03); the Windows one
+  (qt6_6113_msvc2022_64, qt.qt6.6113.addons.qtmultimedia.win64_msvc2022_64)
+  still returns 404. Resume when both are 200: gh run rerun 36132228456,
+  and trigger a fresh trial release (gh workflow run release.yml).
+  When both are green, cut 1.1.0 with cut-release, and in the release
+  commit: flip this item shipped; move its id from the bullet's prose
+  onto the bullet line ("in place of 6.8.3** (GHUB-0193)"); add
+  "**Theme:** Play without a mouse" (the section name in the release
+  plan) at the top of the 1.1.0 changelog section. Pre-flight already
+  done that day: 13 bullet-line ids all shipped, no v1.1.0 tag or
+  release exists, aqtinstall has no release past 3.3.0, and SECURITY.md
+  records the Qt check. After publishing, message the
+  ants-projects-hub-website session that 1.1.0 is out; it was promised.
   **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
   Kind: security.
   Source: in-session-2026-09-13.
