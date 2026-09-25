@@ -92,6 +92,16 @@ and a current screenshot for the README.
   passed both downloads on Qt 6.11.2. The Windows CI leg is green again
   too. What is left: cut 1.1.0, which ships the new Qt and closes this
   item. The changelog's Security entry is already in [Unreleased].
+  Progress (2026-09-25): moved to 6.11.3 in 62486dd before cutting
+  1.1.0. Qt's list now names 6.11.2 (CVE-2026-79680, Qt VNC Server,
+  fixed in 6.11.3; this app does not link that module). Owner chose to
+  bump first. CI run 36132228456 and trial release 36132236685 then
+  failed at Install Qt on every leg: aqt reports ChecksumDownloadFailure.
+  download.qt.io serves each 6.11.3 package and its .sha1, but the
+  .sha256 aqt fetches returns 404. The same file for 6.11.2 returns 200,
+  so the server has not finished publishing 6.11.3's checksums. Owner's
+  call: wait for Qt, keep the checksum check on, then re-run CI and the
+  trial release before the cut. Master is red until then.
   **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
   Kind: security.
   Source: in-session-2026-09-13.
