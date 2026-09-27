@@ -1202,6 +1202,19 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: accessibility.
   Source: demoreel-df recording, 2026-09-25.
 
+- ✅ [GHUB-0198] **The chess heartbeat check asserted the runner, not the window, and failed a release trial on it.**
+  Trial release 36318468030 (1bde36c) failed the Portable zip job on
+  uitest's "an idle window answers promptly to begin with": the idle
+  window's longest gap was 195ms against a fixed idle < 60. CI's Windows
+  leg passed the same check on the same commit. That precondition only
+  has to guarantee that busy <= idle*3+40 can still see a freeze, which
+  fills the whole 1200ms window. Fixed in tests/uitest.cpp: idle is the
+  best of up to three readings, and the precondition is idle*3+40 < 1200.
+  Test-only; no app code changed.
+  **Layman:** A timing test failed because the test computer had a slow moment, not because the game did; it now allows for that.
+  Kind: test.
+  Source: in-session-2026-09-27.
+
 ## P01 — Shipped
 
 ### 🎨 Games

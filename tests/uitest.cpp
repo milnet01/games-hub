@@ -5578,7 +5578,12 @@ int main(int argc, char* argv[])
         chess.resize(620, 620);
         chess.show();
         pump(30);
-        const qint64 idle = worstGapOver(1200);
+        // The best of up to three readings: one stall on a shared runner is the
+        // machine, not the window, and it once cost a release trial run (195ms
+        // against a fixed 60ms bar, on a commit whose CI leg passed).
+        qint64 idle = worstGapOver(1200);
+        for (int retry = 0; retry < 2 && idle >= 60; ++retry)
+            idle = std::min(idle, worstGapOver(1200));
 
         const bool loaded = chess.restoreState(blob);
         check(loaded, "chess: a middlegame position with the computer to move loads");
@@ -5591,7 +5596,11 @@ int main(int argc, char* argv[])
         // machine and this project has three red Windows legs from asserting an
         // environment constant. The unfixed build froze for the whole search --
         // a whole multiple of this bound, not a nudge past it.
-        check(idle < 60, "chess: an idle window answers promptly to begin with");
+        // What the idle reading must guarantee is only that the bound below can
+        // still see a freeze, which fills the whole 1200ms window. Asserting a
+        // fixed figure here asserted the runner.
+        check(idle * 3 + 40 < 1200,
+              "chess: an idle window answers promptly enough to measure a freeze against");
         check(busy <= idle * 3 + 40,
               "chess: the window never stops answering for long while the computer thinks");
 
