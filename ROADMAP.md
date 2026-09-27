@@ -1219,6 +1219,18 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: test.
   Source: in-session-2026-09-27.
 
+- 📋 [GHUB-0199] **The release workflow titles every release "Games X.Y.Z" and never reads the Theme line.**
+  CLAUDE.md § Releasing (owner's call 2026-09-08) says a `**Theme:**`
+  line becomes the release title, "1.1.0 — Play without a mouse". But
+  release.yml's Publish step hard-codes --title "Games $VERSION", and
+  cut-release only verifies a release a workflow published. 1.1.0 was
+  retitled by hand with gh release edit. Fix: have the Publish step read
+  the Theme line out of the notes it already extracts, and fall back to
+  the plain title when there is none.
+  **Layman:** Each release is supposed to carry a name as well as a number, and the automatic publishing step leaves the name off.
+  Kind: fix.
+  Source: in-session-2026-09-27.
+
 ## P01 — Shipped
 
 ### 🎨 Games
