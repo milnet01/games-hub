@@ -1327,9 +1327,11 @@ void boardsTakeTheKeyboard()
         MinesweeperProbe mines;
         SudokuView sudoku;
         KlondikeView klondike;
+        SpiderView spider;
         const std::pair<GameView*, const char*> boards[] = {
             { &chess, "chess" },     { &reversi, "reversi" }, { &draughts, "draughts" },
             { &mines, "minesweeper" }, { &sudoku, "sudoku" }, { &klondike, "klondike" },
+            { &spider, "spider" },
         };
         for (const auto& [view, name] : boards)
             check(view->focusPolicy() == Qt::StrongFocus,
@@ -1547,6 +1549,86 @@ void boardsTakeTheKeyboard()
         const QByteArray beforeDeal = klondike.saveState();
         pressKey(&klondike, Qt::Key_Space);
         check(klondike.saveState() != beforeDeal, "klondike: Space on the stock deals");
+    }
+
+    // Spider, the same way: a one-suit table with a six alone in the first
+    // column, a five-four run in the second and a nine in the third. The run
+    // can go on the six and not on the nine.
+    {
+        std::vector<Card> deck = makeDeck(2, 1);
+        const auto take = [&deck](int rank) {
+            const auto it = std::find_if(deck.begin(), deck.end(),
+                                         [rank](const Card& c) { return c.rank == rank; });
+            Card c = *it;
+            deck.erase(it);
+            c.faceUp = true;
+            return c;
+        };
+        const Card six = take(6);
+        const Card five = take(5);
+        const Card four = take(4);
+        const Card nine = take(9);
+        for (Card& c : deck)
+            c.faceUp = false;
+
+        QByteArray blob;
+        QDataStream out(&blob, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << quint32(1) << qint32(1) << qint32(0) << qint32(0);
+        cardcodec::writePile(out, { six });
+        cardcodec::writePile(out, { five, four });
+        cardcodec::writePile(out, { nine });
+        for (int col = 3; col < SpiderView::kColumns; ++col)
+            cardcodec::writePile(out, {});
+        cardcodec::writePile(out, deck);
+
+        SpiderView spider;
+        spider.resize(900, 640);
+        spider.show();
+        pump(20);
+        check(spider.restoreState(blob), "spider: a hand-built table loads");
+        check(spider.cursorSpot() == QPoint(0, 0),
+              "spider: a save from before the cursor opens it on the first column");
+        QAction* undo = undoAction(spider);
+
+        pressKey(&spider, Qt::Key_Right);
+        check(spider.cursorSpot() == QPoint(1, 1), "spider: Right lands on the next column's top card");
+        pressKey(&spider, Qt::Key_Up);
+        check(spider.cursorSpot() == QPoint(1, 0), "spider: Up climbs to the start of the run");
+        pressKey(&spider, Qt::Key_Up);
+        check(spider.cursorSpot() == QPoint(1, 0),
+              "spider: and no further, since nothing above it comes away");
+
+        pressKey(&spider, Qt::Key_Space);
+        check(spider.holdingARun(), "spider: Space lifts the run under the cursor");
+        pressKey(&spider, Qt::Key_Right);
+        pressKey(&spider, Qt::Key_Space);
+        check(spider.holdingARun(), "spider: a five dropped on a nine stays in hand");
+        pressKey(&spider, Qt::Key_Left);
+        pressKey(&spider, Qt::Key_Space);
+        check(!spider.holdingARun() && undo != nullptr && !undo->isEnabled(),
+              "spider: dropping it back where it came from puts it back");
+
+        pressKey(&spider, Qt::Key_Up);
+        pressKey(&spider, Qt::Key_Space);
+        pressKey(&spider, Qt::Key_Left);
+        pressKey(&spider, Qt::Key_Space);
+        check(!spider.holdingARun() && undo != nullptr && undo->isEnabled(),
+              "spider: Space lifts the run and Space drops it on the six");
+        check(spider.cursorSpot() == QPoint(0, 1),
+              "spider: and the cursor lands on the first card it dropped");
+
+        const QByteArray saved = spider.saveState();
+        SpiderView resumed;
+        check(resumed.restoreState(saved) && resumed.cursorSpot() == QPoint(0, 1),
+              "spider: the cursor is in the save");
+
+        for (int i = 0; i < 12; ++i)
+            pressKey(&spider, Qt::Key_Right);
+        check(spider.cursorSpot() == QPoint(SpiderView::kColumns, -1),
+              "spider: Right past the last column reaches the stock, and stops there");
+        pressKey(&spider, Qt::Key_Escape);
+        check(!spider.holdingARun(), "spider: Escape with nothing in hand does nothing");
     }
 }
 

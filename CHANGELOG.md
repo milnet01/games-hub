@@ -12,10 +12,10 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
-- **Klondike can be played without a mouse**
+- **Klondike and Spider can be played without a mouse**
   Arrow keys move a gold cursor between the piles and up and down a
   column, Space lifts a card and Space drops it, Escape puts it back.
-  The first card game of GHUB-0168; the rest follow.
+  The first two card games of GHUB-0168; the rest follow.
 
 ### Fixed
 

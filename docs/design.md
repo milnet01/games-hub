@@ -174,6 +174,14 @@ is the rules core's**: `lift()`, `dropOnTableau()`, `dropOnFoundation()` and
 idea of a legal move. A mouse press first puts back anything the keyboard is
 holding, so the two never hold cards at once.
 
+**Spider works the same way, with the stock as an eleventh stop** to the right
+of the last column, since it sits in that corner. There is no top row, so Up
+and Down only move along the same-suit run a column can give up: the cursor
+never stands on a card that cannot come away. `SpiderView::dropHeldOn` is the
+one drop for the drag and the keyboard, including the flight of a run the drop
+completes. Its caller decides what a refusal means: the drag puts the run
+back, and the keyboard keeps it in hand.
+
 **The mouse and the keyboard go through one function, and the mouse moves the
 cursor.** `ReversiView::playAt`, `ChessView::pressSquare`,
 `DraughtsView::pressSquare` and `MinesweeperView::digAt` each hold what a press

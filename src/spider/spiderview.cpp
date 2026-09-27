@@ -12,6 +12,7 @@
 #include <QDataStream>
 #include <QIODevice>
 #include <QMessageBox>
+#include <QKeyEvent>
 #include <QPushButton>
 #include <QMouseEvent>
 #include <QPainter>
@@ -29,6 +30,8 @@ SpiderView::SpiderView(QWidget* parent)
     : GameView(parent)
 {
     setMinimumSize(SpiderView::minimumSizeHint());
+    // Without it setFocus() does nothing and no key ever arrives (GHUB-0168).
+    setFocusPolicy(Qt::StrongFocus);
     buildActions();
     newGame();
 }
@@ -81,6 +84,11 @@ void SpiderView::buildActions()
             m_drag.clear();
             m_dragging = false;
             m_pressValid = false;
+            // deal() empties the table's hand, so a keyboard hold has gone too.
+            m_keyHolding = false;
+            m_cursorCol = 0;
+            m_cursorDepth = 99;
+            clampCursor();
             m_won = false;
             m_undoAction->setEnabled(false);
             update();
@@ -98,6 +106,9 @@ void SpiderView::newGame()
     m_resumed = false;
     m_table.deal(m_table.suits());
     Sound::instance().play(Sound::kShuffle);
+    m_cursorCol = 0;
+    m_cursorDepth = 99;
+    clampCursor();
     m_drag.clear();
     m_dragging = false;
     m_pressValid = false;
@@ -119,6 +130,7 @@ void SpiderView::undo()
         return;
     settleForChange();
     m_table.undo();
+    clampCursor();
     m_won = false;
     m_undoAction->setEnabled(m_table.canUndo());
     update();
@@ -136,7 +148,7 @@ QByteArray SpiderView::saveState() const
     // dropped; closing the window while holding it must not lose the cards.
     const auto column = [this](int index) {
         std::vector<Card> cards = m_table.columns()[std::size_t(index)];
-        if (m_dragging && m_dragFrom == index)
+        if ((m_dragging || m_keyHolding) && m_dragFrom == index)
             cards.insert(cards.end(), m_drag.begin(), m_drag.end());
         return cards;
     };
@@ -144,11 +156,14 @@ QByteArray SpiderView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_table.suits()) << qint32(m_table.completed())
+    // Version 2 appends the keyboard cursor, last; a version-1 save still
+    // loads, with the cursor where a fresh deal puts it.
+    out << quint32(2) << qint32(m_table.suits()) << qint32(m_table.completed())
         << qint32(m_table.moves());
     for (int col = 0; col < kColumns; ++col)
         cardcodec::writePile(out, column(col));
     cardcodec::writePile(out, m_table.stock());
+    out << qint8(m_cursorCol) << qint8(m_cursorDepth);
     return blob;
 }
 
@@ -161,7 +176,7 @@ bool SpiderView::restoreState(const QByteArray& blob)
     qint32 completed = 0;
     qint32 moves = 0;
     in >> version >> suits >> completed >> moves;
-    if (version != 1 || in.status() != QDataStream::Ok
+    if ((version != 1 && version != 2) || in.status() != QDataStream::Ok
         || (suits != 1 && suits != 2 && suits != 4) || completed < 0 || completed > 8 || moves < 0)
         return false;
 
@@ -169,6 +184,14 @@ bool SpiderView::restoreState(const QByteArray& blob)
     std::vector<Card> stock;
     if (!cardcodec::readPiles(in, columns) || !cardcodec::readPile(in, stock))
         return false;
+    qint8 cursorCol = 0;
+    qint8 cursorDepth = 99;
+    if (version >= 2) {
+        in >> cursorCol >> cursorDepth;
+        if (in.status() != QDataStream::Ok || cursorCol < 0 || cursorCol > kStockStop
+            || cursorDepth < -1)
+            return false;
+    }
 
     // The table decides whether this is a position the rules could have
     // produced -- Spider takes a finished run off for good, so what must come
@@ -179,6 +202,10 @@ bool SpiderView::restoreState(const QByteArray& blob)
     m_drag.clear();
     m_dragging = false;
     m_pressValid = false;
+    m_keyHolding = false;
+    m_cursorCol = cursorCol;
+    m_cursorDepth = cursorDepth;
+    clampCursor();
     m_won = false;
     m_undoAction->setEnabled(false);
     const QString wanted = QStringLiteral("spider-suits-%1").arg(m_table.suits()); // untranslated: an object name
@@ -391,6 +418,30 @@ void SpiderView::paintEvent(QPaintEvent*)
         }
     }
 
+    // The keyboard's run and the cursor, over everything but the caption.
+    if (!m_dragging) {
+        QRectF cursor;
+        if (m_keyHolding && !m_drag.empty()) {
+            const QRectF first = heldLandingRect();
+            cursor = first;
+            for (int i = 0; i < int(m_drag.size()); ++i) {
+                const QRectF r = first.translated(0, i * cardHeight() * 0.26);
+                CardArt::paintFace(p, r, m_drag[std::size_t(i)]);
+                cursor = cursor.united(r);
+            }
+        } else if (m_cursorCol == kStockStop) {
+            cursor = stockRect();
+        } else {
+            const std::vector<Card>& column = m_table.columns()[std::size_t(m_cursorCol)];
+            cursor = column.empty()
+                ? columnOrigin(m_cursorCol)
+                // The card and everything under it: what Space would lift.
+                : cardRect(m_cursorCol, m_cursorDepth)
+                      .united(cardRect(m_cursorCol, int(column.size()) - 1));
+        }
+        Theme::paintCellCursor(p, cursor, Legibility::instance().enabled());
+    }
+
     paintStatusCaption(p, QRectF(rect()));
 }
 
@@ -401,6 +452,15 @@ void SpiderView::mousePressEvent(QMouseEvent* event)
 
     m_pressPos = event->position();
     m_pressValid = false;
+
+    // A run held by the keyboard goes back before the mouse does anything, so
+    // the two never hold cards at once.
+    if (m_keyHolding) {
+        m_table.putBack();
+        m_keyHolding = false;
+        m_drag.clear();
+        update();
+    }
 
     // Columns first. The stock sits at the bottom right, over the tail of the
     // last column, so testing it first deals a row when the player meant to
@@ -414,6 +474,12 @@ void SpiderView::mousePressEvent(QMouseEvent* event)
         for (int i = int(column.size()) - 1; i >= 0; --i) {
             if (!cardRect(col, i).contains(event->position()))
                 continue;
+            // The cursor follows the mouse, so the two ways of playing never
+            // disagree about where you are.
+            m_cursorCol = col;
+            m_cursorDepth = i;
+            clampCursor();
+            update();
             if (!column[std::size_t(i)].faceUp || i < firstMovable)
                 return; // grabbed a card that cannot move as a unit
             m_dragFrom = col;
@@ -424,8 +490,11 @@ void SpiderView::mousePressEvent(QMouseEvent* event)
         }
     }
 
-    if (stockRect().contains(event->position()))
+    if (stockRect().contains(event->position())) {
+        m_cursorCol = kStockStop;
+        clampCursor();
         dealRow();
+    }
 }
 
 void SpiderView::mouseMoveEvent(QMouseEvent* event)
@@ -474,55 +543,194 @@ void SpiderView::mouseReleaseEvent(QMouseEvent* event)
         }
     }
 
+    const QPointF dragTopLeft(m_dragPos.x() - m_dragGrab.x(), m_dragPos.y() - m_dragGrab.y());
+    if (dropHeldOn(target, dragTopLeft) == SpiderTable::Drop::Refused)
+        m_table.putBack();
+    m_undoAction->setEnabled(m_table.canUndo());
+
+    m_drag.clear();
+    m_pressValid = false;
+    clampCursor();
+    update();
+    refresh();
+    checkWin();
+}
+
+SpiderTable::Drop SpiderView::dropHeldOn(int target, QPointF runTopLeft)
+{
     // What the target column holds, and where each card is sitting, BEFORE the
     // drop. A completed run is taken off inside dropOn(), so by the time it
     // reports Completed those thirteen cards no longer exist to be measured.
     std::vector<Card> preColumn;
     std::vector<QRectF> preRects;
-    if (target >= 0) {
+    if (target >= 0 && target < kColumns) {
         preColumn = m_table.columns()[std::size_t(target)];
         for (int i = 0; i < int(preColumn.size()); ++i)
             preRects.push_back(cardRect(target, i));
     }
     const std::vector<Card> dragged = m_drag;
-    const QPointF dragTopLeft(m_dragPos.x() - m_dragGrab.x(), m_dragPos.y() - m_dragGrab.y());
 
     // The view decides WHICH column the drop landed on; the table decides
     // whether the run may go there, turns over what it uncovered and takes off
     // a completed run.
-    const SpiderTable::Drop result
-        = target >= 0 ? m_table.dropOn(target) : SpiderTable::Drop::Refused;
-    if (result == SpiderTable::Drop::Refused) {
-        m_table.putBack();
-    } else {
-        Sound::instance().play(Sound::kCardPlace);
-        if (result == SpiderTable::Drop::Completed) {
-            Sound::instance().play(Sound::kWin);
-            // The pile as it stood the instant before the harvest: what was in
-            // the column, then the run that was just dropped on top of it. The
-            // last kRunLength of that is what left.
-            std::vector<Card> pile = preColumn;
-            std::vector<QRectF> rects = preRects;
-            const double w = cardWidth();
-            const double h = cardHeight();
-            for (int i = 0; i < int(dragged.size()); ++i) {
-                pile.push_back(dragged[std::size_t(i)]);
-                rects.emplace_back(dragTopLeft.x(), dragTopLeft.y() + i * h * 0.26, w, h);
-            }
-            if (int(pile.size()) >= SpiderTable::kRunLength) {
-                const std::size_t first = pile.size() - SpiderTable::kRunLength;
-                launchCompletedRun({ pile.begin() + qsizetype(first), pile.end() },
-                                   { rects.begin() + qsizetype(first), rects.end() });
-            }
+    const SpiderTable::Drop result = target >= 0 && target < kColumns
+        ? m_table.dropOn(target) : SpiderTable::Drop::Refused;
+    if (result == SpiderTable::Drop::Refused)
+        return result;
+
+    Sound::instance().play(Sound::kCardPlace);
+    if (result == SpiderTable::Drop::Completed) {
+        Sound::instance().play(Sound::kWin);
+        // The pile as it stood the instant before the harvest: what was in
+        // the column, then the run that was just dropped on top of it. The
+        // last kRunLength of that is what left.
+        std::vector<Card> pile = preColumn;
+        std::vector<QRectF> rects = preRects;
+        const double w = cardWidth();
+        const double h = cardHeight();
+        for (int i = 0; i < int(dragged.size()); ++i) {
+            pile.push_back(dragged[std::size_t(i)]);
+            rects.emplace_back(runTopLeft.x(), runTopLeft.y() + i * h * 0.26, w, h);
+        }
+        if (int(pile.size()) >= SpiderTable::kRunLength) {
+            const std::size_t first = pile.size() - SpiderTable::kRunLength;
+            launchCompletedRun({ pile.begin() + qsizetype(first), pile.end() },
+                               { rects.begin() + qsizetype(first), rects.end() });
         }
     }
-    m_undoAction->setEnabled(m_table.canUndo());
+    return result;
+}
 
+// ---------------------------------------------------------------------------
+// Keyboard (GHUB-0168): the boards' scheme, as in KlondikeView. Arrows step
+// between the ten columns and the stock and along the run a column can give
+// up; Space lifts, Space drops, Escape puts back.
+// ---------------------------------------------------------------------------
+
+void SpiderView::clampCursor()
+{
+    m_cursorCol = std::clamp(m_cursorCol, 0, int(kStockStop));
+    if (m_cursorCol == kStockStop) {
+        m_cursorDepth = -1;
+        return;
+    }
+    const std::vector<Card>& column = m_table.columns()[std::size_t(m_cursorCol)];
+    if (column.empty()) {
+        m_cursorDepth = 0;
+        return;
+    }
+    const int last = int(column.size()) - 1;
+    // Only the same-suit run at the foot of a column comes away, so that is
+    // the whole range the cursor can stand on -- and while a run is held the
+    // cursor points at a column, so it sits on the top.
+    const int firstMovable = int(column.size()) - std::max(1, movableRunLength(m_cursorCol));
+    m_cursorDepth = m_keyHolding ? last : std::clamp(m_cursorDepth, firstMovable, last);
+}
+
+QRectF SpiderView::heldLandingRect() const
+{
+    QRectF r = m_cursorCol == kStockStop ? stockRect() : columnOrigin(m_cursorCol);
+    if (m_cursorCol < kStockStop) {
+        const std::vector<Card>& column = m_table.columns()[std::size_t(m_cursorCol)];
+        if (!column.empty())
+            r = cardRect(m_cursorCol, int(column.size()) - 1)
+                    .translated(0, cardHeight() * 0.26 * fanScale(column));
+    }
+    // Raised off the column, so it reads as held rather than as played.
+    return r.translated(cardWidth() * 0.10, -cardHeight() * 0.06);
+}
+
+void SpiderView::pressAtCursor()
+{
+    if (m_keyHolding) {
+        dropAtCursor();
+        return;
+    }
+    if (m_cursorCol == kStockStop) {
+        dealRow();
+        return;
+    }
+    const std::vector<Card>& column = m_table.columns()[std::size_t(m_cursorCol)];
+    if (column.empty() || !column[std::size_t(m_cursorDepth)].faceUp)
+        return;
+    // Banks the undo snapshot before the cards leave, as a drag does.
+    m_drag = m_table.lift(m_cursorCol, m_cursorDepth);
+    if (m_drag.empty())
+        return;
+    m_dragFrom = m_cursorCol;
+    m_dragIndex = m_cursorDepth;
+    m_keyHolding = true;
+}
+
+void SpiderView::dropAtCursor()
+{
+    if (m_cursorCol == m_dragFrom) {
+        m_table.putBack();
+        m_keyHolding = false;
+        m_drag.clear();
+        return;
+    }
+    const int dropped = int(m_drag.size());
+    const SpiderTable::Drop result = dropHeldOn(m_cursorCol, heldLandingRect().topLeft());
+    // Not a legal home: keep holding, so the player can try another column.
+    if (result == SpiderTable::Drop::Refused)
+        return;
+
+    m_keyHolding = false;
     m_drag.clear();
-    m_pressValid = false;
-    update();
+    // Onto the first card of the run it dropped, so Space can pick it up
+    // again. A completed run has left, and the clamp finds what is there now.
+    m_cursorDepth = int(m_table.columns()[std::size_t(m_cursorCol)].size()) - dropped;
+    m_undoAction->setEnabled(m_table.canUndo());
     refresh();
     checkWin();
+}
+
+void SpiderView::keyPressEvent(QKeyEvent* event)
+{
+    if (m_dragging) {
+        GameView::keyPressEvent(event);
+        return;
+    }
+
+    switch (event->key()) {
+    case Qt::Key_Left:
+        m_cursorCol = std::max(0, m_cursorCol - 1);
+        m_cursorDepth = 99; // the top of the new column; clamped
+        break;
+    case Qt::Key_Right:
+        m_cursorCol = std::min(int(kStockStop), m_cursorCol + 1);
+        m_cursorDepth = 99;
+        break;
+    case Qt::Key_Up:
+        if (!m_keyHolding && m_cursorCol != kStockStop)
+            --m_cursorDepth;
+        break;
+    case Qt::Key_Down:
+        if (!m_keyHolding && m_cursorCol != kStockStop)
+            ++m_cursorDepth;
+        break;
+    case Qt::Key_Space:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        pressAtCursor();
+        break;
+    case Qt::Key_Escape:
+        if (!m_keyHolding) {
+            GameView::keyPressEvent(event);
+            return;
+        }
+        m_table.putBack();
+        m_keyHolding = false;
+        m_drag.clear();
+        break;
+    default:
+        GameView::keyPressEvent(event);
+        return;
+    }
+
+    clampCursor();
+    update();
 }
 
 void SpiderView::launchCompletedRun(const std::vector<Card>& run,
@@ -579,6 +787,7 @@ void SpiderView::settleForChange()
         m_table.putBack();
     m_drag.clear();
     m_dragging = false;
+    m_keyHolding = false;
     m_pressValid = false;
 }
 

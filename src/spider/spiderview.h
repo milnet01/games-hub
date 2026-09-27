@@ -5,6 +5,7 @@
 #include "gameview.h"
 #include "spider/spidertable.h"
 
+#include <QPoint>
 #include <QPointF>
 #include <QRectF>
 
@@ -44,6 +45,11 @@ public:
     // settleForChange().
     bool holdingARun() const { return m_dragging || m_table.holding(); }
 
+    // The keyboard cursor, as {column, depth}: columns 0-9, and column 10 is
+    // the stock in the corner. Depth is a card's index in the column (-1 on
+    // the stock). Exists for the reason KlondikeView::cursorSpot does.
+    QPoint cursorSpot() const { return { m_cursorCol, m_cursorDepth }; }
+
     // The bottom edge of the longest column, and the height it must stay
     // inside. Exists so a test can ask whether a fully dealt table still fits,
     // which no rendered picture answers -- same reasoning as flightsInTheAir().
@@ -65,6 +71,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 900, 640 }; }
     QSize minimumSizeHint() const override { return { 620, 440 }; }
 
@@ -92,6 +99,20 @@ private:
     void checkWin();
     void refresh();
 
+    // Drops the held run on `target` and, when that completes a run, sends
+    // the thirteen cards on their way from where the run was DRAWN
+    // (`runTopLeft`). One function for the drag and the keyboard, so the two
+    // cannot disagree about a move. The caller decides what a refusal means:
+    // the drag puts the run back, the keyboard keeps it in hand.
+    SpiderTable::Drop dropHeldOn(int target, QPointF runTopLeft);
+
+    // Keyboard play (GHUB-0168), the boards' scheme. See KlondikeView.
+    static constexpr int kStockStop = kColumns; // the cursor column of the stock
+    void clampCursor();
+    void pressAtCursor();
+    void dropAtCursor();
+    QRectF heldLandingRect() const;
+
     // GHUB-0065. A completed run is thirteen cards leaving a column at once,
     // and until this existed the only sign it had happened was a count in the
     // status bar. They fly to the stock corner, staggered, so the run reads as
@@ -115,6 +136,13 @@ private:
     QPointF m_pressPos;
     bool m_dragging = false;
     bool m_pressValid = false;
+
+    // A run lifted with Space; the table holds it, m_drag and m_dragFrom carry
+    // the view's copy exactly as a drag does, so saveState patches either.
+    bool m_keyHolding = false;
+    // Opens on the top card of the first column; clamped to it on first use.
+    int m_cursorCol = 0;
+    int m_cursorDepth = 99;
 
     // Restoring a save clears the table's undo history, so canUndo() alone reads
     // a resumed deal as untouched and saveState() then returns {}, which the hub

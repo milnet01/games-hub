@@ -319,6 +319,17 @@ path, so they land together.
   the save check was proved red by breaking the write. docs/design.md
   The game contract records it. Left: Spider, FreeCell, Pyramid,
   Canasta, Hearts.
+  Progress (2026-09-27): SPIDER done. Cursor {column 0-9, depth};
+  column 10 is the stock (Right past the last column), where Space deals
+  a row. No top row: Up/Down move only along the same-suit run a column
+  can give up. SpiderView::dropHeldOn is now the one drop for drag and
+  keyboard, completion flight included; the drag puts back a refusal,
+  the keyboard keeps holding. Blob v2 saves the cursor; v1 still loads.
+  boardsTakeTheKeyboard part 4 builds a 6 / 5-4 / 9 one-suit table from
+  a v1 blob. Mutations proved red: breaking the cursor write, and making
+  a refusal put the run back. ctest 11/11. Left: FreeCell, Pyramid,
+  Canasta, Hearts. GHUB-0069 (click-to-place) is not started; it would
+  reuse pressAtCursor/dropAtCursor's shape in each view.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
