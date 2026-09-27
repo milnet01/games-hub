@@ -435,9 +435,18 @@ jobs:
           ' CHANGELOG.md > notes.md
           cat notes.md
 
+          # A release is named as well as numbered (CLAUDE.md § Releasing): the
+          # section's **Theme:** line becomes the title, and a section without
+          # one keeps the plain title rather than failing the publish.
+          theme=$(sed -n 's/^\*\*Theme:\*\*[[:space:]]*//p' notes.md | head -n 1)
+          title="Games $VERSION"
+          if [ -n "$theme" ]; then
+            title="$VERSION — $theme"
+          fi
+
           appimage=$(ls artifacts/GamesHub-*.AppImage)
           zip=$(ls artifacts/GamesHub-*.zip)
           gh release create "$GITHUB_REF_NAME" \
-            --title "Games $VERSION" \
+            --title "$title" \
             --notes-file notes.md \
             "$appimage" "$zip"

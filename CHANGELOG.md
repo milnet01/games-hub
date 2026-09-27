@@ -10,6 +10,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Fixed
+
+- **A release's name now appears in its title on the releases page** (GHUB-0199)
+  Each release carries a name as well as a number, but the step that
+  publishes it always wrote "Games X.Y.Z". 1.1.0 was renamed by hand.
+
 ## [1.1.0] - 2026-09-27
 
 **Theme:** Play without a mouse
