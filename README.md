@@ -11,7 +11,7 @@ editor without covering them.
 
 ![the games hub](docs/hub.png)
 
-Current version 1.0.0 — see the [changelog](CHANGELOG.md) for what changed
+Current version 1.1.0 — see the [changelog](CHANGELOG.md) for what changed
 and the [roadmap](ROADMAP.md) for what is coming.
 
 ## Download

@@ -23,7 +23,7 @@ whose turn it is.
 What remains is the Qt bump, which closes only when a tagged build carries it,
 and a current screenshot for the README.
 
-- 🚧 [GHUB-0193] **The downloads bundle Qt 6.8.3, which Qt's own advisory list names.**
+- ✅ [GHUB-0193] **The downloads bundle Qt 6.8.3, which Qt's own advisory list names.**
   Found by the first run of GHUB-0055's release-checklist step, 2026-09-13.
   https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products names 6.8.3
   in advisories fixed by 6.8.4 and later. The open-source mirror stops the 6.8
@@ -116,6 +116,10 @@ and a current screenshot for the README.
   release exists, aqtinstall has no release past 3.3.0, and SECURITY.md
   records the Qt check. After publishing, message the
   ants-projects-hub-website session that 1.1.0 is out; it was promised.
+  Resolved (2026-09-27): Qt published 6.11.3's Windows .sha256 files.
+  CI 36319021610 (all five checks) and trial release 36319025616
+  (verify, AppImage, Portable zip) passed at 900ceb4 on Qt 6.11.3.
+  Ships in 1.1.0.
   **Layman:** The downloads carry an older copy of Qt with published security fixes it does not have; none reaches this app today, but SECURITY.md promises the upgrade.
   Kind: security.
   Source: in-session-2026-09-13.
