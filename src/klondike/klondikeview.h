@@ -5,6 +5,7 @@
 #include "gameview.h"
 #include "klondike/klondiketable.h"
 
+#include <QPoint>
 #include <QPointF>
 #include <QRectF>
 
@@ -45,6 +46,13 @@ public:
     // settleForChange().
     bool holdingARun() const { return m_dragging || m_table.holding(); }
 
+    // The keyboard cursor, as {column, depth}: column 0-6 across the table,
+    // depth -1 for the top row (stock, waste, foundations) or a card's index in
+    // that tableau column. Exists for the same reason ReversiView's cursorCell
+    // does: a clamped index is a property of this code, a gold band is the
+    // theme's.
+    QPoint cursorSpot() const { return { m_cursorCol, m_cursorDepth }; }
+
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
@@ -54,6 +62,7 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 820, 620 }; }
     QSize minimumSizeHint() const override { return { 560, 420 }; }
 
@@ -119,6 +128,22 @@ private:
     void checkWin();
     void refresh();
 
+    // Keyboard play (GHUB-0168). The top row has no pile in column 2, so the
+    // cursor steps over it there. The pile the cursor stands on, as a Spot;
+    // `index` is the top card, or the card at the cursor's depth in a column.
+    Spot cursorPile() const;
+    // Keeps the depth on a face-up card of the current column (the only cards
+    // Space can lift), or on the top card, after anything moves the table.
+    void clampCursor();
+    // Space: deal, lift, or drop what the keyboard is holding onto the pile
+    // under the cursor. A drop back onto the pile the run came from puts it
+    // back, which is how the mouse says "no" too.
+    void pressAtCursor();
+    void dropAtCursor();
+    // Where a run held by the keyboard is drawn: over the pile under the
+    // cursor, where it would land, and raised off it.
+    QRectF heldLandingRect() const;
+
     // GHUB-0065. Sends `card` on its way from `fromRect` to foundation
     // `foundation`, which the caller has already moved it to in the model. The
     // destination is captured here, when the card leaves, so anything that
@@ -150,6 +175,14 @@ private:
     bool m_dragging = false;
     bool m_pressValid = false;
     QPointF m_pressPos;
+
+    // A run lifted with Space rather than the mouse. The table holds it, as it
+    // does mid-drag; m_drag and m_dragFrom carry the view's copy and its
+    // origin exactly as a drag does, so saveState patches either back.
+    bool m_keyHolding = false;
+    // Opens on the stock, because dealing is the first thing a deal asks for.
+    int m_cursorCol = 0;
+    int m_cursorDepth = -1;
 
     // Restoring a save clears the table's undo history, so canUndo() alone reads
     // a resumed deal as untouched and saveState() then returns {}, which the hub

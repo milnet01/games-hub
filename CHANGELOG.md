@@ -10,6 +10,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Added
+
+- **Klondike can be played without a mouse**
+  Arrow keys move a gold cursor between the piles and up and down a
+  column, Space lifts a card and Space drops it, Escape puts it back.
+  The first card game of GHUB-0168; the rest follow.
+
 ### Fixed
 
 - **A release's name now appears in its title on the releases page** (GHUB-0199)

@@ -305,6 +305,20 @@ path, so they land together.
   Space again to drop it, so there is one thing to learn across all
   fourteen. GHUB-0069 shares that answer and is settled by it. Not
   started; the first slice's four boards are unaffected.
+  Progress (2026-09-27): KLONDIKE done, the first card game. Cursor
+  is {column, depth}: depth -1 is the top row (stock, waste, four
+  foundations; the cursor steps over the empty third column), any other
+  depth is a face-up card in that tableau column. Space deals from the
+  stock, lifts a card and the run under it, and drops on the pile under
+  the cursor. A refused drop keeps the run in hand; a drop on its own
+  pile, or Escape, puts it back. The rules core's lift()/drop*()/putBack()
+  take both the drag and the keyboard. A mouse press puts back a
+  keyboard-held run first. The cursor is in the save: blob v2, and v1
+  still loads with the cursor on the stock. boardsTakeTheKeyboard part 4
+  builds a king-and-queen table from a v1 blob and plays it by keyboard;
+  the save check was proved red by breaking the write. docs/design.md
+  The game contract records it. Left: Spider, FreeCell, Pyramid,
+  Canasta, Hearts.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.

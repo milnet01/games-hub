@@ -1326,9 +1326,10 @@ void boardsTakeTheKeyboard()
         DraughtsProbe draughts;
         MinesweeperProbe mines;
         SudokuView sudoku;
+        KlondikeView klondike;
         const std::pair<GameView*, const char*> boards[] = {
             { &chess, "chess" },     { &reversi, "reversi" }, { &draughts, "draughts" },
-            { &mines, "minesweeper" }, { &sudoku, "sudoku" },
+            { &mines, "minesweeper" }, { &sudoku, "sudoku" }, { &klondike, "klondike" },
         };
         for (const auto& [view, name] : boards)
             check(view->focusPolicy() == Qt::StrongFocus,
@@ -1468,6 +1469,84 @@ void boardsTakeTheKeyboard()
         pressKey(&mines, Qt::Key_Space);
         check(status.contains(QStringLiteral("Digging")),
               "minesweeper: Space digs, which starts the clock");
+    }
+
+    // 4. The card games take the same scheme (owner's call, 2026-09-21): the
+    // cursor steps between piles and along a column, Space lifts and Space
+    // drops. Klondike first. The table is BUILT rather than dealt -- a black
+    // king alone in the first column, a red queen alone in the second, the
+    // rest of the pack face down in the stock -- so every move below has one
+    // known answer. Written as a version-1 save, which is also the check that
+    // a save from before the cursor still loads.
+    {
+        const Card king { Suit::Spades, kKing, true };
+        const Card queen { Suit::Hearts, kQueen, true };
+        std::vector<Card> stock;
+        for (Card c : makeDeck()) {
+            if (c == king || c == queen)
+                continue;
+            c.faceUp = false;
+            stock.push_back(c);
+        }
+        QByteArray blob;
+        QDataStream out(&blob, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << quint32(1) << qint32(1) << qint32(0);
+        cardcodec::writePile(out, stock);
+        cardcodec::writePile(out, {});
+        for (int f = 0; f < 4; ++f)
+            cardcodec::writePile(out, {});
+        cardcodec::writePile(out, { king });
+        cardcodec::writePile(out, { queen });
+        for (int col = 2; col < 7; ++col)
+            cardcodec::writePile(out, {});
+
+        KlondikeView klondike;
+        klondike.resize(820, 620);
+        klondike.show();
+        pump(20);
+        check(klondike.restoreState(blob), "klondike: a hand-built table loads");
+        check(klondike.cursorSpot() == QPoint(0, -1),
+              "klondike: a save from before the cursor opens it on the stock");
+        QAction* undo = undoAction(klondike);
+
+        pressKey(&klondike, Qt::Key_Down);
+        check(klondike.cursorSpot() == QPoint(0, 0), "klondike: Down goes to the column below");
+        pressKey(&klondike, Qt::Key_Right);
+        check(klondike.cursorSpot() == QPoint(1, 0), "klondike: Right steps to the next column");
+
+        pressKey(&klondike, Qt::Key_Space);
+        check(klondike.holdingARun(), "klondike: Space lifts the card under the cursor");
+        pressKey(&klondike, Qt::Key_Right);
+        pressKey(&klondike, Qt::Key_Space);
+        check(klondike.holdingARun(),
+              "klondike: a queen dropped on an empty column stays in hand");
+        pressKey(&klondike, Qt::Key_Escape);
+        check(!klondike.holdingARun(), "klondike: Escape puts a lifted card back");
+        check(undo != nullptr && !undo->isEnabled(), "klondike: and putting it back is not a move");
+
+        pressKey(&klondike, Qt::Key_Left);
+        pressKey(&klondike, Qt::Key_Space);
+        pressKey(&klondike, Qt::Key_Left);
+        pressKey(&klondike, Qt::Key_Space);
+        check(!klondike.holdingARun() && undo != nullptr && undo->isEnabled(),
+              "klondike: Space lifts the queen and Space drops it on the king");
+        check(klondike.cursorSpot() == QPoint(0, 1),
+              "klondike: and the cursor lands on the card it dropped");
+
+        const QByteArray saved = klondike.saveState();
+        KlondikeView resumed;
+        check(resumed.restoreState(saved) && resumed.cursorSpot() == QPoint(0, 1),
+              "klondike: the cursor is in the save");
+
+        // Up climbs the face-up run, then leaves the column for the top row.
+        pressKey(&klondike, Qt::Key_Up);
+        check(klondike.cursorSpot() == QPoint(0, 0), "klondike: Up climbs to the king");
+        pressKey(&klondike, Qt::Key_Up);
+        check(klondike.cursorSpot() == QPoint(0, -1), "klondike: and Up again reaches the stock");
+        const QByteArray beforeDeal = klondike.saveState();
+        pressKey(&klondike, Qt::Key_Space);
+        check(klondike.saveState() != beforeDeal, "klondike: Space on the stock deals");
     }
 }
 

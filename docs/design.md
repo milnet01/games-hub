@@ -161,6 +161,19 @@ changed their mind should not have to hunt for one. Minesweeper adds `F`,
 because the mouse flags with the RIGHT button and a field you can dig but not
 flag is not playable.
 
+**Klondike takes the same scheme as the boards**, so a card game and a board
+game ask the player to learn one thing. Its cursor is a column and a depth: depth -1 is the top row, where the
+cursor steps over the empty third column, and any other depth is a face-up
+card in that tableau column. Up climbs the face-up run and then leaves for the
+top row. Space on the stock deals, Space on a card lifts it and everything
+under it, and Space again drops it on the pile under the cursor. A drop the
+rules refuse keeps the run in hand, so the player can try another pile. A drop
+back on the pile it came from, or Escape, puts it back. **Here the one function
+is the rules core's**: `lift()`, `dropOnTableau()`, `dropOnFoundation()` and
+`putBack()` take both the drag and the keyboard, so neither path has its own
+idea of a legal move. A mouse press first puts back anything the keyboard is
+holding, so the two never hold cards at once.
+
 **The mouse and the keyboard go through one function, and the mouse moves the
 cursor.** `ReversiView::playAt`, `ChessView::pressSquare`,
 `DraughtsView::pressSquare` and `MinesweeperView::digAt` each hold what a press
@@ -178,6 +191,7 @@ the legibility switch drawing the same cursor it drew with the switch off.
 Saving it follows Sudoku, which has always saved its own — the blob version of
 each of the four went up by one, every earlier version still loads with the
 cursor left where a fresh game puts it, and `tests/saves/` is untouched.
+Klondike followed the same route to version 2.
 
 ### The hub
 

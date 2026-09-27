@@ -12,6 +12,7 @@
 #include <QDataStream>
 #include <QIODevice>
 #include <QMessageBox>
+#include <QKeyEvent>
 #include <QPushButton>
 #include <QMouseEvent>
 #include <QPainter>
@@ -32,6 +33,8 @@ KlondikeView::KlondikeView(QWidget* parent)
 {
     setMinimumSize(KlondikeView::minimumSizeHint());
     setMouseTracking(true);
+    // Without it setFocus() does nothing and no key ever arrives (GHUB-0168).
+    setFocusPolicy(Qt::StrongFocus);
     buildActions();
     newGame();
 }
@@ -82,6 +85,8 @@ void KlondikeView::newGame()
     m_resumed = false;
     m_table.deal();
     Sound::instance().play(Sound::kShuffle);
+    m_cursorCol = 0;
+    m_cursorDepth = -1;
     m_drag.clear();
     m_dragging = false;
     m_won = false;
@@ -102,6 +107,7 @@ void KlondikeView::undo()
         return;
     settleForChange();
     m_table.undo();
+    clampCursor();
     m_won = false;
     m_undoAction->setEnabled(m_table.canUndo());
     update();
@@ -131,7 +137,7 @@ QByteArray KlondikeView::saveState() const
     // cards, so they go back onto the pile they came from.
     const auto pile = [this](PileKind kind, int index) {
         std::vector<Card> cards = pileFor(kind, index);
-        if (m_dragging && m_dragFrom.kind == kind && m_dragFrom.pile == index)
+        if ((m_dragging || m_keyHolding) && m_dragFrom.kind == kind && m_dragFrom.pile == index)
             cards.insert(cards.end(), m_drag.begin(), m_drag.end());
         return cards;
     };
@@ -139,13 +145,17 @@ QByteArray KlondikeView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_table.drawCount()) << qint32(m_table.score());
+    // Version 2 appends the keyboard cursor, last, so the render of a resumed
+    // deal matches the one that was saved; a version-1 save still loads, with
+    // the cursor where a fresh deal puts it.
+    out << quint32(2) << qint32(m_table.drawCount()) << qint32(m_table.score());
     cardcodec::writePile(out, pile(PileKind::Stock, 0));
     cardcodec::writePile(out, pile(PileKind::Waste, 0));
     for (int f = 0; f < 4; ++f)
         cardcodec::writePile(out, pile(PileKind::Foundation, f));
     for (int col = 0; col < 7; ++col)
         cardcodec::writePile(out, pile(PileKind::Tableau, col));
+    out << qint8(m_cursorCol) << qint8(m_cursorDepth);
     return blob;
 }
 
@@ -157,7 +167,7 @@ bool KlondikeView::restoreState(const QByteArray& blob)
     qint32 draw = 0;
     qint32 score = 0;
     in >> version >> draw >> score;
-    if (version != 1 || in.status() != QDataStream::Ok || (draw != 1 && draw != 3) || score < 0)
+    if ((version != 1 && version != 2) || in.status() != QDataStream::Ok || (draw != 1 && draw != 3) || score < 0)
         return false;
 
     // Read into a table of its own, so a blob that turns out to be nonsense
@@ -169,6 +179,13 @@ bool KlondikeView::restoreState(const QByteArray& blob)
     if (!cardcodec::readPile(in, stock) || !cardcodec::readPile(in, waste)
         || !cardcodec::readPiles(in, foundations) || !cardcodec::readPiles(in, tableau))
         return false;
+    qint8 cursorCol = 0;
+    qint8 cursorDepth = -1;
+    if (version >= 2) {
+        in >> cursorCol >> cursorDepth;
+        if (in.status() != QDataStream::Ok || cursorCol < 0 || cursorCol > 6 || cursorDepth < -1)
+            return false;
+    }
 
     // The table decides whether this is a position the rules could have
     // produced -- the whole pack back, because Klondike never takes a card out
@@ -179,8 +196,12 @@ bool KlondikeView::restoreState(const QByteArray& blob)
     m_drag.clear();
     m_dragging = false;
     m_pressValid = false;
+    m_keyHolding = false;
     m_won = false;
     m_resumed = true;
+    m_cursorCol = cursorCol;
+    m_cursorDepth = cursorDepth;
+    clampCursor();
     m_undoAction->setEnabled(false);
     const QString wanted = QStringLiteral("klondike-draw-%1").arg(m_table.drawCount()); // untranslated: an object name
     for (QAction* a : m_actions) {
@@ -474,6 +495,31 @@ void KlondikeView::paintEvent(QPaintEvent*)
         }
     }
 
+    // The keyboard's run and the cursor, over everything but the caption: the
+    // cursor says where the next Space lands, so nothing may sit on top of it.
+    if (!m_dragging) {
+        QRectF cursor;
+        if (m_keyHolding && !m_drag.empty()) {
+            const QRectF first = heldLandingRect();
+            cursor = first;
+            for (int i = 0; i < int(m_drag.size()); ++i) {
+                const QRectF r = first.translated(0, i * cardHeight() * kFaceUpStep);
+                CardArt::paintFace(p, r, m_drag[std::size_t(i)]);
+                cursor = cursor.united(r);
+            }
+        } else {
+            const Spot s = cursorPile();
+            if (s.kind != PileKind::Tableau || s.index < 0) {
+                cursor = pileOrigin(s.kind, s.pile);
+            } else {
+                // The card and everything under it: what Space would lift.
+                const int last = int(pileFor(s.kind, s.pile).size()) - 1;
+                cursor = cardRect(s.kind, s.pile, s.index).united(cardRect(s.kind, s.pile, last));
+            }
+        }
+        Theme::paintCellCursor(p, cursor, Legibility::instance().enabled());
+    }
+
     paintStatusCaption(p, QRectF(rect()));
 }
 
@@ -489,9 +535,30 @@ void KlondikeView::mousePressEvent(QMouseEvent* event)
     m_pressPos = event->position();
     m_pressValid = false;
 
+    // A run held by the keyboard goes back before the mouse does anything, so
+    // the two never hold cards at once.
+    if (m_keyHolding) {
+        m_table.putBack();
+        m_keyHolding = false;
+        m_drag.clear();
+        update();
+    }
+
     const Spot s = hitTest(event->position());
     if (!s.valid)
         return;
+
+    // The cursor follows the mouse, so the two ways of playing never disagree
+    // about where you are on the table.
+    if (s.kind == PileKind::Tableau) {
+        m_cursorCol = s.pile;
+        m_cursorDepth = std::max(0, s.index);
+    } else {
+        m_cursorCol = s.kind == PileKind::Stock ? 0 : s.kind == PileKind::Waste ? 1 : 3 + s.pile;
+        m_cursorDepth = -1;
+    }
+    clampCursor();
+    update();
 
     if (s.kind == PileKind::Stock) {
         dealFromStock();
@@ -585,6 +652,7 @@ void KlondikeView::mouseReleaseEvent(QMouseEvent* event)
 
     m_drag.clear();
     m_pressValid = false;
+    clampCursor();
     update();
     refresh();
     checkWin();
@@ -659,6 +727,173 @@ void KlondikeView::launchToFoundation(const Card& card, QRectF fromRect, int fou
     m_flightTimer->start();
 }
 
+// ---------------------------------------------------------------------------
+// Keyboard (GHUB-0168): the same scheme as the boards. Arrows move between
+// piles and up and down a column's face-up cards, Space lifts and Space drops,
+// Escape puts a lifted run back.
+// ---------------------------------------------------------------------------
+
+KlondikeView::Spot KlondikeView::cursorPile() const
+{
+    if (m_cursorDepth < 0) {
+        if (m_cursorCol == 0)
+            return { PileKind::Stock, 0, int(m_table.stock().size()) - 1, true };
+        if (m_cursorCol <= 2)
+            return { PileKind::Waste, 0, int(m_table.waste().size()) - 1, true };
+        const int f = m_cursorCol - 3;
+        return { PileKind::Foundation, f, int(m_table.foundations()[std::size_t(f)].size()) - 1, true };
+    }
+    const std::vector<Card>& column = m_table.tableau()[std::size_t(m_cursorCol)];
+    return { PileKind::Tableau, m_cursorCol, column.empty() ? -1 : m_cursorDepth, true };
+}
+
+void KlondikeView::clampCursor()
+{
+    m_cursorCol = std::clamp(m_cursorCol, 0, 6);
+    if (m_cursorDepth < 0) {
+        // The top row has no pile above the third column.
+        if (m_cursorCol == 2)
+            m_cursorCol = 1;
+        m_cursorDepth = -1;
+        return;
+    }
+    const std::vector<Card>& column = m_table.tableau()[std::size_t(m_cursorCol)];
+    if (column.empty()) {
+        m_cursorDepth = 0;
+        return;
+    }
+    const int last = int(column.size()) - 1;
+    int firstUp = last;
+    while (firstUp > 0 && column[std::size_t(firstUp - 1)].faceUp)
+        --firstUp;
+    // While a run is held the cursor points at a PILE, so it sits on the top.
+    m_cursorDepth = m_keyHolding ? last : std::clamp(m_cursorDepth, firstUp, last);
+}
+
+QRectF KlondikeView::heldLandingRect() const
+{
+    const Spot s = cursorPile();
+    QRectF r = pileOrigin(s.kind, s.pile);
+    if (s.kind == PileKind::Tableau && s.index >= 0) {
+        const std::vector<Card>& column = pileFor(s.kind, s.pile);
+        r = cardRect(s.kind, s.pile, int(column.size()) - 1)
+                .translated(0, cardHeight() * kFaceUpStep * fanScale(column));
+    }
+    // Raised off the pile, so it reads as held rather than as played.
+    return r.translated(cardWidth() * 0.10, -cardHeight() * 0.06);
+}
+
+void KlondikeView::pressAtCursor()
+{
+    if (m_keyHolding) {
+        dropAtCursor();
+        return;
+    }
+    const Spot s = cursorPile();
+    if (s.kind == PileKind::Stock) {
+        dealFromStock();
+        return;
+    }
+    if (s.index < 0)
+        return;
+    const std::vector<Card>& pile = pileFor(s.kind, s.pile);
+    if (!pile[std::size_t(s.index)].faceUp)
+        return;
+    // Banks the undo snapshot before the cards leave, as a drag does.
+    m_drag = m_table.lift(s.kind, s.pile, s.index);
+    if (m_drag.empty())
+        return;
+    m_dragFrom = s;
+    m_keyHolding = true;
+}
+
+void KlondikeView::dropAtCursor()
+{
+    const Spot s = cursorPile();
+    if (s.kind == m_dragFrom.kind && s.pile == m_dragFrom.pile) {
+        m_table.putBack();
+        m_keyHolding = false;
+        m_drag.clear();
+        return;
+    }
+
+    bool placed = false;
+    if (s.kind == PileKind::Foundation && m_drag.size() == 1)
+        placed = m_table.dropOnFoundation(s.pile);
+    else if (s.kind == PileKind::Tableau)
+        placed = m_table.dropOnTableau(s.pile);
+    // Not a legal home: keep holding, so the player can try another pile.
+    if (!placed)
+        return;
+
+    Sound::instance().play(Sound::kCardPlace);
+    // Onto the first card of the run it dropped, so Space can pick it up again.
+    if (s.kind == PileKind::Tableau)
+        m_cursorDepth = int(pileFor(s.kind, s.pile).size() - m_drag.size());
+    m_keyHolding = false;
+    m_drag.clear();
+    m_undoAction->setEnabled(m_table.canUndo());
+    refresh();
+    checkWin();
+}
+
+void KlondikeView::keyPressEvent(QKeyEvent* event)
+{
+    if (m_dragging) {
+        GameView::keyPressEvent(event);
+        return;
+    }
+
+    switch (event->key()) {
+    case Qt::Key_Left:
+        m_cursorCol = std::max(0, m_cursorCol - 1);
+        break;
+    case Qt::Key_Right:
+        m_cursorCol = std::min(6, m_cursorCol + 1);
+        if (m_cursorDepth < 0 && m_cursorCol == 2)
+            m_cursorCol = 3;
+        break;
+    case Qt::Key_Up: {
+        if (m_cursorDepth < 0)
+            break;
+        const std::vector<Card>& column = m_table.tableau()[std::size_t(m_cursorCol)];
+        const bool canClimb = !m_keyHolding && m_cursorDepth > 0 && !column.empty()
+            && column[std::size_t(m_cursorDepth - 1)].faceUp;
+        if (canClimb)
+            --m_cursorDepth;
+        else
+            m_cursorDepth = -1;
+        break;
+    }
+    case Qt::Key_Down:
+        if (m_cursorDepth < 0)
+            m_cursorDepth = 99; // the top card of the column below; clamped
+        else if (!m_keyHolding)
+            ++m_cursorDepth;
+        break;
+    case Qt::Key_Space:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        pressAtCursor();
+        break;
+    case Qt::Key_Escape:
+        if (!m_keyHolding) {
+            GameView::keyPressEvent(event);
+            return;
+        }
+        m_table.putBack();
+        m_keyHolding = false;
+        m_drag.clear();
+        break;
+    default:
+        GameView::keyPressEvent(event);
+        return;
+    }
+
+    clampCursor();
+    update();
+}
+
 void KlondikeView::settleForChange()
 {
     // Two halves, and both bite. A card in the air carries a destination
@@ -676,6 +911,7 @@ void KlondikeView::settleForChange()
         m_table.putBack();
     m_drag.clear();
     m_dragging = false;
+    m_keyHolding = false;
     m_pressValid = false;
 }
 
