@@ -192,6 +192,20 @@ leaving the game and the Large play switch all go through `settleForChange()`,
 which puts a held run back first. Otherwise Undo would reverse the lift and
 leave the run in hand.
 
+**Pyramid pairs cards rather than moving them, so its Space picks rather than
+lifts.** The rules core takes a pair or a King, and nothing ever leaves a pile
+to be held. So Space does what a click does: it picks the first card of a pair,
+takes the pair on the second, takes a King alone, and deals on the stock. Space
+on the picked card, or Escape, puts it down. A pair that does not add up picks
+the second card instead, as a click always has. **The cursor stands only on a
+card that can be taken**, plus the stock, and the waste while it holds a card.
+An arrow goes to the nearest such stop that way: the nearest row first, then
+the nearest along it. A fresh deal starts it on the bottom row's first card,
+where every pairing begins. `PyramidView::pressAtCursor` is the one press for
+the mouse and the keyboard, and a click moves the cursor first. With nothing
+lifted there is nothing to settle, so Pyramid has no `settleForChange()`: Undo
+and a new deal already drop the picked card.
+
 **The mouse and the keyboard go through one function, and the mouse moves the
 cursor.** `ReversiView::playAt`, `ChessView::pressSquare`,
 `DraughtsView::pressSquare` and `MinesweeperView::digAt` each hold what a press

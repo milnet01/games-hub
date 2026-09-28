@@ -10,12 +10,14 @@
 
 #include <QDataStream>
 #include <QIODevice>
+#include <QKeyEvent>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
 
 #include <algorithm>
+#include <cmath>
 
 namespace {
 // The margin and the fan step are shared by the layout and by the height budget
@@ -34,6 +36,8 @@ PyramidView::PyramidView(QWidget* parent)
     : GameView(parent)
 {
     setMinimumSize(PyramidView::minimumSizeHint());
+    // Without it setFocus() does nothing and no key ever arrives (GHUB-0168).
+    setFocusPolicy(Qt::StrongFocus);
     buildActions();
     newGame();
 }
@@ -58,6 +62,7 @@ void PyramidView::newGame()
     m_table.deal();
     Sound::instance().play(Sound::kShuffle);
     clearSelection();
+    resetCursor();
     m_won = false;
     m_announced = false;
     m_undoAction->setEnabled(false);
@@ -79,6 +84,7 @@ void PyramidView::undo()
     m_won = false;
     m_announced = false;
     clearSelection();
+    clampCursor();
     m_undoAction->setEnabled(m_table.canUndo());
     update();
     refresh();
@@ -90,7 +96,9 @@ void PyramidView::undo()
 
 // The table, not the moves that made it — see KlondikeView::saveState for why
 // the card games save differently from Chess. Pyramid has no drag to fold back
-// in: cards are taken by clicking, so nothing is ever in mid-air.
+// in: cards are taken by clicking, so nothing is ever in mid-air. Version 2
+// appends the keyboard cursor, last; a version-1 save still loads, with the
+// cursor where a fresh deal puts it.
 QByteArray PyramidView::saveState() const
 {
     if (m_won || (!m_table.canUndo() && !m_resumed))
@@ -99,7 +107,7 @@ QByteArray PyramidView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_table.pairs()) << qint32(m_table.redeals())
+    out << quint32(2) << qint32(m_table.pairs()) << qint32(m_table.redeals())
         << qint32(m_table.pyramid().size());
     // A taken pyramid card keeps its slot and is simply marked gone, because the
     // slot above it still needs to know both its supports have been cleared.
@@ -109,6 +117,7 @@ QByteArray PyramidView::saveState() const
     }
     cardcodec::writePile(out, m_table.stock());
     cardcodec::writePile(out, m_table.waste());
+    out << qint8(m_cursorRow) << qint8(m_cursorIndex);
     return blob;
 }
 
@@ -125,7 +134,7 @@ bool PyramidView::restoreState(const QByteArray& blob)
     // error that points at the `=` (CLAUDE.md § Traps worth knowing).
     qint32 slotCount = 0;
     in >> version >> pairs >> redeals >> slotCount;
-    if (version != 1 || in.status() != QDataStream::Ok || pairs < 0 || pairs > 52 || redeals < 0
+    if ((version != 1 && version != 2) || in.status() != QDataStream::Ok || pairs < 0 || pairs > 52 || redeals < 0
         || redeals > PyramidTable::kMaxRedeals || slotCount != kPyramidCards)
         return false;
 
@@ -147,6 +156,16 @@ bool PyramidView::restoreState(const QByteArray& blob)
     if (!cardcodec::readPile(in, stock) || !cardcodec::readPile(in, waste))
         return false;
 
+    qint8 cursorRow = kRows - 1;
+    qint8 cursorIndex = 0;
+    if (version >= 2) {
+        in >> cursorRow >> cursorIndex;
+        const int widest = cursorRow == kPileRow ? 1 : cursorRow;
+        if (in.status() != QDataStream::Ok || cursorRow < 0 || cursorRow > kPileRow
+            || cursorIndex < 0 || cursorIndex > widest)
+            return false;
+    }
+
     // The table decides whether this is a position the rules could have
     // produced -- the pack check lives with the rules, not with the reader.
     if (!m_table.restore(pyramid, stock, waste, int(pairs), int(redeals)))
@@ -156,6 +175,9 @@ bool PyramidView::restoreState(const QByteArray& blob)
     m_announced = false;
     m_resumed = true;
     clearSelection();
+    m_cursorRow = cursorRow;
+    m_cursorIndex = cursorIndex;
+    clampCursor();
     m_undoAction->setEnabled(false);
     update();
     refresh();
@@ -398,6 +420,9 @@ void PyramidView::paintEvent(QPaintEvent*)
             CardArt::paintHighlight(p, wasteRect(), QColor(0xff, 0xd5, 0x4f));
     }
 
+    Theme::paintCellCursor(p, stopRect(m_cursorRow, m_cursorIndex),
+                           Legibility::instance().enabled());
+
     paintStatusCaption(p, QRectF(rect()));
 }
 
@@ -406,22 +431,191 @@ void PyramidView::mousePressEvent(QMouseEvent* event)
     if (event->button() != Qt::LeftButton || m_won)
         return;
 
+    // The cursor follows the mouse, so the two ways of playing never disagree
+    // about where you are. The press then goes through the same function the
+    // keyboard's Space does.
     if (stockRect().contains(event->position())) {
-        dealFromStock();
+        m_cursorRow = kPileRow;
+        m_cursorIndex = 0;
+        pressAtCursor();
         return;
     }
 
     if (!m_table.waste().empty() && wasteRect().contains(event->position())) {
-        tryPair(Source::Waste, int(m_table.waste().size()) - 1, m_table.waste().back());
+        m_cursorRow = kPileRow;
+        m_cursorIndex = 1;
+        pressAtCursor();
         return;
     }
 
     if (const std::optional<int> slot = pyramidAt(event->position())) {
-        tryPair(Source::Pyramid, *slot, m_table.pyramid()[std::size_t(*slot)].card);
+        for (int row = 0; row < kRows; ++row) {
+            if (*slot <= slotIndex(row, row)) {
+                m_cursorRow = row;
+                m_cursorIndex = *slot - slotIndex(row, 0);
+                break;
+            }
+        }
+        pressAtCursor();
         return;
     }
 
     clearSelection();
     update();
     refresh();
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard (GHUB-0168): the boards' scheme. Pyramid pairs cards rather than
+// moving them, so there is nothing to lift: Space does what a click does --
+// picks the first card of a pair, takes the pair on the second, takes a King
+// alone, deals from the stock. Escape drops the picked card. The cursor stands
+// only on a card that can be taken, plus the stock.
+// ---------------------------------------------------------------------------
+
+bool PyramidView::isStop(int row, int index) const
+{
+    if (row == kPileRow)
+        return index == 0 || (index == 1 && !m_table.waste().empty());
+    if (row < 0 || row >= kRows || index < 0 || index > row)
+        return false;
+    return isExposed(row, index);
+}
+
+// Where a stop sits, in card widths from the middle of the table and measured
+// the way the painter lays it out -- so the arrows follow the picture without
+// depending on the window's size.
+QPointF PyramidView::stopPos(int row, int index) const
+{
+    constexpr double kRowStep = kFanStep * 1.4;
+    if (row == kPileRow)
+        return { index == 0 ? -0.75 : 0.75, (kRows - 1) * kRowStep + 1.9 };
+    return { (index - row / 2.0) * 0.56, row * kRowStep };
+}
+
+QRectF PyramidView::stopRect(int row, int index) const
+{
+    if (row == kPileRow)
+        return index == 0 ? stockRect() : wasteRect();
+    return pyramidRect(row, index);
+}
+
+// An arrow goes to the nearest stop that way: the nearest row first, then the
+// nearest along it. So Left and Right keep to the row while it has a stop.
+void PyramidView::stepCursor(int dx, int dy)
+{
+    const QPointF from = stopPos(m_cursorRow, m_cursorIndex);
+    int bestRow = -1;
+    int bestIndex = -1;
+    double bestAcross = 0.0;
+    double bestAlong = 0.0;
+    for (int row = 0; row <= kPileRow; ++row) {
+        const int widest = row == kPileRow ? 1 : row;
+        for (int i = 0; i <= widest; ++i) {
+            if (!isStop(row, i) || (row == m_cursorRow && i == m_cursorIndex))
+                continue;
+            const QPointF d = stopPos(row, i) - from;
+            const double ahead = dx != 0 ? d.x() * dx : d.y() * dy;
+            if (ahead <= 1e-6)
+                continue;
+            const double across = std::abs(d.y());
+            const double along = std::abs(d.x());
+            const bool better = bestRow < 0 || across < bestAcross - 1e-6
+                || (across < bestAcross + 1e-6 && along < bestAlong);
+            if (better) {
+                bestRow = row;
+                bestIndex = i;
+                bestAcross = across;
+                bestAlong = along;
+            }
+        }
+    }
+    if (bestRow >= 0) {
+        m_cursorRow = bestRow;
+        m_cursorIndex = bestIndex;
+    }
+}
+
+// A take or an undo can leave the cursor on a card that is gone or covered.
+// It moves to the nearest stop, and the stock is always one.
+void PyramidView::clampCursor()
+{
+    if (isStop(m_cursorRow, m_cursorIndex))
+        return;
+    const QPointF from = stopPos(std::clamp(m_cursorRow, 0, int(kPileRow)),
+                                 std::max(0, m_cursorIndex));
+    double best = -1.0;
+    for (int row = kPileRow; row >= 0; --row) {
+        const int widest = row == kPileRow ? 1 : row;
+        for (int i = 0; i <= widest; ++i) {
+            if (!isStop(row, i))
+                continue;
+            const QPointF d = stopPos(row, i) - from;
+            const double dist = d.x() * d.x() + d.y() * d.y();
+            if (best < 0 || dist < best) {
+                best = dist;
+                m_cursorRow = row;
+                m_cursorIndex = i;
+            }
+        }
+    }
+}
+
+void PyramidView::resetCursor()
+{
+    m_cursorRow = kRows - 1;
+    m_cursorIndex = 0;
+    clampCursor();
+}
+
+void PyramidView::pressAtCursor()
+{
+    if (m_won)
+        return;
+    if (m_cursorRow == kPileRow) {
+        if (m_cursorIndex == 0)
+            dealFromStock();
+        else if (!m_table.waste().empty())
+            tryPair(Source::Waste, int(m_table.waste().size()) - 1, m_table.waste().back());
+    } else {
+        const int slot = slotIndex(m_cursorRow, m_cursorIndex);
+        tryPair(Source::Pyramid, slot, m_table.pyramid()[std::size_t(slot)].card);
+    }
+    clampCursor();
+    update();
+}
+
+void PyramidView::keyPressEvent(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_Left:
+        stepCursor(-1, 0);
+        break;
+    case Qt::Key_Right:
+        stepCursor(1, 0);
+        break;
+    case Qt::Key_Up:
+        stepCursor(0, -1);
+        break;
+    case Qt::Key_Down:
+        stepCursor(0, 1);
+        break;
+    case Qt::Key_Space:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        pressAtCursor();
+        break;
+    case Qt::Key_Escape:
+        if (!m_hasSelection) {
+            GameView::keyPressEvent(event);
+            return;
+        }
+        clearSelection();
+        refresh();
+        break;
+    default:
+        GameView::keyPressEvent(event);
+        return;
+    }
+    update();
 }

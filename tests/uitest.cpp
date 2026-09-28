@@ -1329,10 +1329,11 @@ void boardsTakeTheKeyboard()
         KlondikeView klondike;
         SpiderView spider;
         FreeCellView freecell;
+        PyramidView pyramid;
         const std::pair<GameView*, const char*> boards[] = {
             { &chess, "chess" },     { &reversi, "reversi" }, { &draughts, "draughts" },
             { &mines, "minesweeper" }, { &sudoku, "sudoku" }, { &klondike, "klondike" },
-            { &spider, "spider" },   { &freecell, "freecell" },
+            { &spider, "spider" },   { &freecell, "freecell" }, { &pyramid, "pyramid" },
         };
         for (const auto& [view, name] : boards)
             check(view->focusPolicy() == Qt::StrongFocus,
@@ -1737,6 +1738,115 @@ void boardsTakeTheKeyboard()
             pressKey(&freecell, Qt::Key_Right);
         check(freecell.cursorSpot() == QPoint(FreeCellView::kColumns - 1, -1),
               "freecell: Right along the top row stops at the last foundation");
+    }
+
+    // Pyramid, from a save written before the cursor existed. The bottom row
+    // is six, seven, king, three, four, ten, ace and the stock's top card is a
+    // queen: a pair, a king alone, a pair that does not add up, and the queen
+    // from the waste against the ace. Pyramid pairs rather than moves, so Space
+    // picks the first card and takes the pair on the second.
+    {
+        std::vector<Card> deck = makeDeck(1, 4);
+        const auto take = [&deck](int rank, Suit suit) {
+            const auto it = std::find_if(deck.begin(), deck.end(), [rank, suit](const Card& c) {
+                return c.rank == rank && c.suit == suit;
+            });
+            Card c = *it;
+            deck.erase(it);
+            return c;
+        };
+        const std::vector<Card> bottom = {
+            take(6, Suit::Hearts), take(7, Suit::Spades), take(kKing, Suit::Clubs),
+            take(3, Suit::Diamonds), take(4, Suit::Clubs), take(10, Suit::Spades),
+            take(1, Suit::Hearts),
+        };
+        const Card queen = take(kQueen, Suit::Diamonds);
+
+        QByteArray blob;
+        QDataStream out(&blob, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << quint32(1) << qint32(0) << qint32(0) << qint32(PyramidTable::kPyramidCards);
+        for (int i = 0; i < PyramidTable::kPyramidCards - 7; ++i) {
+            Card c = deck.back();
+            deck.pop_back();
+            c.faceUp = true;
+            cardcodec::writeCard(out, c);
+            out << qint8(0);
+        }
+        for (Card c : bottom) {
+            c.faceUp = true;
+            cardcodec::writeCard(out, c);
+            out << qint8(0);
+        }
+        deck.push_back(queen); // the stock's top
+        cardcodec::writePile(out, deck);
+        cardcodec::writePile(out, {});
+
+        PyramidView pyramid;
+        pyramid.resize(900, 640);
+        pyramid.show();
+        pump(20);
+        check(pyramid.restoreState(blob), "pyramid: a hand-built table loads");
+        check(pyramid.cursorSpot() == QPoint(0, 6),
+              "pyramid: a save from before the cursor opens it on the bottom row's first card");
+        QAction* undo = undoAction(pyramid);
+
+        pressKey(&pyramid, Qt::Key_Up);
+        check(pyramid.cursorSpot() == QPoint(0, 6),
+              "pyramid: Up does not stop on a covered card");
+        pressKey(&pyramid, Qt::Key_Left);
+        check(pyramid.cursorSpot() == QPoint(0, 6), "pyramid: Left stops at the row's end");
+
+        pressKey(&pyramid, Qt::Key_Space);
+        check(pyramid.holdingACard(), "pyramid: Space picks the six");
+        pressKey(&pyramid, Qt::Key_Space);
+        check(!pyramid.holdingACard(), "pyramid: Space on the same card puts it down");
+        pressKey(&pyramid, Qt::Key_Space);
+        pressKey(&pyramid, Qt::Key_Right);
+        check(pyramid.cursorSpot() == QPoint(1, 6), "pyramid: Right steps along the row");
+        pressKey(&pyramid, Qt::Key_Space);
+        check(!pyramid.holdingACard() && undo != nullptr && undo->isEnabled(),
+              "pyramid: Space on the seven takes the pair");
+        check(pyramid.cursorSpot() == QPoint(2, 6),
+              "pyramid: and the cursor moves to the nearest card left, the king");
+
+        pressKey(&pyramid, Qt::Key_Space);
+        check(!pyramid.holdingACard() && pyramid.cursorSpot() == QPoint(3, 6),
+              "pyramid: Space takes the king alone, and the cursor moves on");
+
+        pressKey(&pyramid, Qt::Key_Space);
+        pressKey(&pyramid, Qt::Key_Right);
+        const QByteArray beforeMiss = pyramid.saveState();
+        pressKey(&pyramid, Qt::Key_Space);
+        check(pyramid.holdingACard() && pyramid.saveState() == beforeMiss,
+              "pyramid: three and four take nothing, and the four is picked instead");
+        pressKey(&pyramid, Qt::Key_Escape);
+        check(!pyramid.holdingACard(), "pyramid: Escape puts the picked card down");
+        pressKey(&pyramid, Qt::Key_Escape);
+        check(!pyramid.holdingACard(), "pyramid: Escape with nothing picked does nothing");
+
+        pressKey(&pyramid, Qt::Key_Down);
+        check(pyramid.cursorSpot() == QPoint(0, PyramidView::kRows),
+              "pyramid: Down from the bottom row reaches the stock, the waste being empty");
+        pressKey(&pyramid, Qt::Key_Space);
+        pressKey(&pyramid, Qt::Key_Right);
+        check(pyramid.cursorSpot() == QPoint(1, PyramidView::kRows),
+              "pyramid: Space deals a card, and the waste becomes a stop");
+        pressKey(&pyramid, Qt::Key_Space);
+        check(pyramid.holdingACard(), "pyramid: Space picks the queen from the waste");
+        pressKey(&pyramid, Qt::Key_Up);
+        pressKey(&pyramid, Qt::Key_Right);
+        pressKey(&pyramid, Qt::Key_Right);
+        check(pyramid.cursorSpot() == QPoint(6, 6), "pyramid: the arrows reach the ace");
+        pressKey(&pyramid, Qt::Key_Space);
+        check(!pyramid.holdingACard() && pyramid.cursorSpot() != QPoint(6, 6),
+              "pyramid: Space on the ace takes it with the queen");
+
+        const QPoint spot = pyramid.cursorSpot();
+        const QByteArray saved = pyramid.saveState();
+        PyramidView resumed;
+        check(resumed.restoreState(saved) && resumed.cursorSpot() == spot,
+              "pyramid: the cursor is in the save");
     }
 }
 
@@ -3864,6 +3974,7 @@ int main(int argc, char* argv[])
             const double tall = card * 1.4;
             const double columnTop = 12 + tall + tall * 0.22;
             const QImage beforeTheMove = renderOf(&freecell);
+            const QPoint cursorBefore = freecell.cursorSpot();
             dragBetween(&freecell, QPointF(12 + card / 2, columnTop + tall * (6 * 0.27 + 0.15)),
                         QPointF(12 + card / 2, 12 + tall / 2));
 
@@ -3884,6 +3995,13 @@ int main(int argc, char* argv[])
                       "freecell: the move offers an undo");
                 if (undoAction != nullptr)
                     undoAction->trigger();
+                // The keyboard cursor is painted, and Undo restores the TABLE,
+                // not where the cursor stood. Where the column's last two cards
+                // are a movable run, it comes back one card higher -- so this
+                // check failed on some deals until the cursor was
+                // walked back down before comparing.
+                for (int i = 0; i < 4 && freecell.cursorSpot() != cursorBefore; ++i)
+                    pressKey(&freecell, Qt::Key_Down);
                 check(renderOf(&freecell) == beforeTheMove,
                       "freecell: and undoing it puts the table back exactly as it was");
 

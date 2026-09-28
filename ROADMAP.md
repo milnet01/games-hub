@@ -338,6 +338,20 @@ path, so they land together.
   boardsTakeTheKeyboard part 4 covers it on a hand-built v1 table, and
   seven mutations each turned their check red. Left: Pyramid, Hearts,
   Canasta.
+  Progress (2026-09-28): PYRAMID done. Pyramid pairs rather than moves,
+  so Space picks: it picks the first card of a pair, takes the pair on
+  the second, takes a King alone, and deals on the stock. Escape or
+  Space on the picked card puts it down. Owner's calls 2026-09-28: the
+  cursor stops only on a card that can be taken (plus the stock, and the
+  waste while it holds a card), and a fresh deal starts it on the bottom
+  row's first card. An arrow goes to the nearest stop that way, row
+  first. PyramidView::pressAtCursor is the one press for mouse and
+  keyboard. Nothing is ever lifted, so there is no settleForChange().
+  Save blob v2 carries the cursor; v1 loads. boardsTakeTheKeyboard
+  covers it on a hand-built v1 table, and eight mutations each turned
+  their check red. The same commit fixes a flaky FreeCell undo check:
+  the painted cursor can come back one card higher after Undo on some
+  deals. Left: Hearts, Canasta.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
