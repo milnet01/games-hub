@@ -10,6 +10,7 @@
 
 #include <QDataStream>
 #include <QIODevice>
+#include <QKeyEvent>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -28,6 +29,8 @@ FreeCellView::FreeCellView(QWidget* parent)
     : GameView(parent)
 {
     setMinimumSize(FreeCellView::minimumSizeHint());
+    // Without it setFocus() does nothing and no key ever arrives (GHUB-0168).
+    setFocusPolicy(Qt::StrongFocus);
     buildActions();
     newGame();
 }
@@ -48,12 +51,15 @@ void FreeCellView::buildActions()
 
 void FreeCellView::newGame()
 {
+    // Before the deal, not after: settling puts a held run back on the table
+    // it came from, and after a deal that is a fresh table it never left.
+    settleForChange();
     m_resumed = false;
     m_table.deal();
     Sound::instance().play(Sound::kShuffle);
-    m_drag.clear();
-    m_dragging = false;
-    m_pressValid = false;
+    m_cursorCol = 0;
+    m_cursorDepth = 99;
+    clampCursor();
     m_won = false;
     m_undoAction->setEnabled(false);
 
@@ -70,7 +76,16 @@ void FreeCellView::undo()
 {
     if (!m_table.canUndo())
         return;
+    // A held run goes back first, which also drops the snapshot its lift
+    // banked -- otherwise Undo would undo the lift and leave the run in hand.
+    settleForChange();
+    if (!m_table.canUndo()) {
+        m_undoAction->setEnabled(false);
+        update();
+        return;
+    }
     m_table.undo();
+    clampCursor();
     m_won = false;
     m_undoAction->setEnabled(m_table.canUndo());
     update();
@@ -92,7 +107,7 @@ QByteArray FreeCellView::saveState() const
     // dropped; closing the window while holding it must not lose the cards.
     const auto pile = [this](PileKind kind, int index) {
         std::vector<Card> cards = pileFor(kind, index);
-        if (m_dragging && m_dragFrom.kind == kind && m_dragFrom.pile == index)
+        if ((m_dragging || m_keyHolding) && m_dragFrom.kind == kind && m_dragFrom.pile == index)
             cards.insert(cards.end(), m_drag.begin(), m_drag.end());
         return cards;
     };
@@ -100,13 +115,16 @@ QByteArray FreeCellView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1) << qint32(m_table.moves());
+    // Version 2 appends the keyboard cursor, last; a version-1 save still
+    // loads, with the cursor where a fresh deal puts it.
+    out << quint32(2) << qint32(m_table.moves());
     for (int col = 0; col < kColumns; ++col)
         cardcodec::writePile(out, pile(PileKind::Column, col));
     for (int i = 0; i < kCells; ++i)
         cardcodec::writePile(out, pile(PileKind::Cell, i));
     for (int f = 0; f < 4; ++f)
         cardcodec::writePile(out, pile(PileKind::Foundation, f));
+    out << qint8(m_cursorCol) << qint8(m_cursorDepth);
     return blob;
 }
 
@@ -117,7 +135,7 @@ bool FreeCellView::restoreState(const QByteArray& blob)
     quint32 version = 0;
     qint32 moves = 0;
     in >> version >> moves;
-    if (version != 1 || in.status() != QDataStream::Ok || moves < 0)
+    if ((version != 1 && version != 2) || in.status() != QDataStream::Ok || moves < 0)
         return false;
 
     // Read into a table of its own, so a blob that turns out to be nonsense
@@ -128,6 +146,14 @@ bool FreeCellView::restoreState(const QByteArray& blob)
     if (!cardcodec::readPiles(in, columns) || !cardcodec::readPiles(in, cells)
         || !cardcodec::readPiles(in, foundations))
         return false;
+    qint8 cursorCol = 0;
+    qint8 cursorDepth = 99;
+    if (version >= 2) {
+        in >> cursorCol >> cursorDepth;
+        if (in.status() != QDataStream::Ok || cursorCol < 0 || cursorCol >= kColumns
+            || cursorDepth < -1)
+            return false;
+    }
 
     // The table decides whether this is a position the rules could have
     // produced -- a cell holding one card at most, and the whole pack back,
@@ -138,6 +164,10 @@ bool FreeCellView::restoreState(const QByteArray& blob)
     m_drag.clear();
     m_dragging = false;
     m_pressValid = false;
+    m_keyHolding = false;
+    m_cursorCol = cursorCol;
+    m_cursorDepth = cursorDepth;
+    clampCursor();
     m_won = false;
     m_resumed = true;
     m_undoAction->setEnabled(false);
@@ -373,6 +403,28 @@ void FreeCellView::paintEvent(QPaintEvent*)
         }
     }
 
+    // The keyboard's run and the cursor, over everything but the caption.
+    if (!m_dragging) {
+        QRectF cursor;
+        if (m_keyHolding && !m_drag.empty()) {
+            const QRectF first = heldLandingRect();
+            cursor = first;
+            for (int i = 0; i < int(m_drag.size()); ++i) {
+                const QRectF r = first.translated(0, i * fanStep());
+                CardArt::paintFace(p, r, m_drag[std::size_t(i)]);
+                cursor = cursor.united(r);
+            }
+        } else {
+            const Spot s = cursorPile();
+            cursor = s.kind != PileKind::Column || s.index < 0
+                ? pileOrigin(s.kind, s.pile)
+                // The card and everything under it: what Space would lift.
+                : cardRect(s.pile, s.index)
+                      .united(cardRect(s.pile, int(pileFor(s.kind, s.pile).size()) - 1));
+        }
+        Theme::paintCellCursor(p, cursor, Legibility::instance().enabled());
+    }
+
     paintStatusCaption(p, QRectF(rect()));
 }
 
@@ -388,8 +440,31 @@ void FreeCellView::mousePressEvent(QMouseEvent* event)
     m_pressPos = event->position();
     m_pressValid = false;
 
+    // A run held by the keyboard goes back before the mouse does anything, so
+    // the two never hold cards at once.
+    if (m_keyHolding) {
+        m_table.putBack(m_dragFrom.kind, m_dragFrom.pile, m_drag);
+        m_keyHolding = false;
+        m_drag.clear();
+        m_undoAction->setEnabled(m_table.canUndo());
+        update();
+    }
+
     const Spot s = hitTest(event->position());
-    if (!s.valid || s.index < 0)
+    if (!s.valid)
+        return;
+    // The cursor follows the mouse, so the two ways of playing never disagree
+    // about where you are.
+    if (s.kind == PileKind::Column) {
+        m_cursorCol = s.pile;
+        m_cursorDepth = std::max(0, s.index);
+    } else {
+        m_cursorCol = s.kind == PileKind::Cell ? s.pile : 4 + s.pile;
+        m_cursorDepth = -1;
+    }
+    clampCursor();
+    update();
+    if (s.index < 0)
         return;
 
     if (s.kind == PileKind::Column) {
@@ -440,45 +515,30 @@ void FreeCellView::mouseReleaseEvent(QMouseEvent* event)
 
     m_dragging = false;
     const QPointF drop = event->position();
-    bool placed = false;
-    QString refusal;
 
     // The view decides WHICH pile the drop landed on; the table decides
     // whether the cards may go there.
-    if (m_drag.size() == 1) {
-        for (int i = 0; i < kCells && !placed; ++i) {
-            if (pileOrigin(PileKind::Cell, i).contains(drop))
-                placed = m_table.dropOnCell(m_drag, i);
-        }
-        for (int f = 0; f < 4 && !placed; ++f) {
-            if (pileOrigin(PileKind::Foundation, f).contains(drop))
-                placed = m_table.dropOnFoundation(m_drag, f);
-        }
+    Spot target;
+    for (int i = 0; i < kCells && !target.valid; ++i) {
+        if (pileOrigin(PileKind::Cell, i).contains(drop))
+            target = { PileKind::Cell, i, -1, true };
     }
-
-    for (int col = 0; col < kColumns && !placed; ++col) {
+    for (int f = 0; f < 4 && !target.valid; ++f) {
+        if (pileOrigin(PileKind::Foundation, f).contains(drop))
+            target = { PileKind::Foundation, f, -1, true };
+    }
+    for (int col = 0; col < kColumns && !target.valid; ++col) {
         QRectF zone = pileOrigin(PileKind::Column, col);
         const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
         if (!column.empty())
             zone = zone.united(cardRect(col, int(column.size()) - 1));
         zone.setBottom(zone.bottom() + cardHeight() * 0.5);
-        if (!zone.contains(drop))
-            continue;
-
-        int limit = 0;
-        placed = m_table.dropOnColumn(m_drag, col, &limit);
-        if (!placed && limit > 0) {
-            // The singular is its own sentence: with no translation loaded, a
-            // %n form prints its English source as written for every count.
-            refusal = limit == 1
-                ? tr("Only 1 card can move at once — free a cell or a column.")
-                : tr("Only %n cards can move at once — free a cell or a column.", nullptr, limit);
-            break;
-        }
+        if (zone.contains(drop))
+            target = { PileKind::Column, col, -1, true };
     }
 
-    if (placed) {
-        Sound::instance().play(Sound::kCardPlace);
+    QString refusal;
+    if (dropHeldOn(target, &refusal)) {
         m_undoAction->setEnabled(m_table.canUndo());
     } else {
         // Nothing happened, so the table takes the cards back and drops the
@@ -489,9 +549,41 @@ void FreeCellView::mouseReleaseEvent(QMouseEvent* event)
 
     m_drag.clear();
     m_pressValid = false;
+    clampCursor();
     update();
     refresh(refusal);
     checkWin();
+}
+
+bool FreeCellView::dropHeldOn(const Spot& target, QString* refusal)
+{
+    if (!target.valid || m_drag.empty())
+        return false;
+
+    bool placed = false;
+    switch (target.kind) {
+    case PileKind::Cell:
+        placed = m_table.dropOnCell(m_drag, target.pile);
+        break;
+    case PileKind::Foundation:
+        placed = m_table.dropOnFoundation(m_drag, target.pile);
+        break;
+    case PileKind::Column: {
+        int limit = 0;
+        placed = m_table.dropOnColumn(m_drag, target.pile, &limit);
+        if (!placed && limit > 0 && refusal != nullptr) {
+            // The singular is its own sentence: with no translation loaded, a
+            // %n form prints its English source as written for every count.
+            *refusal = limit == 1
+                ? tr("Only 1 card can move at once — free a cell or a column.")
+                : tr("Only %n cards can move at once — free a cell or a column.", nullptr, limit);
+        }
+        break;
+    }
+    }
+    if (placed)
+        Sound::instance().play(Sound::kCardPlace);
+    return placed;
 }
 
 void FreeCellView::mouseDoubleClickEvent(QMouseEvent* event)
@@ -558,21 +650,195 @@ void FreeCellView::launchToFoundation(const Card& card, QRectF fromRect, int fou
     m_flightTimer->start();
 }
 
-void FreeCellView::deactivate()
+void FreeCellView::settleForChange()
 {
-    // A card in the air carries a destination captured when it left, and the
-    // hub may resize this page while it is away.
+    // Two halves. A card in the air carries a destination captured when it
+    // left, and the layout may be about to move under it. And a run held by
+    // the drag or the keyboard has been LIFTED off its pile, so it goes back
+    // there; putBack() also drops the snapshot the lift banked, since nothing
+    // actually happened.
     m_flights.clear();
     if (m_flightTimer != nullptr)
         m_flightTimer->stop();
+    if ((m_dragging || m_keyHolding) && !m_drag.empty())
+        m_table.putBack(m_dragFrom.kind, m_dragFrom.pile, m_drag);
+    m_drag.clear();
+    m_dragging = false;
+    m_keyHolding = false;
+    m_pressValid = false;
+}
+
+void FreeCellView::deactivate()
+{
+    // The hub may resize this page while it is away.
+    settleForChange();
 }
 
 void FreeCellView::applyLegibility(bool enabled)
 {
     // Land them where the model already believes they are, then let the base
     // re-lay-out. Keeping them would put a card down at its old destination.
-    m_flights.clear();
-    if (m_flightTimer != nullptr)
-        m_flightTimer->stop();
+    settleForChange();
     GameView::applyLegibility(enabled);
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard (GHUB-0168): the boards' scheme, as in KlondikeView. Arrows move
+// between the eight columns and up a column's liftable run to the top row;
+// Space lifts, Space drops, Escape puts back.
+// ---------------------------------------------------------------------------
+
+FreeCellView::Spot FreeCellView::cursorPile() const
+{
+    if (m_cursorDepth < 0) {
+        if (m_cursorCol < kCells)
+            return { PileKind::Cell, m_cursorCol,
+                     int(m_table.cells()[std::size_t(m_cursorCol)].size()) - 1, true };
+        const int f = m_cursorCol - kCells;
+        return { PileKind::Foundation, f,
+                 int(m_table.foundations()[std::size_t(f)].size()) - 1, true };
+    }
+    const std::vector<Card>& column = m_table.columns()[std::size_t(m_cursorCol)];
+    return { PileKind::Column, m_cursorCol, column.empty() ? -1 : m_cursorDepth, true };
+}
+
+void FreeCellView::clampCursor()
+{
+    m_cursorCol = std::clamp(m_cursorCol, 0, kColumns - 1);
+    if (m_cursorDepth < 0) {
+        m_cursorDepth = -1;
+        return;
+    }
+    const std::vector<Card>& column = m_table.columns()[std::size_t(m_cursorCol)];
+    if (column.empty()) {
+        m_cursorDepth = 0;
+        return;
+    }
+    const int last = int(column.size()) - 1;
+    // Only the alternating run at the foot of a column comes away, so that is
+    // the whole range the cursor can stand on -- and while a run is held the
+    // cursor points at a pile, so it sits on the top.
+    m_cursorDepth = m_keyHolding
+        ? last
+        : std::clamp(m_cursorDepth, m_table.firstMovableIndex(m_cursorCol), last);
+}
+
+QRectF FreeCellView::heldLandingRect() const
+{
+    const Spot s = cursorPile();
+    QRectF r = pileOrigin(s.kind, s.pile);
+    if (s.kind == PileKind::Column && s.index >= 0) {
+        const int last = int(pileFor(s.kind, s.pile).size()) - 1;
+        r = cardRect(s.pile, last).translated(0, fanStep(s.pile));
+    }
+    // Raised off the pile, so it reads as held rather than as played.
+    return r.translated(cardWidth() * 0.10, -cardHeight() * 0.06);
+}
+
+void FreeCellView::pressAtCursor()
+{
+    if (m_keyHolding) {
+        dropAtCursor();
+        return;
+    }
+    const Spot s = cursorPile();
+    if (s.index < 0)
+        return;
+    // Banks the undo snapshot before the cards leave, as a drag does.
+    m_drag = m_table.lift(s.kind, s.pile, s.index);
+    if (m_drag.empty())
+        return;
+    m_dragFrom = s;
+    m_keyHolding = true;
+    update();
+}
+
+void FreeCellView::dropAtCursor()
+{
+    const Spot s = cursorPile();
+    if (s.kind == m_dragFrom.kind && s.pile == m_dragFrom.pile) {
+        m_table.putBack(m_dragFrom.kind, m_dragFrom.pile, m_drag);
+        m_keyHolding = false;
+        m_drag.clear();
+        m_undoAction->setEnabled(m_table.canUndo());
+        return;
+    }
+
+    const int dropped = int(m_drag.size());
+    QString refusal;
+    // Not a legal home: keep holding, so the player can try another pile.
+    if (!dropHeldOn(s, &refusal)) {
+        if (!refusal.isEmpty())
+            refresh(refusal);
+        return;
+    }
+
+    m_keyHolding = false;
+    m_drag.clear();
+    // Onto the first card of the run it dropped, so Space can pick it up again.
+    if (s.kind == PileKind::Column)
+        m_cursorDepth = int(pileFor(s.kind, s.pile).size()) - dropped;
+    m_undoAction->setEnabled(m_table.canUndo());
+    refresh();
+    checkWin();
+}
+
+void FreeCellView::keyPressEvent(QKeyEvent* event)
+{
+    if (m_dragging) {
+        GameView::keyPressEvent(event);
+        return;
+    }
+
+    switch (event->key()) {
+    case Qt::Key_Left:
+        m_cursorCol = std::max(0, m_cursorCol - 1);
+        if (m_cursorDepth >= 0)
+            m_cursorDepth = 99; // the top of the new column; clamped
+        break;
+    case Qt::Key_Right:
+        m_cursorCol = std::min(kColumns - 1, m_cursorCol + 1);
+        if (m_cursorDepth >= 0)
+            m_cursorDepth = 99;
+        break;
+    case Qt::Key_Up: {
+        if (m_cursorDepth < 0)
+            break;
+        const bool canClimb = !m_keyHolding
+            && !m_table.columns()[std::size_t(m_cursorCol)].empty()
+            && m_cursorDepth > m_table.firstMovableIndex(m_cursorCol);
+        if (canClimb)
+            --m_cursorDepth;
+        else
+            m_cursorDepth = -1;
+        break;
+    }
+    case Qt::Key_Down:
+        if (m_cursorDepth < 0)
+            m_cursorDepth = 99; // the top card of the column below; clamped
+        else if (!m_keyHolding)
+            ++m_cursorDepth;
+        break;
+    case Qt::Key_Space:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        pressAtCursor();
+        break;
+    case Qt::Key_Escape:
+        if (!m_keyHolding) {
+            GameView::keyPressEvent(event);
+            return;
+        }
+        m_table.putBack(m_dragFrom.kind, m_dragFrom.pile, m_drag);
+        m_keyHolding = false;
+        m_drag.clear();
+        m_undoAction->setEnabled(m_table.canUndo());
+        break;
+    default:
+        GameView::keyPressEvent(event);
+        return;
+    }
+
+    clampCursor();
+    update();
 }

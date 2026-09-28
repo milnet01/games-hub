@@ -12,10 +12,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
-- **Klondike and Spider can be played without a mouse**
+- **Klondike, Spider and FreeCell can be played without a mouse**
   Arrow keys move a gold cursor between the piles and up and down a
   column, Space lifts a card and Space drops it, Escape puts it back.
-  The first two card games of GHUB-0168; the rest follow.
+  In FreeCell, Up from a column reaches the cell or foundation above it.
+  The first three card games of GHUB-0168; the rest follow.
 
 ### Fixed
 

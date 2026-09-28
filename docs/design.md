@@ -182,6 +182,16 @@ one drop for the drag and the keyboard, including the flight of a run the drop
 completes. Its caller decides what a refusal means: the drag puts the run
 back, and the keyboard keeps it in hand.
 
+**FreeCell uses Klondike's cursor, and its top row needs no gap**: the four
+cells sit over columns 0-3 and the four foundations over columns 4-7, so depth
+-1 is always a pile. Up and Down move only along the alternating run a column
+can give up, and Up from the start of that run leaves for the top row.
+`FreeCellView::dropHeldOn` is the one drop for the drag and the keyboard, and a
+refusal for length still says how many cards would fit. Undo, a new deal,
+leaving the game and the Large play switch all go through `settleForChange()`,
+which puts a held run back first. Otherwise Undo would reverse the lift and
+leave the run in hand.
+
 **The mouse and the keyboard go through one function, and the mouse moves the
 cursor.** `ReversiView::playAt`, `ChessView::pressSquare`,
 `DraughtsView::pressSquare` and `MinesweeperView::digAt` each hold what a press

@@ -1328,10 +1328,11 @@ void boardsTakeTheKeyboard()
         SudokuView sudoku;
         KlondikeView klondike;
         SpiderView spider;
+        FreeCellView freecell;
         const std::pair<GameView*, const char*> boards[] = {
             { &chess, "chess" },     { &reversi, "reversi" }, { &draughts, "draughts" },
             { &mines, "minesweeper" }, { &sudoku, "sudoku" }, { &klondike, "klondike" },
-            { &spider, "spider" },
+            { &spider, "spider" },   { &freecell, "freecell" },
         };
         for (const auto& [view, name] : boards)
             check(view->focusPolicy() == Qt::StrongFocus,
@@ -1629,6 +1630,113 @@ void boardsTakeTheKeyboard()
               "spider: Right past the last column reaches the stock, and stops there");
         pressKey(&spider, Qt::Key_Escape);
         check(!spider.holdingARun(), "spider: Escape with nothing in hand does nothing");
+    }
+
+    // FreeCell, the same way, with its cells and foundations as the top row.
+    // The first column ends in a nine-eight run under a king, the second is a
+    // black ten and the third a red one, so the run can go on the second and
+    // not on the third. The rest of the pack fills the other columns, since a
+    // FreeCell save must hold all 52.
+    {
+        std::vector<Card> deck = makeDeck(1, 4);
+        const auto take = [&deck](int rank, Suit suit) {
+            const auto it = std::find_if(deck.begin(), deck.end(), [rank, suit](const Card& c) {
+                return c.rank == rank && c.suit == suit;
+            });
+            Card c = *it;
+            deck.erase(it);
+            return c;
+        };
+        std::array<std::vector<Card>, FreeCellView::kColumns> columns;
+        columns[0] = { take(kKing, Suit::Spades), take(9, Suit::Hearts), take(8, Suit::Spades) };
+        columns[1] = { take(10, Suit::Clubs) };
+        columns[2] = { take(10, Suit::Hearts) };
+        for (std::size_t i = 0; i < deck.size(); ++i)
+            columns[3 + i % 5].push_back(deck[i]);
+        for (auto& column : columns)
+            for (Card& c : column)
+                c.faceUp = true;
+
+        QByteArray blob;
+        QDataStream out(&blob, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << quint32(1) << qint32(0);
+        for (const auto& column : columns)
+            cardcodec::writePile(out, column);
+        for (int i = 0; i < FreeCellView::kCells + 4; ++i)
+            cardcodec::writePile(out, {}); // the cells, then the foundations
+
+        FreeCellView freecell;
+        freecell.resize(900, 640);
+        freecell.show();
+        pump(20);
+        check(freecell.restoreState(blob), "freecell: a hand-built table loads");
+        check(freecell.cursorSpot() == QPoint(0, 2),
+              "freecell: a save from before the cursor opens it on the first column's top card");
+        QAction* undo = undoAction(freecell);
+
+        pressKey(&freecell, Qt::Key_Up);
+        check(freecell.cursorSpot() == QPoint(0, 1), "freecell: Up climbs to the start of the run");
+        pressKey(&freecell, Qt::Key_Up);
+        check(freecell.cursorSpot() == QPoint(0, -1),
+              "freecell: and Up again leaves for the cell above, since the king does not come away");
+        pressKey(&freecell, Qt::Key_Down);
+        pressKey(&freecell, Qt::Key_Up);
+        check(freecell.cursorSpot() == QPoint(0, 1), "freecell: Down returns to the column");
+
+        pressKey(&freecell, Qt::Key_Space);
+        check(freecell.holdingARun(), "freecell: Space lifts the run under the cursor");
+        pressKey(&freecell, Qt::Key_Right);
+        pressKey(&freecell, Qt::Key_Right);
+        pressKey(&freecell, Qt::Key_Space);
+        check(freecell.holdingARun(), "freecell: a red nine dropped on a red ten stays in hand");
+        pressKey(&freecell, Qt::Key_Left);
+        pressKey(&freecell, Qt::Key_Left);
+        pressKey(&freecell, Qt::Key_Space);
+        check(!freecell.holdingARun() && undo != nullptr && !undo->isEnabled(),
+              "freecell: dropping it back where it came from puts it back");
+
+        pressKey(&freecell, Qt::Key_Down);
+        pressKey(&freecell, Qt::Key_Up);
+        pressKey(&freecell, Qt::Key_Space);
+        pressKey(&freecell, Qt::Key_Right);
+        pressKey(&freecell, Qt::Key_Space);
+        check(!freecell.holdingARun() && undo != nullptr && undo->isEnabled(),
+              "freecell: Space lifts the run and Space drops it on the black ten");
+        check(freecell.cursorSpot() == QPoint(1, 1),
+              "freecell: and the cursor lands on the first card it dropped");
+
+        const QByteArray saved = freecell.saveState();
+        FreeCellView resumed;
+        check(resumed.restoreState(saved) && resumed.cursorSpot() == QPoint(1, 1),
+              "freecell: the cursor is in the save");
+
+        // The eight goes up into the cell over its column, and back out.
+        pressKey(&freecell, Qt::Key_Down);
+        pressKey(&freecell, Qt::Key_Space);
+        pressKey(&freecell, Qt::Key_Up);
+        check(freecell.cursorSpot() == QPoint(1, -1), "freecell: Up with a card in hand goes to the cell");
+        const QByteArray beforeCell = freecell.saveState();
+        pressKey(&freecell, Qt::Key_Space);
+        check(!freecell.holdingARun() && freecell.saveState() != beforeCell,
+              "freecell: Space drops the card into the cell");
+        pressKey(&freecell, Qt::Key_Space);
+        check(freecell.holdingARun(), "freecell: Space lifts it out of the cell again");
+        pressKey(&freecell, Qt::Key_Escape);
+        check(!freecell.holdingARun(), "freecell: Escape puts it back in the cell");
+        pressKey(&freecell, Qt::Key_Escape);
+        check(!freecell.holdingARun(), "freecell: Escape with nothing in hand does nothing");
+
+        // Undo while holding puts the card back first, then undoes a real move.
+        pressKey(&freecell, Qt::Key_Space);
+        undo->trigger();
+        check(!freecell.holdingARun() && freecell.saveState() == beforeCell,
+              "freecell: Undo with a card in hand puts it back and undoes the last real move");
+
+        for (int i = 0; i < 10; ++i)
+            pressKey(&freecell, Qt::Key_Right);
+        check(freecell.cursorSpot() == QPoint(FreeCellView::kColumns - 1, -1),
+              "freecell: Right along the top row stops at the last foundation");
     }
 }
 

@@ -5,6 +5,7 @@
 #include "freecell/freecelltable.h"
 #include "gameview.h"
 
+#include <QPoint>
 #include <QPointF>
 #include <QRectF>
 
@@ -40,6 +41,17 @@ public:
     // it is about ends up asserting something weaker and calling it coverage.
     int flightsInTheAir() const { return int(m_flights.size()); }
 
+    // Whether a run is off the table, by mouse or by keyboard. Exists because
+    // no picture and no save answers it: saveState() patches a lifted run back
+    // onto its pile, so the save looks complete whether or not the table is.
+    bool holdingARun() const { return m_dragging || m_keyHolding; }
+
+    // The keyboard cursor, as {column, depth}: columns 0-7. Depth -1 is the
+    // top row, which lines up with the columns -- the four cells over columns
+    // 0-3, the four foundations over 4-7 -- and any other depth is a card's
+    // index in that column. Exists for the reason KlondikeView::cursorSpot does.
+    QPoint cursorSpot() const { return { m_cursorCol, m_cursorDepth }; }
+
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
@@ -63,6 +75,7 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 900, 640 }; }
     QSize minimumSizeHint() const override { return { 620, 440 }; }
 
@@ -75,6 +88,10 @@ private:
         int index = -1;
         bool valid = false;
     };
+
+    // Lands any card in flight and puts back a run held by the drag or the
+    // keyboard, so a change to the table underneath never strands either.
+    void settleForChange();
 
     void buildActions();
     void newGame();
@@ -109,6 +126,20 @@ private:
     void checkWin();
     void refresh(const QString& message = {});
 
+    // Drops the held run on `target`. One function for the drag and the
+    // keyboard, so the two cannot disagree about a move; the table decides
+    // whether it is legal. On a refusal for length, `refusal` says how many
+    // cards would fit. The caller decides what a refusal means: the drag puts
+    // the run back, the keyboard keeps it in hand.
+    bool dropHeldOn(const Spot& target, QString* refusal);
+
+    // Keyboard play (GHUB-0168), the boards' scheme. See KlondikeView.
+    Spot cursorPile() const;
+    void clampCursor();
+    void pressAtCursor();
+    void dropAtCursor();
+    QRectF heldLandingRect() const;
+
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;
 
@@ -131,6 +162,13 @@ private:
     QPointF m_pressPos;
     bool m_dragging = false;
     bool m_pressValid = false;
+
+    // A run lifted with Space. m_drag and m_dragFrom carry it exactly as a
+    // drag does, so saveState patches either.
+    bool m_keyHolding = false;
+    // Opens on the top card of the first column; clamped to it on first use.
+    int m_cursorCol = 0;
+    int m_cursorDepth = 99;
 
     // Restoring a save clears the table's undo history, so canUndo() alone reads
     // a resumed deal as untouched and saveState() then returns {}, which the hub

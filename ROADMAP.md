@@ -330,6 +330,14 @@ path, so they land together.
   a refusal put the run back. ctest 11/11. Left: FreeCell, Pyramid,
   Canasta, Hearts. GHUB-0069 (click-to-place) is not started; it would
   reuse pressAtCursor/dropAtCursor's shape in each view.
+  Progress (2026-09-28): FreeCell done. Klondike's {column, depth}
+  cursor, with depth -1 on the cells (columns 0-3) and foundations (4-7).
+  FreeCellView::dropHeldOn is the one drop for drag and keyboard;
+  settleForChange() puts a held run back before Undo, New Deal, leaving
+  and the Large play switch. Save blob v2 carries the cursor; v1 loads.
+  boardsTakeTheKeyboard part 4 covers it on a hand-built v1 table, and
+  seven mutations each turned their check red. Left: Pyramid, Hearts,
+  Canasta.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
@@ -464,6 +472,19 @@ path, so they land together.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
+
+- 📋 [GHUB-0200] **FreeCell's run highlight can misjudge what fits after a card goes to a cell.**
+  FreeCellTable::dropOnCell and dropOnFoundation never reset
+  m_liftedColumn; only dropOnColumn, putBack, undo, deal and restore do.
+  So after the last card of a column goes to a cell, maxMoveSize still
+  excludes that now-empty column, and paintEvent's gold/red run
+  highlight under-counts the move limit until the next lift() resets it.
+  Found by reading the code for GHUB-0168; not reproduced yet. Fix: reset
+  it in both drops, with a selftest check on maxMoveSize after a
+  column-emptying cell drop.
+  **Layman:** After you park a card, the colour that says whether a run will fit can be wrong until you pick up the next card.
+  Kind: fix.
+  Source: in-session-2026-09-28.
 
 ## 1.3.0 — Getting around the app
 
