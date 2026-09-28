@@ -352,6 +352,16 @@ path, so they land together.
   their check red. The same commit fixes a flaky FreeCell undo check:
   the painted cursor can come back one card higher after Undo on some
   deals. Left: Hearts, Canasta.
+  Owner's calls for HEARTS (2026-09-28), not yet built. The cursor walks
+  EVERY card in the hand, dimmed ones included, so the hand can be read
+  slowly; Space on a card that cannot be played says why rather than
+  doing nothing. Passing: Space picks or unpicks a card, and ENTER sends
+  the three once three are picked. Enter does not pick during passing.
+  During play Space and Enter both play the card under the cursor. Today
+  Pass 3 Cards and Next Hand have no shortcut at all. Pyramid shipped in
+  3c71b1e (pushed, local CI green). Noted, not filed: Undo in Klondike,
+  Spider and FreeCell restores the cards but not the cursor, which can
+  come back one card higher.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
