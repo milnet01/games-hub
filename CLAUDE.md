@@ -282,7 +282,9 @@ before believing an ID never shipped.
 Two workflows in `.github/workflows/`, contract in
 `docs/specs/GHUB-0025-downloadable-builds.md`. `ci.yml` builds and runs
 `ctest` -- every registered case, not just the two binaries -- on `ubuntu-24.04`
-and `windows-2022` for every push **to `master`** and every pull request. That
+and `windows-2022` for every push **to `master`** and every pull request —
+**unless it touches documentation alone**: `paths-ignore` skips the same set the
+pre-push hook treats as docs, and no test reads a file on it. That
 includes the Python checks, which is how a Linux-only `grep` pipeline in one of
 them reddened the Windows leg six times (GHUB-0171). A push to any other branch runs nothing, so
 the Windows leg — the only place MSVC is exercised — does not run on branch

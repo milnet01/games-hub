@@ -6,10 +6,28 @@ name: CI
 # platform break is found by the machine rather than at release time.
 # Contract: docs/specs/GHUB-0025-downloadable-builds.md
 
+# A change touching nothing but documentation builds nothing, so it runs
+# nothing: no test reads a file on this list. The list is the pre-push hook's
+# own documentation set, so CI and the hook agree on what counts. A change
+# touching anything else as well runs everything, workflows included. The list
+# is written out twice rather than shared through a YAML anchor, which not
+# every linter here reads.
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'packaging/licenses/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'packaging/licenses/**'
 
 permissions:
   contents: read

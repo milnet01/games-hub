@@ -53,7 +53,9 @@ if [ "$PUSHING" = 0 ]; then
 fi
 
 # Docs-only if nothing outside these paths changed. Deliberately strict: a
-# CMakeLists or workflow edit is NOT documentation, however small.
+# CMakeLists or workflow edit is NOT documentation, however small. ci.yml's
+# paths-ignore lists the same set, so CI skips exactly what this treats as
+# docs; change the two together.
 CODE=$(printf '%s\n' "$CHANGED" | grep -Ev '(^$|\.md$|^docs/|^LICENSE$|^\.gitignore$|^packaging/licenses/)' || true)
 
 if [ -z "$CODE" ]; then
