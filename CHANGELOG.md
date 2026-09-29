@@ -29,6 +29,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **FreeCell's run highlight reads the move limit right after a card goes to a cell** (GHUB-0200)
+  Parking the last card of a column in a cell, or sending it to a
+  foundation, now frees that column at once. The gold-or-red colour that
+  says whether a run fits used to under-count the limit until the next
+  card was picked up.
+
 - **A release's name now appears in its title on the releases page** (GHUB-0199)
   Each release carries a name as well as a number, but the step that
   publishes it always wrote "Games X.Y.Z". 1.1.0 was renamed by hand.

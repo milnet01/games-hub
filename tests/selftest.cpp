@@ -2129,6 +2129,143 @@ void freecellMoveSizeIsTheRule()
     table.putBack(FC::PileKind::Column, 0, held);
 }
 
+void freecellALiftedColumnIsForgottenOnceTheDropLands()
+{
+    // Why this exists (GHUB-0200): dropOnCell and dropOnFoundation never reset
+    // m_liftedColumn -- only dropOnColumn, putBack, undo, deal and restore did.
+    // So after the last card of a column went to a cell or a foundation, that
+    // now-genuinely-empty column was still excluded by maxMoveSize, and the move
+    // limit (and the gold/red run highlight built on it) read low until the next
+    // lift() happened to reset it.
+    //
+    // Contract:
+    //   INV-1  After a lone card leaves its column for a cell, the column counts
+    //          as empty: maxMoveSize(false) == (free cells + 1) * 2^(empty
+    //          columns), with the vacated column among those empty ones.
+    //   INV-2  The same holds when the lone card leaves for a foundation.
+    //   INV-3  The two drops are separate code paths, so each is asserted on
+    //          its own; a fix to one leaves the other red.
+    //   INV-4  A REFUSED cell drop changes nothing: the held run's column still
+    //          does not count as empty.
+    //   INV-5  Likewise for a refused foundation drop.
+    //
+    // Position: column 0 holds one card, columns 1-7 hold the other 51, every
+    // cell free and no other column empty, so the only empty column afterwards
+    // is the one just vacated.
+    const std::vector<Card> pack = [] {
+        std::vector<Card> deck = makeDeck(1, 4);
+        for (Card& c : deck)
+            c.faceUp = true;
+        return deck;
+    }();
+
+    // Builds the position with `lone` by itself in column 0.
+    // `inCell`, when given, is parked in cell 0 and kept out of the columns.
+    auto build = [&pack](FC& table, const Card& lone, const Card* inCell = nullptr) {
+        std::array<std::vector<Card>, FC::kColumns> columns;
+        std::array<std::vector<Card>, FC::kCells> cells;
+        std::array<std::vector<Card>, FC::kFoundations> foundations;
+        columns[0].push_back(lone);
+        if (inCell != nullptr)
+            cells[0].push_back(*inCell);
+        std::size_t next = 0;
+        for (const Card& c : pack) {
+            if (c.suit == lone.suit && c.rank == lone.rank)
+                continue;
+            if (inCell != nullptr && c.suit == inCell->suit && c.rank == inCell->rank)
+                continue;
+            columns[1 + next % (FC::kColumns - 1)].push_back(c);
+            ++next;
+        }
+        return table.restore(columns, cells, foundations, 0);
+    };
+
+    // INV-1: a cell drop.
+    {
+        FC table;
+        check(build(table, pack.front()), "freecell: the lone-card position is reachable (cell)");
+        check(table.maxMoveSize(false) == 5,
+              "freecell: before the move, four free cells and no empty column is five");
+        const std::vector<Card> held = table.lift(FC::PileKind::Column, 0, 0);
+        check(held.size() == 1, "freecell: the lone card lifts (cell)");
+        check(table.dropOnCell(held, 0), "freecell: and drops into a free cell");
+        check(table.columns()[0].empty(), "freecell: leaving column 0 really empty");
+        const int got = table.maxMoveSize(false);
+        std::printf("      cell drop: expected 8 (3 free cells, 1 empty column), got %d\n", got);
+        check(got == (1 + 3) * 2,
+              "freecell: after a column-emptying cell drop the limit counts that column");
+    }
+
+    // INV-2: a foundation drop. A lone Ace is what a foundation will take.
+    {
+        FC table;
+        Card ace = pack.front();
+        for (const Card& c : pack) {
+            if (c.rank == kAce) {
+                ace = c;
+                break;
+            }
+        }
+        check(build(table, ace), "freecell: the lone-Ace position is reachable (foundation)");
+        const std::vector<Card> held = table.lift(FC::PileKind::Column, 0, 0);
+        check(held.size() == 1, "freecell: the lone Ace lifts");
+        check(table.dropOnFoundation(held, 0), "freecell: and drops on an empty foundation");
+        check(table.columns()[0].empty(), "freecell: leaving column 0 really empty (foundation)");
+        const int got = table.maxMoveSize(false);
+        std::printf("      foundation drop: expected 10 (4 free cells, 1 empty column), got %d\n",
+                    got);
+        check(got == (1 + 4) * 2,
+              "freecell: after a column-emptying foundation drop the limit counts that column");
+    }
+
+    // INV-4: a REFUSED drop leaves the run in the caller's hands (the keyboard
+    // path keeps it there), so its column must still read as lifted. Clearing
+    // the marker before the refusal would count that column as empty.
+    //
+    // Cell 0 is already occupied, so dropOnCell must refuse. Free cells: 3, no
+    // other column empty, the held run's column excluded: (3 + 1) * 1 = 4. If
+    // the marker were wrongly cleared the figure would be (3 + 1) * 2 = 8.
+    {
+        FC table;
+        const Card parked = pack.back();
+        const Card lone = pack.front();
+        check(build(table, lone, &parked), "freecell: the occupied-cell position is reachable");
+        const std::vector<Card> held = table.lift(FC::PileKind::Column, 0, 0);
+        check(held.size() == 1, "freecell: the lone card lifts (refused cell drop)");
+        check(!table.dropOnCell(held, 0), "freecell: an occupied cell refuses the drop");
+        const int got = table.maxMoveSize(false);
+        std::printf("      refused cell drop: expected 4 (3 free cells, held column not empty),"
+                    " got %d\n", got);
+        check(got == (3 + 1) * 1,
+              "freecell: a refused cell drop still excludes the held run's column");
+        table.putBack(FC::PileKind::Column, 0, held);
+    }
+
+    // INV-5: the same for a refused foundation drop. A lone non-Ace cannot go
+    // on an empty foundation. All 4 cells free: (4 + 1) * 1 = 5, not 10.
+    {
+        FC table;
+        Card lone = pack.front();
+        for (const Card& c : pack) {
+            if (c.rank != kAce) {
+                lone = c;
+                break;
+            }
+        }
+        check(build(table, lone), "freecell: the lone non-Ace position is reachable");
+        const std::vector<Card> held = table.lift(FC::PileKind::Column, 0, 0);
+        check(held.size() == 1, "freecell: the lone card lifts (refused foundation drop)");
+        check(!table.dropOnFoundation(held, 0),
+              "freecell: an empty foundation refuses a card that is not an Ace");
+        const int got = table.maxMoveSize(false);
+        std::printf("      refused foundation drop: expected 5 (4 free cells, held column not"
+                    " empty), got %d\n", got);
+        check(got == (4 + 1) * 1,
+              "freecell: a refused foundation drop still excludes the held run's column");
+        table.putBack(FC::PileKind::Column, 0, held);
+    }
+}
+
 void freecellStacksAlternateAndDescend()
 {
     std::array<std::vector<Card>, FC::kColumns> columns;
@@ -6187,6 +6324,7 @@ int main()
 
     freecellDealsAWholePack();
     freecellMoveSizeIsTheRule();
+    freecellALiftedColumnIsForgottenOnceTheDropLands();
     freecellStacksAlternateAndDescend();
     freecellFoundationsGoUpInSuit();
     freecellUndoDoesNotLoseACard();

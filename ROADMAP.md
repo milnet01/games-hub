@@ -528,7 +528,7 @@ path, so they land together.
   Kind: ux.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0200] **FreeCell's run highlight can misjudge what fits after a card goes to a cell.**
+- ✅ [GHUB-0200] **FreeCell's run highlight can misjudge what fits after a card goes to a cell.**
   FreeCellTable::dropOnCell and dropOnFoundation never reset
   m_liftedColumn; only dropOnColumn, putBack, undo, deal and restore do.
   So after the last card of a column goes to a cell, maxMoveSize still
@@ -537,6 +537,13 @@ path, so they land together.
   Found by reading the code for GHUB-0168; not reproduced yet. Fix: reset
   it in both drops, with a selftest check on maxMoveSize after a
   column-emptying cell drop.
+  Resolved (2026-09-29): dropOnCell and dropOnFoundation now clear
+  m_liftedColumn once the drop LANDS -- never on a refusal, since the
+  keyboard keeps a refused run in hand and its column is still not free.
+  Regression check freecellALiftedColumnIsForgottenOnceTheDropLands in
+  tests/selftest.cpp: red first (4 vs 8 for the cell, 5 vs 10 for the
+  foundation), green with the fix. Four mutations, all killed: either
+  reset removed, or either reset moved before its refusal.
   **Layman:** After you park a card, the colour that says whether a run will fit can be wrong until you pick up the next card.
   Kind: fix.
   Source: in-session-2026-09-28.

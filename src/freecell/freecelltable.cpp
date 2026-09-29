@@ -167,6 +167,9 @@ bool FreeCellTable::dropOnCell(const std::vector<Card>& run, int cell)
     if (run.size() != 1 || !m_cells[std::size_t(cell)].empty())
         return false;
     m_cells[std::size_t(cell)].push_back(run.front());
+    // Only once the drop has landed: a refused one goes back to its column,
+    // and until then that column still is not free (GHUB-0200).
+    m_liftedColumn = -1;
     ++m_moves;
     return true;
 }
@@ -176,6 +179,7 @@ bool FreeCellTable::dropOnFoundation(const std::vector<Card>& run, int foundatio
     if (run.size() != 1 || !canPlaceOnFoundation(run.front(), foundation))
         return false;
     m_foundations[std::size_t(foundation)].push_back(run.front());
+    m_liftedColumn = -1; // as dropOnCell (GHUB-0200)
     ++m_moves;
     return true;
 }
