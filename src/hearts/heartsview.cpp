@@ -11,6 +11,7 @@
 #include <QDataStream>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QTimer>
@@ -77,6 +78,7 @@ HeartsView::HeartsView(QWidget* parent)
     : GameView(parent)
 {
     setMinimumSize(HeartsView::minimumSizeHint());
+    setFocusPolicy(Qt::StrongFocus);
 
     m_timer = new QTimer(this);
     m_timer->setSingleShot(true);
@@ -330,6 +332,10 @@ void HeartsView::announceHand()
 
 QString HeartsView::captionText() const
 {
+    // Why the last press did nothing. It goes on the table as well as in the
+    // status line, because the status line is not read during play.
+    if (!m_reason.isEmpty())
+        return m_reason;
     switch (m_engine.phase()) {
     case HeartsEngine::Phase::Passing:
         return tr("Choose 3 cards to pass %1 — %2 chosen.")
@@ -406,8 +412,11 @@ void HeartsView::stepTurnLight()
     update();
 }
 
-void HeartsView::refresh()
+void HeartsView::refresh(const QString& reason)
 {
+    m_reason = reason;
+    // A card played or a hand dealt can leave the cursor past the last card.
+    m_cursor = std::clamp(m_cursor, 0, std::max(0, int(m_engine.hand(0).size()) - 1));
     m_turn.setSeat(litSeat(), m_turnFades);
     if (m_turnFades && m_turn.moving() && !m_turnTimer->isActive())
         m_turnTimer->start();
@@ -433,6 +442,8 @@ void HeartsView::refresh()
         state = tr("Game over");
         break;
     }
+    if (!m_reason.isEmpty())
+        state = m_reason;
 
     m_passAction->setEnabled(m_engine.phase() == HeartsEngine::Phase::Passing
                              && m_selected.size() == 3);
@@ -677,6 +688,8 @@ void HeartsView::paintEvent(QPaintEvent*)
         if (std::find(m_selected.begin(), m_selected.end(), hand[std::size_t(i)]) != m_selected.end())
             CardArt::paintHighlight(p, r, QColor(0xff, 0xd5, 0x4f));
     }
+    if (!hand.empty())
+        Theme::paintCellCursor(p, handCardRect(m_cursor), legible);
 
     paintStatusCaption(p, captionArea());
 }
@@ -686,42 +699,129 @@ void HeartsView::mousePressEvent(QMouseEvent* event)
     if (event->button() != Qt::LeftButton)
         return;
 
-    const std::vector<Card>& hand = m_engine.hand(0);
-
     // Topmost card first: the hand is drawn left to right, so later cards
-    // overlap earlier ones.
-    for (int i = int(hand.size()) - 1; i >= 0; --i) {
-        if (!handCardRect(i).contains(event->position()))
-            continue;
-
-        const Card& card = hand[std::size_t(i)];
-
-        if (m_engine.phase() == HeartsEngine::Phase::Passing) {
-            auto it = std::find(m_selected.begin(), m_selected.end(), card);
-            if (it != m_selected.end())
-                m_selected.erase(it);
-            else if (m_selected.size() < 3)
-                m_selected.push_back(card);
-            update();
-            refresh();
+    // overlap earlier ones. The cursor follows the mouse, so the two ways of
+    // playing never disagree about where you are, and the press then goes
+    // through the same function the keyboard's Space does.
+    for (int i = int(m_engine.hand(0).size()) - 1; i >= 0; --i) {
+        if (handCardRect(i).contains(event->position())) {
+            m_cursor = i;
+            pressAtCursor();
             return;
         }
+    }
+}
 
-        if (m_engine.phase() == HeartsEngine::Phase::Playing && m_engine.currentPlayer() == 0) {
-            if (!m_engine.playCard(0, card))
-                return;
-            Sound::instance().play(Sound::kCardPlace);
-            update();
-            refresh();
-            if (m_engine.trickComplete()) {
-                m_awaitingCollect = true;
-                m_timer->start(kTrickPauseMs);
-            } else {
-                m_timer->start(kAiDelayMs);
-            }
+// ---------------------------------------------------------------------------
+// Keyboard (GHUB-0168): the boards' scheme, with the owner's two calls for
+// Hearts (2026-09-28). The cursor walks every card in the hand, dimmed ones
+// included. While passing, Space picks or unpicks and Enter sends the three;
+// Enter never picks. During play Space and Enter both play the card.
+// ---------------------------------------------------------------------------
+
+// Why `card` cannot go down now, in the words the rules would use. Only asked
+// about a card the engine has just refused.
+QString HeartsView::refusalFor(const Card& card) const
+{
+    if (m_engine.currentPlayer() != 0 || m_engine.trickComplete())
+        return tr("Wait for your turn.");
+
+    const std::vector<Card>& hand = m_engine.hand(0);
+    const auto holds = [&hand](auto pred) {
+        return std::any_of(hand.begin(), hand.end(), pred);
+    };
+    const bool firstTrick = m_engine.tricksPlayed() == 0;
+    const std::vector<std::pair<int, Card>>& trick = m_engine.trick();
+
+    if (trick.empty()) {
+        const Card twoOfClubs { Suit::Clubs, 2, true };
+        if (firstTrick && holds([&](const Card& c) { return c == twoOfClubs; }))
+            return tr("The two of clubs leads the first trick.");
+        if (card.suit == Suit::Hearts)
+            return tr("Hearts are not broken yet, so you cannot lead one.");
+    } else {
+        const Suit led = trick.front().second.suit;
+        if (card.suit != led && holds([led](const Card& c) { return c.suit == led; }))
+            return tr("You must follow %1.").arg(suitName(led));
+    }
+    return tr("No points on the first trick.");
+}
+
+void HeartsView::pressAtCursor()
+{
+    const std::vector<Card>& hand = m_engine.hand(0);
+    if (m_cursor < 0 || m_cursor >= int(hand.size()))
+        return;
+    const Card card = hand[std::size_t(m_cursor)];
+
+    if (m_engine.phase() == HeartsEngine::Phase::Passing) {
+        auto it = std::find(m_selected.begin(), m_selected.end(), card);
+        if (it != m_selected.end()) {
+            m_selected.erase(it);
+        } else if (m_selected.size() < 3) {
+            m_selected.push_back(card);
+        } else {
+            refresh(tr("Three cards are picked. Unpick one to choose another."));
+            return;
         }
+        update();
+        refresh();
         return;
     }
+
+    if (m_engine.phase() != HeartsEngine::Phase::Playing)
+        return;
+    if (!m_engine.playCard(0, card)) {
+        refresh(refusalFor(card));
+        return;
+    }
+    Sound::instance().play(Sound::kCardPlace);
+    update();
+    refresh();
+    if (m_engine.trickComplete()) {
+        m_awaitingCollect = true;
+        m_timer->start(kTrickPauseMs);
+    } else {
+        m_timer->start(kAiDelayMs);
+    }
+}
+
+void HeartsView::keyPressEvent(QKeyEvent* event)
+{
+    const bool passing = m_engine.phase() == HeartsEngine::Phase::Passing;
+    switch (event->key()) {
+    case Qt::Key_Left:
+        if (m_cursor > 0)
+            --m_cursor;
+        refresh();
+        break;
+    case Qt::Key_Right:
+        ++m_cursor; // refresh() stops it at the last card
+        refresh();
+        break;
+    case Qt::Key_Space:
+        pressAtCursor();
+        break;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        if (passing)
+            confirmPass();
+        else
+            pressAtCursor();
+        break;
+    case Qt::Key_Escape:
+        if (!passing || m_selected.empty()) {
+            GameView::keyPressEvent(event);
+            return;
+        }
+        m_selected.clear();
+        refresh();
+        break;
+    default:
+        GameView::keyPressEvent(event);
+        return;
+    }
+    update();
 }
 
 // ---------------------------------------------------------------------------
@@ -739,10 +839,13 @@ QByteArray HeartsView::saveState() const
     QByteArray blob;
     QDataStream out(&blob, QIODevice::WriteOnly);
     out.setVersion(QDataStream::Qt_6_0);
-    out << quint32(1);
+    // Version 2 appends the keyboard cursor, last; a version-1 save still
+    // loads, with the cursor on the leftmost card.
+    out << quint32(2);
     m_engine.save(out);
     cardcodec::writePile(out, m_selected);
     out << qint8(m_awaitingCollect ? 1 : 0) << qint8(m_announced ? 1 : 0);
+    out << qint8(m_cursor);
     return blob;
 }
 
@@ -752,7 +855,7 @@ bool HeartsView::restoreState(const QByteArray& blob)
     in.setVersion(QDataStream::Qt_6_0);
     quint32 version = 0;
     in >> version;
-    if (version != 1 || in.status() != QDataStream::Ok)
+    if ((version != 1 && version != 2) || in.status() != QDataStream::Ok)
         return false;
 
     HeartsEngine engine;
@@ -771,6 +874,13 @@ bool HeartsView::restoreState(const QByteArray& blob)
         return false;
     if (announced != 0 && announced != 1)
         return false;
+    qint8 cursor = 0;
+    if (version >= 2) {
+        in >> cursor;
+        const int last = std::max(0, int(engine.hand(0).size()) - 1);
+        if (in.status() != QDataStream::Ok || cursor < 0 || cursor > last)
+            return false;
+    }
 
     // A lift is at most three cards and only ever cards you are holding --
     // the same rule confirmPass() plays by, checked here because the blob has
@@ -790,6 +900,7 @@ bool HeartsView::restoreState(const QByteArray& blob)
     m_selected = selected;
     m_awaitingCollect = awaitingCollect == 1;
     m_announced = announced == 1;
+    m_cursor = cursor;
     // The clock is deliberately NOT started here. The hub calls activate()
     // straight after this, and that already works out whether the computers
     // owe a move -- starting it in both places runs the timer twice.

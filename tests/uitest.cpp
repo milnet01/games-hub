@@ -1330,10 +1330,12 @@ void boardsTakeTheKeyboard()
         SpiderView spider;
         FreeCellView freecell;
         PyramidView pyramid;
+        HeartsView hearts;
         const std::pair<GameView*, const char*> boards[] = {
             { &chess, "chess" },     { &reversi, "reversi" }, { &draughts, "draughts" },
             { &mines, "minesweeper" }, { &sudoku, "sudoku" }, { &klondike, "klondike" },
             { &spider, "spider" },   { &freecell, "freecell" }, { &pyramid, "pyramid" },
+            { &hearts, "hearts" },
         };
         for (const auto& [view, name] : boards)
             check(view->focusPolicy() == Qt::StrongFocus,
@@ -1847,6 +1849,147 @@ void boardsTakeTheKeyboard()
         PyramidView resumed;
         check(resumed.restoreState(saved) && resumed.cursorSpot() == spot,
               "pyramid: the cursor is in the save");
+    }
+
+    // Hearts. The deal is random, so every check reads the position back out of
+    // the view's own save rather than assuming a hand: the engine first, then
+    // the cards picked for the pass.
+    {
+        struct HeartsProbe : HeartsView {
+            using HeartsView::handCardRect;
+        };
+        struct Seen {
+            HeartsEngine engine;
+            std::vector<Card> picked;
+        };
+        const auto seen = [](const HeartsView& view) {
+            Seen out;
+            QDataStream in(view.saveState());
+            in.setVersion(QDataStream::Qt_6_0);
+            quint32 version = 0;
+            in >> version;
+            out.engine.load(in);
+            cardcodec::readPile(in, out.picked);
+            return out;
+        };
+        using Phase = HeartsEngine::Phase;
+
+        HeartsProbe hearts;
+        hearts.resize(1000, 660);
+        hearts.show();
+        pump(20);
+        check(hearts.cursorSpot() == 0, "hearts: the cursor opens on the leftmost card");
+        pressKey(&hearts, Qt::Key_Right);
+        check(hearts.cursorSpot() == 1, "hearts: Right steps one card along the hand");
+        for (int i = 0; i < 20; ++i)
+            pressKey(&hearts, Qt::Key_Right);
+        check(hearts.cursorSpot() == HeartsEngine::kCardsPerHand - 1,
+              "hearts: and stops on the last card");
+        for (int i = 0; i < 20; ++i)
+            pressKey(&hearts, Qt::Key_Left);
+        check(hearts.cursorSpot() == 0, "hearts: and Left stops on the first");
+
+        pressKey(&hearts, Qt::Key_Space);
+        check(seen(hearts).picked.size() == 1, "hearts: Space picks a card for the pass");
+        pressKey(&hearts, Qt::Key_Space);
+        check(seen(hearts).picked.empty(), "hearts: and Space again unpicks it");
+        pressKey(&hearts, Qt::Key_Return);
+        check(seen(hearts).picked.empty(), "hearts: Enter does not pick a card");
+        pressKey(&hearts, Qt::Key_Space);
+        pressKey(&hearts, Qt::Key_Right);
+        pressKey(&hearts, Qt::Key_Space);
+        pressKey(&hearts, Qt::Key_Return);
+        check(seen(hearts).engine.phase() == Phase::Passing && seen(hearts).picked.size() == 2,
+              "hearts: nor does it send fewer than three");
+        pressKey(&hearts, Qt::Key_Right);
+        pressKey(&hearts, Qt::Key_Space);
+        pressKey(&hearts, Qt::Key_Right);
+        const QString before = hearts.captionText();
+        pressKey(&hearts, Qt::Key_Space);
+        check(seen(hearts).picked.size() == 3 && hearts.captionText() != before
+                  && hearts.lastStatus().startsWith(hearts.captionText()),
+              "hearts: a fourth pick is refused, and the table says why");
+        pressKey(&hearts, Qt::Key_Escape);
+        check(seen(hearts).picked.empty(), "hearts: Escape unpicks the pass");
+
+        // A click moves the cursor and goes through the same press.
+        clickAt(&hearts, hearts.handCardRect(5).topLeft() + QPointF(4, 4), Qt::LeftButton);
+        check(hearts.cursorSpot() == 5 && seen(hearts).picked.size() == 1,
+              "hearts: a click moves the cursor to the card and picks it");
+        pressKey(&hearts, Qt::Key_Right);
+        pressKey(&hearts, Qt::Key_Space);
+        pressKey(&hearts, Qt::Key_Right);
+        pressKey(&hearts, Qt::Key_Space);
+        pressKey(&hearts, Qt::Key_Return);
+        check(seen(hearts).engine.phase() == Phase::Playing,
+              "hearts: Enter sends the three once three are picked");
+
+        // Play. The computers move on a timer, so wait for the turn to come
+        // round before pressing anything -- and stop well short of the end of
+        // the hand, whose box would block the test.
+        const auto myTurn = [&] {
+            QDeadlineTimer deadline(8000);
+            while (!deadline.hasExpired()) {
+                const Seen now = seen(hearts);
+                if (now.engine.phase() == Phase::Playing && now.engine.currentPlayer() == 0
+                    && !now.engine.trickComplete())
+                    return true;
+                pump(20);
+            }
+            return false;
+        };
+        const auto moveTo = [&hearts](int index) {
+            for (int i = 0; i < HeartsEngine::kCardsPerHand; ++i)
+                pressKey(&hearts, Qt::Key_Left);
+            for (int i = 0; i < index; ++i)
+                pressKey(&hearts, Qt::Key_Right);
+        };
+        bool refused = false;
+        bool bySpace = false;
+        bool byEnter = false;
+        for (int turn = 0; turn < 8 && !(refused && bySpace && byEnter); ++turn) {
+            if (!myTurn())
+                break;
+            const Seen now = seen(hearts);
+            const std::vector<Card>& hand = now.engine.hand(0);
+            const std::vector<Card> legal = now.engine.legalPlays(0);
+            if (!refused && legal.size() < hand.size()) {
+                int dim = 0;
+                while (std::find(legal.begin(), legal.end(), hand[std::size_t(dim)]) != legal.end())
+                    ++dim;
+                moveTo(dim);
+                check(hearts.cursorSpot() == dim, "hearts: the cursor reaches a card that is dimmed");
+                pressKey(&hearts, Qt::Key_Space);
+                check(seen(hearts).engine.hand(0).size() == hand.size()
+                          && !hearts.captionText().isEmpty()
+                          && hearts.lastStatus().startsWith(hearts.captionText())
+                          && !hearts.captionText().startsWith(QStringLiteral("Your")),
+                      "hearts: Space on a card that cannot be played says why and plays nothing");
+                refused = true;
+            }
+            const auto at = std::find(hand.begin(), hand.end(), legal.front());
+            moveTo(int(at - hand.begin()));
+            pressKey(&hearts, bySpace ? Qt::Key_Return : Qt::Key_Space);
+            check(seen(hearts).engine.hand(0).size() == hand.size() - 1,
+                  bySpace ? "hearts: Enter plays the card under the cursor"
+                          : "hearts: Space plays the card under the cursor");
+            (bySpace ? byEnter : bySpace) = true;
+        }
+        check(refused && bySpace && byEnter, "hearts: the play checks all ran");
+        hearts.deactivate();
+
+        moveTo(3); // off the leftmost card, so a cursor left out of the save shows
+        const int spot = hearts.cursorSpot();
+        const QByteArray saved = hearts.saveState();
+        HeartsView resumed;
+        check(resumed.restoreState(saved) && resumed.cursorSpot() == spot,
+              "hearts: the cursor is in the save");
+        // A version-1 save is the same blob without the trailing cursor.
+        QByteArray old = saved.left(saved.size() - 1);
+        old[3] = 1;
+        HeartsView fromOld;
+        check(fromOld.restoreState(old) && fromOld.cursorSpot() == 0,
+              "hearts: a save from before the cursor opens it on the leftmost card");
     }
 }
 
@@ -4401,12 +4544,14 @@ int main(int argc, char* argv[])
                 in.setVersion(QDataStream::Qt_6_0);
                 quint32 version = 0;
                 in >> version;
-                check(version == 1, "hearts: the save carries the version this check forges against");
+                check(version == 2, "hearts: the save carries the version this check forges against");
             }
             // The trick count is one byte, six from the end of the engine's
             // block: phase, hand, current, leader, lastWinner, tricksPlayed,
-            // heartsBroken, then the view's own tail.
-            const int tail = 1 /*heartsBroken*/ + 4 + 1 + 1 /*pile length + collect + announced*/;
+            // heartsBroken, then the view's own tail. Version 2 added the
+            // keyboard cursor at the very end (GHUB-0168).
+            const int tail = 1 /*heartsBroken*/ + 4 + 1 + 1 + 1
+                /*pile length + collect + announced + cursor*/;
             forged[forged.size() - tail - 1] = char(9);
             check(!resumed.restoreState(forged),
                   "hearts: a save whose cards do not match its trick count is refused");

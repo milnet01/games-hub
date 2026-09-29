@@ -37,9 +37,15 @@ public:
     void deactivate() override;
     TurnLight turnLight() const override { return m_turn.value(); }
 
+    // The keyboard cursor: the place in your hand, 0 for the leftmost card.
+    // It walks every card, dimmed ones included, so the hand can be read one
+    // card at a time. Exposed for the tests, as KlondikeView::cursorSpot is.
+    int cursorSpot() const { return m_cursor; }
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 880, 660 }; }
     QSize minimumSizeHint() const override { return { 620, 480 }; }
 
@@ -67,7 +73,15 @@ private:
     // is full. Driven by a timer so the play is watchable.
     void step();
     void finishTrick();
-    void refresh();
+    // `reason` is why the last press did nothing, shown until anything else
+    // happens -- every change calls refresh(), and that is what clears it.
+    void refresh(const QString& reason = {});
+
+    // Keyboard (GHUB-0168). The one press for mouse and keyboard: picks or
+    // unpicks a card while passing, plays it during play, and says why when
+    // it cannot.
+    void pressAtCursor();
+    QString refusalFor(const Card& card) const;
     void announceHand();
 
     // Whose turn § 4.2 lights, and the area its light fills. The area is the
@@ -93,6 +107,8 @@ private:
     // The hand-over box came due while the hub was on another page; activate()
     // raises it when we are back.
     bool m_announcePending = false;
+    int m_cursor = 0;
+    QString m_reason;
     // GHUB-0063. m_turnFades is false until activate() has run, so a game
     // opened, restored or photographed shows its light at once instead of
     // fading it in. m_timer is the AI's clock and cannot carry the fade: it is

@@ -206,6 +206,19 @@ the mouse and the keyboard, and a click moves the cursor first. With nothing
 lifted there is nothing to settle, so Pyramid has no `settleForChange()`: Undo
 and a new deal already drop the picked card.
 
+**Hearts has one row, the hand, and the cursor walks every card in it** —
+dimmed ones too, so the hand can be read one card at a time (owner's call,
+2026-09-28). Left and Right step along it. While passing, Space picks or
+unpicks a card and Enter sends the three once three are picked; Enter never
+picks, and Escape unpicks them all. During play Space and Enter both play the
+card under the cursor. **A press that does nothing says why**: a card the rules
+refuse names the rule it breaks, and a fourth pick for the pass is refused
+aloud. The sentence goes in the status line and in the caption on the table,
+because the status line is not read during play, and it lasts until anything
+else happens. `HeartsView::pressAtCursor` is the one press for the mouse and
+the keyboard, and a click moves the cursor first. The computers play on a
+timer, so a key does nothing useful until the turn comes back to you.
+
 **The mouse and the keyboard go through one function, and the mouse moves the
 cursor.** `ReversiView::playAt`, `ChessView::pressSquare`,
 `DraughtsView::pressSquare` and `MinesweeperView::digAt` each hold what a press
