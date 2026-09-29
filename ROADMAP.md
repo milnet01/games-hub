@@ -373,6 +373,15 @@ path, so they land together.
   Save blob v2 carries the cursor; v1 loads on the leftmost card.
   boardsTakeTheKeyboard plays the pass and several turns by keyboard,
   and ten mutations each turned their check red. Left: Canasta.
+  Owner's calls for CANASTA (2026-09-29), not yet built. The cursor
+  walks the hand, and Up reaches the table: stock, discard pile, your
+  melds. Space does what a click does there -- picks or unpicks a card
+  in the hand, draws on the stock, takes the pile before the draw and
+  throws the one picked card after it, and adds the picked cards to a
+  meld (how a wild is placed). ENTER lays the picked cards down as a
+  new meld. Discarding stays on Space-on-the-pile, so Enter can never
+  throw a card away. Both replace today's Space=Meld and Enter=Discard
+  shortcuts, which only a mouse selection could reach.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
