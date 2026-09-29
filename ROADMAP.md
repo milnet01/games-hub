@@ -434,6 +434,26 @@ path, so they land together.
   GHUB-0168 already holds a run in all three (m_keyHolding + m_drag), and
   today a plain click only moves the cursor, so the click becomes the
   same press. Pyramid already pairs by click.
+  Progress (2026-09-29), UNCOMMITTED in the working tree: klondikeview,
+  spiderview, freecellview (.h/.cpp) and tests/uitest.cpp. A release
+  with no drag calls pressAtCursor (lifts); a press while m_keyHolding
+  moves the cursor to the clicked pile and calls pressAtCursor (drop /
+  refuse-keep / own pile puts back), felt puts back; a double-click puts
+  a held run back BEFORE hit-testing, or the send plays the card under
+  the lifted one. New public cursorRect() (the rect paintEvent draws the
+  cursor in) lets tests aim clicks. 15 new click checks PASS. THREE OLD
+  CHECKS FAIL: spider translation/toolbar round-trip ("spider: and a game
+  set that way saves" and the two after it). startedSave() pokes the
+  surface; a click now lifts a run, and a later stock click while
+  holding keeps holding (Space's behaviour), so no row is ever dealt.
+  Open design call: a stock click while holding should probably put the
+  run back and deal, since the stock is never a destination (Klondike
+  likewise). Then: rerun uitest, mutate each part, design.md (its
+  Klondike paragraph's "a mouse press first puts back anything the
+  keyboard is holding" is now false), CHANGELOG, commit, push. Also seen
+  while reading, unverified: FreeCell's double-click sends a pile's TOP
+  card even when a buried card was clicked -- Klondike guards this
+  (GHUB-0160), FreeCell does not.
   **Layman:** You have to drag cards with the mouse held down; only sending a card to a foundation can be done with a double-click.
   Kind: accessibility.
   Source: in-session-2026-08-20.
