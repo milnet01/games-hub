@@ -12,7 +12,7 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
-- **Klondike, Spider, FreeCell, Pyramid and Hearts can be played without a mouse**
+- **Every card game can be played without a mouse**
   Arrow keys move a gold cursor between the piles and up and down a
   column, Space lifts a card and Space drops it, Escape puts it back.
   In FreeCell, Up from a column reaches the cell or foundation above it.
@@ -21,7 +21,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   In Hearts the cursor walks your whole hand: Space picks a card for the
   pass and Enter sends the three, then Space or Enter plays a card. A card
   you cannot play says why, on the table.
-  The first five card games of GHUB-0168; Canasta follows.
+  In Canasta the cursor walks your hand, and Up reaches your melds and
+  then the stock and the pile. Space does what a click does there, and
+  Enter lays the picked cards down; throwing a card away is Space on the
+  pile, so Enter never throws one by mistake.
+  The card-game half of GHUB-0168.
 
 ### Fixed
 

@@ -219,6 +219,25 @@ else happens. `HeartsView::pressAtCursor` is the one press for the mouse and
 the keyboard, and a click moves the cursor first. The computers play on a
 timer, so a key does nothing useful until the turn comes back to you.
 
+**Canasta's cursor has three rows, up the table the way it is drawn**: your
+hand, then your melds, then the stock and the pile (owner's calls,
+2026-09-29). Your melds include the finished canastas in their stack, since a
+canasta can still be added to, and they are ordered left to right as drawn. A
+meld stop is saved by its rank rather than its place, so the cursor stays on
+its meld when another lands beside it. Up and Down go to the nearest stop
+across in the next row, and skip your melds while there are none. **Space does
+what a click does**: it picks or unpicks a hand card, draws on the stock, takes
+the pile before the draw and throws the one picked card after it, and adds the
+picked cards to a meld. **Enter lays the picked cards down as a new meld**, and
+it never throws a card away. Space or Enter also deals the next hand once one
+is scored. This replaced the old Space and Return shortcuts, which laid down
+and threw away but could only be reached once a mouse had picked the cards.
+`CanastaView::pressAtCursor` is the one press for the mouse and the keyboard
+everywhere but the hand, where a click picks on release so a press can still
+start a drag; there both paths call `toggleHandCard`. The save's view tail
+carries the cursor, and an older save opens it on your first card. Undo puts
+the cursor back where it stood when the move was made.
+
 **The mouse and the keyboard go through one function, and the mouse moves the
 cursor.** `ReversiView::playAt`, `ChessView::pressSquare`,
 `DraughtsView::pressSquare` and `MinesweeperView::digAt` each hold what a press

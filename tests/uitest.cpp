@@ -11,6 +11,7 @@
 #include "sound.h"
 #include "theme.h"
 #include "canasta/canastaview.h"
+#include "dealseed.h"
 #include "cards/cardart.h"
 #include "cards/cardcodec.h"
 #include "cards/cardflight.h"
@@ -1331,11 +1332,12 @@ void boardsTakeTheKeyboard()
         FreeCellView freecell;
         PyramidView pyramid;
         HeartsView hearts;
+        CanastaView canasta;
         const std::pair<GameView*, const char*> boards[] = {
             { &chess, "chess" },     { &reversi, "reversi" }, { &draughts, "draughts" },
             { &mines, "minesweeper" }, { &sudoku, "sudoku" }, { &klondike, "klondike" },
             { &spider, "spider" },   { &freecell, "freecell" }, { &pyramid, "pyramid" },
-            { &hearts, "hearts" },
+            { &hearts, "hearts" },     { &canasta, "canasta" },
         };
         for (const auto& [view, name] : boards)
             check(view->focusPolicy() == Qt::StrongFocus,
@@ -1991,6 +1993,7 @@ void boardsTakeTheKeyboard()
         check(fromOld.restoreState(old) && fromOld.cursorSpot() == 0,
               "hearts: a save from before the cursor opens it on the leftmost card");
     }
+
 }
 
 // ---- turnLightFollowsTheTurn (INV-1) ----
@@ -2230,6 +2233,222 @@ void turnLightAnswersTheSwitch()
 
 } // namespace
 
+// ---- canastaTakesTheKeyboard (GHUB-0168) ----
+//
+// Canasta by keyboard. The game is played forward by its own computers, every
+// seat included, until it is your turn to draw with a meld of yours on the
+// table and a natural card in hand that meld can take. From there the keyboard
+// does the whole turn. Every check reads the position back out of the view's
+// own save.
+//
+// Run LAST, with the deal pinned: which position the play reaches depends on
+// the deal, so an unpinned run tests a different turn every time and a failure
+// cannot be reproduced. pinDealSeed() is process-wide, which is why nothing
+// may run after it -- selftest.cpp pins its own last for the same reason.
+void canastaTakesTheKeyboard()
+{
+    using CV = CanastaView;
+    const auto engineOf = [](const CanastaView& view) {
+        canasta::Engine engine;
+        QDataStream in(view.saveState());
+        in.setVersion(QDataStream::Qt_6_0);
+        quint32 version = 0;
+        in >> version;
+        engine.load(in, std::min(int(version) - 1, canasta::Engine::kTail));
+        return engine;
+    };
+    // A rank of a meld of yours that a card in hand could join.
+    const auto joinable = [](const canasta::Engine& e) {
+        for (const Card& c : e.hand(0))
+            if (!canasta::isWild(c) && c.rank != 3 && e.team(0).meldOfRank(c.rank) != nullptr)
+                return c.rank;
+        return -1;
+    };
+    const auto settle = [](CanastaView& view) {
+        for (int i = 0; i < 80 && view.hasPendingAnimation(); ++i)
+            pump(50);
+    };
+
+    CanastaView canasta;
+    canasta.resize(1400, 760);
+    int rank = -1;
+    for (int turn = 0; turn < 600 && rank < 0; ++turn) {
+        canasta.advanceForShot(1);
+        const canasta::Engine e = engineOf(canasta);
+        if (e.phase() == canasta::Engine::Phase::GameOver)
+            break;
+        if (e.phase() == canasta::Engine::Phase::Draw && e.currentSeat() == 0)
+            rank = joinable(e);
+    }
+    check(rank > 0, "canasta: play reaches your turn with a meld you can add to");
+    const auto handSize = [&] { return int(engineOf(canasta).hand(0).size()); };
+    const auto toHandCard = [&](int index) {
+        for (int i = 0; i < 3; ++i)
+            pressKey(&canasta, Qt::Key_Down);
+        for (int i = 0; i < 30; ++i)
+            pressKey(&canasta, Qt::Key_Left);
+        for (int i = 0; i < index; ++i)
+            pressKey(&canasta, Qt::Key_Right);
+    };
+
+    toHandCard(0);
+    check(canasta.cursorSpot() == QPoint(0, CV::kHandRow), "canasta: the cursor walks the hand");
+    for (int i = 0; i < 30; ++i)
+        pressKey(&canasta, Qt::Key_Right);
+    check(canasta.cursorSpot() == QPoint(handSize() - 1, CV::kHandRow),
+          "canasta: and Right stops on the last card");
+
+    // A click moves the cursor onto the card it picks.
+    toHandCard(0);
+    const QImage idle = renderOf(&canasta);
+    clickAt(&canasta, QPointF(canasta.width() / 2.0, canasta.height() - 60.0), Qt::LeftButton);
+    check(canasta.cursorSpot().y() == CV::kHandRow && canasta.cursorSpot().x() > 0
+              && renderOf(&canasta) != idle,
+          "canasta: a click picks a card and moves the cursor to it");
+    pressKey(&canasta, Qt::Key_Escape);
+    toHandCard(0);
+    check(renderOf(&canasta) == idle, "canasta: Escape puts the clicked card back down");
+
+    pressKey(&canasta, Qt::Key_Up);
+    check(canasta.cursorSpot().y() == CV::kMeldRow, "canasta: Up from the hand reaches your melds");
+    pressKey(&canasta, Qt::Key_Up);
+    check(canasta.cursorSpot().y() == CV::kCentreRow, "canasta: and Up again the stock and pile");
+    pressKey(&canasta, Qt::Key_Left);
+    check(canasta.cursorSpot() == QPoint(0, CV::kCentreRow), "canasta: Left reaches the stock");
+
+    // Before the draw, the pile is taken rather than thrown on. Tried on a
+    // copy, because whether the take is allowed depends on the deal: either
+    // the pile comes into the hand or the table says why not. Throwing on it
+    // at this point would do neither -- the discard refuses silently before
+    // the draw.
+    {
+        CanastaView copy;
+        copy.resize(canasta.size());
+        check(copy.restoreState(canasta.saveState()), "canasta: the turn copies through a save");
+        const QString said = copy.lastStatus();
+        pressKey(&copy, Qt::Key_Right);
+        pressKey(&copy, Qt::Key_Space);
+        check(copy.lastStatus() != said,
+              "canasta: Space on the pile before the draw tries to take it");
+        copy.deactivate();
+    }
+
+    const int before = handSize();
+    pressKey(&canasta, Qt::Key_Space);
+    settle(canasta);
+    check(handSize() == before + 1
+              && engineOf(canasta).phase() == canasta::Engine::Phase::Play,
+          "canasta: Space on the stock draws");
+
+    // Pick the natural, find its meld, and add it.
+    {
+        const canasta::Engine now = engineOf(canasta);
+        const std::vector<Card>& hand = now.hand(0);
+        int at = 0;
+        while (at < int(hand.size())
+               && (hand[std::size_t(at)].rank != rank || canasta::isWild(hand[std::size_t(at)])))
+            ++at;
+        toHandCard(at);
+    }
+    pressKey(&canasta, Qt::Key_Space);
+    pressKey(&canasta, Qt::Key_Up);
+    for (int i = 0; i < 20; ++i)
+        pressKey(&canasta, Qt::Key_Left);
+    for (int i = 0; i < 20 && canasta.cursorSpot().x() != rank; ++i)
+        pressKey(&canasta, Qt::Key_Right);
+    check(canasta.cursorSpot() == QPoint(rank, CV::kMeldRow),
+          "canasta: the arrows reach the meld the card belongs to");
+    const int meldBefore = engineOf(canasta).team(0).meldOfRank(rank)->size();
+    pressKey(&canasta, Qt::Key_Space);
+    settle(canasta);
+    const canasta::Engine after = engineOf(canasta);
+    const canasta::Meld* grown = after.team(0).meldOfRank(rank);
+    check(grown != nullptr && grown->size() == meldBefore + 1,
+          "canasta: Space on a meld adds the picked card to it");
+
+
+    // Escape puts the pick down, so Space on the pile has nothing to throw.
+    // First, while nothing is picked: the meld above took the only picked
+    // card, so any card still up here could only be Escape's to clear.
+    toHandCard(0);
+    pressKey(&canasta, Qt::Key_Space);
+    const int holding = handSize();
+    pressKey(&canasta, Qt::Key_Escape);
+    pressKey(&canasta, Qt::Key_Up);
+    pressKey(&canasta, Qt::Key_Up);
+    pressKey(&canasta, Qt::Key_Right);
+    check(canasta.cursorSpot() == QPoint(1, CV::kCentreRow), "canasta: Right reaches the pile");
+    pressKey(&canasta, Qt::Key_Space);
+    check(handSize() == holding, "canasta: Escape put the picked card down");
+
+    // Enter lays down; it never throws a card away, even with exactly one
+    // picked. What that card does depends on the deal -- a natural matching a
+    // meld of yours joins it, anything else is refused -- so the check is on
+    // what Enter must never do: put a card on the pile and end your turn.
+    toHandCard(0);
+    pressKey(&canasta, Qt::Key_Space);
+    const std::size_t pileBefore = engineOf(canasta).pile().size();
+    pressKey(&canasta, Qt::Key_Return);
+    settle(canasta);
+    check(engineOf(canasta).pile().size() == pileBefore && engineOf(canasta).currentSeat() == 0,
+          "canasta: Enter with one card picked throws nothing away");
+    pressKey(&canasta, Qt::Key_Escape); // a refused card is still up
+
+    const QPoint spot = canasta.cursorSpot();
+    const QByteArray saved = canasta.saveState();
+    CanastaView resumed;
+    check(resumed.restoreState(saved) && resumed.cursorSpot() == spot,
+          "canasta: the cursor is in the save");
+    QByteArray old = saved.left(saved.size() - 2);
+    {
+        QDataStream in(saved);
+        in.setVersion(QDataStream::Qt_6_0);
+        quint32 version = 0;
+        in >> version;
+        QDataStream out(&old, QIODevice::ReadWrite);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << quint32(version - 1);
+    }
+    CanastaView fromOld;
+    check(fromOld.restoreState(old) && fromOld.cursorSpot() == QPoint(0, CV::kHandRow),
+          "canasta: a save from before the cursor opens it on your first card");
+    QByteArray stray(saved);
+    stray[stray.size() - 2] = char(CV::kMeldRow);
+    stray[stray.size() - 1] = char(99);
+    check(!fromOld.restoreState(stray), "canasta: a cursor on a meld that is not there is refused");
+
+    // Throw a card: pick one, back to the pile, Space.
+    toHandCard(0);
+    pressKey(&canasta, Qt::Key_Space);
+    const int beforeThrow = handSize();
+    pressKey(&canasta, Qt::Key_Up);
+    pressKey(&canasta, Qt::Key_Up);
+    pressKey(&canasta, Qt::Key_Right);
+    pressKey(&canasta, Qt::Key_Space);
+    check(handSize() == beforeThrow - 1, "canasta: Space on the pile throws the picked card");
+    canasta.deactivate();
+
+    // A scored hand waits for a click, and Enter or Space is that click.
+    const auto toHandOver = [&engineOf](CanastaView& view) {
+        for (int turn = 0; turn < 2000; ++turn) {
+            view.advanceForShot(1);
+            if (engineOf(view).phase() == canasta::Engine::Phase::HandOver)
+                return true;
+        }
+        return false;
+    };
+    CanastaView scored;
+    scored.resize(1400, 760);
+    scored.deactivate();
+    for (const Qt::Key key : { Qt::Key_Return, Qt::Key_Space }) {
+        const bool over = toHandOver(scored);
+        pressKey(&scored, key);
+        check(over && engineOf(scored).phase() != canasta::Engine::Phase::HandOver,
+              key == Qt::Key_Return ? "canasta: Enter deals the next hand once one is scored"
+                                    : "canasta: and so does Space");
+    }
+}
+
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
@@ -2381,9 +2600,11 @@ int main(int argc, char* argv[])
         const QByteArray now = canasta.saveState();
         check(!now.isEmpty(), "canasta: a dealt game has a save to start from");
 
-        // Two qint32 per seat is what this build appends; step the version back
-        // one and drop them, which is exactly what the previous build wrote.
-        const int tail = int(sizeof(qint32)) * 2 * canasta::kSeats;
+        // Two qint32 per seat is what the budget appended, and the keyboard
+        // cursor's two bytes came after it (GHUB-0168); step the version back
+        // two and drop both, which is exactly what the build before the budget
+        // wrote.
+        const int tail = int(sizeof(qint32)) * 2 * canasta::kSeats + 2;
         QByteArray older = now.left(now.size() - tail);
         check(older.size() > int(sizeof(quint32)),
               "canasta: and it is longer than the tail this build adds");
@@ -2392,7 +2613,7 @@ int main(int argc, char* argv[])
         quint32 version = 0;
         vs >> version;
         vs.device()->seek(0);
-        vs << quint32(version - 1);
+        vs << quint32(version - 2);
 
         CanastaView resumed;
         check(resumed.restoreState(older),
@@ -4875,8 +5096,14 @@ int main(int argc, char* argv[])
                 if (undoAction != nullptr)
                     undoAction->trigger();
                 pump(300);
-                check(canasta.saveState() == beforeDraw,
+                // Less the keyboard cursor's two trailing bytes (GHUB-0168): the
+                // click that drew moved the cursor onto the stock first, and
+                // Undo puts back the position the move was made from, cursor
+                // there included. The cards are what this check is about.
+                check(canasta.saveState().chopped(2) == beforeDraw.chopped(2),
                       "canasta: undo puts the table back exactly as it was");
+                check(canasta.cursorSpot() == QPoint(0, CanastaView::kCentreRow),
+                      "canasta: with the cursor on the stock the draw was made from");
                 check(undoAction != nullptr && !undoAction->isEnabled(),
                       "canasta: and one step is all there is -- nothing left to take back");
 
@@ -6400,6 +6627,9 @@ int main(int argc, char* argv[])
     fuzzSavedGames(150);
 
     frameCost();
+
+    pinDealSeed(20260929);
+    canastaTakesTheKeyboard();
 
     std::printf("\n%s\n", g_failures == 0 ? "All UI checks passed." : "FAILURES PRESENT.");
     return g_failures == 0 ? 0 : 1;

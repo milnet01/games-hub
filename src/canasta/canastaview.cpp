@@ -18,6 +18,7 @@
 #include <QLabel>
 #include <QLayout>
 #include <QListWidget>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -44,8 +45,11 @@ namespace {
 // the version and the engine's tail count were one number; the seats' freeze
 // budget is the first field of the view's own (GHUB-0149), and with it the two
 // part company. The engine tail is clamped rather than read off the version.
-constexpr int kViewTail = 1;
+// The keyboard cursor is the second (GHUB-0168), after the budget.
+constexpr int kViewTail = 2;
 constexpr quint32 kBlobVersion = ca::Engine::kTail + 1 + kViewTail;
+constexpr quint32 kBudgetVersion = ca::Engine::kTail + 1 + 1;
+constexpr quint32 kCursorVersion = ca::Engine::kTail + 1 + 2;
 
 // How many engine tail fields a blob of this version carries. An older blob
 // simply predates tails this build knows about; a current one stops at the
@@ -639,6 +643,7 @@ CanastaView::CanastaView(QWidget* parent)
     , m_target(loadTarget())
 {
     setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus);
     setMinimumSize(CanastaView::minimumSizeHint());
 
     m_timer = new QTimer(this);
@@ -668,16 +673,17 @@ void CanastaView::buildActions()
     m_actions.append(m_undoAction);
 
     // Deliberately NOT in m_actions, so it never reaches the toolbar: laying
-    // cards down belongs on the table, where the Lay down button is. This
-    // keeps the space bar working, and refresh() still uses it to decide
-    // whether the move is available at all.
+    // cards down belongs on the table, where the Lay down button is. refresh()
+    // still uses it to decide whether the move is available at all.
+    //
+    // Neither this nor Discard carries a shortcut any more. Space and Return
+    // were theirs, and reachable only once a mouse had picked the cards; the
+    // keyboard now owns both keys, in keyPressEvent (GHUB-0168).
     m_meldAction = new QAction(tr("Meld"), this);
-    m_meldAction->setShortcut(Qt::Key_Space);
     connect(m_meldAction, &QAction::triggered, this, [this] { humanMeld(-1); });
     addAction(m_meldAction);
 
     m_discardAction = new QAction(tr("Discard"), this);
-    m_discardAction->setShortcut(Qt::Key_Return);
     connect(m_discardAction, &QAction::triggered, this, &CanastaView::humanDiscard);
     m_actions.append(m_discardAction);
 
@@ -1034,6 +1040,7 @@ QByteArray CanastaView::saveState() const
     // refilled (GHUB-0149).
     for (const ca::Ai& ai : m_ai)
         out << qint32(ai.freezesThisHand()) << qint32(ai.lastStock());
+    out << qint8(m_cursorRow) << qint8(m_cursorIndex);
     return blob;
 }
 
@@ -1065,12 +1072,26 @@ bool CanastaView::restoreState(const QByteArray& blob)
         probe >> trialLevel >> trialHouse >> trialTarget >> trialSort;
         if (probe.status() != QDataStream::Ok)
             return false;
-        if (trialVersion >= kBlobVersion) {
+        if (trialVersion >= kBudgetVersion) {
             qint32 spent = 0;
             qint32 stock = 0;
             for (std::size_t i = 0; i < m_ai.size(); ++i)
                 probe >> spent >> stock;
             if (probe.status() != QDataStream::Ok)
+                return false;
+        }
+        // The cursor has to point at something the position has: a card in
+        // the hand, one of your melds, the stock or the pile.
+        if (trialVersion >= kCursorVersion) {
+            qint8 row = 0;
+            qint8 index = 0;
+            probe >> row >> index;
+            const int cards = int(trial.hand(0).size());
+            const bool fits = row == kHandRow ? index >= 0 && index < std::max(1, cards)
+                : row == kMeldRow             ? trial.team(0).meldOfRank(index) != nullptr
+                : row == kCentreRow           ? index == 0 || index == 1
+                                              : false;
+            if (probe.status() != QDataStream::Ok || !fits)
                 return false;
         }
     }
@@ -1095,7 +1116,7 @@ bool CanastaView::restoreState(const QByteArray& blob)
 
     // An older save predates the budget and its seats start fresh, which is the
     // behaviour it was written under.
-    if (version >= kBlobVersion) {
+    if (version >= kBudgetVersion) {
         for (ca::Ai& ai : m_ai) {
             qint32 spent = 0;
             qint32 stock = 0;
@@ -1105,6 +1126,13 @@ bool CanastaView::restoreState(const QByteArray& blob)
         if (in.status() != QDataStream::Ok)
             return false;
     }
+    // An older save predates the cursor, which opens on your first card.
+    qint8 cursorRow = kHandRow;
+    qint8 cursorIndex = 0;
+    if (version >= kCursorVersion)
+        in >> cursorRow >> cursorIndex;
+    m_cursorRow = cursorRow;
+    m_cursorIndex = cursorIndex;
     // Not a hand-rolled loop: applyLevels() is the only place m_sharpPartner is
     // honoured, so setting the levels directly here dropped the Expert-partner
     // rule on every resumed game while the toolbar still showed it ticked.
@@ -2173,6 +2201,7 @@ void CanastaView::refresh()
     // Before anything reads the layout: a canasta completed since the last
     // refresh decides where every card in the stack is drawn.
     trackCanastas();
+    clampCursor();
 
     const ca::Team& us = m_engine.team(0);
     const ca::Team& them = m_engine.team(1);
@@ -2208,7 +2237,7 @@ void CanastaView::refresh()
         }
         break;
     case ca::Engine::Phase::HandOver:
-        what = tr("Hand over — click to deal the next one.");
+        what = tr("Hand over — click, or press Space, to deal the next one.");
         break;
     case ca::Engine::Phase::Draw:
         if (m_engine.currentSeat() != 0)
@@ -2259,19 +2288,7 @@ void CanastaView::mousePressEvent(QMouseEvent* event)
     const QPointF pos = event->position();
 
     if (m_awaitingContinue) {
-        if (m_engine.phase() == ca::Engine::Phase::GameOver) {
-            newGame();
-        } else {
-            m_awaitingContinue = false;
-            m_message.clear();
-            m_engine.nextHand();
-            m_canastasShown = 0;
-            m_lastThrownBy = -1;
-            sortHand();
-            Sound::instance().play(Sound::kShuffle);
-            flyTheDeal();
-            refresh();
-        }
+        continueAfterHand();
         update();
         return;
     }
@@ -2291,6 +2308,10 @@ void CanastaView::mousePressEvent(QMouseEvent* event)
     // known yet — that is settled when the button comes back up.
     const int index = handIndexAt(pos);
     if (index >= 0) {
+        // The cursor follows the mouse, so the two ways of playing never
+        // disagree about where you are.
+        m_cursorRow = kHandRow;
+        m_cursorIndex = index;
         m_pressIndex = index;
         m_pressPos = pos;
         m_dragPos = pos;
@@ -2301,28 +2322,25 @@ void CanastaView::mousePressEvent(QMouseEvent* event)
 
     // One of your melds: add the picked cards to it. This is how a wild card
     // gets onto a meld, since a wild has no rank of its own.
+    // From here on a click goes through the same function the keyboard's
+    // Space does, with the cursor moved onto what was clicked first.
     const int rank = meldRankAt(pos);
     if (rank >= 0 && !m_selected.empty()) {
-        humanMeld(rank);
+        m_cursorRow = kMeldRow;
+        m_cursorIndex = rank;
+        pressAtCursor();
         update();
         return;
     }
 
-    if (hits(pos, stockCentre(), cardWidth(), cardHeight(), 0.0)) {
-        humanDraw();
-        update();
-        return;
-    }
-
-    if (hits(pos, pileCentre(), cardWidth(), cardHeight(), 0.0)) {
-        // The pile is where cards come from before you have drawn, and where
-        // they go afterwards.
-        if (m_engine.phase() == ca::Engine::Phase::Draw)
-            humanTakePile();
-        else
-            humanDiscard();
-        update();
-        return;
+    for (int i = 0; i < 2; ++i) {
+        if (centreStopRect(i).contains(pos)) {
+            m_cursorRow = kCentreRow;
+            m_cursorIndex = i;
+            pressAtCursor();
+            update();
+            return;
+        }
     }
 
     update();
@@ -2378,13 +2396,7 @@ void CanastaView::mouseReleaseEvent(QMouseEvent* event)
     // A press that never moved is the old click: pick the card up, or put it
     // back down.
     if (!dragged) {
-        const auto it = std::find(m_selected.begin(), m_selected.end(), pressed);
-        if (it == m_selected.end())
-            m_selected.push_back(pressed);
-        else
-            m_selected.erase(it);
-        Sound::instance().play(Sound::kClick);
-        refresh();
+        toggleHandCard(pressed);
         update();
         return;
     }
@@ -2416,6 +2428,252 @@ void CanastaView::mouseReleaseEvent(QMouseEvent* event)
 
     // Dropped back on the fan: nothing happens, and the cards stay picked up.
     update();
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard (GHUB-0168): the boards' scheme, with the owner's two calls for
+// Canasta (2026-09-29). The cursor walks your hand, and Up reaches your melds
+// and then the stock and the pile. Space does what a click does wherever the
+// cursor is; Enter lays the picked cards down as a new meld. Throwing a card
+// away stays on Space on the pile, so Enter can never throw one by mistake.
+// ---------------------------------------------------------------------------
+
+void CanastaView::toggleHandCard(int index)
+{
+    if (index < 0 || index >= int(m_engine.hand(0).size()))
+        return;
+    const auto it = std::find(m_selected.begin(), m_selected.end(), index);
+    if (it == m_selected.end())
+        m_selected.push_back(index);
+    else
+        m_selected.erase(it);
+    Sound::instance().play(Sound::kClick);
+    refresh();
+}
+
+std::vector<std::pair<int, QRectF>> CanastaView::meldStops() const
+{
+    std::vector<std::pair<int, QRectF>> stops;
+    const std::vector<int> stack = canastaOrder(0);
+    for (int i = 0; i < int(stack.size()); ++i)
+        stops.emplace_back(stack[std::size_t(i)], canastaStackRect(0, i, int(stack.size())));
+
+    const double w = cardWidth() * kMeldScale;
+    const double h = cardHeight() * kMeldScale;
+    const std::vector<int> ranks = meldOrder(0);
+    for (std::size_t slot = 0; slot < ranks.size(); ++slot) {
+        const ca::Meld* m = m_engine.team(0).meldOfRank(ranks[slot]);
+        if (m == nullptr || m->size() == 0)
+            continue;
+        const QPointF first = meldCardCentre(0, int(slot), 0);
+        const QPointF last = meldCardCentre(0, int(slot), m->size() - 1);
+        stops.emplace_back(ranks[slot], QRectF(first.x() - w * 0.5, first.y() - h * 0.5, w,
+                                               last.y() - first.y() + h));
+    }
+    std::sort(stops.begin(), stops.end(), [](const auto& a, const auto& b) {
+        return a.second.center().x() < b.second.center().x();
+    });
+    return stops;
+}
+
+QRectF CanastaView::centreStopRect(int index) const
+{
+    const QPointF c = index == 0 ? stockCentre() : pileCentre();
+    return { c.x() - cardWidth() * 0.5, c.y() - cardHeight() * 0.5, cardWidth(), cardHeight() };
+}
+
+void CanastaView::clampCursor()
+{
+    const int cards = int(m_engine.hand(0).size());
+    if (m_cursorRow == kMeldRow) {
+        const std::vector<std::pair<int, QRectF>> stops = meldStops();
+        const bool there = std::any_of(stops.begin(), stops.end(), [this](const auto& stop) {
+            return stop.first == m_cursorIndex;
+        });
+        if (there)
+            return;
+        // The meld went with the hand that held it.
+        m_cursorRow = kHandRow;
+        m_cursorIndex = 0;
+    }
+    if (m_cursorRow == kCentreRow) {
+        m_cursorIndex = std::clamp(m_cursorIndex, 0, 1);
+        return;
+    }
+    m_cursorRow = kHandRow;
+    m_cursorIndex = std::clamp(m_cursorIndex, 0, std::max(0, cards - 1));
+}
+
+// An arrow along a row moves one stop; up or down moves to the stop in the
+// next row that lies nearest across, so the cursor follows the picture. Your
+// melds are skipped while there are none.
+void CanastaView::stepCursor(int dx, int dy)
+{
+    const int cards = int(m_engine.hand(0).size());
+    const std::vector<std::pair<int, QRectF>> melds = meldStops();
+
+    if (dx != 0) {
+        if (m_cursorRow == kHandRow) {
+            m_cursorIndex = std::clamp(m_cursorIndex + dx, 0, std::max(0, cards - 1));
+        } else if (m_cursorRow == kCentreRow) {
+            m_cursorIndex = std::clamp(m_cursorIndex + dx, 0, 1);
+        } else {
+            int at = 0;
+            for (int i = 0; i < int(melds.size()); ++i)
+                if (melds[std::size_t(i)].first == m_cursorIndex)
+                    at = i;
+            at = std::clamp(at + dx, 0, int(melds.size()) - 1);
+            m_cursorIndex = melds[std::size_t(at)].first;
+        }
+        return;
+    }
+
+    double x = 0.0;
+    if (m_cursorRow == kHandRow)
+        x = handCentre(m_cursorIndex, std::max(1, cards), false).x();
+    else if (m_cursorRow == kCentreRow)
+        x = centreStopRect(m_cursorIndex).center().x();
+    else
+        for (const auto& [rank, r] : melds)
+            if (rank == m_cursorIndex)
+                x = r.center().x();
+
+    // Rows run hand, melds, centre going up the table.
+    int row = m_cursorRow - dy;
+    if (row == kMeldRow && melds.empty())
+        row -= dy;
+    if (row < kHandRow || row > kCentreRow || (row == kHandRow && cards == 0))
+        return;
+
+    const auto nearer = [x](double a, double b) { return std::abs(a - x) < std::abs(b - x); };
+    int best = 0;
+    if (row == kHandRow) {
+        for (int i = 1; i < cards; ++i)
+            if (nearer(handCentre(i, cards, false).x(), handCentre(best, cards, false).x()))
+                best = i;
+    } else if (row == kCentreRow) {
+        best = nearer(centreStopRect(1).center().x(), centreStopRect(0).center().x()) ? 1 : 0;
+    } else {
+        std::size_t pick = 0;
+        for (std::size_t i = 1; i < melds.size(); ++i)
+            if (nearer(melds[i].second.center().x(), melds[pick].second.center().x()))
+                pick = i;
+        best = melds[pick].first;
+    }
+    m_cursorRow = row;
+    m_cursorIndex = best;
+}
+
+void CanastaView::pressAtCursor()
+{
+    if (m_awaitingContinue) {
+        continueAfterHand();
+        return;
+    }
+    if (animating() || m_engine.currentSeat() != 0)
+        return;
+
+    if (m_cursorRow == kHandRow) {
+        toggleHandCard(m_cursorIndex);
+    } else if (m_cursorRow == kMeldRow) {
+        humanMeld(m_cursorIndex);
+    } else if (m_cursorIndex == 0) {
+        humanDraw();
+    } else if (m_engine.phase() == ca::Engine::Phase::Draw) {
+        // The pile is where cards come from before you have drawn, and where
+        // they go afterwards.
+        humanTakePile();
+    } else {
+        humanDiscard();
+    }
+}
+
+void CanastaView::continueAfterHand()
+{
+    if (m_engine.phase() == ca::Engine::Phase::GameOver) {
+        newGame();
+        return;
+    }
+    m_awaitingContinue = false;
+    m_message.clear();
+    m_engine.nextHand();
+    m_canastasShown = 0;
+    m_lastThrownBy = -1;
+    sortHand();
+    Sound::instance().play(Sound::kShuffle);
+    flyTheDeal();
+    refresh();
+}
+
+void CanastaView::keyPressEvent(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_Left:
+        stepCursor(-1, 0);
+        break;
+    case Qt::Key_Right:
+        stepCursor(1, 0);
+        break;
+    case Qt::Key_Up:
+        stepCursor(0, -1);
+        break;
+    case Qt::Key_Down:
+        stepCursor(0, 1);
+        break;
+    case Qt::Key_Space:
+        pressAtCursor();
+        break;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        if (m_awaitingContinue)
+            continueAfterHand();
+        else
+            humanMeld(-1);
+        break;
+    case Qt::Key_Escape:
+        if (m_selected.empty()) {
+            GameView::keyPressEvent(event);
+            return;
+        }
+        clearSelection();
+        refresh();
+        break;
+    default:
+        GameView::keyPressEvent(event);
+        return;
+    }
+    update();
+}
+
+void CanastaView::paintCursor(QPainter& p)
+{
+    // Not over the summary a scored hand shows, and not while a drag has the
+    // cards in the air.
+    if (m_awaitingContinue || m_dragging)
+        return;
+    const bool legible = Legibility::instance().enabled();
+
+    if (m_cursorRow == kCentreRow) {
+        Theme::paintCellCursor(p, centreStopRect(m_cursorIndex), legible);
+        return;
+    }
+    if (m_cursorRow == kMeldRow) {
+        for (const auto& [rank, r] : meldStops())
+            if (rank == m_cursorIndex)
+                Theme::paintCellCursor(p, r, legible);
+        return;
+    }
+    const int n = int(m_engine.hand(0).size());
+    if (m_cursorIndex < 0 || m_cursorIndex >= n)
+        return;
+    // Drawn the way the card is: raised when picked or hovered, and turned
+    // with the fan.
+    p.save();
+    p.translate(handCentre(m_cursorIndex, n, isSelected(m_cursorIndex) || m_cursorIndex == m_hover));
+    p.rotate(handAngle(m_cursorIndex, n));
+    Theme::paintCellCursor(p, QRectF(-cardWidth() * 0.5, -cardHeight() * 0.5, cardWidth(), cardHeight()),
+                           legible);
+    p.restore();
 }
 
 void CanastaView::leaveEvent(QEvent* event)
@@ -2473,6 +2731,7 @@ void CanastaView::paintEvent(QPaintEvent* event)
     paintCentreStrip(p);
     paintHand(p);
     paintLayDown(p);
+    paintCursor(p);
     paintMessagePanel(p);
     paintFlights(p);
     paintDrag(p);

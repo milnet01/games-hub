@@ -5,6 +5,7 @@
 #include "gameview.h"
 
 #include <QFont>
+#include <QPoint>
 #include <QPointF>
 #include <QRectF>
 
@@ -54,6 +55,16 @@ public:
     // lands every card in flight, and a landed card cannot be un-landed.
     bool hasPendingAnimation() const override { return animating(); }
 
+    // The keyboard cursor, as {index, row} (GHUB-0168). Row 0 is your hand and
+    // the index a card in it; row 1 is your melds and the index a meld's RANK,
+    // so the cursor stays on its meld when another one lands beside it; row 2
+    // is the stock (0) and the pile (1). Exposed for the tests, as
+    // KlondikeView::cursorSpot is.
+    static constexpr int kHandRow = 0;
+    static constexpr int kMeldRow = 1;
+    static constexpr int kCentreRow = 2;
+    QPoint cursorSpot() const { return { m_cursorIndex, m_cursorRow }; }
+
     // True when the table is big enough to lay this card out on its own, with
     // cardWidth()'s floor never having to lift it. Floor and minimum size move
     // together or not at all (§ 4.4): a floored card is one the table has no
@@ -97,6 +108,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     void leaveEvent(QEvent* event) override;
     QSize sizeHint() const override { return { 1000, 740 }; }
     QSize minimumSizeHint() const override;
@@ -195,6 +207,25 @@ private:
     // Fans your hand back into order, carrying the selection across. Does
     // nothing unless the Sort toggle is on.
     void sortHand();
+    // A click on a card in your hand, and Space on it: pick it up or put it
+    // back down.
+    void toggleHandCard(int index);
+
+    // --- keyboard (GHUB-0168) ---
+    // Your melds as cursor stops, each a rank and the rect it is drawn in,
+    // left to right as the table shows them -- the finished canastas in their
+    // stack included, since a canasta can still be added to.
+    std::vector<std::pair<int, QRectF>> meldStops() const;
+    QRectF centreStopRect(int index) const;
+    void stepCursor(int dx, int dy);
+    // Puts the cursor back on something that exists: a hand that shrank, a
+    // meld that went at the end of a hand.
+    void clampCursor();
+    // Space: what a click on the thing under the cursor does.
+    void pressAtCursor();
+    // A scored hand waits for a click; this is that click, and the keys'.
+    void continueAfterHand();
+    void paintCursor(QPainter& p);
 
     // --- moves ---
     void humanDraw();
@@ -317,4 +348,6 @@ private:
     int m_canastasShown = 0;
     QString m_message;
     bool m_awaitingContinue = false;
+    int m_cursorRow = kHandRow;
+    int m_cursorIndex = 0;
 };
