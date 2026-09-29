@@ -362,6 +362,17 @@ path, so they land together.
   3c71b1e (pushed, local CI green). Noted, not filed: Undo in Klondike,
   Spider and FreeCell restores the cards but not the cursor, which can
   come back one card higher.
+  Progress (2026-09-29): HEARTS done (f88e75e), to the owner's two
+  calls. The cursor walks every card in the hand, dimmed ones too.
+  Passing: Space picks or unpicks, Enter sends the three and never
+  picks, Escape unpicks them all. Play: Space and Enter both play. A
+  press that does nothing says why -- the rule a refused card breaks,
+  or that three are already picked -- in the status line AND the table
+  caption, because the status line is not read during play.
+  HeartsView::pressAtCursor is the one press for mouse and keyboard.
+  Save blob v2 carries the cursor; v1 loads on the leftmost card.
+  boardsTakeTheKeyboard plays the pass and several turns by keyboard,
+  and ten mutations each turned their check red. Left: Canasta.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
