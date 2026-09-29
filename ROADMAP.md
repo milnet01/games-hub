@@ -197,7 +197,7 @@ The card games and Hearts take the keyboard scheme the owner chose on
 The same views gain card flights. All three items work on one lift-and-drop
 path, so they land together.
 
-- 🚧 [GHUB-0168] **Ten games can only be played with a mouse.**
+- ✅ [GHUB-0168] **Ten games can only be played with a mouse.**
   Split out of GHUB-0132, whose accessible-name half shipped. This is
   a feature with design choices in it, not a sweep fix, and pretending
   otherwise is how it would get built badly.
@@ -382,6 +382,17 @@ path, so they land together.
   new meld. Discarding stays on Space-on-the-pile, so Enter can never
   throw a card away. Both replace today's Space=Meld and Enter=Discard
   shortcuts, which only a mouse selection could reach.
+  Resolved (2026-09-29): CANASTA done (c7264a3), to the owner's two
+  calls, and with it all ten games this item named. Three cursor rows
+  up the table -- hand, your melds (stacked canastas included), stock
+  and pile. Space does what a click does; Enter lays the picked cards
+  down and never throws one away; either deals the next hand. The old
+  Space/Return shortcuts are gone. Save blob 10 -> 11 carries the
+  cursor; older saves load. canastaTakesTheKeyboard runs last with the
+  deal pinned, since which turn the forward play reaches depends on
+  the deal. Fifteen of sixteen mutations went red; the sixteenth is
+  equivalent. Still open and NOT this item: GHUB-0069 (click-to-place),
+  and the known Undo-cursor note for Klondike, Spider and FreeCell.
   **Layman:** Ten of the fourteen games cannot be played from the keyboard at all, which matters most to the reader this app is built for.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
