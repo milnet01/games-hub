@@ -424,6 +424,16 @@ path, so they land together.
   whether the button stayed down. Whichever game gets a rules core first under
   GHUB-0066 is the natural place to try it, since the lift/drop logic is exactly
   what that extraction has to pull out of the mouse handlers anyway.
+  Owner's calls (2026-09-29), not yet built. In Klondike, Spider and
+  FreeCell a plain click (no drag) picks a card up with the cards under
+  it, exactly as Space does on the keyboard; a click on another pile puts
+  them down there, and a click on the same card or Escape puts them back.
+  Dragging keeps working and double-click still sends a card home. Legal
+  destinations are NOT marked yet -- ship click-to-move first; marking
+  can be its own item once he has played with it. The keyboard work of
+  GHUB-0168 already holds a run in all three (m_keyHolding + m_drag), and
+  today a plain click only moves the cursor, so the click becomes the
+  same press. Pyramid already pairs by click.
   **Layman:** You have to drag cards with the mouse held down; only sending a card to a foundation can be done with a double-click.
   Kind: accessibility.
   Source: in-session-2026-08-20.
