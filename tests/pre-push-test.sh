@@ -128,6 +128,26 @@ expect LINT -u origin prose
 # 7. Deleting a branch checks nothing — there is no new code in a deletion.
 expect NONE origin --delete prose
 
+# 8. A secret is refused, and on a documentation-only push too: the scan runs
+#    before the docs-only decision. The token is built at run time so this file
+#    never holds one. It needs the machine-wide hook and gitleaks, which a CI
+#    runner has neither of, so there it skips and says so.
+if [ -x "${ANTS_GLOBAL_HOOKS:-$HOME/.claude/githooks}/pre-push" ] && command -v gitleaks >/dev/null 2>&1; then
+    git checkout --quiet master
+    tok="ghp_$(head -c 96 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-36)"
+    echo "token = $tok" > docs/leak.md
+    commit "a leaked token"
+    if git push origin master >/dev/null 2>&1; then
+        FAIL=$((FAIL + 1))
+        echo "  FAIL  expected the push refused   (a token in docs/leak.md)"
+    else
+        PASS=$((PASS + 1))
+        echo "  ok    SECRET (a token in docs/leak.md is refused)"
+    fi
+else
+    echo "  skip  SECRET (no machine-wide hook or no gitleaks here)"
+fi
+
 echo
 echo "pre-push: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

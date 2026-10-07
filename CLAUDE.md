@@ -244,6 +244,11 @@ The `pre-push` hook runs it automatically. A push touching only `.md` files,
 touching code, CMake or a workflow runs the full pipeline. `SKIP_LOCAL_CI=1
 git push` bypasses it when you mean to.
 
+**Every push is first scanned for secrets, and `SKIP_LOCAL_CI=1` does not skip
+that.** The hook hands the pushed commits to the machine-wide hook's
+`--secrets-only` mode, which runs gitleaks; a finding refuses the push. Where
+that hook is absent the push goes ahead and the hook says no scan ran.
+
 **The hook reads one line per ref and must accumulate across all of them.**
 `git push --follow-tags` sends the tag *last*, and a new ref has no remote sha
 — so a hook that let the last ref decide diffed a bare sha against the working
