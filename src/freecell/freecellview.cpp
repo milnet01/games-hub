@@ -607,6 +607,11 @@ void FreeCellView::mouseDoubleClickEvent(QMouseEvent* event)
     const std::vector<Card>& source = pileFor(s.kind, s.pile);
     if (source.empty())
         return;
+    // sendToFoundation moves the pile's TOP card, so acting on a click that
+    // landed anywhere else plays a card the player did not point at
+    // (GHUB-0201, as Klondike since GHUB-0160). A buried card is a miss.
+    if (s.index != int(source.size()) - 1)
+        return;
     const Card moving = source.back();
     const QRectF fromRect = s.kind == PileKind::Column
         ? cardRect(s.pile, int(source.size()) - 1)

@@ -37,6 +37,8 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **In FreeCell, double-clicking a card buried under others no longer sends the column's top card home instead** (GHUB-0201)
+
 - **FreeCell's run highlight reads the move limit right after a card goes to a cell** (GHUB-0200)
   Parking the last card of a column in a cell, or sending it to a
   foundation, now frees that column at once. The gold-or-red colour that

@@ -1560,7 +1560,7 @@ void boardsTakeTheKeyboard()
                 clickAt(&klondike, top ? QPointF(r.center().x(), r.top() + 4) : r.center(),
                         Qt::LeftButton);
             };
-            const QPointF stock = klondike.cursorRect().center(); // the cursor opens there
+            const QPointF stockAt = klondike.cursorRect().center(); // the cursor opens there
             pressKey(&klondike, Qt::Key_Down);
             pressKey(&klondike, Qt::Key_Right);
             clickCursor(true);
@@ -1588,7 +1588,7 @@ void boardsTakeTheKeyboard()
             pressKey(&klondike, Qt::Key_Right);
             clickCursor(true);
             check(klondike.holdingARun(), "klondike: the queen is in hand again");
-            clickAt(&klondike, stock, Qt::LeftButton);
+            clickAt(&klondike, stockAt, Qt::LeftButton);
             check(!klondike.holdingARun() && clickUndo != nullptr && clickUndo->isEnabled(),
                   "klondike: a click on the stock puts it back and deals");
             // A double-click's first click picks the card up, so the double-
@@ -1908,6 +1908,51 @@ void boardsTakeTheKeyboard()
                 doubleClickAt(&freecell, QPointF(r.center().x(), r.top() + 4));
                 check(!freecell.holdingARun() && freecell.flightsInTheAir() > 0,
                       "freecell: a double-click sends the ace home, and nothing is left in hand");
+            }
+            // A double-click on a BURIED card is a miss, as in Klondike
+            // (GHUB-0201). sendToFoundation moves the pile's top card, so
+            // acting on the five here would send the ace above it -- a card
+            // the player did not point at.
+            {
+                std::vector<Card> pack = makeDeck();
+                const Card ace { Suit::Hearts, kAce, true };
+                const Card five { Suit::Clubs, 5, true };
+                std::array<std::vector<Card>, FreeCellView::kColumns> cols;
+                cols[0] = { five, ace };
+                int next = 0;
+                for (Card c : pack) {
+                    if (c == ace || c == five)
+                        continue;
+                    c.faceUp = true;
+                    cols[std::size_t(1 + next++ % (FreeCellView::kColumns - 1))].push_back(c);
+                }
+                QByteArray buried;
+                QDataStream o(&buried, QIODevice::WriteOnly);
+                o.setVersion(QDataStream::Qt_6_0);
+                o << quint32(1) << qint32(0);
+                for (const auto& column : cols)
+                    cardcodec::writePile(o, column);
+                for (int i = 0; i < FreeCellView::kCells + 4; ++i)
+                    cardcodec::writePile(o, {});
+                // The ace sent home above is still in flight, and restoring a
+                // table does not ground it. settle() cannot wait for it:
+                // FreeCell does not report its flights as pending animation.
+                QDeadlineTimer landing(5000);
+                while (!landing.hasExpired() && freecell.flightsInTheAir() > 0)
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+                check(freecell.flightsInTheAir() == 0, "freecell: the ace sent home lands");
+                check(freecell.restoreState(buried) && freecell.flightsInTheAir() == 0,
+                      "freecell: an ace on a five loads again, with nothing in the air");
+                check(freecell.cursorSpot() == QPoint(0, 1), "freecell: with the cursor on the ace");
+                const QRectF aceRect = freecell.cursorRect();
+                doubleClickAt(&freecell, QPointF(aceRect.center().x(), aceRect.top() - 4));
+                check(!freecell.holdingARun() && freecell.flightsInTheAir() == 0
+                          && clickUndo != nullptr && !clickUndo->isEnabled(),
+                      "freecell: a double-click on the buried five moves nothing");
+                // The ace is still the top card: pointing at it sends it home.
+                doubleClickAt(&freecell, QPointF(aceRect.center().x(), aceRect.top() + 4));
+                check(freecell.flightsInTheAir() > 0,
+                      "freecell: and a double-click on the ace itself still sends it home");
             }
             check(freecell.restoreState(blob), "freecell: and the table starts again for the keys");
         }

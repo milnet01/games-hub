@@ -587,7 +587,7 @@ path, so they land together.
   Kind: fix.
   Source: in-session-2026-09-28.
 
-- 📋 [GHUB-0201] **FreeCell's double-click sends a column's top card even when a buried card was clicked.**
+- ✅ [GHUB-0201] **FreeCell's double-click sends a column's top card even when a buried card was clicked.**
   FreeCellView::mouseDoubleClickEvent hit-tests the clicked card, then calls
   sendToFoundation on the pile, which moves the pile's TOP card. Nothing
   checks that the click landed on the top card, so a double-click on a
@@ -596,6 +596,10 @@ path, so they land together.
   2026-10-07 during GHUB-0069; not yet reproduced by a test. Fix: the same
   guard, plus a uitest check that double-clicks a buried card and asserts
   nothing moved.
+  Resolved (2026-10-07): the Klondike guard, in mouseDoubleClickEvent.
+  tests/uitest.cpp double-clicks a five buried under an ace and asserts
+  nothing moved; red before the guard, green after, and a double-click on
+  the ace itself still sends it home.
   **Layman:** In FreeCell, double-clicking a card under other cards can send the wrong card to the foundations.
   Kind: fix.
   Source: in-session-2026-10-07.
@@ -1431,6 +1435,30 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: perf.
   Source: claude-config-request-2026-09-28.
   Lanes: ci.
+
+- 📋 [GHUB-0204] **Spider's run-harvest UI check fails under heavy machine load.**
+  tests/uitest.cpp gives the thirteen staggered cards of a completed run a
+  fixed pump(3000) of wall-clock time, then asserts none is still flying and
+  no timer is left. On 2026-10-07, at a load average of about 25, one direct
+  uitest run failed both checks; ctest just before and three reruns after all
+  passed. Fix: wait on the condition with a generous deadline, as the
+  GHUB-0201 check waits on flightsInTheAir(), rather than a fixed sleep.
+  **Layman:** One Spider test can fail when the computer is very busy, even though the game is fine.
+  Kind: test.
+  Source: in-session-2026-10-07.
+  Lanes: spider, tests.
+
+- 📋 [GHUB-0205] **settle() returns at once for every game but Canasta, because only Canasta reports its animation as pending.**
+  GameView::hasPendingAnimation() defaults to false and only CanastaView
+  overrides it, so settle() in tests/uitest.cpp returns true immediately
+  while FreeCell cards are still in flight. Found writing the GHUB-0201
+  check, which waits on flightsInTheAir() instead. Decide whether the card
+  games should report their flights there, and check what --bench's
+  "at rest" readings were taken against.
+  **Layman:** A test helper meant to wait for cards to stop moving does not actually wait in most games.
+  Kind: test.
+  Source: in-session-2026-10-07.
+  Lanes: tests, freecell, klondike, spider.
 
 ## P01 — Shipped
 
