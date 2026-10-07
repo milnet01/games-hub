@@ -31,6 +31,7 @@ jobs:
   verify:
     name: Verify the tag
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.check.outputs.version }}
     steps:
@@ -78,6 +79,7 @@ jobs:
     name: AppImage
     needs: verify
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     env:
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
@@ -261,6 +263,7 @@ jobs:
     name: Portable zip
     needs: verify
     runs-on: windows-2022
+    timeout-minutes: 30
     env:
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
@@ -389,6 +392,7 @@ jobs:
     # Never from a trial run: only a pushed tag publishes.
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
       # For actions/attest-build-provenance below: id-token to get the OIDC

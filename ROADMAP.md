@@ -578,6 +578,20 @@ path, so they land together.
   Kind: fix.
   Source: in-session-2026-09-28.
 
+- 📋 [GHUB-0201] **FreeCell's double-click sends a column's top card even when a buried card was clicked.**
+  FreeCellView::mouseDoubleClickEvent hit-tests the clicked card, then calls
+  sendToFoundation on the pile, which moves the pile's TOP card. Nothing
+  checks that the click landed on the top card, so a double-click on a
+  buried card plays a different card. KlondikeView guards this since
+  GHUB-0160 (a buried card is a miss, not a move). Found by reading on
+  2026-10-07 during GHUB-0069; not yet reproduced by a test. Fix: the same
+  guard, plus a uitest check that double-clicks a buried card and asserts
+  nothing moved.
+  **Layman:** In FreeCell, double-clicking a card under other cards can send the wrong card to the foundations.
+  Kind: fix.
+  Source: in-session-2026-10-07.
+  Lanes: freecell.
+
 ## 1.3.0 — Getting around the app
 
 One window, one place for settings, and quicker ways between games.
@@ -1373,6 +1387,41 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** Each release is supposed to carry a name as well as a number, and the automatic publishing step leaves the name off.
   Kind: fix.
   Source: in-session-2026-09-27.
+
+- 📋 [GHUB-0202] **The pre-push hook gates the working tree, not the pushed commits, and a docs-only push skips the documentation checks.**
+  ~/.claude/standards/local-gate.md section 2.1 (binding from 2026-09-28,
+  and on this hook's next edit) asks a hook of its own for four things.
+  Item 1, the secret scan, landed 2026-10-07. Still owed: item 2, gate the
+  pushed commits rather than the working tree (section 5); item 3, run the
+  documentation checks on a docs-only push (section 6), where today it runs
+  the workflow linters only; item 4, skip completely only on section 7's
+  conditions. And a clone without ~/.claude gets no scan: section 2.1 wants
+  the hook to call gitleaks itself there. The standard's recommended route is
+  to replace .githooks/pre-push with the skeleton's shim that execs the
+  shared hook, set ants.gate.command to scripts/local-ci.sh, and use
+  ants.gate.docsCommand / ants.gate.inPlace. tests/pre-push-test.sh asserts
+  the current hook's arms and would change with it, as would CLAUDE.md's
+  pipeline section.
+  **Layman:** The check that runs before every upload tests whatever is on disk rather than exactly what is being uploaded.
+  Kind: chore.
+  Source: claude-config-request-2026-09-28.
+  Lanes: ci.
+
+- 📋 [GHUB-0203] **Take the rest of local-gate.md section 9's CI speed-ups that fit: sanitizers nightly, cache pruning, sized parallelism.**
+  Job timeouts landed 2026-10-07 (cold jobs measured at 5 minutes or less
+  over the last six green runs of each workflow; 30 on builds, 10 on lint,
+  verify and publish). Still to weigh, each measured before and after, one
+  lever per change: the ASan/UBSan fuzz leg nightly and on demand rather
+  than per push (it is about 1-2 minutes today, so the saving is small);
+  caches saved with if: always(), one key prefix per job, pruned after save;
+  ccache sloppiness and base_dir (CI has no ccache today); ctest -j sized
+  from runner memory. Local ctest -j was measured with no gain (see
+  GHUB-0069's handoff). Reply to the claude-config session with the
+  timings and any row that did not fit.
+  **Layman:** Make the automatic checks on GitHub faster without skipping any of them.
+  Kind: perf.
+  Source: claude-config-request-2026-09-28.
+  Lanes: ci.
 
 ## P01 — Shipped
 
