@@ -51,6 +51,9 @@ public:
     // 0-3, the four foundations over 4-7 -- and any other depth is a card's
     // index in that column. Exists for the reason KlondikeView::cursorSpot does.
     QPoint cursorSpot() const { return { m_cursorCol, m_cursorDepth }; }
+    // Where the cursor is drawn, as KlondikeView::cursorRect is: paintEvent
+    // draws this rect, so a test clicking inside it clicks what the player sees.
+    QRectF cursorRect() const;
 
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
@@ -135,6 +138,9 @@ private:
 
     // Keyboard play (GHUB-0168), the boards' scheme. See KlondikeView.
     Spot cursorPile() const;
+    // Puts the cursor on a clicked spot, so the mouse and the keyboard never
+    // disagree about where you are.
+    void moveCursorTo(const Spot& s);
     void clampCursor();
     void pressAtCursor();
     void dropAtCursor();

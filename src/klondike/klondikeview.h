@@ -52,6 +52,10 @@ public:
     // does: a clamped index is a property of this code, a gold band is the
     // theme's.
     QPoint cursorSpot() const { return { m_cursorCol, m_cursorDepth }; }
+    // Where the cursor is drawn: the card under it and everything below, or a
+    // held run over the pile it would land on. paintEvent draws this rect, so
+    // a test that clicks inside it clicks what the player sees the cursor on.
+    QRectF cursorRect() const;
 
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
@@ -132,12 +136,16 @@ private:
     // cursor steps over it there. The pile the cursor stands on, as a Spot;
     // `index` is the top card, or the card at the cursor's depth in a column.
     Spot cursorPile() const;
+    // Puts the cursor on a clicked spot, so the mouse and the keyboard never
+    // disagree about where you are.
+    void moveCursorTo(const Spot& s);
     // Keeps the depth on a face-up card of the current column (the only cards
     // Space can lift), or on the top card, after anything moves the table.
     void clampCursor();
     // Space: deal, lift, or drop what the keyboard is holding onto the pile
     // under the cursor. A drop back onto the pile the run came from puts it
-    // back, which is how the mouse says "no" too.
+    // back, which is how the mouse says "no" too. A click that is not a drag
+    // makes the same press (GHUB-0069): it lifts, and the next click drops.
     void pressAtCursor();
     void dropAtCursor();
     // Where a run held by the keyboard is drawn: over the pile under the

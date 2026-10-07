@@ -141,7 +141,10 @@ void SpiderView::undo()
 // the card games save differently from Chess.
 QByteArray SpiderView::saveState() const
 {
-    if (m_won || (!m_table.canUndo() && !m_resumed))
+    // A run held up banked an undo snapshot as it was lifted, but nothing has
+    // moved until it lands (GHUB-0069).
+    const bool touched = m_table.undoDepth() > (holdingARun() ? 1u : 0u);
+    if (m_won || (!touched && !m_resumed))
         return {};
 
     // A run lifted in mid-drag belongs to the column it came from until it is
@@ -420,26 +423,13 @@ void SpiderView::paintEvent(QPaintEvent*)
 
     // The keyboard's run and the cursor, over everything but the caption.
     if (!m_dragging) {
-        QRectF cursor;
         if (m_keyHolding && !m_drag.empty()) {
             const QRectF first = heldLandingRect();
-            cursor = first;
-            for (int i = 0; i < int(m_drag.size()); ++i) {
-                const QRectF r = first.translated(0, i * cardHeight() * 0.26);
-                CardArt::paintFace(p, r, m_drag[std::size_t(i)]);
-                cursor = cursor.united(r);
-            }
-        } else if (m_cursorCol == kStockStop) {
-            cursor = stockRect();
-        } else {
-            const std::vector<Card>& column = m_table.columns()[std::size_t(m_cursorCol)];
-            cursor = column.empty()
-                ? columnOrigin(m_cursorCol)
-                // The card and everything under it: what Space would lift.
-                : cardRect(m_cursorCol, m_cursorDepth)
-                      .united(cardRect(m_cursorCol, int(column.size()) - 1));
+            for (int i = 0; i < int(m_drag.size()); ++i)
+                CardArt::paintFace(p, first.translated(0, i * cardHeight() * 0.26),
+                                   m_drag[std::size_t(i)]);
         }
-        Theme::paintCellCursor(p, cursor, Legibility::instance().enabled());
+        Theme::paintCellCursor(p, cursorRect(), Legibility::instance().enabled());
     }
 
     paintStatusCaption(p, QRectF(rect()));
@@ -453,13 +443,43 @@ void SpiderView::mousePressEvent(QMouseEvent* event)
     m_pressPos = event->position();
     m_pressValid = false;
 
-    // A run held by the keyboard goes back before the mouse does anything, so
-    // the two never hold cards at once.
+    // A run already held, by a click or by the keyboard: this press says where
+    // it goes (GHUB-0069). It is the press Space makes with the cursor there,
+    // so a refused column keeps the run in hand and its own column puts it
+    // back. A press on bare felt puts it back too, and so does one on the
+    // stock, which then deals: the stock is never a destination, and a click
+    // there means "deal", whatever is in hand.
     if (m_keyHolding) {
+        // A card you can see wins over the stock, as below (GHUB-0160); the
+        // stock wins over a column's drop zone, which reaches under it.
+        int target = -1;
+        for (int col = 0; col < kColumns && target < 0; ++col) {
+            for (int i = 0; i < int(m_table.columns()[std::size_t(col)].size()); ++i) {
+                if (cardRect(col, i).contains(event->position())) {
+                    target = col;
+                    break;
+                }
+            }
+        }
+        const bool onStock = target < 0 && stockRect().contains(event->position());
+        if (target < 0 && !onStock)
+            target = columnAt(event->position());
+        if (target >= 0) {
+            m_cursorCol = target;
+            m_cursorDepth = 99; // the top of the column; clamped
+            pressAtCursor();
+            clampCursor();
+            update();
+            return;
+        }
         m_table.putBack();
         m_keyHolding = false;
         m_drag.clear();
-        update();
+        if (!onStock) {
+            clampCursor();
+            update();
+            return;
+        }
     }
 
     // Columns first. The stock sits at the bottom right, over the tail of the
@@ -522,26 +542,21 @@ void SpiderView::mouseMoveEvent(QMouseEvent* event)
 void SpiderView::mouseReleaseEvent(QMouseEvent* event)
 {
     if (!m_dragging) {
+        // A press that never became a drag is a click, and a click on a card
+        // picks it up (GHUB-0069): the press put the cursor on it, so this is
+        // Space. The next click says where it goes.
+        const bool click = m_pressValid;
         m_pressValid = false;
+        if (click) {
+            pressAtCursor();
+            clampCursor();
+            update();
+        }
         return;
     }
 
     m_dragging = false;
-    const QPointF drop = event->position();
-    int target = -1;
-
-    for (int col = 0; col < kColumns; ++col) {
-        QRectF zone = columnOrigin(col);
-        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
-        if (!column.empty())
-            zone = zone.united(cardRect(col, int(column.size()) - 1));
-        zone.setBottom(zone.bottom() + cardHeight() * 0.5);
-
-        if (zone.contains(drop)) {
-            target = col;
-            break;
-        }
-    }
+    const int target = columnAt(event->position());
 
     const QPointF dragTopLeft(m_dragPos.x() - m_dragGrab.x(), m_dragPos.y() - m_dragGrab.y());
     if (dropHeldOn(target, dragTopLeft) == SpiderTable::Drop::Refused)
@@ -625,6 +640,35 @@ void SpiderView::clampCursor()
     // cursor points at a column, so it sits on the top.
     const int firstMovable = int(column.size()) - std::max(1, movableRunLength(m_cursorCol));
     m_cursorDepth = m_keyHolding ? last : std::clamp(m_cursorDepth, firstMovable, last);
+}
+
+int SpiderView::columnAt(QPointF pos) const
+{
+    for (int col = 0; col < kColumns; ++col) {
+        QRectF zone = columnOrigin(col);
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
+        if (!column.empty())
+            zone = zone.united(cardRect(col, int(column.size()) - 1));
+        zone.setBottom(zone.bottom() + cardHeight() * 0.5);
+        if (zone.contains(pos))
+            return col;
+    }
+    return -1;
+}
+
+QRectF SpiderView::cursorRect() const
+{
+    if (m_keyHolding && !m_drag.empty()) {
+        const QRectF first = heldLandingRect();
+        return first.united(first.translated(0, (int(m_drag.size()) - 1) * cardHeight() * 0.26));
+    }
+    if (m_cursorCol == kStockStop)
+        return stockRect();
+    const std::vector<Card>& column = m_table.columns()[std::size_t(m_cursorCol)];
+    return column.empty()
+        ? columnOrigin(m_cursorCol)
+        // The card and everything under it: what Space would lift.
+        : cardRect(m_cursorCol, m_cursorDepth).united(cardRect(m_cursorCol, int(column.size()) - 1));
 }
 
 QRectF SpiderView::heldLandingRect() const

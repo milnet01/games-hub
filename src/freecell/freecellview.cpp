@@ -100,7 +100,10 @@ void FreeCellView::undo()
 // the card games save differently from Chess.
 QByteArray FreeCellView::saveState() const
 {
-    if (m_won || (!m_table.canUndo() && !m_resumed))
+    // A run held up banked an undo snapshot as it was lifted, but nothing has
+    // moved until it lands (GHUB-0069).
+    const bool touched = m_table.undoDepth() > (holdingARun() ? 1u : 0u);
+    if (m_won || (!touched && !m_resumed))
         return {};
 
     // A run lifted in mid-drag belongs to the pile it came from until it is
@@ -405,24 +408,12 @@ void FreeCellView::paintEvent(QPaintEvent*)
 
     // The keyboard's run and the cursor, over everything but the caption.
     if (!m_dragging) {
-        QRectF cursor;
         if (m_keyHolding && !m_drag.empty()) {
             const QRectF first = heldLandingRect();
-            cursor = first;
-            for (int i = 0; i < int(m_drag.size()); ++i) {
-                const QRectF r = first.translated(0, i * fanStep());
-                CardArt::paintFace(p, r, m_drag[std::size_t(i)]);
-                cursor = cursor.united(r);
-            }
-        } else {
-            const Spot s = cursorPile();
-            cursor = s.kind != PileKind::Column || s.index < 0
-                ? pileOrigin(s.kind, s.pile)
-                // The card and everything under it: what Space would lift.
-                : cardRect(s.pile, s.index)
-                      .united(cardRect(s.pile, int(pileFor(s.kind, s.pile).size()) - 1));
+            for (int i = 0; i < int(m_drag.size()); ++i)
+                CardArt::paintFace(p, first.translated(0, i * fanStep()), m_drag[std::size_t(i)]);
         }
-        Theme::paintCellCursor(p, cursor, Legibility::instance().enabled());
+        Theme::paintCellCursor(p, cursorRect(), Legibility::instance().enabled());
     }
 
     paintStatusCaption(p, QRectF(rect()));
@@ -439,30 +430,30 @@ void FreeCellView::mousePressEvent(QMouseEvent* event)
 
     m_pressPos = event->position();
     m_pressValid = false;
+    const Spot s = hitTest(event->position());
 
-    // A run held by the keyboard goes back before the mouse does anything, so
-    // the two never hold cards at once.
+    // A run already held, by a click or by the keyboard: this press says where
+    // it goes (GHUB-0069). It is the press Space makes with the cursor there,
+    // so a refused pile keeps the run in hand and its own pile puts it back.
+    // A press on bare felt puts it back too.
     if (m_keyHolding) {
-        m_table.putBack(m_dragFrom.kind, m_dragFrom.pile, m_drag);
-        m_keyHolding = false;
-        m_drag.clear();
-        m_undoAction->setEnabled(m_table.canUndo());
+        if (s.valid) {
+            moveCursorTo(s);
+            pressAtCursor();
+        } else {
+            m_table.putBack(m_dragFrom.kind, m_dragFrom.pile, m_drag);
+            m_keyHolding = false;
+            m_drag.clear();
+            m_undoAction->setEnabled(m_table.canUndo());
+        }
+        clampCursor();
         update();
+        return;
     }
 
-    const Spot s = hitTest(event->position());
     if (!s.valid)
         return;
-    // The cursor follows the mouse, so the two ways of playing never disagree
-    // about where you are.
-    if (s.kind == PileKind::Column) {
-        m_cursorCol = s.pile;
-        m_cursorDepth = std::max(0, s.index);
-    } else {
-        m_cursorCol = s.kind == PileKind::Cell ? s.pile : 4 + s.pile;
-        m_cursorDepth = -1;
-    }
-    clampCursor();
+    moveCursorTo(s);
     update();
     if (s.index < 0)
         return;
@@ -509,7 +500,16 @@ void FreeCellView::mouseMoveEvent(QMouseEvent* event)
 void FreeCellView::mouseReleaseEvent(QMouseEvent* event)
 {
     if (!m_dragging) {
+        // A press that never became a drag is a click, and a click on a card
+        // picks it up (GHUB-0069): the press put the cursor on it, so this is
+        // Space. The next click says where it goes.
+        const bool click = m_pressValid;
         m_pressValid = false;
+        if (click) {
+            pressAtCursor();
+            clampCursor();
+            update();
+        }
         return;
     }
 
@@ -590,6 +590,14 @@ void FreeCellView::mouseDoubleClickEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
+    // The first click of the pair picked the card up (GHUB-0069). Put it back
+    // before looking, or the pile's top is the card beneath it and the send
+    // below plays a card nobody pointed at.
+    if (m_keyHolding) {
+        m_table.putBack(m_dragFrom.kind, m_dragFrom.pile, m_drag);
+        m_keyHolding = false;
+        m_drag.clear();
+    }
     const Spot s = hitTest(event->position());
     if (!s.valid || s.index < 0 || s.kind == PileKind::Foundation)
         return;
@@ -721,6 +729,31 @@ void FreeCellView::clampCursor()
     m_cursorDepth = m_keyHolding
         ? last
         : std::clamp(m_cursorDepth, m_table.firstMovableIndex(m_cursorCol), last);
+}
+
+void FreeCellView::moveCursorTo(const Spot& s)
+{
+    if (s.kind == PileKind::Column) {
+        m_cursorCol = s.pile;
+        m_cursorDepth = std::max(0, s.index);
+    } else {
+        m_cursorCol = s.kind == PileKind::Cell ? s.pile : 4 + s.pile;
+        m_cursorDepth = -1;
+    }
+    clampCursor();
+}
+
+QRectF FreeCellView::cursorRect() const
+{
+    if (m_keyHolding && !m_drag.empty()) {
+        const QRectF first = heldLandingRect();
+        return first.united(first.translated(0, (int(m_drag.size()) - 1) * fanStep()));
+    }
+    const Spot s = cursorPile();
+    return s.kind != PileKind::Column || s.index < 0
+        ? pileOrigin(s.kind, s.pile)
+        // The card and everything under it: what Space would lift.
+        : cardRect(s.pile, s.index).united(cardRect(s.pile, int(pileFor(s.kind, s.pile).size()) - 1));
 }
 
 QRectF FreeCellView::heldLandingRect() const

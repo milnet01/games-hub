@@ -129,7 +129,10 @@ QByteArray KlondikeView::saveState() const
 {
     // Nothing worth coming back to: a deal already solved, or one nobody has
     // touched. An empty state also clears whatever was stored before.
-    if (m_won || (!m_table.canUndo() && !m_resumed))
+    // A run held up banked an undo snapshot as it was lifted, but nothing has
+    // moved until it lands (GHUB-0069).
+    const bool touched = m_table.undoDepth() > (holdingARun() ? 1u : 0u);
+    if (m_won || (!touched && !m_resumed))
         return {};
 
     // A run lifted in mid-drag has been erased from its pile and is held until
@@ -498,26 +501,13 @@ void KlondikeView::paintEvent(QPaintEvent*)
     // The keyboard's run and the cursor, over everything but the caption: the
     // cursor says where the next Space lands, so nothing may sit on top of it.
     if (!m_dragging) {
-        QRectF cursor;
         if (m_keyHolding && !m_drag.empty()) {
             const QRectF first = heldLandingRect();
-            cursor = first;
-            for (int i = 0; i < int(m_drag.size()); ++i) {
-                const QRectF r = first.translated(0, i * cardHeight() * kFaceUpStep);
-                CardArt::paintFace(p, r, m_drag[std::size_t(i)]);
-                cursor = cursor.united(r);
-            }
-        } else {
-            const Spot s = cursorPile();
-            if (s.kind != PileKind::Tableau || s.index < 0) {
-                cursor = pileOrigin(s.kind, s.pile);
-            } else {
-                // The card and everything under it: what Space would lift.
-                const int last = int(pileFor(s.kind, s.pile).size()) - 1;
-                cursor = cardRect(s.kind, s.pile, s.index).united(cardRect(s.kind, s.pile, last));
-            }
+            for (int i = 0; i < int(m_drag.size()); ++i)
+                CardArt::paintFace(p, first.translated(0, i * cardHeight() * kFaceUpStep),
+                                   m_drag[std::size_t(i)]);
         }
-        Theme::paintCellCursor(p, cursor, Legibility::instance().enabled());
+        Theme::paintCellCursor(p, cursorRect(), Legibility::instance().enabled());
     }
 
     paintStatusCaption(p, QRectF(rect()));
@@ -534,30 +524,35 @@ void KlondikeView::mousePressEvent(QMouseEvent* event)
 
     m_pressPos = event->position();
     m_pressValid = false;
+    const Spot s = hitTest(event->position());
 
-    // A run held by the keyboard goes back before the mouse does anything, so
-    // the two never hold cards at once.
+    // A run already held, by a click or by the keyboard: this press says where
+    // it goes (GHUB-0069). It is the press Space makes with the cursor there,
+    // so a refused pile keeps the run in hand and its own pile puts it back.
+    // A press on bare felt puts it back too, and so does one on the stock,
+    // which then deals: the stock is never a destination, and a click there
+    // means "deal", whatever is in hand.
     if (m_keyHolding) {
+        if (s.valid && s.kind != PileKind::Stock) {
+            moveCursorTo(s);
+            pressAtCursor();
+            clampCursor();
+            update();
+            return;
+        }
         m_table.putBack();
         m_keyHolding = false;
         m_drag.clear();
-        update();
+        if (!s.valid) {
+            clampCursor();
+            update();
+            return;
+        }
     }
 
-    const Spot s = hitTest(event->position());
     if (!s.valid)
         return;
-
-    // The cursor follows the mouse, so the two ways of playing never disagree
-    // about where you are on the table.
-    if (s.kind == PileKind::Tableau) {
-        m_cursorCol = s.pile;
-        m_cursorDepth = std::max(0, s.index);
-    } else {
-        m_cursorCol = s.kind == PileKind::Stock ? 0 : s.kind == PileKind::Waste ? 1 : 3 + s.pile;
-        m_cursorDepth = -1;
-    }
-    clampCursor();
+    moveCursorTo(s);
     update();
 
     if (s.kind == PileKind::Stock) {
@@ -610,7 +605,16 @@ void KlondikeView::mouseMoveEvent(QMouseEvent* event)
 void KlondikeView::mouseReleaseEvent(QMouseEvent* event)
 {
     if (!m_dragging) {
+        // A press that never became a drag is a click, and a click on a card
+        // picks it up (GHUB-0069): the press put the cursor on it, so this is
+        // Space. The next click says where it goes.
+        const bool click = m_pressValid;
         m_pressValid = false;
+        if (click) {
+            pressAtCursor();
+            clampCursor();
+            update();
+        }
         return;
     }
 
@@ -662,6 +666,15 @@ void KlondikeView::mouseDoubleClickEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
+
+    // The first click of the pair picked the card up (GHUB-0069). Put it back
+    // before looking, or the pile's top is the card beneath it and the send
+    // below plays a card nobody pointed at.
+    if (m_keyHolding) {
+        m_table.putBack();
+        m_keyHolding = false;
+        m_drag.clear();
+    }
 
     const Spot s = hitTest(event->position());
     if (!s.valid || s.kind == PileKind::Stock || s.index < 0)
@@ -768,6 +781,33 @@ void KlondikeView::clampCursor()
         --firstUp;
     // While a run is held the cursor points at a PILE, so it sits on the top.
     m_cursorDepth = m_keyHolding ? last : std::clamp(m_cursorDepth, firstUp, last);
+}
+
+void KlondikeView::moveCursorTo(const Spot& s)
+{
+    if (s.kind == PileKind::Tableau) {
+        m_cursorCol = s.pile;
+        m_cursorDepth = std::max(0, s.index);
+    } else {
+        m_cursorCol = s.kind == PileKind::Stock ? 0 : s.kind == PileKind::Waste ? 1 : 3 + s.pile;
+        m_cursorDepth = -1;
+    }
+    clampCursor();
+}
+
+QRectF KlondikeView::cursorRect() const
+{
+    if (m_keyHolding && !m_drag.empty()) {
+        const QRectF first = heldLandingRect();
+        return first.united(
+            first.translated(0, (int(m_drag.size()) - 1) * cardHeight() * kFaceUpStep));
+    }
+    const Spot s = cursorPile();
+    if (s.kind != PileKind::Tableau || s.index < 0)
+        return pileOrigin(s.kind, s.pile);
+    // The card and everything under it: what Space would lift.
+    const int last = int(pileFor(s.kind, s.pile).size()) - 1;
+    return cardRect(s.kind, s.pile, s.index).united(cardRect(s.kind, s.pile, last));
 }
 
 QRectF KlondikeView::heldLandingRect() const

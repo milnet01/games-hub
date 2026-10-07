@@ -209,6 +209,19 @@ void clickAt(QWidget* w, QPointF pos, Qt::MouseButton button)
     QCoreApplication::sendEvent(w, &release);
 }
 
+// What Qt delivers for a double-click: a whole click, then the double-click
+// event in place of the second press, then its release.
+void doubleClickAt(QWidget* w, QPointF pos)
+{
+    clickAt(w, pos, Qt::LeftButton);
+    QMouseEvent twice(QEvent::MouseButtonDblClick, pos, w->mapToGlobal(pos), Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(w, &twice);
+    QMouseEvent release(QEvent::MouseButtonRelease, pos, w->mapToGlobal(pos), Qt::LeftButton,
+                        Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(w, &release);
+}
+
 // 2048 is played on the keyboard rather than with the mouse. A synthetic key
 // event reaches the widget the same way a synthetic click does.
 void pressKey(QWidget* w, Qt::Key key)
@@ -688,6 +701,26 @@ void anInterruptedDragPutsTheRunBack(const QString& game)
     view->deactivate();
     check(!view->holdingARun(),
           qPrintable(game + QStringLiteral(": leaving the game mid-drag puts the run back")));
+}
+
+// A lift banks an undo snapshot before the cards leave their pile (GHUB-0126),
+// so a card merely held up looked like a move to saveState: pick one up on a
+// fresh deal, quit, and an untouched deal was kept as a game in progress. A
+// click picks a card up since GHUB-0069, which is how this was found.
+template <typename V>
+void aCardHeldUpIsNotAMove(const QString& game, bool downFirst)
+{
+    V view;
+    view.resize(900, 640);
+    view.show();
+    pump(20);
+    if (downFirst)
+        pressKey(&view, Qt::Key_Down); // Klondike's cursor opens on the stock
+    const QRectF r = view.cursorRect();
+    clickAt(&view, QPointF(r.center().x(), r.top() + 4), Qt::LeftButton);
+    check(view.holdingARun(), qPrintable(game + QStringLiteral(": a click on a fresh deal picks a card up")));
+    check(view.saveState().isEmpty(),
+          qPrintable(game + QStringLiteral(": and a card held up is not a move, so the deal has nothing to save")));
 }
 
 // Pyramid's stock is the only place the game says a redeal is available, and
@@ -1514,6 +1547,85 @@ void boardsTakeTheKeyboard()
         klondike.show();
         pump(20);
         check(klondike.restoreState(blob), "klondike: a hand-built table loads");
+
+        // Click to move (GHUB-0069), before the keyboard checks below, which
+        // start again from the same table. A click lands where the cursor is
+        // drawn: just inside the top of its rect is the card under it, and the
+        // middle of a held run's rect is the pile it would land on. The left
+        // edge of the window is felt in all three games.
+        {
+            QAction* clickUndo = undoAction(klondike);
+            const auto clickCursor = [&klondike](bool top) {
+                const QRectF r = klondike.cursorRect();
+                clickAt(&klondike, top ? QPointF(r.center().x(), r.top() + 4) : r.center(),
+                        Qt::LeftButton);
+            };
+            const QPointF stock = klondike.cursorRect().center(); // the cursor opens there
+            pressKey(&klondike, Qt::Key_Down);
+            pressKey(&klondike, Qt::Key_Right);
+            clickCursor(true);
+            check(klondike.holdingARun(), "klondike: a click picks the queen up");
+            clickCursor(false);
+            check(!klondike.holdingARun() && clickUndo != nullptr && !clickUndo->isEnabled(),
+                  "klondike: a click on its own pile puts it back, and is not a move");
+            clickCursor(true);
+            pressKey(&klondike, Qt::Key_Right);
+            clickCursor(false);
+            check(klondike.holdingARun(), "klondike: a click on a pile that refuses it keeps it in hand");
+            clickAt(&klondike, QPointF(2, klondike.height() / 2.0), Qt::LeftButton);
+            check(!klondike.holdingARun() && clickUndo != nullptr && !clickUndo->isEnabled(),
+                  "klondike: a click on the felt puts it back");
+            pressKey(&klondike, Qt::Key_Left);
+            clickCursor(true);
+            pressKey(&klondike, Qt::Key_Left);
+            clickCursor(false);
+            check(!klondike.holdingARun() && clickUndo != nullptr && clickUndo->isEnabled()
+                      && klondike.cursorSpot() == QPoint(0, 1),
+                  "klondike: a click on a pile that takes it puts it down");
+            check(klondike.restoreState(blob) && clickUndo != nullptr && !clickUndo->isEnabled(),
+                  "klondike: the table starts again for the stock");
+            pressKey(&klondike, Qt::Key_Down);
+            pressKey(&klondike, Qt::Key_Right);
+            clickCursor(true);
+            check(klondike.holdingARun(), "klondike: the queen is in hand again");
+            clickAt(&klondike, stock, Qt::LeftButton);
+            check(!klondike.holdingARun() && clickUndo != nullptr && clickUndo->isEnabled(),
+                  "klondike: a click on the stock puts it back and deals");
+            // A double-click's first click picks the card up, so the double-
+            // click has to put it back before it looks. If it does not, the
+            // pile's top is the hidden card under the ace, nothing goes home,
+            // and the ace stays in hand.
+            {
+                const Card ace { Suit::Diamonds, kAce, true };
+                const Card under { Suit::Clubs, 2, false };
+                std::vector<Card> rest;
+                for (Card c : makeDeck()) {
+                    if (c == ace || c == under)
+                        continue;
+                    c.faceUp = false;
+                    rest.push_back(c);
+                }
+                QByteArray home;
+                QDataStream o(&home, QIODevice::WriteOnly);
+                o.setVersion(QDataStream::Qt_6_0);
+                o << quint32(1) << qint32(1) << qint32(0);
+                cardcodec::writePile(o, rest);
+                cardcodec::writePile(o, {});
+                for (int f = 0; f < 4; ++f)
+                    cardcodec::writePile(o, {});
+                cardcodec::writePile(o, { under, ace });
+                for (int col = 1; col < 7; ++col)
+                    cardcodec::writePile(o, {});
+                check(klondike.restoreState(home), "klondike: a lone ace over a hidden card loads");
+                pressKey(&klondike, Qt::Key_Down);
+                const QRectF r = klondike.cursorRect();
+                doubleClickAt(&klondike, QPointF(r.center().x(), r.top() + 4));
+                check(!klondike.holdingARun() && klondike.flightsInTheAir() > 0,
+                      "klondike: a double-click sends the ace home, and nothing is left in hand");
+            }
+            check(klondike.restoreState(blob), "klondike: and the table starts again for the keys");
+        }
+
         check(klondike.cursorSpot() == QPoint(0, -1),
               "klondike: a save from before the cursor opens it on the stock");
         QAction* undo = undoAction(klondike);
@@ -1593,6 +1705,56 @@ void boardsTakeTheKeyboard()
         spider.show();
         pump(20);
         check(spider.restoreState(blob), "spider: a hand-built table loads");
+
+        // Click to move (GHUB-0069), as Klondike's above.
+        {
+            QAction* clickUndo = undoAction(spider);
+            const auto clickCursor = [&spider](bool top) {
+                const QRectF r = spider.cursorRect();
+                clickAt(&spider, top ? QPointF(r.center().x(), r.top() + 4) : r.center(),
+                        Qt::LeftButton);
+            };
+            pressKey(&spider, Qt::Key_Right);
+            pressKey(&spider, Qt::Key_Up);
+            clickCursor(true);
+            check(spider.holdingARun(), "spider: a click picks the five-four up");
+            clickCursor(false);
+            check(!spider.holdingARun() && clickUndo != nullptr && !clickUndo->isEnabled(),
+                  "spider: a click on its own column puts it back, and is not a move");
+            pressKey(&spider, Qt::Key_Up);
+            clickCursor(true);
+            pressKey(&spider, Qt::Key_Right);
+            clickCursor(false);
+            check(spider.holdingARun(), "spider: a click on a column that refuses it keeps it in hand");
+            clickAt(&spider, QPointF(2, spider.height() / 2.0), Qt::LeftButton);
+            check(!spider.holdingARun() && clickUndo != nullptr && !clickUndo->isEnabled(),
+                  "spider: a click on the felt puts it back");
+            pressKey(&spider, Qt::Key_Left);
+            pressKey(&spider, Qt::Key_Up);
+            clickCursor(true);
+            pressKey(&spider, Qt::Key_Left);
+            clickCursor(false);
+            check(!spider.holdingARun() && clickUndo != nullptr && clickUndo->isEnabled()
+                      && spider.cursorSpot() == QPoint(0, 1),
+                  "spider: a click on a column that takes it puts it down");
+            // Spider refuses a deal over an empty column, and this table has
+            // seven, so the refusal's words are what say a deal was asked for.
+            check(spider.restoreState(blob), "spider: the table starts again for the stock");
+            for (int i = 0; i < SpiderView::kColumns; ++i)
+                pressKey(&spider, Qt::Key_Right);
+            const QPointF stock = spider.cursorRect().center();
+            for (int i = 1; i < SpiderView::kColumns; ++i)
+                pressKey(&spider, Qt::Key_Left);
+            pressKey(&spider, Qt::Key_Up);
+            clickCursor(true);
+            check(spider.holdingARun(), "spider: the five-four is in hand again");
+            clickAt(&spider, stock, Qt::LeftButton);
+            check(!spider.holdingARun()
+                      && spider.lastStatus().contains(QStringLiteral("Fill every empty column")),
+                  "spider: a click on the stock puts it back and deals");
+            check(spider.restoreState(blob), "spider: and the table starts again for the keys");
+        }
+
         check(spider.cursorSpot() == QPoint(0, 0),
               "spider: a save from before the cursor opens it on the first column");
         QAction* undo = undoAction(spider);
@@ -1676,6 +1838,80 @@ void boardsTakeTheKeyboard()
         freecell.show();
         pump(20);
         check(freecell.restoreState(blob), "freecell: a hand-built table loads");
+
+        // Click to move (GHUB-0069), as Klondike's above.
+        {
+            QAction* clickUndo = undoAction(freecell);
+            const auto clickCursor = [&freecell](bool top) {
+                const QRectF r = freecell.cursorRect();
+                clickAt(&freecell, top ? QPointF(r.center().x(), r.top() + 4) : r.center(),
+                        Qt::LeftButton);
+            };
+            pressKey(&freecell, Qt::Key_Up);
+            check(freecell.cursorSpot() == QPoint(0, 1), "freecell: the cursor starts on the nine");
+            clickCursor(true);
+            check(freecell.holdingARun(), "freecell: a click picks the nine-eight up");
+            clickCursor(false);
+            check(!freecell.holdingARun() && clickUndo != nullptr && !clickUndo->isEnabled(),
+                  "freecell: a click on its own column puts it back, and is not a move");
+            pressKey(&freecell, Qt::Key_Up);
+            pressKey(&freecell, Qt::Key_Up);
+            pressKey(&freecell, Qt::Key_Down);
+            pressKey(&freecell, Qt::Key_Up);
+            clickCursor(true);
+            pressKey(&freecell, Qt::Key_Right);
+            pressKey(&freecell, Qt::Key_Right);
+            clickCursor(false);
+            check(freecell.holdingARun(), "freecell: a click on a column that refuses it keeps it in hand");
+            clickAt(&freecell, QPointF(2, freecell.height() / 2.0), Qt::LeftButton);
+            check(!freecell.holdingARun() && clickUndo != nullptr && !clickUndo->isEnabled(),
+                  "freecell: a click on the felt puts it back");
+            pressKey(&freecell, Qt::Key_Left);
+            pressKey(&freecell, Qt::Key_Left);
+            pressKey(&freecell, Qt::Key_Up);
+            pressKey(&freecell, Qt::Key_Up);
+            pressKey(&freecell, Qt::Key_Down);
+            pressKey(&freecell, Qt::Key_Up);
+            clickCursor(true);
+            pressKey(&freecell, Qt::Key_Right);
+            clickCursor(false);
+            check(!freecell.holdingARun() && clickUndo != nullptr && clickUndo->isEnabled()
+                      && freecell.cursorSpot() == QPoint(1, 1),
+                  "freecell: a click on a column that takes it puts it down");
+            // The double-click put-back, as in Klondike: an ace on a five.
+            // Without it the five is the pile's top, it cannot go home, and
+            // the ace stays in hand.
+            {
+                std::vector<Card> pack = makeDeck();
+                const Card ace { Suit::Hearts, kAce, true };
+                const Card five { Suit::Clubs, 5, true };
+                std::array<std::vector<Card>, FreeCellView::kColumns> cols;
+                cols[0] = { five, ace };
+                int next = 0;
+                for (Card c : pack) {
+                    if (c == ace || c == five)
+                        continue;
+                    c.faceUp = true;
+                    cols[std::size_t(1 + next++ % (FreeCellView::kColumns - 1))].push_back(c);
+                }
+                QByteArray home;
+                QDataStream o(&home, QIODevice::WriteOnly);
+                o.setVersion(QDataStream::Qt_6_0);
+                o << quint32(1) << qint32(0);
+                for (const auto& column : cols)
+                    cardcodec::writePile(o, column);
+                for (int i = 0; i < FreeCellView::kCells + 4; ++i)
+                    cardcodec::writePile(o, {});
+                check(freecell.restoreState(home), "freecell: an ace on a five loads");
+                check(freecell.cursorSpot() == QPoint(0, 1), "freecell: with the cursor on the ace");
+                const QRectF r = freecell.cursorRect();
+                doubleClickAt(&freecell, QPointF(r.center().x(), r.top() + 4));
+                check(!freecell.holdingARun() && freecell.flightsInTheAir() > 0,
+                      "freecell: a double-click sends the ace home, and nothing is left in hand");
+            }
+            check(freecell.restoreState(blob), "freecell: and the table starts again for the keys");
+        }
+
         check(freecell.cursorSpot() == QPoint(0, 2),
               "freecell: a save from before the cursor opens it on the first column's top card");
         QAction* undo = undoAction(freecell);
@@ -6609,6 +6845,10 @@ int main(int argc, char* argv[])
 
     anInterruptedDragPutsTheRunBack<KlondikeView>(QStringLiteral("Solitaire"));
     anInterruptedDragPutsTheRunBack<SpiderView>(QStringLiteral("Spider"));
+
+    aCardHeldUpIsNotAMove<KlondikeView>(QStringLiteral("klondike"), true);
+    aCardHeldUpIsNotAMove<SpiderView>(QStringLiteral("spider"), false);
+    aCardHeldUpIsNotAMove<FreeCellView>(QStringLiteral("freecell"), false);
 
     sudokuRemembersItsDifficulty();
 

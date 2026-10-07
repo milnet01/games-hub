@@ -49,6 +49,9 @@ public:
     // the stock in the corner. Depth is a card's index in the column (-1 on
     // the stock). Exists for the reason KlondikeView::cursorSpot does.
     QPoint cursorSpot() const { return { m_cursorCol, m_cursorDepth }; }
+    // Where the cursor is drawn, as KlondikeView::cursorRect is: paintEvent
+    // draws this rect, so a test clicking inside it clicks what the player sees.
+    QRectF cursorRect() const;
 
     // The bottom edge of the longest column, and the height it must stay
     // inside. Exists so a test can ask whether a fully dealt table still fits,
@@ -105,6 +108,10 @@ private:
     // cannot disagree about a move. The caller decides what a refusal means:
     // the drag puts the run back, the keyboard keeps it in hand.
     SpiderTable::Drop dropHeldOn(int target, QPointF runTopLeft);
+    // The column a drop at `pos` lands on, or -1: anywhere down its run, and
+    // half a card past the end, which is far more forgiving to aim at than the
+    // top card. A drag's release and a click while holding share it.
+    int columnAt(QPointF pos) const;
 
     // Keyboard play (GHUB-0168), the boards' scheme. See KlondikeView.
     static constexpr int kStockStop = kColumns; // the cursor column of the stock

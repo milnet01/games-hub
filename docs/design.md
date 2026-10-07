@@ -171,8 +171,7 @@ rules refuse keeps the run in hand, so the player can try another pile. A drop
 back on the pile it came from, or Escape, puts it back. **Here the one function
 is the rules core's**: `lift()`, `dropOnTableau()`, `dropOnFoundation()` and
 `putBack()` take both the drag and the keyboard, so neither path has its own
-idea of a legal move. A mouse press first puts back anything the keyboard is
-holding, so the two never hold cards at once.
+idea of a legal move.
 
 **Spider works the same way, with the stock as an eleventh stop** to the right
 of the last column, since it sits in that corner. There is no top row, so Up
@@ -191,6 +190,19 @@ refusal for length still says how many cards would fit. Undo, a new deal,
 leaving the game and the Large play switch all go through `settleForChange()`,
 which puts a held run back first. Otherwise Undo would reverse the lift and
 leave the run in hand.
+
+**In Klondike, Spider and FreeCell a click is Space at the pointer**
+(GHUB-0069). A press moves the cursor to the card under it, and a release that
+never became a drag lifts that card and the cards under it. The mouse and the
+keyboard hold the same run, so either can put it down. While a run is held, the
+next press is Space on the pile clicked: a pile the rules refuse keeps the run
+in hand, and the pile it came from puts it back. A press on bare felt puts it
+back too. In Klondike and Spider a press on the stock puts it back and deals,
+because the stock is never a destination. In Klondike and FreeCell a
+double-click puts a held run back before it looks, because the first click of
+the pair lifted the card the double-click sends home. Dragging is unchanged.
+A held run is not a move: its lift banks an undo snapshot, and `saveState()`
+does not count that one when deciding whether a deal is worth keeping.
 
 **Pyramid pairs cards rather than moving them, so its Space picks rather than
 lifts.** The rules core takes a pair or a King, and nothing ever leaves a pile

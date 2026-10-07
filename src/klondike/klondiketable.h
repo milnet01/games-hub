@@ -86,6 +86,8 @@ public:
     void dealFromStock();
 
     bool canUndo() const { return !m_history.empty(); }
+    // A run in hand counts one: its lift banked a snapshot before it left.
+    std::size_t undoDepth() const { return m_history.size(); }
     void undo();
 
     // Adopts a position from a save. Klondike never takes a card out of play,

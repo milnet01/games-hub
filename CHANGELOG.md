@@ -12,6 +12,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Klondike, Spider and FreeCell move cards by clicking as well as dragging** (GHUB-0069)
+  Click a card to pick it up with the cards under it, then click the pile
+  it should go to. A pile that will not take it leaves it in your hand;
+  clicking where it came from, or on the empty table, puts it back.
+  Clicking the stock while holding a card puts it back and deals.
+  Dragging and double-clicking a card home work as before. Picking a
+  card up and closing the game no longer keeps a deal you never played.
+
 - **Every card game can be played without a mouse**
   Arrow keys move a gold cursor between the piles and up and down a
   column, Space lifts a card and Space drops it, Escape puts it back.

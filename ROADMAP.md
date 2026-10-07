@@ -397,7 +397,7 @@ path, so they land together.
   Kind: accessibility.
   Source: review-code sweep 2026-08-31, split from GHUB-0132.
 
-- 📋 [GHUB-0069] **Every card move needs a drag, except the one move that does not.**
+- ✅ [GHUB-0069] **Every card move needs a drag, except the one move that does not.**
   Klondike and FreeCell already answer part of this: a double-click sends a card
   to its foundation, which is the most frequent move in both games and the one
   players most resent dragging. Everything else — a run between tableau columns, a
@@ -454,6 +454,15 @@ path, so they land together.
   while reading, unverified: FreeCell's double-click sends a pile's TOP
   card even when a buried card was clicked -- Klondike guards this
   (GHUB-0160), FreeCell does not.
+  Resolved (2026-10-07): shipped in Klondike, Spider and FreeCell. The three
+  red Spider checks were not the stock: a lift banks an undo snapshot, so
+  a card merely held up made saveState() call an untouched deal worth
+  keeping, and deactivate() then put it back and emptied the save. Fixed in
+  all three (undoDepth() discounts the held run's snapshot), which Space
+  had too. A stock click while holding now puts back and deals. uitest
+  982/0; 16 mutants of the new paths all killed, the two double-click
+  put-backs only after precise checks were added. FreeCell's buried-card
+  double-click is GHUB-0201.
   **Layman:** You have to drag cards with the mouse held down; only sending a card to a foundation can be done with a double-click.
   Kind: accessibility.
   Source: in-session-2026-08-20.
