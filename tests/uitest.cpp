@@ -5716,10 +5716,18 @@ int main(int argc, char* argv[])
         sudoku.resize(sudoku.minimumSize());
         const QFont original = sudoku.font();
 
+        // The floor the solve never goes below: the plain-play size, which is
+        // what markPointSize() answers with large play off.
+        Legibility::instance().setEnabled(false);
+        const double floorPt = sudoku.markPointSize();
+        Legibility::instance().setEnabled(true);
+
         const QStringList families = QFontDatabase::families();
         const int stride = std::max(1, int(families.size()) / 12);
         int exercised = 0;
         int misfit = 0;
+        int floored = 0;
+        int belowFloor = 0;
         int timid = 0;
         for (int i = 0; i < families.size(); i += stride) {
             QFont probe(families.at(i));
@@ -5730,10 +5738,26 @@ int main(int argc, char* argv[])
                 continue;
 
             sudoku.setFont(QFont(families.at(i)));
-            if (!sudoku.marksFitCell())
+            const double points = sudoku.markPointSize();
+            const bool fits = sudoku.marksFitCell();
+            const bool grows = sudoku.marksFitAt(points * 1.12);
+            const bool atFloor = points <= floorPt;
+            if (points < floorPt)
+                ++belowFloor;
+            if (!fits && atFloor)
+                ++floored;
+            else if (!fits)
                 ++misfit;
-            if (sudoku.marksFitAt(sudoku.markPointSize() * 1.12))
+            if (grows)
                 ++timid;
+            // Name the family, so a red run says which font rather than how many.
+            if (!fits || grows)
+                std::printf("      sudoku: %s %s at %.2f pt\n",
+                            qPrintable(families.at(i)),
+                            fits ? "could grow"
+                                 : atFloor ? "does not fit even at the floor"
+                                           : "does not fit",
+                            points);
             ++exercised;
         }
         sudoku.setFont(original);
@@ -5750,10 +5774,21 @@ int main(int argc, char* argv[])
         // maximality, so an empty loop here cannot leave the solve unchecked.
         // What this block adds is BREADTH, and breadth is exactly the thing a
         // machine either has or does not.
-        std::printf("      sudoku: mark size solved against %d font families\n", exercised);
+        //
+        // The same goes for a font whose digits are too tall even at the floor.
+        // Noto Sans CJK JP draws them 10 px tall on a 9 px em at 7 pt, so in the
+        // smallest cell no size the solve may choose fits its share (GHUB-0207).
+        // The solve keeps the floor rather than shrink below plain play, which
+        // is the code's promise and is asserted; that some installed font
+        // cannot meet the share at the floor is the machine's, and is reported.
+        std::printf("      sudoku: mark size solved against %d font families, "
+                    "%d too tall to fit even at the floor\n", exercised, floored);
         check(misfit == 0,
-              "sudoku: the solved mark fits its cell third in every font tried, however "
-              "tall that font draws a digit");
+              "sudoku: the solved mark fits its cell third in every font tried that "
+              "fits at all above the floor, however tall that font draws a digit");
+        check(belowFloor == 0,
+              "sudoku: and is never smaller than the plain-play size, even in a font "
+              "too tall to fit at it");
         check(timid == 0,
               "sudoku: and is the largest that fits in each of them, rather than a size "
               "that merely happens to be safe");

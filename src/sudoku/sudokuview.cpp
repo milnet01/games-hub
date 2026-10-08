@@ -58,7 +58,9 @@ constexpr int kFrameWidth = 9;
 // draw rather than scaling a ratio: the number that matters is the rounded one.
 //
 // So markFont() measures the font in hand and takes the largest size whose ink
-// really fits, floored at kMarkRatio, which has always fitted.
+// really fits, floored at kMarkRatio. The floor wins over the fit: a font whose
+// digits are too tall even there (Noto Sans CJK JP, GHUB-0207) gets the floor,
+// never a mark smaller than plain play draws.
 constexpr double kMarkRatio = 0.20;
 // How much of its third of the cell a mark's ink may fill. The remainder is the
 // paper that keeps nine marks reading as a 3x3 pattern rather than a block.

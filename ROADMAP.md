@@ -1517,7 +1517,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: in-session-2026-10-08.
   Lanes: tests.
 
-- 📋 [GHUB-0207] **The Sudoku solved-mark check fails on this machine against 13 font families.**
+- ✅ [GHUB-0207] **The Sudoku solved-mark check fails on this machine against 13 font families.**
   gameshub_uitest FAILs "sudoku: the solved mark fits its cell third in
   every font tried, however tall that font draws a digit" on clean master
   (d6d7015), 2026-10-08; GHUB-0205's run earlier the same day was 990
@@ -1525,6 +1525,17 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   installed font is the likely cause, unverified. Find which family fails,
   then decide whether the code is wrong for that font or the check
   asserts something the platform supplies (code-traps.md's rule).
+  Resolved (2026-10-08): one family failed, not 13 (13 is how many
+  the check samples). Noto Sans CJK JP draws digits 10 px tall on a 9 px
+  em at 7 pt, so in the smallest cell even the floor size overruns the
+  85% share, though it stays inside its third. The font dates from 2024;
+  the fontconfig index rebuilt that day most likely moved the sample onto
+  it (unverified). The code is right: the floor keeps large-play marks no
+  smaller than plain play. The check asserted what the platform supplies,
+  so a font too tall at the floor is now reported, a misfit above the
+  floor still fails, and a new check asserts no mark goes below the floor.
+  Each red under a code mutation, green on the real code: uitest 997 PASS,
+  0 FAIL; ctest 11/11.
   **Layman:** A screen test about the size of Sudoku's pencil marks started failing on this computer, probably because a font was installed or updated today.
   Kind: test.
   Source: in-session-2026-10-08.
