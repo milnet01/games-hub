@@ -55,6 +55,7 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QStatusBar>
+#include <QThreadPool>
 #include <QToolBar>
 #include <QTranslator>
 
@@ -188,6 +189,23 @@ bool settle(GameView* view, int budgetMs)
     while (!deadline.hasExpired() && view->hasPendingAnimation())
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     return !view->hasPendingAnimation();
+}
+
+// Pump until `done()` holds, up to a deadline, and say whether it did. What
+// settle() is for flights, this is for everything else -- above all a
+// computer's reply, which settle() does not cover: a thinking pause is not an
+// animation. A fixed pump guesses how long the reply takes, and a loaded
+// machine can overrun the guess (GHUB-0204, GHUB-0206).
+template <typename Condition>
+bool pumpUntil(Condition done, int budgetMs)
+{
+    QDeadlineTimer deadline(budgetMs);
+    while (!done()) {
+        if (deadline.hasExpired())
+            return false;
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+    return true;
 }
 
 QLabel* statusLabel(QMainWindow* window)
@@ -4522,7 +4540,9 @@ int main(int argc, char* argv[])
         clickAt(&chess, square(&chess, 6, 4), Qt::LeftButton);   // the pawn on e2
         const QImage selected = renderOf(&chess);
         clickAt(&chess, square(&chess, 4, 4), Qt::LeftButton);   // push it to e4
-        pump(1500);                                              // let the engine reply
+        // The engine has replied when the turn light is back on you.
+        check(pumpUntil([&chess] { return chess.turnLight().seat == 0; }, 20000),
+              "chess: the turn comes back to you");
         const QImage replied = renderOf(&chess);
 
         check(selected != replied, "chess: playing a move redraws the board");
@@ -4747,7 +4767,8 @@ int main(int argc, char* argv[])
             check(reversiGame.saveState().isEmpty(), "reversiGame: an unplayed game saves nothing");
 
             clickAt(&reversiGame, cellCentre(&reversiGame, 2, 3), Qt::LeftButton); // a legal opening
-            pump(1500);                                                    // and the engine's reply
+            check(pumpUntil([&reversiGame] { return reversiGame.turnLight().seat == 0; }, 20000),
+                  "reversiGame: the engine replies and the turn comes back to you");
             const QImage played = renderOf(&reversiGame);
             const QByteArray saved = reversiGame.saveState();
             check(!saved.isEmpty(), "reversiGame: a game in progress is worth saving");
@@ -4827,7 +4848,8 @@ int main(int argc, char* argv[])
             // third row from the bottom, then step it diagonally forward.
             clickAt(&draughts, cellCentre(&draughts, 5, 2), Qt::LeftButton);
             clickAt(&draughts, cellCentre(&draughts, 4, 3), Qt::LeftButton);
-            pump(1500);
+            check(pumpUntil([&draughts] { return draughts.turnLight().seat == 0; }, 20000),
+                  "draughts: the engine replies and the turn comes back to you");
             const QImage moved = renderOf(&draughts);
             const QByteArray draughtsSave = draughts.saveState();
             check(!draughtsSave.isEmpty(), "draughts: a game in progress is worth saving");
@@ -5373,7 +5395,7 @@ int main(int argc, char* argv[])
                 const QByteArray beforeDraw = canasta.saveState();
                 check(!beforeDraw.isEmpty(), "canasta: the position can be written down");
                 clickAt(&canasta, stockPile, Qt::LeftButton);
-                pump(900);
+                settle(&canasta, 20000);
                 check(canasta.saveState() != beforeDraw, "canasta: drawing moves the game on");
                 check(undoAction != nullptr && undoAction->isEnabled(),
                       "canasta: and Undo lights up once there is a move to take back");
@@ -5404,15 +5426,19 @@ int main(int argc, char* argv[])
                         discardAction = a;
                 }
                 clickAt(&canasta, stockPile, Qt::LeftButton);  // draw again
-                pump(900);
+                settle(&canasta, 20000);
                 const QPointF handCard(canasta.width() / 2.0, canasta.height() - 60.0);
                 clickAt(&canasta, handCard, Qt::LeftButton);   // lift one
                 const QByteArray beforeThrow = canasta.saveState();
                 if (discardAction != nullptr && discardAction->isEnabled())
                     discardAction->trigger();
-                // Long enough for the turn to leave you and at least one
-                // computer to answer, which is the whole point of the case.
-                pump(2000);
+                // Until the turn has passed the first computer, so at least one
+                // has answered, which is the whole point of the case.
+                check(pumpUntil([&canasta] {
+                          const int seat = canasta.turnLight().seat;
+                          return seat != 0 && seat != 1;
+                      }, 20000),
+                      "canasta: after your throw at least one computer answers");
                 const bool theyReplied = canasta.saveState() != beforeThrow;
                 check(theyReplied, "canasta: the throw passes the turn and the table moves on");
 
@@ -5427,7 +5453,7 @@ int main(int argc, char* argv[])
             const QPointF stock(canasta.width() * 0.5 - 60.0, canasta.height() * 0.47);
             const QPointF pile(canasta.width() * 0.5 + 60.0, canasta.height() * 0.47);
             clickAt(&canasta, stock, Qt::LeftButton);
-            pump(900);
+            settle(&canasta, 20000);
             check(status.contains(QStringLiteral("throw")) || !status.isEmpty(),
                   "canasta: the game responds to a draw");
 
@@ -5469,25 +5495,33 @@ int main(int argc, char* argv[])
 
             // Play a stretch of the hand for real: draw, pick a card, throw it,
             // and let the three computer seats answer. A rule that stalls a
-            // turn shows up here as a table that stops changing.
+            // turn shows up here as a table that stops changing. Each turn
+            // waits twice, for the turn to come round and for the cards to
+            // land, since the board ignores clicks until both hold. The old
+            // fixed waits were shorter than a round, so most of their clicks
+            // landed on a computer's turn and did nothing (GHUB-0206).
             const auto stockLeft = [&status] {
                 const int at = status.lastIndexOf(QStringLiteral("stock "));
                 return at < 0 ? -1 : status.mid(at + 6).split(QChar(' ')).first().toInt();
             };
             const int stockAtStart = stockLeft();
-            for (int turn = 0; turn < 12; ++turn) {
-                pump(700);
+            int yourTurns = 0;
+            for (int turn = 0; turn < 3; ++turn) {
+                if (!pumpUntil([&canasta] { return canasta.turnLight().seat == 0; }, 20000)
+                    || !settle(&canasta, 20000))
+                    break;
                 clickAt(&canasta, stock, Qt::LeftButton);
-                pump(400);
+                settle(&canasta, 20000);
                 clickAt(&canasta, QPointF(canasta.width() / 2.0, canasta.height() - 60.0),
                         Qt::LeftButton);
                 pump(80);
                 clickAt(&canasta, pile, Qt::LeftButton);
+                ++yourTurns;
             }
-            pump(1200);
             const int stockAtEnd = stockLeft();
-            std::printf("      canasta: stock went %d -> %d over twelve turns\n", stockAtStart,
-                        stockAtEnd);
+            std::printf("      canasta: stock went %d -> %d over %d of your turns\n",
+                        stockAtStart, stockAtEnd, yourTurns);
+            check(yourTurns == 3, "canasta: the turn comes back to you, round after round");
             check(stockAtEnd >= 0 && stockAtEnd < stockAtStart,
                   "canasta: play keeps moving through the stock rather than stalling");
             check(paints(&canasta), "canasta: the table still paints mid-hand");
@@ -6705,7 +6739,10 @@ int main(int argc, char* argv[])
             // ...and then the view goes away with a worker still running.
         }
         check(true, "chess: abandoning a search mid-flight leaves nothing behind");
-        pump(2500);   // let every abandoned worker finish into a dead view
+        // Every abandoned worker has to finish into a dead view while the
+        // sanitizer is still watching. The searches run on Qt's global pool.
+        check(QThreadPool::globalInstance()->waitForDone(30000),
+              "chess: and every abandoned search runs to its end");
     }
 
     // ---- the engine's stale timer (GHUB-0140) ----

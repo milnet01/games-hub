@@ -1484,7 +1484,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: in-session-2026-10-07.
   Lanes: tests, freecell, klondike, spider.
 
-- 💭 [GHUB-0206] **Other UI checks wait a fixed wall-clock time and could flake under load like GHUB-0204.**
+- ✅ [GHUB-0206] **Other UI checks wait a fixed wall-clock time and could flake under load like GHUB-0204.**
   tests/uitest.cpp has several pump(1200..2500) calls, most letting a
   computer opponent reply, then asserting on the result. GHUB-0204 showed a
   fixed wait can be missed on a loaded machine. None has been seen to fail.
@@ -1497,10 +1497,36 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   and no other game overrides hasPendingAnimation(). So the remaining
   waits, mostly for the computer's reply, need a condition on game state
   (whose turn it is), not settle().
+  Resolved (2026-10-08, owner said convert): a pumpUntil(condition,
+  budget) helper beside settle(). Chess, Reversi and Draughts wait for
+  turnLight().seat to come back to 0 instead of pump(1500); Canasta's
+  draws wait with settle(), its throw waits for the turn to pass the
+  first computer, and the "stretch of the hand" loop plays 3 real turns,
+  each waiting for your turn and the landing, instead of 12 timed clicks
+  (most of which landed on a computer's turn: the stock fell 58 -> 52
+  before, 61 -> 49 after). The chess churn waits on the global thread
+  pool instead of pump(2500). Six new checks. Red: with chess's think
+  delay raised to 2000 ms the old pump(1500) failed "the engine answers
+  the player's move"; the new waits pass. Left as they are: the autosave
+  pause (the interval is the subject) and the short pumps after a
+  restore or an undo, which wait on nothing slow.
   **Layman:** Some tests wait a set time for the computer opponent instead of waiting until it has actually moved, so a busy computer could fail them.
   Kind: test.
   Source: in-session-2026-10-08.
   Lanes: tests.
+
+- 📋 [GHUB-0207] **The Sudoku solved-mark check fails on this machine against 13 font families.**
+  gameshub_uitest FAILs "sudoku: the solved mark fits its cell third in
+  every font tried, however tall that font draws a digit" on clean master
+  (d6d7015), 2026-10-08; GHUB-0205's run earlier the same day was 990
+  PASS, 0 FAIL. /usr/share/fonts/truetype changed that day, so a newly
+  installed font is the likely cause, unverified. Find which family fails,
+  then decide whether the code is wrong for that font or the check
+  asserts something the platform supplies (code-traps.md's rule).
+  **Layman:** A screen test about the size of Sudoku's pencil marks started failing on this computer, probably because a font was installed or updated today.
+  Kind: test.
+  Source: in-session-2026-10-08.
+  Lanes: tests, sudoku.
 
 ## P01 — Shipped
 
