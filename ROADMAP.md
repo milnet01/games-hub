@@ -463,6 +463,8 @@ path, so they land together.
   982/0; 16 mutants of the new paths all killed, the two double-click
   put-backs only after precise checks were added. FreeCell's buried-card
   double-click is GHUB-0201.
+  Owner confirmed (2026-10-08): a click on the stock while holding a card
+  puts the card back and deals, as shipped.
   **Layman:** You have to drag cards with the mouse held down; only sending a card to a foundation can be done with a double-click.
   Kind: accessibility.
   Source: in-session-2026-08-20.
@@ -1436,13 +1438,17 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: claude-config-request-2026-09-28.
   Lanes: ci.
 
-- 📋 [GHUB-0204] **Spider's run-harvest UI check fails under heavy machine load.**
+- ✅ [GHUB-0204] **Spider's run-harvest UI check fails under heavy machine load.**
   tests/uitest.cpp gives the thirteen staggered cards of a completed run a
   fixed pump(3000) of wall-clock time, then asserts none is still flying and
   no timer is left. On 2026-10-07, at a load average of about 25, one direct
   uitest run failed both checks; ctest just before and three reruns after all
   passed. Fix: wait on the condition with a generous deadline, as the
   GHUB-0201 check waits on flightsInTheAir(), rather than a fixed sleep.
+  Resolved (2026-10-08): the check waits until the run has landed and the
+  flight timer has stopped, with a 20 s ceiling, instead of pump(3000).
+  Not reproduced on demand: four contended copies on one core did not
+  trip it, so the cause rests on the code (one fixed step per tick).
   **Layman:** One Spider test can fail when the computer is very busy, even though the game is fine.
   Kind: test.
   Source: in-session-2026-10-07.

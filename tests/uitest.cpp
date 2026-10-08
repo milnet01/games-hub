@@ -6546,7 +6546,13 @@ int main(int argc, char* argv[])
                 // have finished a single unstaggered card.
                 pump(200);
                 check(v.flightsInTheAir() > 0, "spider: and they leave in order rather than at once");
-                pump(3000);
+                // Flights advance a fixed step per timer tick, so a busy
+                // machine delivers fewer ticks and a fixed 3 s missed the
+                // landing (GHUB-0204). Wait for the landing, with a ceiling.
+                QDeadlineTimer arrival(20000);
+                while (!arrival.hasExpired()
+                       && (v.flightsInTheAir() > 0 || activeTimers(&v) > 0))
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
                 check(v.flightsInTheAir() == 0, "spider: the whole run arrives and stops flying");
                 check(activeTimers(&v) == 0, "spider: with no timer left running behind it");
             }
