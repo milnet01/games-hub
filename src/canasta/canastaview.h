@@ -51,8 +51,9 @@ public:
     // are the smallest scale it draws a card at, which is exactly what the
     // base class asks for.
     double smallestCardWidth() const override { return smallestFaceWidth(); }
-    // The one game in the collection that answers this true: applyLegibility
-    // lands every card in flight, and a landed card cannot be un-landed.
+    // Answered from its flights, as every game that flies cards does
+    // (GHUB-0205): applyLegibility lands every card in flight, and a landed
+    // card cannot be un-landed.
     bool hasPendingAnimation() const override { return animating(); }
 
     // The keyboard cursor, as {index, row} (GHUB-0168). Row 0 is your hand and

@@ -39,6 +39,8 @@ public:
     // reasoning as SudokuView::marksFitAt — a check that cannot reach the state
     // it is about ends up asserting something weaker and calling it coverage.
     int flightsInTheAir() const { return int(m_flights.size()); }
+    // A card in the air is what settle() in the UI test waits on (GHUB-0205).
+    bool hasPendingAnimation() const override { return !m_flights.empty(); }
 
     // Whether a run is still off the table. Exists because no picture and no
     // save answers it: saveState() patches a lifted run back onto its pile, so

@@ -39,6 +39,7 @@ case's `else()` inside the same guard. **Count them with `ctest
 -N` rather than against a figure here** — the number moves whenever a case is
 added, and a stale one sends you hunting for a case that was never registered
 on that platform.
+
 ## Testing notes
 
 Moved from `CLAUDE.md` § Testing notes.

@@ -111,8 +111,9 @@ different.** A board frozen mid-deal is static and will pass any stillness
 probe while still holding state the next settings change consumes — Canasta's
 cards in flight carry a destination captured when they left, so
 `applyLegibility` lands them, correctly and irreversibly.
-`hasPendingAnimation()` is how a game says so, and Canasta is the only one
-that answers true. **Asking pixels instead does not work**: a staggered deal
+`hasPendingAnimation()` is how a game says so. Canasta, Klondike, Spider and
+FreeCell answer true while a card is in the air. **Asking pixels instead does
+not work**: a staggered deal
 has lulls where every remaining card is counting down its delay, so two
 matching renders mean nothing. That mistake passed here every time and
 reddened both CI legs.

@@ -85,6 +85,7 @@ This replaced a throwaway harness of five source edits that had to be rebuilt an
 reverted each time. It found a four-canasta stack whose badges landed on top of
 one another, and that stack hanging over the edge of its band — neither flagged
 by any arithmetic in the project.
+
 **`--bench` is the only thing here that can time a frame**, and it is what
 makes a painting change provable. It prints ms/frame for Canasta mid-deal and
 at rest, a full Klondike tableau, a FreeCell board and the tile grid, and

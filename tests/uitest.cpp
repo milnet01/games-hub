@@ -1935,12 +1935,11 @@ void boardsTakeTheKeyboard()
                 for (int i = 0; i < FreeCellView::kCells + 4; ++i)
                     cardcodec::writePile(o, {});
                 // The ace sent home above is still in flight, and restoring a
-                // table does not ground it. settle() cannot wait for it:
-                // FreeCell does not report its flights as pending animation.
-                QDeadlineTimer landing(5000);
-                while (!landing.hasExpired() && freecell.flightsInTheAir() > 0)
-                    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-                check(freecell.flightsInTheAir() == 0, "freecell: the ace sent home lands");
+                // table does not ground it, so wait for it to land (GHUB-0205).
+                check(freecell.hasPendingAnimation(),
+                      "freecell: a card in the air is pending animation");
+                check(settle(&freecell, 5000) && freecell.flightsInTheAir() == 0,
+                      "freecell: the ace sent home lands");
                 check(freecell.restoreState(buried) && freecell.flightsInTheAir() == 0,
                       "freecell: an ace on a five loads again, with nothing in the air");
                 check(freecell.cursorSpot() == QPoint(0, 1), "freecell: with the cursor on the ace");
@@ -6425,8 +6424,9 @@ int main(int argc, char* argv[])
                 continue;
 
             // It must land on its own, and the timer must not outlive it.
-            pump(1200);
-            check(v.flightsInTheAir() == 0, "klondike: a card sent home lands and stops flying");
+            check(v.hasPendingAnimation(), "klondike: a card in the air is pending animation");
+            check(settle(&v, 5000) && v.flightsInTheAir() == 0,
+                  "klondike: a card sent home lands and stops flying");
             check(activeTimers(&v) == 0, "klondike: and the flight timer stops once it has");
         }
         check(klondikeFlew, "klondike: double-clicking an ace sends it home with a visible journey");
@@ -6445,9 +6445,11 @@ int main(int argc, char* argv[])
             // deactivate() must clear the air, not merely pause it: a flight
             // carries a destination captured when the card left, and the hub
             // resizes this page the moment it leaves.
-            check(v.flightsInTheAir() > 0, "freecell: a card is in the air to begin with");
+            check(v.flightsInTheAir() > 0 && v.hasPendingAnimation(),
+                  "freecell: a card is in the air to begin with");
             v.deactivate();
-            check(v.flightsInTheAir() == 0, "freecell: and leaving the game clears the air");
+            check(v.flightsInTheAir() == 0 && !v.hasPendingAnimation(),
+                  "freecell: and leaving the game clears the air");
             check(activeTimers(&v) == 0, "freecell: with no timer left running behind it");
         }
         check(freecellFlew, "freecell: double-clicking an ace sends it home with a visible journey");
@@ -6549,11 +6551,9 @@ int main(int argc, char* argv[])
                 // Flights advance a fixed step per timer tick, so a busy
                 // machine delivers fewer ticks and a fixed 3 s missed the
                 // landing (GHUB-0204). Wait for the landing, with a ceiling.
-                QDeadlineTimer arrival(20000);
-                while (!arrival.hasExpired()
-                       && (v.flightsInTheAir() > 0 || activeTimers(&v) > 0))
-                    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-                check(v.flightsInTheAir() == 0, "spider: the whole run arrives and stops flying");
+                check(v.hasPendingAnimation(), "spider: a run in the air is pending animation");
+                check(settle(&v, 20000) && v.flightsInTheAir() == 0,
+                      "spider: the whole run arrives and stops flying");
                 check(activeTimers(&v) == 0, "spider: with no timer left running behind it");
             }
             check(harvested, "spider: completing a run is visible as thirteen cards leaving");

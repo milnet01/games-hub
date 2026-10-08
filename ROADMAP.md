@@ -1406,7 +1406,11 @@ text: an owner decision, a measurement, or a better approach than the one tried.
 - 📋 [GHUB-0202] **The pre-push hook gates the working tree, not the pushed commits, and a docs-only push skips the documentation checks.**
   ~/.claude/standards/local-gate.md section 2.1 (binding from 2026-09-28,
   and on this hook's next edit) asks a hook of its own for four things.
-  Item 1, the secret scan, landed 2026-10-07. Still owed: item 2, gate the
+  Item 1, the secret scan, landed 2026-10-07 for this machine only; since
+  claude-config's 5fba684 (2026-10-08) an item met in part is still missing,
+  so item 1 stays open until the clone case below is done. And any edit that
+  changes what the hook runs must now land at least one missing check. Still
+  owed: item 2, gate the
   pushed commits rather than the working tree (section 5); item 3, run the
   documentation checks on a docs-only push (section 6), where today it runs
   the workflow linters only; item 4, skip completely only on section 7's
@@ -1454,13 +1458,27 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: in-session-2026-10-07.
   Lanes: spider, tests.
 
-- 📋 [GHUB-0205] **settle() returns at once for every game but Canasta, because only Canasta reports its animation as pending.**
+- ✅ [GHUB-0205] **settle() returns at once for every game but Canasta, because only Canasta reports its animation as pending.**
   GameView::hasPendingAnimation() defaults to false and only CanastaView
   overrides it, so settle() in tests/uitest.cpp returns true immediately
   while FreeCell cards are still in flight. Found writing the GHUB-0201
   check, which waits on flightsInTheAir() instead. Decide whether the card
   games should report their flights there, and check what --bench's
   "at rest" readings were taken against.
+  Resolved (2026-10-08): Klondike, Spider and FreeCell now answer
+  hasPendingAnimation() from m_flights, as Canasta does, so settle() waits
+  for their cards. The app never consults it (GHUB-0137), so play is
+  unchanged. --bench is unaffected: its Klondike and FreeCell readings are
+  fresh deals with nothing in the air (these games fly cards only on a
+  move), and Canasta's "at rest" already used Canasta's own answer. The
+  three flight checks in tests/uitest.cpp now assert it and wait via
+  settle() instead of pump(1200) and two hand loops; red before the fix
+  (4 new checks failing, plus the landings settle() returned early on),
+  green after. docs/design.md's "Canasta is the only one" corrected.
+  Not done, for the owner: design.md section Cards still requires the
+  override only of "a game whose deal animates". Widening it to any game
+  that flies cards would make a fifth such game report too, but it is a
+  direction change and owes review-contract first.
   **Layman:** A test helper meant to wait for cards to stop moving does not actually wait in most games.
   Kind: test.
   Source: in-session-2026-10-07.
@@ -1472,6 +1490,13 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   fixed wait can be missed on a loaded machine. None has been seen to fail.
   Offered to the owner 2026-10-08, not yet answered: decide whether to
   convert them to wait-on-condition, as GHUB-0204 did.
+  Progress (2026-10-08, after GHUB-0205): settle() now waits for cards
+  in the air in every game that flies them, and Klondike's pump(1200) was
+  converted with GHUB-0205. It does NOT wait for a computer's thinking
+  pause: Canasta's animating() is flights only by design (docs/design.md),
+  and no other game overrides hasPendingAnimation(). So the remaining
+  waits, mostly for the computer's reply, need a condition on game state
+  (whose turn it is), not settle().
   **Layman:** Some tests wait a set time for the computer opponent instead of waiting until it has actually moved, so a busy computer could fail them.
   Kind: test.
   Source: in-session-2026-10-08.
