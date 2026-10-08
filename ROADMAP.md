@@ -1466,6 +1466,17 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: in-session-2026-10-07.
   Lanes: tests, freecell, klondike, spider.
 
+- 💭 [GHUB-0206] **Other UI checks wait a fixed wall-clock time and could flake under load like GHUB-0204.**
+  tests/uitest.cpp has several pump(1200..2500) calls, most letting a
+  computer opponent reply, then asserting on the result. GHUB-0204 showed a
+  fixed wait can be missed on a loaded machine. None has been seen to fail.
+  Offered to the owner 2026-10-08, not yet answered: decide whether to
+  convert them to wait-on-condition, as GHUB-0204 did.
+  **Layman:** Some tests wait a set time for the computer opponent instead of waiting until it has actually moved, so a busy computer could fail them.
+  Kind: test.
+  Source: in-session-2026-10-08.
+  Lanes: tests.
+
 ## P01 — Shipped
 
 ### 🎨 Games
