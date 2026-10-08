@@ -1479,6 +1479,8 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   override only of "a game whose deal animates". Widening it to any game
   that flies cards would make a fifth such game report too, but it is a
   direction change and owes review-contract first.
+  Owner's call (2026-10-08): widen design.md section Cards when the
+  next card game is added, not now. That change owes review-contract.
   **Layman:** A test helper meant to wait for cards to stop moving does not actually wait in most games.
   Kind: test.
   Source: in-session-2026-10-07.
