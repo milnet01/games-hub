@@ -75,7 +75,7 @@ after changing code or the pinned icon keeps launching the old build.
 ## Run the pipeline locally before pushing
 
 ```bash
-git config core.hooksPath .githooks   # once per clone
+scripts/setup-hooks.sh                # once per clone
 scripts/local-ci.sh                   # or just push; the hook runs it
 ```
 
@@ -88,15 +88,20 @@ the **sanitizer** and **clang-tidy** legs are off unless asked for:
 the push gate does not touch them either — `.claude/rules/release.md` has the whole
 list of what CI runs.
 
-The `pre-push` hook runs it automatically. A push touching only `.md` files,
+The `pre-push` hook runs it automatically, over the commits being pushed
+rather than the working tree. `.githooks/pre-push` hands every push to the
+machine-wide hook, `~/.claude/githooks/pre-push`, and this project's settings
+for it are committed in `.ants/gate.conf`. A push touching only `.md` files,
 `docs/`, `.gitignore` or the licence texts runs the workflow linters and stops; anything
-touching code, CMake or a workflow runs the full pipeline. `SKIP_LOCAL_CI=1
+touching code, CMake or a workflow runs the full pipeline. With a clean tree
+at the pushed commit it runs in place, on the warm `build/`; otherwise it
+checks the pushed commit out fresh and builds from cold. `SKIP_LOCAL_CI=1
 git push` bypasses it when you mean to.
 
 **Every push is first scanned for secrets, and `SKIP_LOCAL_CI=1` does not skip
-that.** The hook hands the pushed commits to the machine-wide hook's
-`--secrets-only` mode, which runs gitleaks; a finding refuses the push. Where
-that hook is absent the push goes ahead and the hook says no scan ran.
+that.** The machine-wide hook runs gitleaks over the pushed commits; a finding
+refuses the push. Where that hook is absent nothing is scanned or gated, and
+the push goes ahead saying so.
 
 How `local-ci.sh` reads `ci.yml`, and the rule the hook keeps across refs:
 `.claude/rules/ci.md`, which loads when the hook, `scripts/local-ci.sh` or a

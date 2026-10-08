@@ -4,6 +4,8 @@ paths:
   - "scripts/local-ci.sh"
   - "scripts/wintest-ci.sh"
   - "tests/pre-push-test.sh"
+  - "scripts/setup-hooks.sh"
+  - ".ants/gate.conf"
   - ".github/**"
 ---
 
@@ -28,6 +30,18 @@ succeeds either way. `tests/pre-push-test.sh` is the guard: it drives real
 pushes at a throwaway remote and asserts which arm each one takes. Keep the
 docs-only arm in it — that path is a feature, and the obvious "fix" of always
 running the full pipeline deletes it.
+
+**Since GHUB-0202 that rule lives in the machine-wide hook, not here.**
+`.githooks/pre-push` is the skeleton's shim: it hands every push to
+`~/.claude/githooks/pre-push`, which gates the pushed commits rather than the
+working tree. This project's answers for it are in `.ants/gate.conf`, and the
+test proves the two together. On a machine without the shared hook the test
+runs one case: that the shim says nothing was checked.
+
+**`local-ci.sh` tells the hook which legs it skipped**, by writing them to
+the file named in `ANTS_GATE_SKIPPED`. A plain run always skips the Windows
+leg, so the hook never records a tree as fully passed and never skips the
+gate on that record (`~/.claude/standards/local-gate.md` § 7.1).
 
 **Two traps this script hit while being written**, both of which produce a
 green run that checked nothing. `$(...)` strips NUL bytes, so the

@@ -1,84 +1,34 @@
 #!/usr/bin/env bash
-# Runs the local CI pipeline before every push, so a red build is found here
-# rather than on GitHub.
+# Delegate the push gate to the machine-wide hook.
 #
-# Enable it once per clone:
-#     git config core.hooksPath .githooks
+# WHY THIS FILE EXISTS. `core.hooksPath` holds ONE value and the repository's
+# own wins, so a project that sets it to `.githooks` for the commit-msg check
+# stops seeing `~/.claude/githooks/pre-push` — silently. Before this file, every
+# scaffolded project got the commit checks and NO push gate, and nothing said
+# so. local-gate.md § 2 requires the gate; that is the breach this closes.
 #
-# A documentation-only push runs the workflow linters and stops — there is no
-# code for the compiler to have an opinion about. Anything touching code,
-# CMake or a workflow runs the full local pipeline.
+# WHY A DELEGATOR AND NOT A COPY. A copy is correct on the day it is written
+# and drifts from then on, which is the same argument local-gate.md § 3 makes
+# about a hand-written mirror of a CI workflow. One implementation, one place
+# to fix.
 #
-# Emergency bypass: SKIP_LOCAL_CI=1 git push
-# Use it when you mean to; it is not the default for a reason.
+# WHAT IT DOES. Everything: discovering this project's gate script, deciding
+# whether the push is documentation-only, and checking the PUSHED COMMITS out
+# into a worktree rather than gating whatever happens to be on disk. Read that
+# file for the escape hatches and the per-repository knobs.
+#
+# ON A MACHINE WITHOUT IT — a colleague's clone, CI, a fresh box — there is no
+# gate, and this says so rather than exiting 0 in silence. A check that did not
+# run must not look like one that passed.
+set -Eeuo pipefail
 
-set -uo pipefail
+GLOBAL_HOOK="${ANTS_GLOBAL_HOOKS:-$HOME/.claude/githooks}/pre-push"
 
-# git's stdin is read ONCE, because two readers need it: the secret scan below
-# and the docs-only decision after it.
-REFS=$(cat)
-
-# A secret must never reach a remote (~/.claude/standards/security.md § 2), so
-# the scan runs on every push -- documentation-only and SKIP_LOCAL_CI ones
-# included -- over the commits being pushed. The machine-wide hook does the
-# scanning and, given --secrets-only, runs no gate of its own.
-SCAN="${ANTS_GLOBAL_HOOKS:-$HOME/.claude/githooks}/pre-push"
-if [ -x "$SCAN" ]; then
-    printf '%s\n' "$REFS" | "$SCAN" --secrets-only "${1:-}" || exit 1
-else
-    echo "pre-push: $SCAN is absent -- NO SECRET SCAN RAN."
+if [[ -x $GLOBAL_HOOK ]]; then
+    exec "$GLOBAL_HOOK" "$@"
 fi
 
-if [ "${SKIP_LOCAL_CI:-}" = "1" ]; then
-    echo "pre-push: SKIP_LOCAL_CI=1 — local CI deliberately skipped."
-    exit 0
-fi
-
-CI=scripts/local-ci.sh
-[ -x "$CI" ] || { echo "pre-push: $CI is missing or not executable"; exit 1; }
-
-# git feeds "<local ref> <local sha> <remote ref> <remote sha>" on stdin, ONE
-# LINE PER REF. Accumulate the changed files across all of them: a loop that
-# overwrote a single range let the last ref decide the whole push, and
-# `git push --follow-tags` sends the tag last — which is how a release push
-# came out looking like a documentation change (GHUB-0027).
-ZERO=0000000000000000000000000000000000000000
-CHANGED=""
-PUSHING=0
-while read -r _localref localsha _remoteref remotesha; do
-    [ -z "$localsha" ] && continue                 # an empty push's one blank line
-    [ "$localsha" = "$ZERO" ] && continue          # a branch or tag deletion
-    PUSHING=1
-    if [ "$remotesha" = "$ZERO" ]; then
-        # A ref the remote has never seen — a new branch, or the tag half of
-        # a --follow-tags push. NOT `git diff <sha>`: that compares the commit
-        # against the WORKING TREE, so on a clean checkout it reports nothing
-        # changed at all. Ask instead for the commits this ref adds on top of
-        # everything the remote already has.
-        files=$(git log --name-only --pretty=format: "$localsha" --not --remotes 2>/dev/null)
-    else
-        files=$(git diff --name-only "$remotesha" "$localsha" 2>/dev/null)
-    fi
-    CHANGED="$CHANGED
-$files"
-done <<< "$REFS"
-
-if [ "$PUSHING" = 0 ]; then
-    echo "pre-push: nothing to check (deletion or empty push)."
-    exit 0
-fi
-
-# Docs-only if nothing outside these paths changed. Deliberately strict: a
-# CMakeLists or workflow edit is NOT documentation, however small. ci.yml's
-# paths-ignore lists the same set, so CI skips exactly what this treats as
-# docs; change the two together.
-CODE=$(printf '%s\n' "$CHANGED" | grep -Ev '(^$|\.md$|^docs/|^LICENSE$|^\.gitignore$|^packaging/licenses/)' || true)
-
-if [ -z "$CODE" ]; then
-    echo "pre-push: nothing outside the docs changed — running the workflow linters only."
-    exec "$CI" --lint
-fi
-
-echo "pre-push: code changed, running the full local pipeline:"
-printf '%s\n' "$CODE" | sed 's/^/    /'
-exec "$CI"
+printf 'pre-push: no push gate on this machine (%s is absent).\n' "$GLOBAL_HOOK" >&2
+printf 'pre-push: NOTHING WAS CHECKED. local-gate.md § 2 wants the pipeline run\n' >&2
+printf 'pre-push: locally, over the commits being pushed, before they go.\n' >&2
+exit 0

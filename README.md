@@ -304,9 +304,13 @@ The same pipeline CI runs can be run locally before pushing, which is worth
 doing because half of it is checked on a machine you do not have:
 
 ```bash
-git config core.hooksPath .githooks   # once, then it runs on every push
+scripts/setup-hooks.sh   # once per clone, then it runs on every push
 scripts/local-ci.sh
 ```
+
+The push hook hands each push to a gate kept outside this repository, on the
+maintainer's machine. Without it the push goes ahead and says nothing was
+checked, so run `scripts/local-ci.sh` yourself.
 
 It takes its steps from `.github/workflows/ci.yml` instead of repeating
 them, so it cannot quietly fall out of step with what GitHub actually runs.

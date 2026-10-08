@@ -315,6 +315,12 @@ if [ ${#SKIPPED[@]} -gt 0 ]; then
     echo "  run scripts/wintest-ci.sh to build and test it on the wintest box."
     echo "  That box is NOT the runner: it has real fonts, CI runs headless"
     echo "  with an empty font database, so font-derived checks can differ."
+    # Tell the pre-push hook too. A run that skipped a leg is not a full run,
+    # and the hook records a tree it may skip next time only after a full one
+    # (local-gate.md 7.1). The variable is set only when the hook runs us.
+    if [ -n "${ANTS_GATE_SKIPPED:-}" ]; then
+        printf '%s\n' "${SKIPPED[@]}" >> "$ANTS_GATE_SKIPPED"
+    fi
 fi
 
 echo

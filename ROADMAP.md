@@ -1403,7 +1403,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: fix.
   Source: in-session-2026-09-27.
 
-- 📋 [GHUB-0202] **The pre-push hook gates the working tree, not the pushed commits, and a docs-only push skips the documentation checks.**
+- ✅ [GHUB-0202] **The pre-push hook gates the working tree, not the pushed commits, and a docs-only push skips the documentation checks.**
   ~/.claude/standards/local-gate.md section 2.1 (binding from 2026-09-28,
   and on this hook's next edit) asks a hook of its own for four things.
   Item 1, the secret scan, landed 2026-10-07 for this machine only; since
@@ -1421,6 +1421,15 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   ants.gate.docsCommand / ants.gate.inPlace. tests/pre-push-test.sh asserts
   the current hook's arms and would change with it, as would CLAUDE.md's
   pipeline section.
+  Resolved (2026-10-08): .githooks/pre-push is now the skeleton's shim,
+  handing every push to ~/.claude/githooks/pre-push, so local-gate.md
+  section 2.1 no longer binds (a shim is not a hook of its own). That hook
+  scans and gates the PUSHED commits (in place on a clean tree at HEAD,
+  otherwise a fresh checkout), and this project's settings are committed in
+  .ants/gate.conf. scripts/setup-hooks.sh is the one step a clone runs.
+  local-ci.sh now declares its skipped legs, so no partial run is recorded
+  as a full pass. A clone without ~/.claude gets no scan and no gate and is
+  told so. Item 3, a real documentation check, is split out as GHUB-0208.
   **Layman:** The check that runs before every upload tests whatever is on disk rather than exactly what is being uploaded.
   Kind: chore.
   Source: claude-config-request-2026-09-28.
@@ -1540,6 +1549,21 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: test.
   Source: in-session-2026-10-08.
   Lanes: tests, sudoku.
+
+- 📋 [GHUB-0208] **A documentation-only push runs no documentation check, only the workflow linters.**
+  Split from GHUB-0202, whose item 3 this was. ~/.claude/standards/local-gate.md
+  section 6 asks a docs-only push to run the documentation checks, and where
+  the pipeline has none, to add the cheapest real one, such as a link check.
+  Today the hook's docs mode is local-ci.sh --lint, the workflow linters, and
+  ci.yml's paths-ignore skips a docs-only push entirely, so neither side
+  checks any prose. Section 3 wants the check in ci.yml so local-ci.sh runs
+  it rather than a second copy, which makes this a workflow change: a job
+  that runs on docs pushes, and a STEP_RULES entry for any tool it installs.
+  **Layman:** When only the written docs change, nothing checks the docs themselves, such as whether their links still work.
+  Kind: chore.
+  Source: in-session-2026-10-08.
+  Lanes: ci.
+  Splits-from: GHUB-0202.
 
 ## P01 — Shipped
 
