@@ -1469,6 +1469,12 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   sanitizers nightly (never the slowest job, and it caught a real bug per
   push); ctest -j (uitest is about 98s of 112s locally). Next: ccache on the
   build legs.
+  2026-10-15, lever 2 committed as 4020220 (ccache on the build legs,
+  Windows zip v4.14.1 checksummed), not yet pushed. To close: push it;
+  the first CI run fills the cache (cold), the second is the measurement
+  -- compare Windows and Linux Build steps and whole-run wall time against
+  lever 1's numbers above. Then send the claude-config session the
+  before/after timings and the two dropped rows, and flip this shipped.
   **Layman:** Make the automatic checks on GitHub faster without skipping any of them.
   Kind: perf.
   Source: claude-config-request-2026-09-28.
