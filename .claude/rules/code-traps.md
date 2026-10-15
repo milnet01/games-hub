@@ -73,6 +73,14 @@ project already targets, and it needs no build flag to be load-bearing for a
 maths constant. A new painter reaching for `M_PI` is caught only by the
 Windows CI job, minutes later.
 
+**The Linux runner's GCC warns where this machine's does not, and warnings
+are errors.** `for (const auto [r, c] : pairs)` over a
+`std::vector<std::pair<int, int>>` passed the local gate and failed CI's Linux
+leg with `-Werror=range-loop-construct` (GHUB-0209). The runner's
+`ubuntu-24.04` image reported GNU 13.3.0 on 2026-10-15; this machine's GCC is
+newer. Bind a structured binding in a range loop by `const auto&`. Only CI
+catches this class.
+
 **`qt_add_resources(<target> <file>.qrc)` silently compiles an EMPTY resource.**
 That signature expects a resource name plus a `FILES` list, so handing it a
 `.qrc` gives no error, no warning and no content — every sound lookup then
