@@ -17,12 +17,9 @@ only, so they are not in order and are never renumbered.
 
 ## 1.1.0 — Play without a mouse
 
-The next release. Its new capability is already on master, in the changelog's
-[Unreleased]: the four board games play from the keyboard, and a light shows
-whose turn it is.
-
-What remains is the Qt bump, which closes only when a tagged build carries it,
-and a current screenshot for the README.
+Shipped 2026-09-27. The four board games play from the keyboard, and a light
+shows whose turn it is. The release also carried the Qt bump and a current
+README screenshot.
 
 - ✅ [GHUB-0193] **The downloads bundle Qt 6.8.3, which Qt's own advisory list names.**
   Found by the first run of GHUB-0055's release-checklist step, 2026-09-13.
@@ -1601,7 +1598,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: chore.
   Source: in-session-2026-10-15.
 
-- 📋 [GHUB-0211] **The 1.1.0 roadmap section still calls itself the next release.**
+- ✅ [GHUB-0211] **The 1.1.0 roadmap section still calls itself the next release.**
   Section "1.1.0 — Play without a mouse" says "The next release";
   1.1.0 shipped 2026-09-27. Amend its intro through roadmap_log.
   **Layman:** A heading in the plan still says 1.1.0 is coming, though it came out on 2026-09-27.
