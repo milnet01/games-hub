@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=209 -->
+<!-- ants-roadmap-id-high-water: GHUB=211 -->
 
 # Games Hub — Roadmap
 
@@ -1591,6 +1591,22 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: in-session-2026-10-08.
   Lanes: ci.
   Splits-from: GHUB-0202.
+
+- 📋 [GHUB-0210] **Remove the v1.1.0 trailer worktree once the trailer is approved.**
+  `build-v110/` holds a registered git worktree at tag v1.1.0
+  (`build-v110/wt`), its build, and the clip script, kept for
+  re-takes. Remove with `git worktree remove build-v110/wt`, then
+  the folder. Clips went to /mnt/Games/Trailers/incoming/games-hub/.
+  **Layman:** Tidy away the copy of the old version used to film the trailer, once the website session says the clips are fine.
+  Kind: chore.
+  Source: in-session-2026-10-15.
+
+- 📋 [GHUB-0211] **The 1.1.0 roadmap section still calls itself the next release.**
+  Section "1.1.0 — Play without a mouse" says "The next release";
+  1.1.0 shipped 2026-09-27. Amend its intro through roadmap_log.
+  **Layman:** A heading in the plan still says 1.1.0 is coming, though it came out on 2026-09-27.
+  Kind: doc-fix.
+  Source: in-session-2026-10-15.
 
 ## P01 — Shipped
 
