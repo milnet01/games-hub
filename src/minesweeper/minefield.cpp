@@ -91,14 +91,14 @@ void Minefield::countNeighbours()
     }
 }
 
-void Minefield::reveal(int row, int col)
+bool Minefield::reveal(int row, int col)
 {
     if (m_state != State::Playing || !inBounds(row, col))
-        return;
+        return false;
 
     const Square& s = at(row, col);
     if (s.revealed || s.flagged)
-        return;
+        return false;
 
     if (!m_minesPlaced)
         placeMines(row, col);
@@ -110,11 +110,12 @@ void Minefield::reveal(int row, int col)
         for (Square& sq : m_squares)
             if (sq.mine)
                 sq.revealed = true;
-        return;
+        return true;
     }
 
     revealFrom(row, col);
     checkWin();
+    return true;
 }
 
 // Iterative flood fill — a recursive one overflows the stack on a large blank
@@ -144,20 +145,21 @@ void Minefield::revealFrom(int row, int col)
     }
 }
 
-void Minefield::toggleFlag(int row, int col)
+bool Minefield::toggleFlag(int row, int col)
 {
     if (m_state != State::Playing || !inBounds(row, col) || at(row, col).revealed)
-        return;
+        return false;
     square(row, col).flagged = !at(row, col).flagged;
+    return true;
 }
 
-void Minefield::chord(int row, int col)
+bool Minefield::chord(int row, int col)
 {
     if (m_state != State::Playing || !inBounds(row, col))
-        return;
+        return false;
     const Square& s = at(row, col);
     if (!s.revealed || s.neighbours == 0)
-        return;
+        return false;
 
     int flags = 0;
     for (int dr = -1; dr <= 1; ++dr)
@@ -166,12 +168,14 @@ void Minefield::chord(int row, int col)
                 ++flags;
 
     if (flags != s.neighbours)
-        return;
+        return false;
 
+    bool changed = false;
     for (int dr = -1; dr <= 1; ++dr)
         for (int dc = -1; dc <= 1; ++dc)
             if (dr || dc)
-                reveal(row + dr, col + dc);
+                changed |= reveal(row + dr, col + dc);
+    return changed;
 }
 
 void Minefield::checkWin()

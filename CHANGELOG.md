@@ -35,6 +35,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   pile, so Enter never throws one by mistake.
   The card-game half of GHUB-0168.
 
+### Changed
+
+- **Minesweeper makes a sound only when a click does something** (GHUB-0209)
+  Clicking a square that is already open, a number whose flags do not
+  match it, or a number with nothing left to open is now silent, and so is
+  trying to flag an open square. The sound itself now tells you the click
+  worked. A middle-click that opens squares now sounds as a dig does.
+
 ### Fixed
 
 - **In FreeCell, double-clicking a card buried under others no longer sends the column's top card home instead** (GHUB-0201)

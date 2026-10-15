@@ -33,14 +33,18 @@ public:
     // Mines left to find, by the player's own reckoning: total minus flags.
     int minesRemaining() const { return m_mines - flagCount(); }
 
+    // Each of these three returns whether it changed the board, which is what
+    // the view sounds a click on (GHUB-0209): a click that does nothing stays
+    // silent, so the sound itself says the click worked.
+
     // Uncovers a square, cascading through blank areas. The first reveal of a
     // game lays the mines, so the opening click is never fatal.
-    void reveal(int row, int col);
-    void toggleFlag(int row, int col);
+    bool reveal(int row, int col);
+    bool toggleFlag(int row, int col);
 
     // Uncovers every unflagged neighbour of an already-revealed square whose
     // flag count matches its number — the usual middle-click shortcut.
-    void chord(int row, int col);
+    bool chord(int row, int col);
 
 
     // A game in progress, for saving: the squares in row-major order. The

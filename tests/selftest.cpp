@@ -207,6 +207,34 @@ void minesweeperRules()
     check(!g.at(0, 0).flagged, "minesweeper: flags toggle off");
 }
 
+// GHUB-0209. The view sounds a click only when it changed the board, and it
+// learns that from these return values -- so each no-op the owner named must
+// answer false: a square already open, a number whose flags fall short, a
+// number with nothing left to open, a flag on an open square. A 5x5 board
+// built by hand: a mine in the top-left corner to chord around, and a safe
+// bottom-right corner walled in by three mines, so the cascade cannot reach
+// it and the game is still in play when the last checks run.
+void minesweeperClicksSayWhetherTheyChangedTheBoard()
+{
+    std::vector<Minefield::Square> squares(25);
+    for (const auto [r, c] : { std::pair { 0, 0 }, { 3, 3 }, { 3, 4 }, { 4, 3 } })
+        squares[std::size_t(r * 5 + c)].mine = true;
+    Minefield f(5, 5, 4);
+    check(f.restore(squares), "minesweeper sound: the hand-built board restores");
+
+    check(f.reveal(1, 1), "minesweeper sound: digging a hidden square changes the board");
+    check(!f.reveal(1, 1), "minesweeper sound: digging an open square does not");
+    check(!f.chord(1, 1), "minesweeper sound: a number short of flags opens nothing");
+    check(!f.toggleFlag(1, 1), "minesweeper sound: an open square takes no flag");
+    check(f.toggleFlag(0, 0), "minesweeper sound: flagging a hidden square changes the board");
+    check(!f.reveal(0, 0), "minesweeper sound: digging a flagged square does not");
+    check(f.chord(1, 1), "minesweeper sound: a number whose flags match opens its neighbours");
+    check(f.state() == Minefield::State::Playing,
+          "minesweeper sound: the walled-in corner keeps the game in play");
+    check(!f.chord(1, 1), "minesweeper sound: a number with nothing left to open opens nothing");
+    check(!f.chord(2, 2), "minesweeper sound: a number whose mine is unflagged opens nothing");
+}
+
 void minesweeperWinAndLoss()
 {
     // Clearing every safe square wins; the field is small enough to brute force.
@@ -6208,6 +6236,7 @@ int main()
 
     section("Minesweeper");
     minesweeperRules();
+    minesweeperClicksSayWhetherTheyChangedTheBoard();
     minesweeperWinAndLoss();
 
     section("Draughts");

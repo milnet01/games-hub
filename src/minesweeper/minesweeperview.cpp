@@ -419,11 +419,14 @@ void MinesweeperView::mousePressEvent(QMouseEvent* event)
     m_cursorRow = row;
     m_cursorCol = col;
 
+    // A click sounds only when it changed the board (GHUB-0209), so silence
+    // says the click did nothing.
     if (event->button() == Qt::RightButton) {
-        m_field->toggleFlag(row, col);
-        Sound::instance().play(Sound::kFlag);
+        if (m_field->toggleFlag(row, col))
+            Sound::instance().play(Sound::kFlag);
     } else if (event->button() == Qt::MiddleButton) {
-        m_field->chord(row, col);
+        if (m_field->chord(row, col) && m_field->state() != Minefield::State::Lost)
+            Sound::instance().play(Sound::kDig);
     } else if (event->button() == Qt::LeftButton) {
         digAt(row, col);
     } else {
@@ -444,11 +447,9 @@ void MinesweeperView::digAt(int row, int col)
     }
     // A dig on an already-open number chords, which is what most players
     // expect from a modern Minesweeper.
-    if (m_field->at(row, col).revealed)
-        m_field->chord(row, col);
-    else
-        m_field->reveal(row, col);
-    if (m_field->state() != Minefield::State::Lost)
+    const bool changed = m_field->at(row, col).revealed ? m_field->chord(row, col)
+                                                        : m_field->reveal(row, col);
+    if (changed && m_field->state() != Minefield::State::Lost)
         Sound::instance().play(Sound::kDig);
 }
 
@@ -470,8 +471,8 @@ void MinesweeperView::keyPressEvent(QKeyEvent* event)
         digAt(m_cursorRow, m_cursorCol);
         break;
     case Qt::Key_F:
-        m_field->toggleFlag(m_cursorRow, m_cursorCol);
-        Sound::instance().play(Sound::kFlag);
+        if (m_field->toggleFlag(m_cursorRow, m_cursorCol))
+            Sound::instance().play(Sound::kFlag);
         break;
     default:
         GameView::keyPressEvent(event);

@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=208 -->
+<!-- ants-roadmap-id-high-water: GHUB=209 -->
 
 # Games Hub — Roadmap
 
@@ -607,6 +607,23 @@ path, so they land together.
   Kind: fix.
   Source: in-session-2026-10-07.
   Lanes: freecell.
+
+- ✅ [GHUB-0209] **Minesweeper sounds a click only when the click changes the board.**
+  Today every left click or Space plays the dig sound, and every right
+  click or F plays the flag sound, whether or not anything happened: a
+  number whose flags do not match, a number with nothing left to open,
+  a flag on an open square. Owner's request 2026-10-15: sound only where
+  the click produces a result. Minefield's reveal, chord and toggleFlag
+  report whether they changed the board, and the view plays a sound only
+  then. A middle-click chord that opens squares now sounds too.
+  Shipped 2026-10-15. minesweeperClicksSayWhetherTheyChangedTheBoard in the
+  self-test pins every no-op the owner named on a hand-built board. The
+  view's choice to stay silent is not tested (Sound has no test hook);
+  it reads the return values directly.
+  **Layman:** Clicking a number that cannot open anything, or a square already open, stays silent, so the sound tells you the click did something.
+  Kind: enhancement.
+  Source: user-request-2026-10-15.
+  Lanes: minesweeper.
 
 ## 1.3.0 — Getting around the app
 
