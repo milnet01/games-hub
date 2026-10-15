@@ -129,9 +129,13 @@ def resolve(body, job_name):
             if entry.get('name') == 'Linux':
                 row = entry
                 break
-    return re.sub(r'\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}',
+    body = re.sub(r'\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}',
                   lambda m: str(row[m.group(1)]) if m.group(1) in row else m.group(0),
                   body)
+    # Here every job runs once, so a job split across runners by its strategy
+    # index (GHUB-0203's tidy job) runs as instance 0 of 1 -- the whole job.
+    body = re.sub(r'\$\{\{\s*strategy\.job-index\s*\}\}', '0', body)
+    return re.sub(r'\$\{\{\s*strategy\.job-total\s*\}\}', '1', body)
 # Every job, not just `build`. This read the build job alone until GHUB-0052
 # added a second one, and a job this script cannot see is the same silent
 # drift a step it cannot see would be -- worse, because it is a whole leg.
@@ -147,8 +151,9 @@ for path in sys.argv[1:]:
 # GitHub applies the workflow's `env:` and then the job's to every step. A
 # step that reads one of them would otherwise see it unset here and set on
 # the runner -- so export both ahead of each body, job over workflow, as
-# GitHub orders them. A value holding a ${{ }} expression is refused by the
-# expression guard below, because it travels inside the body.
+# GitHub orders them. The exports pass through resolve() with the body, so a
+# value holding a ${{ }} expression resolve() cannot answer is refused by the
+# expression guard below.
 def exports(job):
     merged = dict(wf.get('env') or {})
     merged.update(job.get('env') or {})
@@ -173,7 +178,7 @@ for wf, job_name in JOBS:
         name = step.get('name') or step.get('uses', '').split('@')[0]
         body = step.get('run', '') if kind == 'RUN' else step.get('uses', '')
         if kind == 'RUN':
-            body = exports(job) + resolve(body, job_name)
+            body = resolve(exports(job) + body, job_name)
             # Every body runs under bash here. A step naming another shell,
             # or another directory, would run differently from CI -- refuse.
             if step.get('shell', 'bash') != 'bash' or 'working-directory' in step:

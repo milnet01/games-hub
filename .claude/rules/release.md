@@ -27,9 +27,10 @@ work until a pull request opens. `release.yml`
 turns a tag into a Linux AppImage and a Windows zip on the releases page.
 
 **`ci.yml` runs more than the two test binaries.** Four job definitions —
-`lint`, `build`, `sanitizers` and `tidy` — but `build` is a matrix, so GitHub
-reports **five** checks: `Workflow lint`, the Linux build, the Windows build,
-`Saved-game fuzz (ASan/UBSan)` and `clang-tidy`. All on the same triggers.
+`lint`, `build`, `sanitizers` and `tidy` — but `build` and `tidy` are
+matrices, so GitHub reports **six** checks: `Workflow lint`, the Linux build,
+the Windows build, `Saved-game fuzz (ASan/UBSan)`, and `clang-tidy` twice, one
+per half of the sources (GHUB-0203). All on the same triggers.
 `scripts/local-ci.sh` runs the lint job first, skips the last two unless given
 `--with-sanitizers` and `--with-tidy`, and prints that it skipped them.
 

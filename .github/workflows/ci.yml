@@ -281,10 +281,25 @@ jobs:
   # deliberately OLDER than the clang-tidy a developer is likely to have
   # locally: check families only grow, so a newer local run is the stricter of
   # the two and this leg should not be the first to see a finding.
+  #
+  # Split across two runners (GHUB-0203). It was every push's slowest job, at
+  # about four minutes, nearly all of it the analysis itself on four cores.
+  # The split cannot halve it: canastaview.cpp alone is about a sixth of the
+  # analysis, and no runner finishes before its largest file does.
   tidy:
     name: clang-tidy
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
+    # Through env rather than inline in run:, which zizmor reads as template
+    # injection. scripts/local-ci.sh reads them as part 0 of 1, so a local run
+    # analyses every file.
+    env:
+      TIDY_PART: ${{ strategy.job-index }}
+      TIDY_PARTS: ${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -330,7 +345,13 @@ jobs:
       # this image. xargs exits 123 when any invocation fails, so a finding
       # still fails the step — .clang-tidy carries WarningsAsErrors, so a
       # finding is an error rather than a warning.
+      #
+      # Largest file first, one per invocation, dealt in turn to each runner:
+      # size stands in for analysis time, so the slowest file starts at once
+      # instead of queueing behind a batch.
       - name: Analyse every source
         run: |
-          git ls-files 'src/*.cpp' \
-            | xargs -P 4 -n 4 clang-tidy -p build-tidy --quiet
+          git ls-files -z 'src/*.cpp' \
+            | xargs -0 ls -S \
+            | awk -v n="$TIDY_PARTS" -v i="$TIDY_PART" '(NR - 1) % n == i' \
+            | xargs -P 4 -n 1 clang-tidy -p build-tidy --quiet
