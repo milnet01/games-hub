@@ -1461,6 +1461,14 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   from runner memory. Local ctest -j was measured with no gain (see
   GHUB-0069's handoff). Reply to the claude-config session with the
   timings and any row that did not fit.
+  2026-10-15, lever 1 (d791549): clang-tidy split across two runners,
+  largest file first. Before, the last three green runs: tidy job 223-251s,
+  whole run 251-258s. After, run 38773461889: tidy halves 190s and 148s;
+  whole run 286s, because Windows took 282s (configure 60s against 15-32s
+  before), so Windows now gates. Dropped, with reasons for the reply:
+  sanitizers nightly (never the slowest job, and it caught a real bug per
+  push); ctest -j (uitest is about 98s of 112s locally). Next: ccache on the
+  build legs.
   **Layman:** Make the automatic checks on GitHub faster without skipping any of them.
   Kind: perf.
   Source: claude-config-request-2026-09-28.
