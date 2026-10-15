@@ -26,7 +26,7 @@ Moved from `CLAUDE.md` § Commands.
 # objects are linked into all three executables. Until GHUB-0187 the three
 # targets listed GAME_CORE_SOURCES and GAME_VIEW_SOURCES directly, so a core
 # file went to the compiler three times and a view file twice. Measured on this
-# machine with ccache and mold off, which is how CI builds: a cold build fell
+# machine with ccache and mold off, which is how a release builds: a cold build fell
 # from about 58 s to about 29 s, and 126 build steps to 65.
 #
 # The object libraries are not a faster compiler. They are the same work done
@@ -44,11 +44,13 @@ Moved from `CLAUDE.md` § Commands.
 # so; -DGAMESHUB_FAST_BUILD=OFF turns both off. Neither changes what is built.
 # ccache replays compilations it has already done, so a repeated cold build is
 # a couple of seconds whatever the object count; the figures above are what a
-# machine that has never built this pays, which is every CI run.
+# machine that has never built this pays, which is every release build.
 #
-# Two things worth knowing. CI has neither ccache nor mold, so a runner builds
-# the plain way and the shipped artifacts are linked by GNU ld -- if a local
-# build is green and CI is not, the toolchain is one of the differences. And
+# Two things worth knowing. CI's two test legs compile through ccache, carried
+# between runs in a cache (GHUB-0203), but no runner has mold, and release.yml
+# has neither: the shipped artifacts are built the plain way and linked by GNU
+# ld -- if a local build is green and CI is not, the toolchain is one of the
+# differences. And
 # the peak is a single compiler process at roughly 660 MB, unchanged by the
 # above, so -j on a machine short of memory is worth setting by hand: ninja
 # defaults to cores plus two.

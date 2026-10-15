@@ -93,6 +93,8 @@ Install Qt|provision|qmake6 --version
 Install Linux build and runtime dependencies|provision|ninja --version
 Install clang-tidy|provision|clang-tidy --version
 Set up MSVC environment|windows-only|
+Install ccache|provision|ccache --version
+Cache ccache|action|ccache --version
 RULES
 )
 

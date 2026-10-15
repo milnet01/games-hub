@@ -198,6 +198,41 @@ jobs:
         shell: pwsh
         run: ./scripts/setup-msvc.ps1
 
+      # GHUB-0203. CMake compiles through ccache whenever it finds one
+      # (GAMESHUB_FAST_BUILD), so installing it is the whole switch, and the
+      # cache below carries its objects from one run to the next. Test legs
+      # only: release.yml builds without it, so nothing cached can reach a
+      # published file. The Windows zip is checked against the checksum its
+      # release publishes; the bin directory goes on GITHUB_PATH in Windows
+      # form because Configure runs under pwsh there.
+      - name: Install ccache
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            v=4.14.1
+            cd "$RUNNER_TEMP"
+            curl -fsSLo ccache.zip \
+              "https://github.com/ccache/ccache/releases/download/v$v/ccache-$v-windows-x86_64.zip"
+            sum=6219f3865ca59aec41ee4b678df171d5d35855ecb2b6dbbbd20690b3a68af7b4
+            echo "$sum  ccache.zip" | sha256sum --check --strict
+            unzip -q ccache.zip
+            cygpath -w "$RUNNER_TEMP/ccache-$v-windows-x86_64" >> "$GITHUB_PATH"
+          else
+            sudo apt-get install -y -qq ccache
+          fi
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_MAXSIZE=500M" >> "$GITHUB_ENV"
+
+      # A cache entry cannot be overwritten, so each run saves under its own
+      # key and restores the newest one for its platform. CCACHE_MAXSIZE
+      # keeps each entry pruned; GitHub evicts the old entries.
+      - name: Cache ccache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-${{ matrix.qt_arch }}-${{ github.run_id }}
+          restore-keys: ccache-${{ matrix.qt_arch }}-
+
       - name: Configure
         run: >
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
