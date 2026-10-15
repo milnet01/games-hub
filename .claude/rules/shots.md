@@ -26,6 +26,12 @@ QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/hearts.png \
 # looks like an answer.
 ```
 
+**Crop a shot before reading it when the question is about one part of the
+window.** A picture stays in the session's context and is paid for on every
+later request. `magick /tmp/hearts.png -crop 600x200+400+380 +repage
+/tmp/hearts-crop.png` keeps the 600×200 region whose top-left corner is at
+(400, 380). Read the whole window when the question is the layout itself.
+
 **A shot is taken the moment a game opens, which for a card game is a deal and
 nothing else — so `--turns` plays it forward first.** Anything that only exists
 once a hand has been played (Canasta's melds, its canasta stack, a frozen pack)
