@@ -21,6 +21,12 @@ order, and **stops on any step it has no rule for** — a new action added to
 `ci.yml` fails the local run until `STEP_RULES` in the script accounts for
 it, because a silently skipped step is exactly the drift being prevented.
 
+**It reads `docs.yml` beside `ci.yml`** (GHUB-0208). That workflow's one job
+is the documentation check, kept out of `ci.yml` because `ci.yml`'s
+`paths-ignore` skips a docs-only push entirely. `--lint`, the hook's docs mode,
+runs the `lint` and `docs` jobs. A new job in either file stops the run until
+`KNOWN` in the script's parser lists it.
+
 **The hook reads one line per ref and must accumulate across all of them.**
 `git push --follow-tags` sends the tag *last*, and a new ref has no remote sha
 — so a hook that let the last ref decide diffed a bare sha against the working

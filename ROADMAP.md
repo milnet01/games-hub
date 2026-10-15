@@ -1,5 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
+<!-- ants-roadmap-id-high-water: GHUB=208 -->
 
 # Games Hub — Roadmap
 
@@ -1550,7 +1551,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: in-session-2026-10-08.
   Lanes: tests, sudoku.
 
-- 📋 [GHUB-0208] **A documentation-only push runs no documentation check, only the workflow linters.**
+- ✅ [GHUB-0208] **A documentation-only push runs no documentation check, only the workflow linters.**
   Split from GHUB-0202, whose item 3 this was. ~/.claude/standards/local-gate.md
   section 6 asks a docs-only push to run the documentation checks, and where
   the pipeline has none, to add the cheapest real one, such as a link check.
@@ -1559,6 +1560,15 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   checks any prose. Section 3 wants the check in ci.yml so local-ci.sh runs
   it rather than a second copy, which makes this a workflow change: a job
   that runs on docs pushes, and a STEP_RULES entry for any tool it installs.
+  Shipped 2026-10-15. scripts/doc-refs-check.py checks every relative link
+  (and its heading anchor) in tracked markdown, and every backticked repo
+  path in living documents; records (CHANGELOG, ROADMAP, docs/reviews,
+  dated reviews) are link-checked only. A link check alone would have
+  covered four links; the paths add about two hundred. Runs in a new
+  docs.yml with no paths filter, because ci.yml's paths-ignore skips a
+  docs push entirely; local-ci.sh reads docs.yml beside ci.yml and its
+  --lint mode runs the lint and docs jobs. Proved red on a planted missing
+  file, missing anchor and missing path, and on an unknown job.
   **Layman:** When only the written docs change, nothing checks the docs themselves, such as whether their links still work.
   Kind: chore.
   Source: in-session-2026-10-08.

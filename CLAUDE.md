@@ -92,7 +92,9 @@ The `pre-push` hook runs it automatically, over the commits being pushed
 rather than the working tree. `.githooks/pre-push` hands every push to the
 machine-wide hook, `~/.claude/githooks/pre-push`, and this project's settings
 for it are committed in `.ants/gate.conf`. A push touching only `.md` files,
-`docs/`, `.gitignore` or the licence texts runs the workflow linters and stops; anything
+`docs/`, `.gitignore` or the licence texts runs the workflow linters and
+`scripts/doc-refs-check.py`, which checks that every link and backticked path
+in the docs still resolves, and stops; anything
 touching code, CMake or a workflow runs the full pipeline. With a clean tree
 at the pushed commit it runs in place, on the warm `build/`; otherwise it
 checks the pushed commit out fresh and builds from cold. `SKIP_LOCAL_CI=1

@@ -19,8 +19,12 @@
 # the runner does not, so read wintest-ci.sh's header before trusting one for
 # the other.
 #
-# Usage:  scripts/local-ci.sh            # lint + build + test the Linux leg
-#         scripts/local-ci.sh --lint     # workflow linters only (docs pushes)
+# It reads two workflows: ci.yml, and docs.yml, whose one job checks the
+# documents (GHUB-0208). docs.yml is separate because ci.yml's paths-ignore
+# skips a docs-only push entirely, and that is the push its check is for.
+#
+# Usage:  scripts/local-ci.sh            # lint + docs + build + test, Linux leg
+#         scripts/local-ci.sh --lint     # workflow linters + docs check (docs pushes)
 #         scripts/local-ci.sh --with-sanitizers   # add the ASan/UBSan fuzz leg
 #         scripts/local-ci.sh --with-tidy         # add the clang-tidy leg
 #         scripts/local-ci.sh --verbose           # print every step's output
@@ -34,7 +38,8 @@
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
-WORKFLOW=.github/workflows/ci.yml
+WORKFLOWS=(.github/workflows/ci.yml .github/workflows/docs.yml)
+WORKFLOW="${WORKFLOWS[*]}"   # for messages
 FAILED=0
 SKIPPED=()
 # The sanitizer leg is real work rather than a lint, so it is opt-in here and
@@ -66,7 +71,9 @@ ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; FAILED=1; }
 note() { printf '  \033[33m-\033[0m %s\n' "$1"; }
 
-[ -f "$WORKFLOW" ] || { echo "no $WORKFLOW — nothing to run"; exit 1; }
+for wf in "${WORKFLOWS[@]}"; do
+    [ -f "$wf" ] || { echo "no $wf — nothing to run"; exit 1; }
+done
 
 # --------------------------------------------------------------------------
 # 1. The Linux legs' steps, taken from the workflow
@@ -99,9 +106,14 @@ STEPS_FILE=$(mktemp)
 trap 'rm -f "$STEPS_FILE"' EXIT
 STEPS_RUN=0
 
-python3 - "$WORKFLOW" > "$STEPS_FILE" <<'PY'
-import sys, re, shlex, yaml
-wf = yaml.safe_load(open(sys.argv[1]))
+python3 - "${WORKFLOWS[@]}" > "$STEPS_FILE" <<'PY'
+import os, sys, re, shlex, yaml
+# The jobs each workflow may hold, in the order they run here. An unknown job
+# stops the run exactly as an unknown step does -- see the loop below.
+KNOWN = {
+    'ci.yml': ('lint', 'build', 'sanitizers', 'tidy'),
+    'docs.yml': ('docs',),
+}
 
 # The build job is a matrix and this script runs its LINUX row, so a
 # `${{ matrix.<key> }}` in a body is resolvable rather than unknown. Resolve it
@@ -124,10 +136,14 @@ def resolve(body, job_name):
 # added a second one, and a job this script cannot see is the same silent
 # drift a step it cannot see would be -- worse, because it is a whole leg.
 # An unknown job stops the run exactly as an unknown step does.
-known = ('lint', 'build', 'sanitizers', 'tidy')
-for name in wf['jobs']:
-    if name not in known:
-        sys.stdout.write('\x1e'.join(['UNKNOWNJOB', name, '']) + '\0')
+JOBS = []
+for path in sys.argv[1:]:
+    wf = yaml.safe_load(open(path))
+    known = KNOWN.get(os.path.basename(path), ())
+    for name in wf['jobs']:
+        if name not in known:
+            sys.stdout.write('\x1e'.join(['UNKNOWNJOB', name, '']) + '\0')
+    JOBS += [(wf, name) for name in known if name in wf['jobs']]
 # GitHub applies the workflow's `env:` and then the job's to every step. A
 # step that reads one of them would otherwise see it unset here and set on
 # the runner -- so export both ahead of each body, job over workflow, as
@@ -137,10 +153,10 @@ def exports(job):
     merged = dict(wf.get('env') or {})
     merged.update(job.get('env') or {})
     return ''.join(f'export {k}={shlex.quote(str(v))}\n' for k, v in merged.items())
-for job_name in known:
-    job = wf['jobs'].get(job_name)
-    if job is None:
-        continue
+# resolve() and exports() read the module-level `wf`, which this loop rebinds
+# to the job's own workflow before each job.
+for wf, job_name in JOBS:
+    job = wf['jobs'][job_name]
     # `defaults:` changes the shell or directory of every run step, and this
     # script applies neither -- refuse it rather than run the steps wrongly.
     if wf.get('defaults') or job.get('defaults'):
@@ -202,8 +218,9 @@ while IFS= read -r -d '' REC; do
         bad "UNKNOWN JOB '$NAME' in $WORKFLOW — teach $0 about it or it runs nowhere but CI"
         continue
     fi
-    # --lint, for a documentation-only push, runs the lint job and nothing else.
-    if [ "$LINT_ONLY" -eq 1 ] && [ "$JOB" != "lint" ]; then
+    # --lint, for a documentation-only push, runs the workflow linters and the
+    # documentation check, and nothing that builds.
+    if [ "$LINT_ONLY" -eq 1 ] && [ "$JOB" != "lint" ] && [ "$JOB" != "docs" ]; then
         continue
     fi
 
@@ -324,7 +341,7 @@ fi
 
 if [ "$LINT_ONLY" -eq 1 ]; then
     echo
-    bold "Lint-only run (documentation change) — build and tests not run."
+    bold "Documentation run (workflow linters and docs check) — build and tests not run."
     [ "$FAILED" -eq 0 ] || bold "Local CI FAILED — do not push."
     exit $FAILED
 fi

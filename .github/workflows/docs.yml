@@ -1,0 +1,42 @@
+---
+name: Docs
+
+# GHUB-0208. A documentation-only push skips ci.yml entirely (its
+# paths-ignore), so until this workflow nothing on either side read the prose:
+# a renamed file could leave every document naming it pointing at nothing.
+# scripts/doc-refs-check.py checks every link and every backticked repository
+# path the documents name; its header says what it skips and why.
+#
+# Its own workflow rather than a job in ci.yml, because ci.yml's paths-ignore
+# applies to every job in it and this is the one check a docs push most
+# needs. No paths filter here: a code push that renames a file breaks the
+# documents just as surely, and the job is seconds long.
+#
+# scripts/local-ci.sh reads this file beside ci.yml and runs this job in its
+# --lint mode, which is what the pre-push hook runs for a docs-only push.
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: Documentation references
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Python's standard library only, so nothing is installed and the
+      # runner's python3 and this machine's run the same check.
+      - name: Check the links and paths the documents name
+        run: python3 scripts/doc-refs-check.py

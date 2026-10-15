@@ -12,7 +12,9 @@ paths:
 
 ## Releasing
 
-Two workflows in `.github/workflows/`, contract in
+Three workflows in `.github/workflows/`. `docs.yml` runs
+`scripts/doc-refs-check.py` on every push to `master` and every pull request,
+documentation-only ones included (GHUB-0208). The other two have their contract in
 `docs/specs/GHUB-0025-downloadable-builds.md`. `ci.yml` builds and runs
 `ctest` -- every registered case, not just the two binaries -- on `ubuntu-24.04`
 and `windows-2022` for every push **to `master`** and every pull request —
