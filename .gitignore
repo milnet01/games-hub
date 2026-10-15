@@ -6,3 +6,7 @@ compile_commands.json
 # Derived, per-machine cache: the roadmap format standard says this is
 # recomputed from committed content and never committed itself.
 .roadmap-counter
+
+# Untracked scratch kept from earlier sessions (moved in 2026-10-15 from
+# the parent folder): the GHUB-0081 eyeball harness and an old scratchpad.
+.archive/
