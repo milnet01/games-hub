@@ -217,7 +217,7 @@ void minesweeperRules()
 void minesweeperClicksSayWhetherTheyChangedTheBoard()
 {
     std::vector<Minefield::Square> squares(25);
-    for (const auto [r, c] : { std::pair { 0, 0 }, { 3, 3 }, { 3, 4 }, { 4, 3 } })
+    for (const auto& [r, c] : { std::pair { 0, 0 }, { 3, 3 }, { 3, 4 }, { 4, 3 } })
         squares[std::size_t(r * 5 + c)].mine = true;
     Minefield f(5, 5, 4);
     check(f.restore(squares), "minesweeper sound: the hand-built board restores");
