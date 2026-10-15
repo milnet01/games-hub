@@ -23,6 +23,12 @@
 #         scripts/local-ci.sh --lint     # workflow linters only (docs pushes)
 #         scripts/local-ci.sh --with-sanitizers   # add the ASan/UBSan fuzz leg
 #         scripts/local-ci.sh --with-tidy         # add the clang-tidy leg
+#         scripts/local-ci.sh --verbose           # print every step's output
+#
+# A step's output is printed only when the step fails, and then only its last
+# lines; the whole of it is kept in .git/local-ci-logs/. A green run is read
+# by an agent on every push, and the build and test logs were most of what it
+# read, to learn nothing a ✓ does not say.
 
 # shellcheck disable=SC2016  # the ${{ }} literal below is deliberately unexpanded
 set -uo pipefail
@@ -44,9 +50,11 @@ WITH_TIDY=0
 TIDY_NOTED=0
 LAST_JOB=
 LINT_ONLY=0
+VERBOSE=0
 for arg in "$@"; do
     case "$arg" in
         --lint)             LINT_ONLY=1 ;;
+        --verbose)          VERBOSE=1 ;;
         --with-sanitizers)  WITH_SANITIZERS=1 ;;
         --with-tidy)        WITH_TIDY=1 ;;
         *) echo "unknown option '$arg'"; exit 1 ;;
@@ -282,13 +290,27 @@ while IFS= read -r -d '' REC; do
         continue
     fi
 
-    echo "  → $NAME"
     # GitHub's own invocation for a bash step, flag for flag, so no profile
     # or rc file on this machine changes what the step does.
-    if bash --noprofile --norc -eo pipefail -c "$BODY" 2>&1 | sed 's/^/      /'; then
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo "  → $NAME"
+        if bash --noprofile --norc -eo pipefail -c "$BODY" 2>&1 | sed 's/^/      /'; then
+            ok "$NAME"
+        else
+            bad "$NAME"
+        fi
+        continue
+    fi
+    # The common git dir, not build/: a fresh-checkout gate runs in a
+    # worktree that is deleted afterwards, and the log must outlive it.
+    LOG_DIR="$(git rev-parse --git-common-dir)/local-ci-logs"
+    mkdir -p "$LOG_DIR"
+    LOG="$LOG_DIR/$(printf '%s' "$NAME" | tr -c '[:alnum:]-' '_').log"
+    if bash --noprofile --norc -eo pipefail -c "$BODY" > "$LOG" 2>&1; then
         ok "$NAME"
     else
-        bad "$NAME"
+        bad "$NAME — last lines below, whole log: $LOG"
+        tail -n 60 "$LOG" | sed 's/^/      /'
     fi
 done < "$STEPS_FILE"
 
