@@ -563,6 +563,17 @@ path, so they land together.
   the citation back on the bullet line when the rest lands: the deals,
   the board games, Klondike's stock and waste, Pyramid's matched pairs,
   and Spider's harvest via dealRow.
+  Progress (2026-10-19): Spider's dealt row, commit ab2233b. Each dealt
+  card flies from the stock to its column in turn, and a run the row
+  finished sits complete for a beat, then leaves for the stock corner.
+  SpiderTable::dealRow now reports the columns it harvested, which
+  closes the "Spider's harvest via dealRow" gap named above. A press or
+  a new deal lands dealt cards first, so a card hidden at its column is
+  never lifted unseen. Flight::appearsWithin keeps the finishing Ace
+  from being drawn twice.
+
+  Still open: Klondike's stock and waste, Pyramid's matched pairs, the
+  board games, and the opening deals.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
