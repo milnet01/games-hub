@@ -613,7 +613,9 @@ and zero it at the top of every `paintEvent`. Clear the flights whenever the
 layout moves — a flight's destination was captured when the card left, so it
 would otherwise land where its target used to be. And a game whose deal
 animates answers `hasPendingAnimation()` from its flights, per § The game
-contract.
+contract. A card making two journeys in a row — a dealt Spider card that
+finishes a run, then leaves with it — sets `Flight::appearsWithin` on its
+second leg, so that leg is not drawn waiting while the first is on its way.
 
 ### Chess
 

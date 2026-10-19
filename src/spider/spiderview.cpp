@@ -202,6 +202,12 @@ bool SpiderView::restoreState(const QByteArray& blob)
     if (!m_table.restore(columns, stock, int(suits), int(completed), int(moves)))
         return false;
 
+    // A dealt card in the air would hide the restored column's foot until it
+    // landed, at an address that now means nothing.
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+
     m_drag.clear();
     m_dragging = false;
     m_pressValid = false;
@@ -314,13 +320,32 @@ void SpiderView::dealRow()
 {
     if (m_table.stock().empty())
         return;
-    if (!m_table.dealRow()) {
+    // Before anything is measured: the last row's cards land first, or this
+    // row re-fans their columns under them.
+    landDealtCards();
+
+    // Where everything is BEFORE the deal. A run the row finishes is taken
+    // off inside dealRow(), so afterwards it no longer exists to be measured.
+    const std::array<std::vector<Card>, kColumns> before = m_table.columns();
+    std::array<std::vector<QRectF>, kColumns> beforeRects;
+    for (int col = 0; col < kColumns; ++col) {
+        for (int i = 0; i < int(before[std::size_t(col)].size()); ++i)
+            beforeRects[std::size_t(col)].push_back(cardRect(col, i));
+    }
+    // The row comes off the back of the stock, column 0 first.
+    const std::vector<Card>& stock = m_table.stock();
+    std::vector<Card> dealt(stock.rbegin(),
+                            stock.rbegin() + std::min<qsizetype>(kColumns, qsizetype(stock.size())));
+
+    std::vector<int> harvested;
+    if (!m_table.dealRow(&harvested)) {
         // The rule that stops a deal burying an empty column beyond recovery.
         Q_EMIT statusChanged(tr("Fill every empty column before dealing a new row."));
         return;
     }
     m_undoAction->setEnabled(m_table.canUndo());
     Sound::instance().play(Sound::kCardDeal);
+    launchDealtRow(before, beforeRects, dealt, harvested);
 
     update();
     refresh();
@@ -373,6 +398,10 @@ void SpiderView::paintEvent(QPaintEvent*)
 
     Theme::paintFelt(p, rect(), Theme::kFeltTealTop, Theme::kFeltTealBottom);
 
+    // One match per flight, so two identical cards in the air do not both
+    // suppress the same destination copy. Reset every repaint.
+    m_flightConsumed.assign(m_flights.size(), 0);
+
     for (int col = 0; col < kColumns; ++col) {
         const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
         if (column.empty()) {
@@ -382,6 +411,10 @@ void SpiderView::paintEvent(QPaintEvent*)
         const int movable = movableRunLength(col);
         for (int i = 0; i < int(column.size()); ++i) {
             const QRectF r = cardRect(col, i);
+            // A dealt card is on its way here; drawing it too shows it twice.
+            if (i == int(column.size()) - 1
+                && cardflight::suppressAt(m_flights, m_flightConsumed, col, column.back()))
+                continue;
             if (column[std::size_t(i)].faceUp) {
                 CardArt::paintFace(p, r, column[std::size_t(i)]);
                 // Mark where the liftable run starts, so the player can see
@@ -402,8 +435,11 @@ void SpiderView::paintEvent(QPaintEvent*)
             CardArt::paintBack(p, s.translated(-i * 5.0, -i * 2.0));
     }
 
-    // A completed run on its way out, above the table and below the hand.
+    // A dealt row on its way in and a completed run on its way out, above the
+    // table and below the hand.
     for (const cardflight::Flight& f : m_flights) {
+        if (f.delay > f.appearsWithin)
+            continue;
         const QPointF at = cardflight::positionOf(f);
         CardArt::paintFace(p, QRectF(at, QSizeF(cardWidth(), cardHeight())), f.card);
     }
@@ -439,6 +475,7 @@ void SpiderView::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
+    landDealtCards();
 
     m_pressPos = event->position();
     m_pressValid = false;
@@ -686,6 +723,7 @@ QRectF SpiderView::heldLandingRect() const
 
 void SpiderView::pressAtCursor()
 {
+    landDealtCards();
     if (m_keyHolding) {
         dropAtCursor();
         return;
@@ -778,7 +816,7 @@ void SpiderView::keyPressEvent(QKeyEvent* event)
 }
 
 void SpiderView::launchCompletedRun(const std::vector<Card>& run,
-                                    const std::vector<QRectF>& fromRects)
+                                    const std::vector<QRectF>& fromRects, double after)
 {
     if (run.size() != fromRects.size() || run.empty())
         return;
@@ -794,14 +832,79 @@ void SpiderView::launchCompletedRun(const std::vector<Card>& run,
         f.card = run[std::size_t(i)];
         f.from = fromRects[std::size_t(i)].topLeft();
         f.to = home;
-        f.delay = i * cardflight::kStagger;
+        f.delay = after + i * cardflight::kStagger;
         f.speed = 2.2;
         // Nothing on this surface draws a completed run, so there is no
         // destination copy to suppress and no key to suppress it by.
         f.destination = -1;
         m_flights.push_back(f);
     }
+    startFlights();
+}
 
+void SpiderView::launchDealtRow(const std::array<std::vector<Card>, kColumns>& before,
+                                const std::array<std::vector<QRectF>, kColumns>& beforeRects,
+                                const std::vector<Card>& dealt, const std::vector<int>& harvested)
+{
+    // Slower and further apart than a completed run: a run is one thing
+    // leaving, and a row is ten separate answers to "where did that go?".
+    constexpr double kDealSpeed = 2.5;
+    constexpr double kDealStagger = 0.08;
+    // A finished run sits complete for a beat before it leaves, so the card
+    // that finished it is seen to be the one that did.
+    constexpr double kRunPause = 0.3;
+
+    const QPointF from = stockRect().topLeft();
+    for (int col = 0; col < int(dealt.size()); ++col) {
+        const bool finished =
+            std::find(harvested.begin(), harvested.end(), col) != harvested.end();
+        const std::vector<Card>& column = m_table.columns()[std::size_t(col)];
+
+        cardflight::Flight f;
+        f.card = dealt[std::size_t(col)];
+        f.card.faceUp = true;
+        f.from = from;
+        f.delay = col * kDealStagger;
+        f.speed = kDealSpeed;
+        if (finished) {
+            // The column no longer holds this card, so there is nothing to
+            // suppress: it lands where it WOULD have sat, one step below what
+            // was the foot of the column -- heldLandingRect's arithmetic.
+            const std::vector<Card>& was = before[std::size_t(col)];
+            const QRectF foot = beforeRects[std::size_t(col)].back();
+            const QRectF landed = foot.translated(0, cardHeight() * 0.26 * fanScale(was));
+            f.to = landed.topLeft();
+            f.destination = -1;
+            m_flights.push_back(f);
+
+            // Then the run leaves with it: the twelve it landed on, and itself.
+            const std::size_t first = was.size() - (SpiderTable::kRunLength - 1);
+            std::vector<Card> run(was.begin() + qsizetype(first), was.end());
+            std::vector<QRectF> rects(beforeRects[std::size_t(col)].begin() + qsizetype(first),
+                                      beforeRects[std::size_t(col)].end());
+            run.push_back(f.card);
+            rects.push_back(landed);
+            const std::size_t ace = m_flights.size() + run.size() - 1;
+            const double landsAt = f.delay + 1.0 / kDealSpeed;
+            launchCompletedRun(run, rects, landsAt + kRunPause);
+            // The Ace leaves last, so its second leg waits at the foot of the
+            // run from the start -- and must not be drawn there while its first
+            // leg is still on the way. It appears as the first leg lands.
+            if (ace < m_flights.size())
+                m_flights[ace].appearsWithin = m_flights[ace].delay - landsAt;
+            continue;
+        }
+        if (column.empty())
+            continue;
+        f.to = cardRect(col, int(column.size()) - 1).topLeft();
+        f.destination = col;
+        m_flights.push_back(f);
+    }
+    startFlights();
+}
+
+void SpiderView::startFlights()
+{
     if (m_flightTimer == nullptr) {
         m_flightTimer = new QTimer(this);
         m_flightTimer->setInterval(16);
@@ -811,7 +914,20 @@ void SpiderView::launchCompletedRun(const std::vector<Card>& run,
             update();
         });
     }
-    m_flightTimer->start();
+    if (!m_flights.empty())
+        m_flightTimer->start();
+}
+
+void SpiderView::landDealtCards()
+{
+    const auto dealt = std::remove_if(m_flights.begin(), m_flights.end(),
+                                      [](const cardflight::Flight& f) { return f.destination >= 0; });
+    if (dealt == m_flights.end())
+        return;
+    m_flights.erase(dealt, m_flights.end());
+    if (m_flights.empty() && m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    update();
 }
 
 void SpiderView::settleForChange()

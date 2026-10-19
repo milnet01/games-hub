@@ -4,6 +4,7 @@
 
 #include <QPointF>
 
+#include <limits>
 #include <vector>
 
 // One card travelling from where it was to where it now is.
@@ -37,6 +38,10 @@ struct Flight {
     double delay = 0.0;      // seconds still to wait before setting off
     double speed = 3.0;      // progress per second
     int destination = -1;    // whatever key the game identifies a pile by
+    // Drawn only once `delay` is down to this. For the second leg of a card
+    // whose first leg is still in the air, which would otherwise be on screen
+    // twice: a dealt Spider card that finishes a run lands, then leaves with it.
+    double appearsWithin = std::numeric_limits<double>::infinity();
 };
 
 // How long a card should linger before setting off when several leave at once,

@@ -2993,6 +2993,50 @@ void spiderRowNeedsEveryColumnOccupied()
     check(!table.canUndo(), "spider: and banks no undo for the row it did not deal");
 }
 
+void spiderDealtRowSaysWhichRunsItFinished()
+{
+    // A row can finish a run on its own, and the view has to know WHICH column
+    // it came off to show it leaving (GHUB-0065). Built rather than searched
+    // for: King down to Two of clubs in column 0, and the Ace of clubs the
+    // card the row deals onto it.
+    ST table;
+    std::vector<Card> deck = makeDeck(2, 4);
+    auto lift = [&deck](Suit suit, int rank) {
+        const auto it = std::find_if(deck.begin(), deck.end(), [&](const Card& c) {
+            return c.suit == suit && c.rank == rank;
+        });
+        Card c = *it;
+        deck.erase(it);
+        c.faceUp = true;
+        return c;
+    };
+
+    std::array<std::vector<Card>, ST::kColumns> columns;
+    for (int rank = kKing; rank >= 2; --rank)
+        columns[0].push_back(lift(Suit::Clubs, rank));
+    // The row deals off the back of the stock, column 0 first.
+    const Card ace = lift(Suit::Clubs, kAce);
+    std::vector<Card> stock(deck.end() - (ST::kColumns - 1), deck.end());
+    deck.erase(deck.end() - (ST::kColumns - 1), deck.end());
+    stock.push_back(ace);
+    int at = 0;
+    for (const Card& c : deck)
+        columns[std::size_t(at++ % (ST::kColumns - 1)) + 1].push_back(c);
+    check(table.restore(columns, stock, 4, 0, 0),
+          "spider: the hand-built row position is one the rules could reach");
+
+    std::vector<int> harvested;
+    check(table.dealRow(&harvested), "spider: the row deals");
+    check(harvested == std::vector<int> { 0 },
+          "spider: and says the run it finished came off column 0, and only that one");
+    check(table.completed() == 1 && table.columns()[0].empty(),
+          "spider: which it did take off the table");
+
+    harvested = { 7 };
+    check(!table.dealRow(&harvested) && harvested.empty(),
+          "spider: a row that cannot deal reports nothing finished");
+}
+
 void spiderPlaysOutWithoutLosingACard()
 {
     // Random legal play. The pack shrinks by exactly thirteen every time a run
@@ -6372,6 +6416,7 @@ int main()
     spiderStacksByRankButMovesBySuit();
     spiderHarvestsAFullRun();
     spiderRowNeedsEveryColumnOccupied();
+    spiderDealtRowSaysWhichRunsItFinished();
     spiderPlaysOutWithoutLosingACard();
 
     // LAST, and it must stay last: it pins the deal seed for the rest of the

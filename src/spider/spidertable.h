@@ -68,7 +68,10 @@ public:
     // A row may only be dealt with every column occupied: the rule that stops
     // a deal burying an empty column beyond recovery.
     bool canDealRow() const;
-    bool dealRow();
+    // `harvested`, when given, is filled with the columns the row finished a
+    // run on, so the view can show which ones left (GHUB-0065). Cleared even
+    // when the row cannot deal.
+    bool dealRow(std::vector<int>* harvested = nullptr);
 
     bool canUndo() const { return !m_history.empty(); }
     // A run in hand counts one: its lift banked a snapshot before it left.

@@ -168,8 +168,10 @@ bool SpiderTable::canDealRow() const
     return true;
 }
 
-bool SpiderTable::dealRow()
+bool SpiderTable::dealRow(std::vector<int>* harvested)
 {
+    if (harvested != nullptr)
+        harvested->clear();
     if (!canDealRow())
         return false;
 
@@ -180,8 +182,10 @@ bool SpiderTable::dealRow()
         c.faceUp = true;
         m_columns[std::size_t(col)].push_back(c);
     }
-    for (int col = 0; col < kColumns; ++col)
-        harvest(col);
+    for (int col = 0; col < kColumns; ++col) {
+        if (harvest(col) && harvested != nullptr)
+            harvested->push_back(col);
+    }
     return true;
 }
 

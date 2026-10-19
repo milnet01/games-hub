@@ -4615,6 +4615,9 @@ int main(int argc, char* argv[])
             // The stock is the stack in the bottom-right corner; clicking it
             // deals a row across the ten columns.
             clickAt(&spider, QPointF(spider.width() - 20, spider.height() - 20), Qt::LeftButton);
+            // The row flies in from the stock (GHUB-0065); a picture taken
+            // mid-flight is of the journey, not of the table the save holds.
+            check(settle(&spider, 20000), "spider: the dealt row lands");
             const QImage played = renderOf(&spider);
             const QByteArray saved = spider.saveState();
             check(!saved.isEmpty(), "spider: a deal in progress is worth saving");
@@ -6626,6 +6629,54 @@ int main(int argc, char* argv[])
                 check(activeTimers(&v) == 0, "spider: with no timer left running behind it");
             }
             check(harvested, "spider: completing a run is visible as thirteen cards leaving");
+
+            // A dealt row used to arrive all at once, and a run it finished
+            // vanished with no sign of where. Same position, but the Ace waits
+            // at the back of the stock, so it is the card the row deals onto
+            // column 0 -- and column 1, which held it, takes a stock card.
+            {
+                std::array<std::vector<Card>, 10> rowColumns = columns;
+                std::vector<Card> rowStock = stock;
+                rowStock.push_back(rowColumns[1].back());
+                rowColumns[1] = { rowStock.front() };
+                rowStock.erase(rowStock.begin());
+
+                QByteArray rowBlob;
+                QDataStream rowOut(&rowBlob, QIODevice::WriteOnly);
+                rowOut.setVersion(QDataStream::Qt_6_0);
+                rowOut << quint32(1) << qint32(1) << qint32(0) << qint32(1);
+                for (const std::vector<Card>& col : rowColumns)
+                    cardcodec::writePile(rowOut, col);
+                cardcodec::writePile(rowOut, rowStock);
+
+                SpiderView v;
+                v.resize(900, 640);
+                v.show();
+                pump(10);
+                check(v.restoreState(rowBlob),
+                      "spider: the built row position is one the rules could have reached");
+                check(v.dealARowForTest(), "spider: the row deals");
+                // Nine cards to the columns that keep theirs, the Ace to the
+                // foot of its run, and the thirteen of that run on their way out.
+                check(v.flightsInTheAir() == 9 + 1 + SpiderTable::kRunLength,
+                      "spider: every dealt card flies from the stock, and the run the row "
+                      "finished leaves after it");
+
+                const QPointF felt(1.0, 1.0);
+                QMouseEvent press(QEvent::MouseButtonPress, felt, v.mapToGlobal(felt),
+                                  Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(&v, &press);
+                QMouseEvent release(QEvent::MouseButtonRelease, felt, v.mapToGlobal(felt),
+                                    Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QApplication::sendEvent(&v, &release);
+                check(v.flightsInTheAir() == 1 + SpiderTable::kRunLength,
+                      "spider: a press lands the dealt cards, so none can be lifted unseen, "
+                      "and the finished run keeps flying");
+
+                check(settle(&v, 20000) && v.flightsInTheAir() == 0,
+                      "spider: the dealt row and its finished run all arrive and stop flying");
+                check(activeTimers(&v) == 0, "spider: with no timer left running behind the row");
+            }
         }
     }
 

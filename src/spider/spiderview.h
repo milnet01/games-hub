@@ -126,9 +126,27 @@ private:
     // and until this existed the only sign it had happened was a count in the
     // status bar. They fly to the stock corner, staggered, so the run reads as
     // a sequence rather than a disappearance.
-    void launchCompletedRun(const std::vector<Card>& run, const std::vector<QRectF>& fromRects);
+    // `after` holds the whole run in place first, for a run a dealt card
+    // finished: it waits for that card to land, then leaves.
+    void launchCompletedRun(const std::vector<Card>& run, const std::vector<QRectF>& fromRects,
+                            double after = 0.0);
+    // A dealt row, card by card from the stock, so the player sees which card
+    // went where rather than ten cards arriving at once.
+    // `before` and `beforeRects` are the columns as they stood before the
+    // deal, `dealt` the card each column was given.
+    void launchDealtRow(const std::array<std::vector<Card>, kColumns>& before,
+                        const std::array<std::vector<QRectF>, kColumns>& beforeRects,
+                        const std::vector<Card>& dealt, const std::vector<int>& harvested);
+    void startFlights();
+    // Puts every dealt card in the air down where it was going. A dealt card
+    // is hidden at its column until it lands, so a press that could lift it,
+    // or a deal that re-fans its column, must land it first. A completed run
+    // keeps flying: nothing on the table is waiting for it.
+    void landDealtCards();
 
     std::vector<cardflight::Flight> m_flights;
+    // One match per flight; see cardflight::suppressAt.
+    std::vector<char> m_flightConsumed;
     QTimer* m_flightTimer = nullptr;
 
     QList<QAction*> m_actions;
