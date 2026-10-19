@@ -1450,7 +1450,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: claude-config-request-2026-09-28.
   Lanes: ci.
 
-- 📋 [GHUB-0203] **Take the rest of local-gate.md section 9's CI speed-ups that fit: sanitizers nightly, cache pruning, sized parallelism.**
+- ✅ [GHUB-0203] **Take the rest of local-gate.md section 9's CI speed-ups that fit: sanitizers nightly, cache pruning, sized parallelism.**
   Job timeouts landed 2026-10-07 (cold jobs measured at 5 minutes or less
   over the last six green runs of each workflow; 30 on builds, 10 on lint,
   verify and publish). Still to weigh, each measured before and after, one
@@ -1475,6 +1475,16 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   -- compare Windows and Linux Build steps and whole-run wall time against
   lever 1's numbers above. Then send the claude-config session the
   before/after timings and the two dropped rows, and flip this shipped.
+  2026-10-19, lever 2 measured on run 39251233066 (pushed ecb2245).
+  Attempt 1, cold (no ccache yet): Linux Build 50s, Windows Build 110s,
+  whole run 248s. Attempt 2, a re-run reading attempt 1's cache: Linux
+  Build 3s and Windows Build 3s (against 43s and 89s for lever 1); whole
+  run 134s against 286s. Windows no longer gates; clang-tidy (1) does,
+  at 134s. Caveats: one sample each. The re-run hit its own exact key
+  and changed no source, so it is the best case; a real push restores
+  through the key prefix and recompiles what it touched. The tidy halves
+  also ran faster (134s and 128s) with no change of ours: runner variance.
+  Reported to the claude-config session with the two dropped rows.
   **Layman:** Make the automatic checks on GitHub faster without skipping any of them.
   Kind: perf.
   Source: claude-config-request-2026-09-28.
