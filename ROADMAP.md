@@ -8561,6 +8561,15 @@ writer it waits for.
   Kind: feature.
   Source: user-request-2026-09-02.
 
+- 📋 [GHUB-0210] **Remove the v1.1.0 trailer worktree once the trailer is approved.**
+  `build-v110/` holds a registered git worktree at tag v1.1.0
+  (`build-v110/wt`), its build, and the clip script, kept for
+  re-takes. Remove with `git worktree remove build-v110/wt`, then
+  the folder. Clips went to /mnt/Games/Trailers/incoming/games-hub/.
+  **Layman:** Tidy away the copy of the old version used to film the trailer, once the website session says the clips are fine.
+  Kind: chore.
+  Source: in-session-2026-10-15.
+
 ## 1.4.0 — Getting it to other people
 
 Packages and updates.
@@ -8740,10 +8749,13 @@ The in-app rules come first, so every new game ships with its instructions.
   Kind: feature.
   Source: user-request-2026-08-10.
 
-## Unscheduled
+## 1.6.0 — Poker and Bridge
 
-Work not promised to any release. Each item names what it waits on in its own
-text: an owner decision, a measurement, or a better approach than the one tried.
+Two more card tables against computer players, and a sharper Canasta
+
+opponent. The memory check rides along because this release takes the
+
+collection past twenty games. Owner's call, 2026-10-20.
 
 - 📋 [GHUB-0036] **Poker against three computer players, with chips and betting.**
   Asked for 2026-08-19, after the owner noticed the collection has
@@ -8851,6 +8863,99 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: feature.
   Source: user-request-2026-08-20.
 
+- 📋 [GHUB-0108] **How dangerous a throw is does not scale with how big the pack has grown.**
+  Suggested to the owner on 2026-08-24; the owner chose on
+  2026-10-20 to plan it, in 1.6.0.
+
+  chooseDiscard weighs a card's danger as a fixed judgement.
+  But the stake is the pack, and the pack grows all hand: the
+  same throw that is nearly free on turn two can hand over
+  fifteen cards on turn twenty.
+
+  So the bar a throw has to clear should tighten with the size
+  of the pack rather than being one number. Early in a hand
+  almost anything is safe, which is also why the first-round
+  rule the owner plays (noMeldingFirstRound) costs so little.
+
+  Note the interaction with GHUB-0104 and Expert's existing
+  +50 x countRank(pile, rank) term, which is already a
+  pack-aware safety term -- this generalises it rather than
+  adding a second one beside it.
+  Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
+  Attempted 2026-08-24 and NOT shipped. The bullet's own instruction --
+  "this generalises it rather than adding a second one beside it" -- was
+  implemented literally: the per-term (1 + 0.12 * pileSize) came off the
+  unseen reading in chooseDiscard and became one weight over the whole
+  `safety` accumulator.
+
+  It measured worse, and unlike GHUB-0101 and GHUB-0104 the loss is on the
+  rung that can actually see it. Bisected against a measured baseline of
+  hard v easy 23/24 +3489, hard v medium 70/120, expert v hard 129/240:
+
+    - with GHUB-0121 only:  23/24 +3594, 67/120, 118/240
+    - with this half added: 20/24 +2959, 67/120, 113/240
+
+  hard v easy wins by thousands of points a game, so three games and a
+  sixth of the margin there carries far more information than the same
+  swing on expert v hard, which GHUB-0110 showed cannot separate anything.
+
+  The cause is understood rather than guessed, which is why this is a
+  finding and not just a failed try. discardRisk ALREADY scales with pack
+  size -- `25.0 + 0.4 * pileSize` -- so weighting the accumulator scaled
+  that term a second time and made feeding a near-canasta grow roughly
+  quadratically with the pack, drowning the hand-value terms that decide
+  an ordinary throw.
+
+  So the bullet's premise is right and its prescription is wrong: the
+  accumulator is not one thing that can take one weight, because one of
+  its terms already carries the reading. A future attempt has to either
+  take discardRisk's own pileSize term out first (it is checked directly
+  by canastaDiscardRisk, so that is a visible change, not a quiet one), or
+  weight only the terms that lack one -- Hard's -2.5 * shown and Expert's
+  +50 * countRank -- and leave discardRisk alone.
+
+  The single pack-size weight that DOES ship is the one that was always
+  there, on the unseen term, and it now carries a comment pointing here.
+  **Layman:** Handing over three cards is a nuisance; handing over fifteen can lose the hand -- so a throw should have to be safer as the pack grows.
+  Kind: feature.
+  Source: claude-suggestion-2026-08-24.
+
+- 📋 [GHUB-0057] **A game you have opened is never freed, which is fine at fourteen and worth watching at thirty.**
+  Games are built on first open and live for the session by design -- the lazy
+  construction is deliberate and good, and `hubwindow.cpp` contains no `delete`,
+  no `deleteLater` and no `removeWidget`. Nothing is ever taken back down.
+
+  Measured rather than feared. The tile grid holds 55.6 MB resident; opening
+  Canasta -- the heaviest game here by a distance, 2265 lines of view over a
+  108-card two-pack table -- takes it to 57.6 MB. Chess measured no increase at
+  all. So the worst case today is a couple of megabytes per game against a Qt
+  baseline of fifty-five, and a player who opens all fourteen is still nowhere
+  near a number anyone would notice. **This item is filed as a thing to know, not
+  a thing to fix.**
+
+  Two reasons it is worth a bullet anyway. It is the mechanism behind GHUB-0046:
+  the reason a Pinball table can keep simulating while you play Chess is that the
+  Pinball view is still there, fully alive, holding a running timer. Fixing the
+  timers is the fix; this is why the timers can run at all.
+
+  And the curve is the part to watch rather than the current number. Nine more
+  games are already queued in the sections above, and Bridge has just joined them.
+  Thirty games at Canasta's weight is a different conversation from fourteen. The
+  honest trigger to revisit is a measurement, not a feeling: if the roadmap's game
+  count doubles, take this reading again before deciding whether an idle game
+  should be torn down and rebuilt from its saved state -- which the save/restore
+  machinery already makes possible, since every game that keeps anything worth
+  keeping can already serialise itself and come back.
+  **Layman:** Every game you try stays in memory for the rest of the session, even if you never go back to it.
+  Kind: investigate.
+  Source: in-session-2026-08-20.
+
+## 1.7.0 — Play against a person
+
+The largest item on this roadmap gets a release of its own, so it
+
+holds nothing else back. Owner's call, 2026-10-20.
+
 - 📋 [GHUB-0080] **Play against another person — same machine, same network, or over the internet — with Windows and Linux in the same game.**
   Large, and deliberately filed rather than started. What follows is
   what is already known so a later session does not re-derive it.
@@ -8952,93 +9057,10 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: feature.
   Source: user-request-2026-08-20.
 
-- 📋 [GHUB-0057] **A game you have opened is never freed, which is fine at fourteen and worth watching at thirty.**
-  Games are built on first open and live for the session by design -- the lazy
-  construction is deliberate and good, and `hubwindow.cpp` contains no `delete`,
-  no `deleteLater` and no `removeWidget`. Nothing is ever taken back down.
+## Unscheduled
 
-  Measured rather than feared. The tile grid holds 55.6 MB resident; opening
-  Canasta -- the heaviest game here by a distance, 2265 lines of view over a
-  108-card two-pack table -- takes it to 57.6 MB. Chess measured no increase at
-  all. So the worst case today is a couple of megabytes per game against a Qt
-  baseline of fifty-five, and a player who opens all fourteen is still nowhere
-  near a number anyone would notice. **This item is filed as a thing to know, not
-  a thing to fix.**
-
-  Two reasons it is worth a bullet anyway. It is the mechanism behind GHUB-0046:
-  the reason a Pinball table can keep simulating while you play Chess is that the
-  Pinball view is still there, fully alive, holding a running timer. Fixing the
-  timers is the fix; this is why the timers can run at all.
-
-  And the curve is the part to watch rather than the current number. Nine more
-  games are already queued in the sections above, and Bridge has just joined them.
-  Thirty games at Canasta's weight is a different conversation from fourteen. The
-  honest trigger to revisit is a measurement, not a feeling: if the roadmap's game
-  count doubles, take this reading again before deciding whether an idle game
-  should be torn down and rebuilt from its saved state -- which the save/restore
-  machinery already makes possible, since every game that keeps anything worth
-  keeping can already serialise itself and come back.
-  **Layman:** Every game you try stays in memory for the rest of the session, even if you never go back to it.
-  Kind: investigate.
-  Source: in-session-2026-08-20.
-
-- 📋 [GHUB-0108] **How dangerous a throw is does not scale with how big the pack has grown.**
-  SUGGESTED, NOT REQUESTED. Offered to the owner on
-  2026-08-24 and not yet answered; filed as considered so it
-  survives the session rather than as planned work.
-
-  chooseDiscard weighs a card's danger as a fixed judgement.
-  But the stake is the pack, and the pack grows all hand: the
-  same throw that is nearly free on turn two can hand over
-  fifteen cards on turn twenty.
-
-  So the bar a throw has to clear should tighten with the size
-  of the pack rather than being one number. Early in a hand
-  almost anything is safe, which is also why the first-round
-  rule the owner plays (noMeldingFirstRound) costs so little.
-
-  Note the interaction with GHUB-0104 and Expert's existing
-  +50 x countRank(pile, rank) term, which is already a
-  pack-aware safety term -- this generalises it rather than
-  adding a second one beside it.
-  Promoted (2026-08-24): owner ruled on it — into the Canasta AI pass with 0101..0104, 0113 and 0114.
-  Attempted 2026-08-24 and NOT shipped. The bullet's own instruction --
-  "this generalises it rather than adding a second one beside it" -- was
-  implemented literally: the per-term (1 + 0.12 * pileSize) came off the
-  unseen reading in chooseDiscard and became one weight over the whole
-  `safety` accumulator.
-
-  It measured worse, and unlike GHUB-0101 and GHUB-0104 the loss is on the
-  rung that can actually see it. Bisected against a measured baseline of
-  hard v easy 23/24 +3489, hard v medium 70/120, expert v hard 129/240:
-
-    - with GHUB-0121 only:  23/24 +3594, 67/120, 118/240
-    - with this half added: 20/24 +2959, 67/120, 113/240
-
-  hard v easy wins by thousands of points a game, so three games and a
-  sixth of the margin there carries far more information than the same
-  swing on expert v hard, which GHUB-0110 showed cannot separate anything.
-
-  The cause is understood rather than guessed, which is why this is a
-  finding and not just a failed try. discardRisk ALREADY scales with pack
-  size -- `25.0 + 0.4 * pileSize` -- so weighting the accumulator scaled
-  that term a second time and made feeding a near-canasta grow roughly
-  quadratically with the pack, drowning the hand-value terms that decide
-  an ordinary throw.
-
-  So the bullet's premise is right and its prescription is wrong: the
-  accumulator is not one thing that can take one weight, because one of
-  its terms already carries the reading. A future attempt has to either
-  take discardRisk's own pileSize term out first (it is checked directly
-  by canastaDiscardRisk, so that is a visible change, not a quiet one), or
-  weight only the terms that lack one -- Hard's -2.5 * shown and Expert's
-  +50 * countRank -- and leave discardRisk alone.
-
-  The single pack-size weight that DOES ship is the one that was always
-  there, on the unseen term, and it now carries a comment pointing here.
-  **Layman:** Handing over three cards is a nuisance; handing over fifteen can lose the hand -- so a throw should have to be safer as the pack grows.
-  Kind: feature.
-  Source: claude-suggestion-2026-08-24.
+Work not promised to any release. Each item names what it waits on in its own
+text: an owner decision, a measurement, or a better approach than the one tried.
 
 - 🚫 [GHUB-0197] **On a dark desktop theme the hub's toolbar and menu bar are close to unreadable.**
   Seen in a demo video recorded by the demoreel session on a private
@@ -9296,15 +9318,6 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: in-session-2026-10-08.
   Lanes: ci.
   Splits-from: GHUB-0202.
-
-- 📋 [GHUB-0210] **Remove the v1.1.0 trailer worktree once the trailer is approved.**
-  `build-v110/` holds a registered git worktree at tag v1.1.0
-  (`build-v110/wt`), its build, and the clip script, kept for
-  re-takes. Remove with `git worktree remove build-v110/wt`, then
-  the folder. Clips went to /mnt/Games/Trailers/incoming/games-hub/.
-  **Layman:** Tidy away the copy of the old version used to film the trailer, once the website session says the clips are fine.
-  Kind: chore.
-  Source: in-session-2026-10-15.
 
 - ✅ [GHUB-0211] **The 1.1.0 roadmap section still calls itself the next release.**
   Section "1.1.0 — Play without a mouse" says "The next release";
