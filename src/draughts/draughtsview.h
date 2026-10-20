@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cards/cardflight.h"
 #include "draughtsboard.h"
 #include "gameview.h"
 
@@ -7,6 +8,7 @@
 #include <QTimer>
 
 #include <optional>
+#include <utility>
 #include <vector>
 
 class QActionGroup;
@@ -31,6 +33,16 @@ public:
     TurnLight turnLight() const override { return m_turn.value(); }
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
+
+    // How many legs of the last move are still to be travelled, which no
+    // rendered picture can answer -- see KlondikeView::flightsInTheAir. A
+    // plain step is one leg; a jump chain is one per jump.
+    int flightsInTheAir() const { return int(m_flights.size()); }
+    // How many jumped pieces are still on their squares, waiting for the
+    // mover to pass over them. For the tests, for the same reason.
+    int takenPiecesShown() const;
+    // A piece in the air is what settle() in the UI test waits on (GHUB-0205).
+    bool hasPendingAnimation() const override { return !m_flights.empty(); }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -67,6 +79,18 @@ private:
     // The one place a human move is applied. Two click paths reach it now --
     // an unambiguous destination, and a route chosen from several.
     void playMove(const DraughtsMove& m);
+
+    // GHUB-0065. The piece `m` moved travels its route a leg at a time, and
+    // each piece it jumps stays on the board until the mover has passed over
+    // it. `before` is the board the move was played on, which is the only
+    // place the jumped pieces are still recorded. Called after the move, so
+    // the board is already the truth and the travel is the picture catching
+    // up with it.
+    void launchMove(const DraughtsMove& m, const DraughtsBoard& before);
+    // Lands the move at once. Anything that changes the position calls it,
+    // and so does a press: the arriving piece is hidden at its square until
+    // it lands, and must never be lifted unseen.
+    void clearFlights();
     // What a press on one square does: narrow a route, play a destination,
     // pick up a piece, or put down whatever was lifted. Reached by a click and
     // by the keyboard alike, so the two cannot drift apart.
@@ -149,4 +173,16 @@ private:
     bool m_turnFades = false;
     QTimer* m_turnTimer = nullptr;
     QString m_caption;
+
+    // One per leg, measured in squares, (column, row), so a resize or the
+    // legibility switch mid-move still lands the piece on its square. Every
+    // leg's `destination` is the route's last square, row * kBoardSize +
+    // column, and a leg is drawn only once the one before it has landed. The
+    // Card goes unused -- what travels is whatever piece now stands there.
+    std::vector<cardflight::Flight> m_flights;
+    // The jumped pieces in the order they were jumped: the i-th goes when the
+    // i-th leg lands.
+    std::vector<std::pair<Square, Piece>> m_taken;
+    int m_legs = 0;
+    QTimer* m_flightTimer = nullptr;
 };

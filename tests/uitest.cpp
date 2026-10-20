@@ -4871,6 +4871,8 @@ int main(int argc, char* argv[])
             clickAt(&draughts, cellCentre(&draughts, 4, 3), Qt::LeftButton);
             check(pumpUntil([&draughts] { return draughts.turnLight().seat == 0; }, 20000),
                   "draughts: the engine replies and the turn comes back to you");
+            // The reply travels to its square (GHUB-0065); photograph it landed.
+            settle(&draughts, 5000);
             const QImage moved = renderOf(&draughts);
             const QByteArray draughtsSave = draughts.saveState();
             check(!draughtsSave.isEmpty(), "draughts: a game in progress is worth saving");
@@ -6757,6 +6759,86 @@ int main(int argc, char* argv[])
                 check(v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
                       "reversi: leaving the game clears the air and stops the timer");
             }
+        }
+
+        // Draughts: a double jump used to arrive at its last square with both
+        // men already gone. The red man on (5,2) must take (4,3) then (2,3),
+        // landing on (1,2); the white man on (0,7) is there so the capture
+        // does not end the game, which would open the modal result box.
+        {
+            QByteArray doubleJump;
+            {
+                QDataStream out(&doubleJump, QIODevice::WriteOnly);
+                out.setVersion(QDataStream::Qt_6_0);
+                // Version 3, Red to move, you are Red, Easy, no last move.
+                out << quint32(3) << qint8(0) << qint8(0) << qint8(0) << qint8(0);
+                std::array<qint8, 64> board {};
+                board[5 * 8 + 2] = 1;   // RedMan
+                board[4 * 8 + 3] = 3;   // WhiteMan
+                board[2 * 8 + 3] = 3;
+                board[0 * 8 + 7] = 3;
+                for (qint8 c : board)
+                    out << c;
+                out << qint8(0) << qint8(5) << qint8(2); // no moves since progress; the cursor on the red man
+            }
+            const auto jump = [](DraughtsView* view) {
+                pressKey(view, Qt::Key_Space);
+                for (int i = 0; i < 4; ++i)
+                    pressKey(view, Qt::Key_Up);
+                pressKey(view, Qt::Key_Space);
+            };
+
+            DraughtsView v;
+            v.resize(700, 700);
+            v.show();
+            pump(20);
+            QAction* undo = nullptr;
+            QAction* newGame = nullptr;
+            for (QAction* action : v.gameActions()) {
+                if (action->shortcut() == QKeySequence(QKeySequence::Undo))
+                    undo = action;
+                if (action->shortcut() == QKeySequence(QKeySequence::New))
+                    newGame = action;
+            }
+
+            check(v.restoreState(doubleJump), "draughts: the double-jump position loads");
+            jump(&v);
+            check(v.flightsInTheAir() == 2 && v.takenPiecesShown() == 2,
+                  "draughts: a double jump travels two legs, and both men wait for it");
+            check(settle(&v, 5000) && v.takenPiecesShown() == 0,
+                  "draughts: both men go once the jumper lands");
+
+            v.restoreState(doubleJump);
+            jump(&v);
+            check(v.flightsInTheAir() == 2, "draughts: the reloaded jump travels");
+            check(v.restoreState(doubleJump) && v.flightsInTheAir() == 0,
+                  "draughts: restoring a save clears the air");
+
+            jump(&v);
+            check(undo != nullptr, "draughts: the view offers Undo");
+            if (undo != nullptr)
+                undo->trigger();
+            check(v.flightsInTheAir() == 0, "draughts: undo takes the travel back with the move");
+
+            v.restoreState(doubleJump);
+            jump(&v);
+            // The reply is the computer's, but a press still lands the jumper:
+            // it is hidden at its square until it does.
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 0, "draughts: a press lands the piece in the air");
+
+            v.restoreState(doubleJump);
+            jump(&v);
+            check(newGame != nullptr, "draughts: the view offers New Game");
+            if (newGame != nullptr)
+                newGame->trigger();
+            check(v.flightsInTheAir() == 0, "draughts: a new game clears the air");
+
+            v.restoreState(doubleJump);
+            jump(&v);
+            v.deactivate();
+            check(v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                  "draughts: leaving the game clears the air and stops the timer");
         }
 
         int freecellTries = 0;

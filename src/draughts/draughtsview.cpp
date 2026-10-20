@@ -102,6 +102,7 @@ void DraughtsView::newGame()
 {
     m_resumed = false;
     abandonSearch();
+    clearFlights();
     m_board.reset();
     m_toMove = Side::Red;
     m_human = Side::Red;
@@ -124,6 +125,7 @@ void DraughtsView::undo()
     // Before GHUB-0047 this refused while the engine was thinking, because the
     // window was frozen and the player could not have pressed it. Now they can.
     abandonSearch();
+    clearFlights();
     // Step back to the player's own turn, so one undo takes back the reply too.
     while (!m_history.empty()) {
         const Snapshot s = m_history.back();
@@ -152,6 +154,9 @@ void DraughtsView::deactivate()
     // where it stands, and both levels stay put until activate() picks them up.
     m_turnFades = false;
     m_turnTimer->stop();
+    // A move in the air is a QTimer too (GHUB-0046); it lands rather than
+    // freezes.
+    clearFlights();
 }
 
 void DraughtsView::activate()
@@ -252,7 +257,9 @@ void DraughtsView::engineMoveReady(const SearchResult& result)
         return;
     }
 
+    const DraughtsBoard before = m_board;
     m_board.apply(move);
+    launchMove(move, before);
     m_lastMove = move;
     Sound::instance().play(move.isCapture() ? Sound::kDiscFlip : Sound::kDiscPlace);
     m_toMove = other(m_toMove);
@@ -484,42 +491,64 @@ void DraughtsView::paintEvent(QPaintEvent*)
                           cell, cell));
     }
 
+    const auto paintPieceAt = [&](QPointF centre, Piece piece) {
+        const double radius = cell * 0.38;
+        const QColor face = belongsTo(piece, Side::Red) ? kRedPiece : kWhitePiece;
+
+        Theme::paintContactShadow(p, centre, radius);
+
+        QRadialGradient g(centre - QPointF(radius * 0.3, radius * 0.35), radius * 1.7);
+        g.setColorAt(0.0, face.lighter(135));
+        g.setColorAt(1.0, face.darker(130));
+        p.setBrush(g);
+        p.setPen(QPen(QColor(0, 0, 0, 70), 1));
+        p.drawEllipse(centre, radius, radius);
+
+        // A ridge, so a draught reads as a stacked counter.
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(0, 0, 0, 45), std::max(1.0, cell * 0.02)));
+        p.drawEllipse(centre, radius * 0.78, radius * 0.78);
+
+        if (isKing(piece)) {
+            // A crown for a king: a simple gold band and points.
+            p.setPen(QPen(Theme::kGold, std::max(1.5, cell * 0.05)));
+            const double cr = radius * 0.44;
+            QPolygonF crown;
+            crown << centre + QPointF(-cr, cr * 0.5) << centre + QPointF(-cr, -cr * 0.3)
+                  << centre + QPointF(-cr * 0.5, cr * 0.1) << centre + QPointF(0, -cr * 0.7)
+                  << centre + QPointF(cr * 0.5, cr * 0.1) << centre + QPointF(cr, -cr * 0.3)
+                  << centre + QPointF(cr, cr * 0.5);
+            p.drawPolyline(crown);
+        }
+    };
+    const auto centreAt = [&](QPointF square) {
+        return QPointF(r.x() + (square.x() + 0.5) * cell, r.y() + (square.y() + 0.5) * cell);
+    };
+    const auto arriving = [this](int row, int col) {
+        return std::any_of(m_flights.begin(), m_flights.end(), [&](const cardflight::Flight& f) {
+            return f.destination == row * kBoardSize + col;
+        });
+    };
+
     for (int row = 0; row < kBoardSize; ++row) {
         for (int col = 0; col < kBoardSize; ++col) {
             const Piece piece = m_board.at(row, col);
-            if (piece == Piece::Empty)
-                continue;
-
-            const QPointF centre(r.x() + (col + 0.5) * cell, r.y() + (row + 0.5) * cell);
-            const double radius = cell * 0.38;
-            const QColor face = belongsTo(piece, Side::Red) ? kRedPiece : kWhitePiece;
-
-            Theme::paintContactShadow(p, centre, radius);
-
-            QRadialGradient g(centre - QPointF(radius * 0.3, radius * 0.35), radius * 1.7);
-            g.setColorAt(0.0, face.lighter(135));
-            g.setColorAt(1.0, face.darker(130));
-            p.setBrush(g);
-            p.setPen(QPen(QColor(0, 0, 0, 70), 1));
-            p.drawEllipse(centre, radius, radius);
-
-            // A ridge, so a draught reads as a stacked counter.
-            p.setBrush(Qt::NoBrush);
-            p.setPen(QPen(QColor(0, 0, 0, 45), std::max(1.0, cell * 0.02)));
-            p.drawEllipse(centre, radius * 0.78, radius * 0.78);
-
-            if (isKing(piece)) {
-                // A crown for a king: a simple gold band and points.
-                p.setPen(QPen(Theme::kGold, std::max(1.5, cell * 0.05)));
-                const double cr = radius * 0.44;
-                QPolygonF crown;
-                crown << centre + QPointF(-cr, cr * 0.5) << centre + QPointF(-cr, -cr * 0.3)
-                      << centre + QPointF(-cr * 0.5, cr * 0.1) << centre + QPointF(0, -cr * 0.7)
-                      << centre + QPointF(cr * 0.5, cr * 0.1) << centre + QPointF(cr, -cr * 0.3)
-                      << centre + QPointF(cr, cr * 0.5);
-                p.drawPolyline(crown);
-            }
+            if (piece != Piece::Empty && !arriving(row, col))
+                paintPieceAt(centreAt(QPointF(col, row)), piece);
         }
+    }
+    // The men a jump took, until the jumper has passed over each.
+    const int stillShown = takenPiecesShown();
+    for (int i = int(m_taken.size()) - stillShown; i < int(m_taken.size()); ++i) {
+        const Square s = m_taken[std::size_t(i)].first;
+        paintPieceAt(centreAt(QPointF(s.col, s.row)), m_taken[std::size_t(i)].second);
+    }
+    // Over the board, the one leg under way.
+    for (const cardflight::Flight& f : m_flights) {
+        if (f.delay > f.appearsWithin)
+            continue;
+        const Square end { f.destination / kBoardSize, f.destination % kBoardSize };
+        paintPieceAt(centreAt(cardflight::positionOf(f)), m_board.at(end.row, end.col));
     }
 
     // The keyboard cursor, over the pieces: it says where the next Space lands,
@@ -568,7 +597,9 @@ void DraughtsView::playMove(const DraughtsMove& m)
 {
     m_history.push_back({ m_board, m_toMove, m_lastMove });
     m_undoAction->setEnabled(true);
+    const DraughtsBoard before = m_board;
     m_board.apply(m);
+    launchMove(m, before);
     m_lastMove = m;
     Sound::instance().play(m.isCapture() ? Sound::kDiscFlip : Sound::kDiscPlace);
     m_selected.reset();
@@ -577,6 +608,61 @@ void DraughtsView::playMove(const DraughtsMove& m)
     m_chooseStep = -1;
     m_toMove = other(m_toMove);
     advance();
+}
+
+void DraughtsView::launchMove(const DraughtsMove& m, const DraughtsBoard& before)
+{
+    // A reply played before the last move landed: that one lands now.
+    clearFlights();
+
+    const Square end = m.destination();
+    Square from = m.from;
+    for (std::size_t i = 0; i < m.steps.size(); ++i) {
+        cardflight::Flight f;
+        f.from = QPointF(from.col, from.row);
+        f.to = QPointF(m.steps[i].col, m.steps[i].row);
+        f.speed = 2.2;
+        // Each leg sets off as the one before it lands, and is not drawn
+        // until then, so the piece is never on screen twice.
+        f.delay = double(i) / f.speed;
+        f.appearsWithin = 0.0;
+        f.destination = end.row * kBoardSize + end.col;
+        m_flights.push_back(f);
+        from = m.steps[i];
+    }
+    m_legs = int(m_flights.size());
+    for (const Square& s : m.captured)
+        m_taken.emplace_back(s, before.at(s.row, s.col));
+
+    if (m_flightTimer == nullptr) {
+        m_flightTimer = new QTimer(this);
+        // 16ms is the frame budget the bench in gameshub_uitest measures.
+        m_flightTimer->setInterval(16);
+        connect(m_flightTimer, &QTimer::timeout, this, [this] {
+            if (!cardflight::advance(m_flights, 0.016))
+                clearFlights();
+            update();
+        });
+    }
+    if (!m_flights.empty())
+        m_flightTimer->start();
+}
+
+void DraughtsView::clearFlights()
+{
+    m_flights.clear();
+    m_taken.clear();
+    m_legs = 0;
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    update();
+}
+
+int DraughtsView::takenPiecesShown() const
+{
+    // A jumped piece goes as the leg that jumps it lands.
+    const int landed = m_legs - int(m_flights.size());
+    return std::max(0, int(m_taken.size()) - landed);
 }
 
 void DraughtsView::mousePressEvent(QMouseEvent* event)
@@ -628,6 +714,9 @@ void DraughtsView::keyPressEvent(QKeyEvent* event)
 
 void DraughtsView::pressSquare(Square pressed)
 {
+    // First, and whoever's turn it is: the piece arriving here is hidden until
+    // it lands, and must not be lifted unseen.
+    clearFlights();
     if (m_finished || m_thinking || m_toMove != m_human)
         return;
 
@@ -832,6 +921,7 @@ bool DraughtsView::restoreState(const QByteArray& blob)
     m_toMove = Side(toMove);
     m_human = Side(human);
     abandonSearch();
+    clearFlights();
     m_level = DraughtsLevel(level);
     m_selected.reset();
     m_selectedMoves.clear();
