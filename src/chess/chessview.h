@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cards/cardflight.h"
 #include "chessai.h"
 #include "chessboard.h"
 #include "gameview.h"
@@ -8,6 +9,7 @@
 #include <QTimer>
 
 #include <optional>
+#include <utility>
 #include <vector>
 
 class ChessView : public GameView
@@ -39,6 +41,16 @@ public:
     // the result box is modal, and a modal dialog in an offscreen test hangs
     // rather than fails -- so the choice is checked here instead.
     static const char* jingleFor(chess::Result result, chess::Colour human);
+
+    // Whether a moved piece is still sliding to its square, which no rendered
+    // picture can answer -- see KlondikeView::flightsInTheAir. A castle slides
+    // two.
+    int flightsInTheAir() const { return int(m_flights.size()); }
+    // Whether the piece a capture took is still drawn where it stood, waiting
+    // for the taker to arrive. For the tests, for the same reason.
+    bool showsTakenPiece() const { return m_taken.has_value(); }
+    // A piece in the air is what settle() in the UI test waits on (GHUB-0205).
+    bool hasPendingAnimation() const override { return !m_flights.empty(); }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -112,6 +124,17 @@ private:
     // to be asked which piece they want.
     bool choosePromotion(chess::PieceType& out);
 
+    // GHUB-0065. The piece `move` moved slides from its old square to its new
+    // one, and a castle's rook beside it; `before` is the board the move was
+    // played on, which is the only place the taken piece is still recorded.
+    // Called after the move is played, so the board is already the truth and
+    // the slide is only the picture catching up with it.
+    void launchMove(const chess::Move& move, const chess::Board& before);
+    // Lands every slide at once. Anything that changes the position calls it,
+    // and so does a press: the arriving piece is hidden at its square until
+    // it lands, and must never be picked up unseen.
+    void clearFlights();
+
     QList<QAction*> m_actions;
     QAction* m_undoAction = nullptr;
 
@@ -148,4 +171,14 @@ private:
     TurnLightState m_turn;
     bool m_turnFades = false;
     QTimer* m_turnTimer = nullptr;
+
+    // Measured in squares, (column, row), not pixels: the board can resize or
+    // the legibility switch move it mid-slide, and a slide in squares still
+    // lands on its square. `destination` is row * kFiles + column. The Card
+    // goes unused -- what slides is whatever piece now stands there.
+    std::vector<cardflight::Flight> m_flights;
+    // The piece the move took, drawn where it stood until the taker arrives,
+    // so the player sees what was taken rather than a square already empty.
+    std::optional<std::pair<chess::Square, chess::Piece>> m_taken;
+    QTimer* m_flightTimer = nullptr;
 };

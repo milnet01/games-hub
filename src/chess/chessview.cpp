@@ -142,6 +142,7 @@ void ChessView::buildActions()
 void ChessView::newGame()
 {
     abandonSearch();
+    clearFlights();
     m_game.reset();
     m_human = Colour::White;
     m_selected.reset();
@@ -162,6 +163,7 @@ void ChessView::undo()
     // they can, and waiting for a search whose board is about to be thrown away
     // would be the one thing the roadmap said not to do.
     abandonSearch();
+    clearFlights();
     // Step back to the player's own turn, so one undo takes back the reply too.
     while (m_game.canUndo()) {
         m_game.undo();
@@ -187,6 +189,8 @@ void ChessView::deactivate()
     // where it stands, and both levels stay put until activate() picks them up.
     m_turnFades = false;
     m_turnTimer->stop();
+    // A slide is a QTimer too (GHUB-0046); it lands rather than freezes.
+    clearFlights();
 }
 
 void ChessView::activate()
@@ -287,6 +291,7 @@ bool ChessView::restoreState(const QByteArray& blob)
 
     m_game = game;
     abandonSearch();
+    clearFlights();
     m_level = chess::Level(std::clamp<int>(level, 0, 2));
     const QString wanted = QStringLiteral("chess-level-%1").arg(int(m_level)); // untranslated: an object name
     for (QAction* a : m_actions) {
@@ -397,7 +402,9 @@ void ChessView::engineMoveReady(const SearchResult& result)
 
     const bool capture = !m_game.board().at(move.to).empty() || move.enPassant;
     const QString text = QString::fromStdString(m_game.board().notation(move));
+    const Board before = m_game.board();
     m_game.play(move);
+    launchMove(move, before);
     m_lastMove = move;
     Sound::instance().play(capture ? Sound::kDiscFlip : Sound::kDiscPlace);
 
@@ -409,6 +416,56 @@ void ChessView::engineMoveReady(const SearchResult& result)
     // the next one.
     advance(m_game.board().inCheck() ? tr("Computer played %1 — check!").arg(text)
                                      : tr("Computer played %1.").arg(text));
+}
+
+void ChessView::launchMove(const Move& move, const Board& before)
+{
+    // A reply played before the last slide landed: that one lands now, so two
+    // moves are never in the air at once.
+    clearFlights();
+
+    const auto slide = [this](Square from, Square to) {
+        cardflight::Flight f;
+        f.from = QPointF(from.col, from.row);
+        f.to = QPointF(to.col, to.row);
+        f.speed = 2.2;
+        f.destination = to.row * kFiles + to.col;
+        m_flights.push_back(f);
+    };
+    slide(move.from, move.to);
+    if (move.castle) {
+        // The king has gone two files; the rook comes round to the square it
+        // crossed.
+        const bool kingside = move.to.col > move.from.col;
+        slide({ move.from.row, kingside ? kFiles - 1 : 0 },
+              { move.from.row, kingside ? move.to.col - 1 : move.to.col + 1 });
+    }
+
+    // En passant takes a pawn beside the destination, not on it.
+    const Square takenAt = move.enPassant ? Square { move.from.row, move.to.col } : move.to;
+    if (!before.at(takenAt).empty())
+        m_taken = std::make_pair(takenAt, before.at(takenAt));
+
+    if (m_flightTimer == nullptr) {
+        m_flightTimer = new QTimer(this);
+        // 16ms is the frame budget the bench in gameshub_uitest measures.
+        m_flightTimer->setInterval(16);
+        connect(m_flightTimer, &QTimer::timeout, this, [this] {
+            if (!cardflight::advance(m_flights, 0.016))
+                clearFlights();
+            update();
+        });
+    }
+    m_flightTimer->start();
+}
+
+void ChessView::clearFlights()
+{
+    m_flights.clear();
+    m_taken.reset();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    update();
 }
 
 bool ChessView::choosePromotion(PieceType& out)
@@ -689,15 +746,30 @@ void ChessView::paintEvent(QPaintEvent*)
         p.drawRect(squareRect(*m_selected));
     }
 
+    const auto paintPieceIn = [&](const QRectF& box, const Piece& piece) {
+        ChessArt::paintPiece(p, box.adjusted(cell * 0.06, cell * 0.04, -cell * 0.06, -cell * 0.02),
+                             piece.type, piece.colour);
+    };
+    const auto arriving = [this](int row, int col) {
+        return std::any_of(m_flights.begin(), m_flights.end(), [&](const cardflight::Flight& f) {
+            return f.destination == row * kFiles + col;
+        });
+    };
     for (int row = 0; row < kRanks; ++row) {
         for (int col = 0; col < kFiles; ++col) {
             const Piece piece = m_game.board().at(row, col);
-            if (piece.empty())
-                continue;
-            ChessArt::paintPiece(p, squareRect({ row, col }).adjusted(cell * 0.06, cell * 0.04,
-                                                                     -cell * 0.06, -cell * 0.02),
-                                 piece.type, piece.colour);
+            if (!piece.empty() && !arriving(row, col))
+                paintPieceIn(squareRect({ row, col }), piece);
         }
+    }
+    if (m_taken)
+        paintPieceIn(squareRect(m_taken->first), m_taken->second);
+    // Over the board, so a slide crossing other pieces is never hidden by one.
+    for (const cardflight::Flight& f : m_flights) {
+        const QPointF at = cardflight::positionOf(f);
+        const Square dest { f.destination / kFiles, f.destination % kFiles };
+        paintPieceIn(QRectF(r.x() + at.x() * cell, r.y() + at.y() * cell, cell, cell),
+                     m_game.board().at(dest));
     }
 
     // The keyboard cursor, over the pieces: it says where the next Space lands,
@@ -756,6 +828,9 @@ void ChessView::keyPressEvent(QKeyEvent* event)
 
 void ChessView::pressSquare(Square pressed)
 {
+    // First, and whoever's turn it is: the piece arriving here is hidden until
+    // it lands, and must not be lifted unseen.
+    clearFlights();
     if (m_finished || m_thinking || m_game.toMove() != m_human)
         return;
 
@@ -777,7 +852,9 @@ void ChessView::pressSquare(Square pressed)
             }
 
             const bool capture = !m_game.board().at(chosen.to).empty() || chosen.enPassant;
+            const Board before = m_game.board();
             m_game.play(chosen);
+            launchMove(chosen, before);
             m_lastMove = chosen;
             m_undoAction->setEnabled(true);
             Sound::instance().play(capture ? Sound::kDiscFlip : Sound::kDiscPlace);

@@ -60,6 +60,7 @@
 #include <QTranslator>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <vector>
 #include <functional>
@@ -4552,6 +4553,8 @@ int main(int argc, char* argv[])
         // The engine has replied when the turn light is back on you.
         check(pumpUntil([&chess] { return chess.turnLight().seat == 0; }, 20000),
               "chess: the turn comes back to you");
+        // The reply slides to its square (GHUB-0065); photograph it landed.
+        settle(&chess, 5000);
         const QImage replied = renderOf(&chess);
 
         check(selected != replied, "chess: playing a move redraws the board");
@@ -6610,6 +6613,102 @@ int main(int argc, char* argv[])
             v.deactivate();
             check(v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
                   "pyramid: leaving the game clears the air and stops the timer");
+        }
+
+        // Chess moves a piece rather than a card, but the question is the same:
+        // the computer's reply used to appear between one frame and the next.
+        // Played from saves, so every position is the human's turn and no
+        // reply is in flight when a check counts.
+        {
+            // (from row, from col, to row, to col); row 0 is rank 8.
+            using Ply = std::array<int, 4>;
+            const auto chessSave = [](const std::vector<Ply>& plies) {
+                QByteArray blob;
+                QDataStream out(&blob, QIODevice::WriteOnly);
+                out.setVersion(QDataStream::Qt_6_0);
+                out << quint32(2) << qint32(0) << qint32(plies.size());
+                for (const Ply& p : plies)
+                    out << qint8(p[0]) << qint8(p[1]) << qint8(p[2]) << qint8(p[3]) << qint8(0);
+                out << qint8(7) << qint8(4); // the cursor on White's king
+                return blob;
+            };
+            // 1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5: White may castle short.
+            const QByteArray readyToCastle = chessSave({ { 6, 4, 4, 4 }, { 1, 4, 3, 4 },
+                                                         { 7, 6, 5, 5 }, { 0, 1, 2, 2 },
+                                                         { 7, 5, 4, 2 }, { 0, 5, 3, 2 } });
+            // 1. e4 d5: the e-pawn can take on d5. The cursor stays on e1.
+            const QByteArray readyToTake = chessSave({ { 6, 4, 4, 4 }, { 1, 3, 3, 3 } });
+            const auto castle = [](ChessView* view) {
+                pressKey(view, Qt::Key_Space);
+                pressKey(view, Qt::Key_Right);
+                pressKey(view, Qt::Key_Right);
+                pressKey(view, Qt::Key_Space);
+            };
+
+            ChessView v;
+            v.resize(700, 700);
+            v.show();
+            pump(20);
+            QAction* undo = nullptr;
+            QAction* newGame = nullptr;
+            for (QAction* action : v.gameActions()) {
+                if (action->shortcut() == QKeySequence(QKeySequence::Undo))
+                    undo = action;
+                if (action->shortcut() == QKeySequence(QKeySequence::New))
+                    newGame = action;
+            }
+
+            check(v.restoreState(readyToCastle), "chess: the castling position loads");
+            castle(&v);
+            check(v.flightsInTheAir() == 2, "chess: a castle slides the king and the rook");
+            check(settle(&v, 5000) && v.flightsInTheAir() == 0,
+                  "chess: both pieces land");
+
+            v.restoreState(readyToCastle);
+            castle(&v);
+            check(v.flightsInTheAir() == 2, "chess: the reloaded castle slides");
+            check(v.restoreState(readyToCastle) && v.flightsInTheAir() == 0,
+                  "chess: restoring a save clears the air");
+            castle(&v);
+            check(undo != nullptr, "chess: the view offers Undo");
+            if (undo != nullptr)
+                undo->trigger();
+            check(v.flightsInTheAir() == 0, "chess: undo takes the slide back with the move");
+
+            v.restoreState(readyToCastle);
+            castle(&v);
+            // A press while the reply is the computer's still lands the slide:
+            // the arriving piece is hidden at its square until it does.
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 0, "chess: a press lands the piece in the air");
+
+            v.restoreState(readyToCastle);
+            castle(&v);
+            check(newGame != nullptr, "chess: the view offers New Game");
+            if (newGame != nullptr)
+                newGame->trigger();
+            check(v.flightsInTheAir() == 0, "chess: a new game clears the air");
+
+            // e4 takes d5: the pawn slides, and the pawn it took stays on its
+            // square until the taker arrives.
+            v.restoreState(readyToTake);
+            pressKey(&v, Qt::Key_Up);
+            pressKey(&v, Qt::Key_Up);
+            pressKey(&v, Qt::Key_Up);
+            pressKey(&v, Qt::Key_Space);
+            pressKey(&v, Qt::Key_Up);
+            pressKey(&v, Qt::Key_Left);
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 1 && v.showsTakenPiece(),
+                  "chess: a capture slides, and the taken pawn waits for it");
+            check(settle(&v, 5000) && !v.showsTakenPiece(),
+                  "chess: the taken pawn goes when the taker lands");
+
+            v.restoreState(readyToCastle);
+            castle(&v);
+            v.deactivate();
+            check(v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                  "chess: leaving the game clears the air and stops the timer");
         }
 
         int freecellTries = 0;
