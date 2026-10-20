@@ -40,7 +40,7 @@ PyramidView::PyramidView(QWidget* parent)
     // Without it setFocus() does nothing and no key ever arrives (GHUB-0168).
     setFocusPolicy(Qt::StrongFocus);
     buildActions();
-    newGame();
+    dealTable();
 }
 
 void PyramidView::buildActions()
@@ -58,6 +58,12 @@ void PyramidView::buildActions()
 }
 
 void PyramidView::newGame()
+{
+    dealTable();
+    launchDeal();
+}
+
+void PyramidView::dealTable()
 {
     m_resumed = false;
     clearFlights();
@@ -379,7 +385,29 @@ void PyramidView::launchTaken(const std::vector<QRectF>& from, const std::vector
         f.speed = 2.2;
         m_flights.push_back(f);
     }
+    startFlights();
+}
 
+void PyramidView::launchDeal()
+{
+    const QPointF from = stockRect().topLeft();
+    for (int row = 0; row < kRows; ++row) {
+        for (int i = 0; i <= row; ++i) {
+            const int slot = slotIndex(row, i);
+            cardflight::Flight f;
+            f.card = m_table.pyramid()[std::size_t(slot)].card;
+            f.from = from;
+            f.to = pyramidRect(row, i).topLeft();
+            f.delay = slot * cardflight::kStagger;
+            f.destination = slot;
+            m_flights.push_back(f);
+        }
+    }
+    startFlights();
+}
+
+void PyramidView::startFlights()
+{
     if (m_flightTimer == nullptr) {
         m_flightTimer = new QTimer(this);
         // 16ms is the frame budget the bench in gameshub_uitest measures.
@@ -392,6 +420,18 @@ void PyramidView::launchTaken(const std::vector<QRectF>& from, const std::vector
     }
     if (!m_flights.empty())
         m_flightTimer->start();
+}
+
+void PyramidView::landDealtCards()
+{
+    const auto dealt = std::remove_if(m_flights.begin(), m_flights.end(),
+                                      [](const cardflight::Flight& f) { return f.destination >= 0; });
+    if (dealt == m_flights.end())
+        return;
+    m_flights.erase(dealt, m_flights.end());
+    if (m_flights.empty() && m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    update();
 }
 
 void PyramidView::clearFlights()
@@ -454,12 +494,17 @@ void PyramidView::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     Theme::paintFelt(p, rect(), Theme::kFeltTealTop, Theme::kFeltTealBottom);
+    // One match per flight; see cardflight::suppressAt.
+    m_flightConsumed.assign(m_flights.size(), 0);
 
     // Top row first, so lower cards overlap the ones they cover.
     for (int row = 0; row < kRows; ++row) {
         for (int i = 0; i <= row; ++i) {
             const int slot = slotIndex(row, i);
-            if (m_table.pyramid()[std::size_t(slot)].removed)
+            // A dealt card still in the air is not on its slot yet.
+            if (m_table.pyramid()[std::size_t(slot)].removed
+                || cardflight::suppressAt(m_flights, m_flightConsumed, slot,
+                                          m_table.pyramid()[std::size_t(slot)].card))
                 continue;
 
             const QRectF r = pyramidRect(row, i);
@@ -646,6 +691,7 @@ void PyramidView::resetCursor()
 
 void PyramidView::pressAtCursor()
 {
+    landDealtCards();
     if (m_won)
         return;
     if (m_cursorRow == kPileRow) {

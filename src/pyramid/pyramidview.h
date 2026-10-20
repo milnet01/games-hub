@@ -65,7 +65,11 @@ private:
     using Slot = PyramidTable::Slot;
 
     void buildActions();
+    // A deal the player asked for: the table, then the cards flying to it
+    // (GHUB-0065). The deal made when the view is built is dealTable() alone,
+    // because nobody asked for it and the view has no size yet.
     void newGame();
+    void dealTable();
     void undo();
 
     double cardWidth() const;
@@ -93,6 +97,14 @@ private:
     // from where it lay. Nothing on the surface receives it, so nothing waits
     // for it to land and no press has to land it first.
     void launchTaken(const std::vector<QRectF>& from, const std::vector<Card>& cards);
+    // The opening deal, from the stock to the pyramid a row at a time from
+    // the top, as a dealer lays it. A dealt card's destination is its slot,
+    // which is how the pyramid hides it until it lands; a taken card's is -1.
+    void launchDeal();
+    void startFlights();
+    // Puts every dealt card in the air down on its slot, so a press never
+    // picks up a card the pyramid is still hiding. Taken cards keep flying.
+    void landDealtCards();
     void clearFlights();
     void checkEnd();
     void refresh(const QString& message = {});
@@ -115,6 +127,9 @@ private:
     PyramidTable m_table;
 
     std::vector<cardflight::Flight> m_flights;
+    // Per-repaint scratch for cardflight::suppressAt. Cleared at the top of
+    // paintEvent, never read outside it.
+    std::vector<char> m_flightConsumed;
     QTimer* m_flightTimer = nullptr;
 
     bool m_hasSelection = false;
