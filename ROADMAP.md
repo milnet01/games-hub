@@ -8765,13 +8765,15 @@ collection past twenty games. Owner's call, 2026-10-20.
   the shared deck in cards/card.* and cards/cardart.* already draws
   everything a poker table shows.
 
-  VARIANT NOT YET CHOSEN, and it decides most of the work. Five-card draw
+  ALL THREE VARIANTS, and the player chooses. Owner's call, 2026-10-20:
+    "Offer all versions please and leave it to the player to choose." Five-card draw
   is the smallest honest poker: one draw, two betting rounds, no shared
   cards, and it is the variant most people learn first. Texas hold'em is
   what most people now mean by the word, needs community cards and four
   betting rounds, and has far more written about its strategy for an AI to
-  be measured against. Seven-card stud sits between them. Pick one and
-  ship it rather than building a variant framework nobody asked for.
+  be measured against. Seven-card stud sits between them. The betting,
+    the pot and the hand evaluator are shared; what differs is the deal
+    and the number of betting rounds.
 
   What is genuinely new, and why this is bigger than another solitaire.
   None of the fourteen games has money in it, so a chip stack, a pot, side
@@ -8804,9 +8806,12 @@ collection past twenty games. Owner's call, 2026-10-20.
   position plus a betting history, and the pack check that cardcodec's
   matchesPack does for the solitaires applies here too.
 
-  Open question for the owner beyond the variant: play money only, with a
-  stack that resets, or a running bankroll across sessions the way best
-  scores persist?
+  Chips: BOTH, owner's call 2026-10-20. A game whose stacks reset, and a
+    running bankroll kept across sessions. The owner added a tournament:
+    "have a tournament version where you have a select number of starting
+    individuals and each new table gets harder and harder as you
+    progress." How the tournament and the bankroll relate is not yet
+    settled; ask when this item is designed.
   **Layman:** A poker table against three computer opponents, with chips to bet and a hand that says in words what you are holding.
   Kind: feature.
   Source: user-request-2026-08-19.
