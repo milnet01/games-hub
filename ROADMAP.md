@@ -8278,6 +8278,16 @@ path, so they land together.
 
   Still open: Klondike's stock and waste, Pyramid's matched pairs, the
   board games, and the opening deals.
+  Progress (2026-10-20): Klondike's stock and waste, commit 1ef8bd1. A
+  drawn card flies face up from the stock to the waste (Draw 3's three
+  leave staggered), and a recycled waste goes back to the stock as a
+  card back. The waste shows the card beneath until a drawn card lands;
+  the stock keeps its recycle marker until the waste arrives. Any press
+  lands those flights first (landStockCards), so a hidden card is never
+  lifted or dealt unseen. restoreState now clears flights.
+
+  Still open: Pyramid's matched pairs, the board games (Chess, Reversi,
+  Draughts), and the opening deals.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
