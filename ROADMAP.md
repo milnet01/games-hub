@@ -8304,6 +8304,13 @@ path, so they land together.
   a restore and leaving the game clear the air.
 
   Still open: Reversi, Draughts, and the opening deals.
+  Progress (2026-10-20): Reversi, commit 159bb85. Each captured disc
+  turns over on its axis, old colour to edge-on to new. The discs
+  nearest the one placed turn first, the rest following outward along
+  each line. New Game, Undo, a restore and leaving the game finish the
+  turning.
+
+  Still open: Draughts and the opening deals.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
@@ -9347,6 +9354,12 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   budget. gameshub_uitest run directly passed it twice straight after.
   Not yet known whether the hand ended, a click missed, or the
   computer's seats ran long. Find which before touching a budget.
+  Second sighting, same day: failed again in a full serial ctest run
+  (load near 6), then passed twice under `ctest -R '^uitest$'` and
+  three times run directly. The deal is unseeded, so each run plays a
+  different hand (stock started at 58, 56 and 58). Leading guess,
+  unproven: some deals end the hand before your third turn. Seeding
+  the deal would make a failure reproducible.
   **Layman:** One Canasta test failed once while the whole suite ran, then passed twice when run alone.
   Kind: test.
   Source: in-session-2026-10-20.
