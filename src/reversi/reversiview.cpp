@@ -20,6 +20,9 @@
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <numbers>
 
 namespace {
 constexpr QColor kGrid { 0x0d, 0x3d, 0x27 };
@@ -118,6 +121,9 @@ void ReversiView::deactivate()
     // where it stands, and both levels stay put until activate() picks them up.
     m_turnFades = false;
     m_turnTimer->stop();
+    // A turning disc is a QTimer too (GHUB-0046); it finishes rather than
+    // freezes.
+    clearFlights();
 }
 
 void ReversiView::activate()
@@ -138,6 +144,7 @@ void ReversiView::newGame()
 {
     m_resumed = false;
     abandonSearch();
+    clearFlights();
     m_board.reset();
     m_passNotice.clear();
     m_toMove = Player::Black;
@@ -157,6 +164,7 @@ void ReversiView::undo()
     // Before GHUB-0047 this refused while the engine was thinking, because the
     // window was frozen and the player could not have pressed it. Now they can.
     abandonSearch();
+    clearFlights();
 
     // Step back to the last position where it was the player's turn, so one
     // undo rewinds both their move and the computer's reply.
@@ -278,11 +286,57 @@ void ReversiView::engineMoveReady(const SearchResult& result)
     }
 
     m_passNotice.clear();
+    const Board before = m_board;
     m_board.play(m_toMove, *m);
+    launchFlips(*m, before);
     Sound::instance().play(Sound::kDiscPlace);
     m_lastMove = m;
     m_toMove = opponent(m_toMove);
     advance();
+}
+
+void ReversiView::launchFlips(Move m, const Board& before)
+{
+    // A reply played before the last turn finished: that one finishes now.
+    clearFlights();
+
+    for (int row = 0; row < kSize; ++row) {
+        for (int col = 0; col < kSize; ++col) {
+            const Cell was = before.at(row, col);
+            if (was == Cell::Empty || was == m_board.at(row, col))
+                continue;
+            // Every captured disc lies on a straight line from the one placed,
+            // so its distance in squares is its place in that line.
+            const int distance = std::max(std::abs(row - m.row), std::abs(col - m.col));
+            cardflight::Flight f;
+            f.destination = row * kSize + col;
+            f.delay = (distance - 1) * 0.09;
+            f.speed = 3.0;
+            m_flights.push_back(f);
+        }
+    }
+    if (m_flights.empty())
+        return;
+
+    if (m_flightTimer == nullptr) {
+        m_flightTimer = new QTimer(this);
+        // 16ms is the frame budget the bench in gameshub_uitest measures.
+        m_flightTimer->setInterval(16);
+        connect(m_flightTimer, &QTimer::timeout, this, [this] {
+            if (!cardflight::advance(m_flights, 0.016))
+                m_flightTimer->stop();
+            update();
+        });
+    }
+    m_flightTimer->start();
+}
+
+void ReversiView::clearFlights()
+{
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    update();
 }
 
 void ReversiView::refresh(const QString& message)
@@ -475,7 +529,25 @@ void ReversiView::paintEvent(QPaintEvent*)
                 continue;
             }
 
-            const QColor face = (c == Cell::Black) ? kBlackDisc : kWhiteDisc;
+            // A captured disc turning over shows its old colour until it is
+            // edge-on, then its new one, narrowing and widening as a counter
+            // flipped on its axis does. One still waiting its turn is the old
+            // colour, full width.
+            Cell shown = c;
+            double across = 1.0;
+            const auto turning = std::find_if(m_flights.begin(), m_flights.end(),
+                                              [&](const cardflight::Flight& f) {
+                                                  return f.destination == row * kSize + col;
+                                              });
+            if (turning != m_flights.end()) {
+                const double t = std::clamp(turning->progress, 0.0, 1.0);
+                if (t < 0.5)
+                    shown = (c == Cell::Black) ? Cell::White : Cell::Black;
+                // Never quite zero: an edge-on disc is still a disc on its square.
+                across = std::max(0.08, std::abs(std::cos(t * std::numbers::pi)));
+            }
+
+            const QColor face = (shown == Cell::Black) ? kBlackDisc : kWhiteDisc;
             const double radius = cell * 0.40;
 
             // Contact shadow — it is what makes the counter sit on the board
@@ -484,11 +556,11 @@ void ReversiView::paintEvent(QPaintEvent*)
 
             // A soft radial fill reads as a physical counter rather than a dot.
             QRadialGradient g(centre - QPointF(radius * 0.3, radius * 0.35), radius * 1.6);
-            g.setColorAt(0.0, face.lighter(c == Cell::Black ? 260 : 108));
-            g.setColorAt(1.0, face.darker(c == Cell::Black ? 130 : 118));
+            g.setColorAt(0.0, face.lighter(shown == Cell::Black ? 260 : 108));
+            g.setColorAt(1.0, face.darker(shown == Cell::Black ? 130 : 118));
             p.setBrush(g);
             p.setPen(QPen(QColor(0, 0, 0, 60), 1));
-            p.drawEllipse(centre, radius, radius);
+            p.drawEllipse(centre, radius * across, radius);
         }
     }
 
@@ -559,7 +631,9 @@ void ReversiView::playAt(Move m)
     m_undoAction->setEnabled(true);
     m_passNotice.clear();
 
+    const Board before = m_board;
     const int flipped = m_board.play(m_human, m);
+    launchFlips(m, before);
     Sound::instance().play(Sound::kDiscPlace);
     if (flipped > 2)
         Sound::instance().play(Sound::kDiscFlip);
@@ -651,6 +725,7 @@ bool ReversiView::restoreState(const QByteArray& blob)
     m_toMove = Player(toMove);
     m_human = Player(human);
     abandonSearch();
+    clearFlights();
     m_difficulty = Difficulty(difficulty);
     m_lastMove = (hasLast == 1) ? std::optional<Move>(Move { lastRow, lastCol }) : std::nullopt;
     m_history.clear();

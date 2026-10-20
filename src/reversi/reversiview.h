@@ -2,6 +2,7 @@
 
 #include "ai.h"
 #include "board.h"
+#include "cards/cardflight.h"
 #include "gameview.h"
 
 #include <QFutureWatcher>
@@ -31,6 +32,12 @@ public:
     TurnLight turnLight() const override { return m_turn.value(); }
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
+
+    // How many captured discs are still turning over, which no rendered
+    // picture can answer -- see KlondikeView::flightsInTheAir.
+    int flightsInTheAir() const { return int(m_flights.size()); }
+    // A disc mid-turn is what settle() in the UI test waits on (GHUB-0205).
+    bool hasPendingAnimation() const override { return !m_flights.empty(); }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -74,6 +81,13 @@ private:
     QRectF turnBand(int seat) const;
     void stepTurnLight();
     std::optional<Move> cellAt(QPointF pos) const;
+
+    // GHUB-0065. Every disc `m` captured turns over, nearest first, so the
+    // eye can follow each line out from the disc just placed. `before` is the
+    // board the move was played on. Called after the move, so the board is
+    // already the truth and the turning is the picture catching up.
+    void launchFlips(Move m, const Board& before);
+    void clearFlights();
 
     struct Snapshot {
         Board board;
@@ -134,4 +148,11 @@ private:
     TurnLightState m_turn;
     bool m_turnFades = false;
     QTimer* m_turnTimer = nullptr;
+
+    // One per disc turning over. Only the timing is used: `destination` is
+    // row * kSize + column, and progress runs the turn from the old colour,
+    // edge-on at the half, to the new. Nothing moves, so nothing here depends
+    // on where the board is drawn.
+    std::vector<cardflight::Flight> m_flights;
+    QTimer* m_flightTimer = nullptr;
 };

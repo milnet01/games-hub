@@ -4787,6 +4787,9 @@ int main(int argc, char* argv[])
             clickAt(&reversiGame, cellCentre(&reversiGame, 2, 3), Qt::LeftButton); // a legal opening
             check(pumpUntil([&reversiGame] { return reversiGame.turnLight().seat == 0; }, 20000),
                   "reversiGame: the engine replies and the turn comes back to you");
+            // The reply's captured discs turn over (GHUB-0065); photograph them
+            // turned.
+            settle(&reversiGame, 5000);
             const QImage played = renderOf(&reversiGame);
             const QByteArray saved = reversiGame.saveState();
             check(!saved.isEmpty(), "reversiGame: a game in progress is worth saving");
@@ -6709,6 +6712,51 @@ int main(int argc, char* argv[])
             v.deactivate();
             check(v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
                   "chess: leaving the game clears the air and stops the timer");
+        }
+
+        // Reversi's captured discs used to change colour between one frame and
+        // the next. The cursor opens on one of Black's opening moves, so the
+        // first Space plays it, and it captures exactly one disc.
+        {
+            ReversiView v;
+            v.resize(700, 700);
+            v.show();
+            pump(20);
+            QAction* undo = nullptr;
+            QAction* newGame = nullptr;
+            for (QAction* action : v.gameActions()) {
+                if (action->shortcut() == QKeySequence(QKeySequence::Undo))
+                    undo = action;
+                if (action->shortcut() == QKeySequence(QKeySequence::New))
+                    newGame = action;
+            }
+
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 1, "reversi: the captured disc turns over");
+            check(settle(&v, 5000) && v.flightsInTheAir() == 0, "reversi: and finishes turning");
+            const QByteArray saved = v.saveState();
+
+            check(undo != nullptr && newGame != nullptr, "reversi: the view offers Undo and New Game");
+            if (undo != nullptr && newGame != nullptr) {
+                newGame->trigger();
+                pressKey(&v, Qt::Key_Space);
+                undo->trigger();
+                check(v.flightsInTheAir() == 0, "reversi: undo takes the turning back with the move");
+
+                pressKey(&v, Qt::Key_Space);
+                newGame->trigger();
+                check(v.flightsInTheAir() == 0, "reversi: a new game clears the air");
+
+                pressKey(&v, Qt::Key_Space);
+                check(!saved.isEmpty() && v.restoreState(saved) && v.flightsInTheAir() == 0,
+                      "reversi: restoring a save clears the air");
+
+                newGame->trigger();
+                pressKey(&v, Qt::Key_Space);
+                v.deactivate();
+                check(v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                      "reversi: leaving the game clears the air and stops the timer");
+            }
         }
 
         int freecellTries = 0;
