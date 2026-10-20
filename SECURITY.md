@@ -65,10 +65,11 @@ are reported to The Qt Project under its
 here — but do open an issue if a release is still shipping a Qt version with
 a known advisory, because bumping it is this project's job.
 
-**Last checked: 2026-09-25**, against Qt's
-[list of known vulnerabilities](https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products).
-The list's newest advisory, CVE-2026-79680, names 6.11.2: an
-authentication bypass in the Qt VNC Server module, fixed in 6.11.3. This
-app does not link that module, so it was never reachable here. The
-downloads moved to 6.11.3 anyway, and no advisory on the list names 6.11.3
-as affected.
+**Last checked: 2026-10-20**, against Qt's
+[list of known vulnerabilities](https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products),
+for the downloads' Qt 6.11.3. The list's newest Qt advisory,
+CVE-2026-101201, is an out-of-bounds read in Qt Core's JSON parsing,
+fixed in 6.11.3. One advisory's range covers 6.11.3: CVE-2026-15037, XML
+injection in QDom, affected "before Qt 6.12.0". QDom is in the Qt XML
+module, which this app does not link (`CMakeLists.txt` finds Widgets,
+Multimedia and Concurrent only), so it is not reachable here.

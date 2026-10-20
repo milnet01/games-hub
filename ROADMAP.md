@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=212 -->
+<!-- ants-roadmap-id-high-water: GHUB=213 -->
 
 # Games Hub — Roadmap
 
@@ -9386,6 +9386,19 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** One Canasta test failed once while the whole suite ran, then passed twice when run alone.
   Kind: test.
   Source: in-session-2026-10-20.
+
+- 📋 [GHUB-0213] **Move the downloads' bundled Qt from 6.11.3 to 6.12.0.**
+  CVE-2026-15037, XML injection in QDom, is listed as affecting Qt
+  "before Qt 6.12.0", which covers the 6.11.3 that ci.yml and
+  release.yml pin (QT_VERSION). QDom is in Qt XML, which this app does
+  not link, so the flaw is unreachable and the bump is not urgent.
+  .claude/rules/release.md asks for an item whenever an advisory names
+  the pinned Qt. The list's own impact text says "through 6.11", which
+  conflicts with its range; confirm before treating 6.11.3 as affected.
+  The Qt installer pins (AQT_SRC, scripts/install-qt.py) move with it.
+  **Layman:** The downloads carry a Qt version a published flaw covers, though the flaw sits in a part of Qt this app never uses.
+  Kind: security.
+  Source: release-check-2026-10-20.
 
 ## P01 — Shipped
 
