@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=211 -->
+<!-- ants-roadmap-id-high-water: GHUB=212 -->
 
 # Games Hub — Roadmap
 
@@ -8296,6 +8296,14 @@ path, so they land together.
 
   Still open: the board games (Chess, Reversi, Draughts) and the
   opening deals.
+  Progress (2026-10-20): Chess, commit 4404156. A moved piece slides
+  from its old square to its new one, and a castle's rook slides with
+  the king. A taken piece stays on its square until the taker arrives.
+  Slides are measured in squares, so a resize or the legibility switch
+  cannot strand one. Any press lands the slide first; New Game, Undo,
+  a restore and leaving the game clear the air.
+
+  Still open: Reversi, Draughts, and the opening deals.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
@@ -9330,6 +9338,18 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** A heading in the plan still says 1.1.0 is coming, though it came out on 2026-09-27.
   Kind: doc-fix.
   Source: in-session-2026-10-15.
+
+- 📋 [GHUB-0212] **Canasta's "turn comes back to you, round after round" check flaked under ctest.**
+  Seen 2026-10-20 during the Chess slice of GHUB-0065, on a load
+  average near 2.2. Under ctest the check counted 2 of 3 turns and
+  printed "stock went 58 -> 50 over 2 of your turns": the third
+  pumpUntil (turn light back on seat 0) or settle() ran past its 20 s
+  budget. gameshub_uitest run directly passed it twice straight after.
+  Not yet known whether the hand ended, a click missed, or the
+  computer's seats ran long. Find which before touching a budget.
+  **Layman:** One Canasta test failed once while the whole suite ran, then passed twice when run alone.
+  Kind: test.
+  Source: in-session-2026-10-20.
 
 ## P01 — Shipped
 
