@@ -8288,6 +8288,14 @@ path, so they land together.
 
   Still open: Pyramid's matched pairs, the board games (Chess, Reversi,
   Draughts), and the opening deals.
+  Progress (2026-10-20): Pyramid's taken cards, commit eb5bec0. A
+  taken pair, or a King taken alone, flies from where it lay off past
+  the right edge; the card picked first leaves first. Nothing receives
+  them, so no press has to land them. Undo, a new deal, a restore,
+  leaving the game and the legibility switch clear the air.
+
+  Still open: the board games (Chess, Reversi, Draughts) and the
+  opening deals.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
