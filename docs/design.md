@@ -596,9 +596,12 @@ height-bound and the deal ran under the plate instead. `cardsKeepTheirFaces` in
 history.
 
 **A card game with animation must not let the model and the picture disagree.**
-`cards/cardflight.*` is the shared way to animate a card, and Klondike, Spider
-and FreeCell use it; Canasta predates it and keeps its own copy in
-`CanastaView`. Each flight carries where it is going, and the destination skips
+`cards/cardflight.*` is the shared way to animate a card, and Klondike, Spider,
+FreeCell, Pyramid and Hearts use it; Canasta predates it and keeps its own copy
+in `CanastaView`. Chess and Draughts borrow its timing and easing to slide a
+piece, measured in squares rather than pixels, so a slide holds no pixel
+destination for a layout change to strand. Reversi borrows only the timing, to
+turn a captured disc over where it lies. Each flight carries where it is going, and the destination skips
 drawing that card until it lands (`cardflight::suppressAt()`, Canasta's
 `suppressed()`); otherwise a card in the air is also drawn at its destination
 and the eye sees it twice. **The match is CONSUMED one per flight** — the
