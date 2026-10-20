@@ -88,7 +88,7 @@ HeartsView::HeartsView(QWidget* parent)
     connect(m_turnTimer, &QTimer::timeout, this, &HeartsView::stepTurnLight);
 
     buildActions();
-    newGame();
+    dealTable();
 }
 
 void HeartsView::buildActions()
@@ -116,6 +116,13 @@ void HeartsView::buildActions()
 
 void HeartsView::newGame()
 {
+    dealTable();
+    launchDeal();
+}
+
+void HeartsView::dealTable()
+{
+    landDeal();
     m_engine.newGame();
     Sound::instance().play(Sound::kShuffle);
     m_selected.clear();
@@ -149,6 +156,8 @@ void HeartsView::activate()
 
 void HeartsView::deactivate()
 {
+    // The deal is a QTimer too (GHUB-0046); it lands rather than freezes.
+    landDeal();
     m_timer->stop();
     // The cross-fade freezes rather than finishing, as the AI's clock does.
     m_turnFades = false;
@@ -159,7 +168,9 @@ void HeartsView::startNextHand()
 {
     if (m_engine.phase() != HeartsEngine::Phase::HandOver)
         return;
+    landDeal();
     m_engine.nextHand();
+    launchDeal();
     m_announced = false;
     m_selected.clear();
     update();
@@ -190,6 +201,10 @@ void HeartsView::confirmPass()
 
 void HeartsView::step()
 {
+    // The computers wait for the deal to land, as players wait for the
+    // dealer. The clock runs on, so the next tick asks again.
+    if (!m_flights.empty())
+        return;
     if (m_awaitingCollect) {
         finishTrick();
         return;
@@ -609,6 +624,8 @@ void HeartsView::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
+    // One match per flight; see cardflight::suppressAt.
+    m_flightConsumed.assign(m_flights.size(), 0);
 
     Theme::paintFelt(p, rect(), Theme::kFeltBlueTop, Theme::kFeltBlueBottom);
 
@@ -625,7 +642,13 @@ void HeartsView::paintEvent(QPaintEvent*)
     for (int seat = 1; seat < HeartsEngine::kPlayers; ++seat) {
         const QRectF r = opponentRect(seat);
         const int n = int(m_engine.hand(seat).size());
-        for (int i = 0; i < std::min(n, kFanCards); ++i)
+        // The fan grows as the deal reaches it; the count beside it is the
+        // hand's own.
+        const int dealtHere = n - int(std::count_if(m_flights.begin(), m_flights.end(),
+                                                    [seat](const cardflight::Flight& f) {
+                                                        return f.destination == seat;
+                                                    }));
+        for (int i = 0; i < std::min(dealtHere, kFanCards); ++i)
             CardArt::paintBack(p, r.translated(fanOffset(seat, i)));
 
         QFont f = font();
@@ -671,6 +694,9 @@ void HeartsView::paintEvent(QPaintEvent*)
         && m_engine.currentPlayer() == 0 && !m_engine.trickComplete();
 
     for (int i = 0; i < int(hand.size()); ++i) {
+        // A dealt card still in the air is not in the hand yet.
+        if (cardflight::suppressAt(m_flights, m_flightConsumed, 0, hand[std::size_t(i)]))
+            continue;
         const QRectF r = handCardRect(i);
         CardArt::paintFace(p, r, hand[std::size_t(i)]);
 
@@ -688,16 +714,83 @@ void HeartsView::paintEvent(QPaintEvent*)
         if (std::find(m_selected.begin(), m_selected.end(), hand[std::size_t(i)]) != m_selected.end())
             CardArt::paintHighlight(p, r, QColor(0xff, 0xd5, 0x4f));
     }
+    // Cards on their way round the table, over everything they cross.
+    for (const cardflight::Flight& f : m_flights) {
+        const QSizeF size = f.destination == 0 ? handCardRect(0).size() : opponentRect(f.destination).size();
+        const QRectF r(cardflight::positionOf(f), size);
+        if (f.card.faceUp)
+            CardArt::paintFace(p, r, f.card);
+        else
+            CardArt::paintBack(p, r);
+    }
+
     if (!hand.empty())
         Theme::paintCellCursor(p, handCardRect(m_cursor), legible);
 
     paintStatusCaption(p, captionArea());
 }
 
+void HeartsView::launchDeal()
+{
+    const QSizeF card = handCardRect(0).size();
+    const QPointF from(width() / 2.0 - card.width() / 2.0, height() / 2.0 - card.height() / 2.0);
+    std::size_t most = 0;
+    for (int seat = 0; seat < HeartsEngine::kPlayers; ++seat)
+        most = std::max(most, m_engine.hand(seat).size());
+    int dealt = 0;
+    for (std::size_t k = 0; k < most; ++k) {
+        for (int seat = 0; seat < HeartsEngine::kPlayers; ++seat) {
+            const std::vector<Card>& hand = m_engine.hand(seat);
+            if (k >= hand.size())
+                continue;
+            cardflight::Flight f;
+            f.card = hand[k];
+            f.card.faceUp = (seat == 0);
+            f.from = from;
+            // Your hand is sorted, so your cards arrive left to right.
+            f.to = seat == 0 ? handCardRect(int(k)).topLeft()
+                             : opponentRect(seat)
+                                   .translated(fanOffset(seat, std::min(int(k), kFanCards - 1)))
+                                   .topLeft();
+            f.delay = dealt++ * cardflight::kStagger;
+            f.destination = seat;
+            m_flights.push_back(f);
+        }
+    }
+
+    if (m_flightTimer == nullptr) {
+        m_flightTimer = new QTimer(this);
+        // 16ms is the frame budget the bench in gameshub_uitest measures.
+        m_flightTimer->setInterval(16);
+        connect(m_flightTimer, &QTimer::timeout, this, [this] {
+            if (!cardflight::advance(m_flights, 0.016))
+                m_flightTimer->stop();
+            update();
+        });
+    }
+    if (!m_flights.empty())
+        m_flightTimer->start();
+}
+
+void HeartsView::landDeal()
+{
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    update();
+}
+
+void HeartsView::applyLegibility(bool enabled)
+{
+    landDeal();
+    GameView::applyLegibility(enabled);
+}
+
 void HeartsView::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
+    landDeal();
 
     // Topmost card first: the hand is drawn left to right, so later cards
     // overlap earlier ones. The cursor follows the mouse, so the two ways of
@@ -788,6 +881,7 @@ void HeartsView::pressAtCursor()
 
 void HeartsView::keyPressEvent(QKeyEvent* event)
 {
+    landDeal();
     const bool passing = m_engine.phase() == HeartsEngine::Phase::Passing;
     switch (event->key()) {
     case Qt::Key_Left:
@@ -896,6 +990,7 @@ bool HeartsView::restoreState(const QByteArray& blob)
     if (awaitingCollect == 1 && !engine.trickComplete())
         return false;
 
+    landDeal();
     m_engine = engine;
     m_selected = selected;
     m_awaitingCollect = awaitingCollect == 1;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cards/cardflight.h"
 #include "gameview.h"
 #include "heartsengine.h"
 
@@ -42,6 +43,15 @@ public:
     // card at a time. Exposed for the tests, as KlondikeView::cursorSpot is.
     int cursorSpot() const { return m_cursor; }
 
+    // Whether a dealt card is still on its way to a seat, which no rendered
+    // picture can answer -- see KlondikeView::flightsInTheAir.
+    int flightsInTheAir() const { return int(m_flights.size()); }
+    // A card in the air is what settle() in the UI test waits on (GHUB-0205).
+    bool hasPendingAnimation() const override { return !m_flights.empty(); }
+    // A dealt card's destination is a pixel point captured when it left, and
+    // the switch moves every seat, so the deal lands at once.
+    void applyLegibility(bool enabled) override;
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -64,7 +74,12 @@ protected:
 
 private:
     void buildActions();
+    // A deal the player asked for: the hands, then the cards flying round the
+    // table to them (GHUB-0065). The deal made when the view is built is
+    // dealTable() alone, because nobody asked for it and the view has no size
+    // yet.
     void newGame();
+    void dealTable();
     void confirmPass();
     // Deal the next hand. Reached from the hand-over box's accept button and
     // from the toolbar, so declining the box no longer ends the match.
@@ -72,6 +87,13 @@ private:
     // Runs the computer seats until it is the human's turn again, or the trick
     // is full. Driven by a timer so the play is watchable.
     void step();
+    // The deal, one card to each seat in turn from the middle of the table,
+    // as a dealer goes round: face up to your hand, face down to the others'
+    // fans. Called after the engine has dealt. A seat's key is its number.
+    void launchDeal();
+    // Lands every card in the air. Any press calls it, so a card is never
+    // played or picked unseen, and so does anything that changes the hands.
+    void landDeal();
     void finishTrick();
     // `reason` is why the last press did nothing, shown until anything else
     // happens -- every change calls refresh(), and that is what clears it.
@@ -116,4 +138,10 @@ private:
     TurnLightState m_turn;
     bool m_turnFades = false;
     QTimer* m_turnTimer = nullptr;
+
+    std::vector<cardflight::Flight> m_flights;
+    // Per-repaint scratch for cardflight::suppressAt. Cleared at the top of
+    // paintEvent, never read outside it.
+    std::vector<char> m_flightConsumed;
+    QTimer* m_flightTimer = nullptr;
 };

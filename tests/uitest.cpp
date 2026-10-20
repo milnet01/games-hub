@@ -6930,6 +6930,26 @@ int main(int argc, char* argv[])
                 check(v.flightsInTheAir() == 0, "pyramid: a press lands the deal at once");
             }
         }
+        {
+            HeartsView v;
+            v.resize(900, 680);
+            v.show();
+            pump(20);
+            check(v.flightsInTheAir() == 0, "hearts: a table simply opened is already dealt");
+            QAction* newGame = newGameOf(&v);
+            check(newGame != nullptr, "hearts: the view offers New Game");
+            if (newGame != nullptr) {
+                newGame->trigger();
+                check(v.flightsInTheAir() == 52, "hearts: New Game deals all 52 cards round the table");
+                check(settle(&v, 10000) && v.flightsInTheAir() == 0, "hearts: the deal lands");
+                newGame->trigger();
+                pressKey(&v, Qt::Key_Left);
+                check(v.flightsInTheAir() == 0, "hearts: a press lands the deal at once");
+                newGame->trigger();
+                v.deactivate();
+                check(v.flightsInTheAir() == 0, "hearts: leaving the game lands the deal");
+            }
+        }
 
         int freecellTries = 0;
         bool freecellFlew = false;
