@@ -12,6 +12,22 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Every game now shows its moves instead of jumping to the result** (GHUB-0065)
+  In Chess the computer's piece slides to its square, a castle's rook
+  slides beside the king, and a taken piece stays put until the taker
+  arrives. In Draughts a jump travels its route one hop at a time, and
+  each man it takes stays until the jumper has passed over it. In
+  Reversi each captured disc turns over, nearest first, so you can trace
+  every line the move took.
+  In Klondike a drawn card flies to the waste, and a recycled waste goes
+  back to the stock. In Pyramid a taken pair flies off the table. In
+  Spider a dealt row flies out card by card, and a run it finishes
+  leaves for the stock corner.
+  New Game deals in motion in Klondike, Spider, FreeCell, Pyramid and
+  Hearts, and in Hearts every new hand does. A game you simply open
+  shows its table at once, and any click or key finishes a deal still
+  running.
+
 - **Klondike, Spider and FreeCell move cards by clicking as well as dragging** (GHUB-0069)
   Click a card to pick it up with the cards under it, then click the pile
   it should go to. A pile that will not take it leaves it in your hand;

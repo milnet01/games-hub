@@ -8171,7 +8171,7 @@ path, so they land together.
   Kind: accessibility.
   Source: in-session-2026-08-20.
 
-- 🚧 [GHUB-0065] **One game animates and thirteen teleport.**
+- ✅ [GHUB-0065] **One game animates and thirteen teleport.**
   Canasta has card flights. Nothing else does. In every other game a card is in
   one place, and then it is in another, with nothing in between: a deal arrives
   fully formed, a run lands on a foundation, a trick gathers itself up. The move
@@ -8318,6 +8318,20 @@ path, so they land together.
   The board games are done.
 
   Still open: the opening deals.
+  Owner's decisions on the opening deals (2026-10-20): animate on New
+  Game only; a game opened with nothing in progress shows its table at
+  once, as a resumed one does. Any press lands every card still in the
+  air, so the game is ready at once and a hidden card is never lifted
+  unseen. Games: Klondike, Spider, FreeCell, Pyramid and Hearts
+  (Canasta already deals in motion).
+  Done (2026-10-20): the opening deals. New Game deals in motion in
+  Klondike (ebf9907), Spider (000681e), FreeCell (db08860), Pyramid
+  (c436430) and Hearts (d51bf77), whose next hand deals the same way and
+  whose computers wait for the deal to land. A game simply opened is
+  dealt still; any press lands the deal. With the board games and the
+  earlier slices, every game that teleported now shows its moves. The
+  release-notes citation the 0.5.0 note held back can go on the bullet
+  line now.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
