@@ -6567,9 +6567,9 @@ int main(int argc, char* argv[])
             pump(20);
             check(v.restoreState(handBuiltPyramid()), "pyramid: the hand-built table loads");
             QAction* undo = nullptr;
-            for (QAction* a : v.gameActions())
-                if (a->shortcut() == QKeySequence(QKeySequence::Undo))
-                    undo = a;
+            for (QAction* action : v.gameActions())
+                if (action->shortcut() == QKeySequence(QKeySequence::Undo))
+                    undo = action;
 
             pressKey(&v, Qt::Key_Space);
             pressKey(&v, Qt::Key_Right);
