@@ -196,6 +196,12 @@ bool KlondikeView::restoreState(const QByteArray& blob)
     if (!m_table.restore(stock, waste, foundations, tableau, int(draw), int(score)))
         return false;
 
+    // A card in the air would hide the restored pile's top until it landed,
+    // at an address that now means nothing.
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
+
     m_drag.clear();
     m_dragging = false;
     m_pressValid = false;
@@ -370,9 +376,15 @@ KlondikeView::Spot KlondikeView::hitTest(QPointF pos) const
 
 void KlondikeView::dealFromStock()
 {
+    // The last draw's cards land first, so the waste's top is never a card
+    // still on its way there.
+    landStockCards();
+    const bool recycling = m_table.stock().empty();
+    const std::size_t wasteBefore = m_table.waste().size();
     m_table.dealFromStock();
     m_undoAction->setEnabled(m_table.canUndo());
     Sound::instance().play(Sound::kCardDeal);
+    launchFromStock(recycling, wasteBefore);
     update();
     refresh();
 }
@@ -433,20 +445,29 @@ void KlondikeView::paintEvent(QPaintEvent*)
 
     Theme::paintFelt(p, rect(), Theme::kFeltGreenTop, Theme::kFeltGreenBottom);
 
-    // Stock: a back if there are cards, otherwise a recycle marker.
-    if (m_table.stock().empty())
+    // One match per flight, so two identical cards in the air do not both
+    // suppress the same destination copy. Reset every repaint.
+    m_flightConsumed.assign(m_flights.size(), 0);
+
+    // Stock: a back if there are cards, otherwise a recycle marker. A waste
+    // on its way back still shows the marker until it arrives.
+    const std::vector<Card>& stock = m_table.stock();
+    if (stock.empty() || cardflight::suppressAt(m_flights, m_flightConsumed, kStockKey, stock.back()))
         CardArt::paintSlot(p, pileOrigin(PileKind::Stock, 0), QStringLiteral("↻"));
     else
         CardArt::paintBack(p, pileOrigin(PileKind::Stock, 0));
 
-    if (m_table.waste().empty())
+    // The waste shows its top card only, so a drawn card still in the air
+    // leaves the one beneath it showing, as a foundation does below.
+    const std::vector<Card>& waste = m_table.waste();
+    std::size_t wasteShown = waste.size();
+    while (wasteShown > 0
+           && cardflight::suppressAt(m_flights, m_flightConsumed, kWasteKey, waste[wasteShown - 1]))
+        --wasteShown;
+    if (wasteShown == 0)
         CardArt::paintSlot(p, pileOrigin(PileKind::Waste, 0));
     else
-        CardArt::paintFace(p, pileOrigin(PileKind::Waste, 0), m_table.waste().back());
-
-    // One match per flight, so two identical cards in the air do not both
-    // suppress the same destination copy. Reset every repaint.
-    m_flightConsumed.assign(m_flights.size(), 0);
+        CardArt::paintFace(p, pileOrigin(PileKind::Waste, 0), waste[wasteShown - 1]);
 
     for (int f = 0; f < 4; ++f) {
         const QRectF r = pileOrigin(PileKind::Foundation, f);
@@ -478,10 +499,14 @@ void KlondikeView::paintEvent(QPaintEvent*)
         }
     }
 
-    // Cards on their way home, above the table and below the hand.
+    // Cards on their way, above the table and below the hand. Only a waste
+    // going back to the stock travels face down.
     for (const cardflight::Flight& f : m_flights) {
-        const QPointF at = cardflight::positionOf(f);
-        CardArt::paintFace(p, QRectF(at, QSizeF(cardWidth(), cardHeight())), f.card);
+        const QRectF r(cardflight::positionOf(f), QSizeF(cardWidth(), cardHeight()));
+        if (f.card.faceUp)
+            CardArt::paintFace(p, r, f.card);
+        else
+            CardArt::paintBack(p, r);
     }
 
     // The dragged stack rides above everything else.
@@ -521,6 +546,7 @@ void KlondikeView::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
+    landStockCards();
 
     m_pressPos = event->position();
     m_pressValid = false;
@@ -666,6 +692,7 @@ void KlondikeView::mouseDoubleClickEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
+    landStockCards();
 
     // The first click of the pair picked the card up (GHUB-0069). Put it back
     // before looking, or the pile's top is the card beneath it and the send
@@ -725,7 +752,57 @@ void KlondikeView::launchToFoundation(const Card& card, QRectF fromRect, int fou
     f.to = pileOrigin(PileKind::Foundation, foundation).topLeft();
     f.destination = foundation;
     m_flights.push_back(f);
+    startFlights();
+}
 
+void KlondikeView::launchFromStock(bool recycled, std::size_t wasteBefore)
+{
+    const QPointF stockAt = pileOrigin(PileKind::Stock, 0).topLeft();
+    const QPointF wasteAt = pileOrigin(PileKind::Waste, 0).topLeft();
+    if (recycled) {
+        // The whole waste went back as one face-down pile, so one back makes
+        // the trip, carrying the card now on top of the stock: that is the
+        // match that keeps the stock showing its marker until it lands.
+        if (m_table.stock().empty())
+            return;
+        cardflight::Flight f;
+        f.card = m_table.stock().back();
+        f.from = wasteAt;
+        f.to = stockAt;
+        f.destination = kStockKey;
+        m_flights.push_back(f);
+    } else {
+        // Draw 3 turns three cards, and they leave in the order they landed
+        // on the waste, so the one left on top is the last to arrive.
+        const std::vector<Card>& waste = m_table.waste();
+        for (std::size_t i = wasteBefore; i < waste.size(); ++i) {
+            cardflight::Flight f;
+            f.card = waste[i];
+            f.from = stockAt;
+            f.to = wasteAt;
+            f.delay = double(i - wasteBefore) * 0.08;
+            f.destination = kWasteKey;
+            m_flights.push_back(f);
+        }
+    }
+    startFlights();
+}
+
+void KlondikeView::landStockCards()
+{
+    const auto landed = std::remove_if(m_flights.begin(), m_flights.end(), [](const cardflight::Flight& f) {
+        return f.destination == kWasteKey || f.destination == kStockKey;
+    });
+    if (landed == m_flights.end())
+        return;
+    m_flights.erase(landed, m_flights.end());
+    if (m_flights.empty() && m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    update();
+}
+
+void KlondikeView::startFlights()
+{
     if (m_flightTimer == nullptr) {
         m_flightTimer = new QTimer(this);
         // 16ms is the frame budget the bench in gameshub_uitest measures
@@ -737,7 +814,8 @@ void KlondikeView::launchToFoundation(const Card& card, QRectF fromRect, int fou
             update();
         });
     }
-    m_flightTimer->start();
+    if (!m_flights.empty())
+        m_flightTimer->start();
 }
 
 // ---------------------------------------------------------------------------
@@ -825,6 +903,7 @@ QRectF KlondikeView::heldLandingRect() const
 
 void KlondikeView::pressAtCursor()
 {
+    landStockCards();
     if (m_keyHolding) {
         dropAtCursor();
         return;

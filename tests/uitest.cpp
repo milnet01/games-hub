@@ -4590,6 +4590,9 @@ int main(int argc, char* argv[])
 
             // The stock is the top-left corner card; clicking it turns one over.
             clickAt(&klondike, QPointF(31, 40), Qt::LeftButton);
+            // The card flies to the waste (GHUB-0065); a picture taken
+            // mid-flight is of the journey, not of the table the save holds.
+            check(settle(&klondike, 5000), "klondike: the drawn card lands");
             const QImage played = renderOf(&klondike);
             const QByteArray saved = klondike.saveState();
             check(!saved.isEmpty(), "klondike: a deal in progress is worth saving");
@@ -6502,6 +6505,48 @@ int main(int argc, char* argv[])
             check(activeTimers(&v) == 0, "klondike: and the flight timer stops once it has");
         }
         check(klondikeFlew, "klondike: double-clicking an ace sends it home with a visible journey");
+
+        // Klondike's stock turns a card to the waste, and an exhausted stock
+        // takes the waste back. Both used to happen between one frame and the
+        // next, so a draw read as the waste changing its mind. Draw 1, the
+        // default: the deal leaves 24 cards in the stock.
+        {
+            KlondikeView v;
+            v.resize(820, 620);
+            v.show();
+            pump(10);
+            pressKey(&v, Qt::Key_Space); // the cursor opens on the stock
+            check(v.flightsInTheAir() == 1,
+                  "klondike: a drawn card flies from the stock to the waste");
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 1, "klondike: drawing again lands the last card first");
+            check(settle(&v, 5000) && v.flightsInTheAir() == 0,
+                  "klondike: a drawn card lands and stops flying");
+            check(activeTimers(&v) == 0, "klondike: and the flight timer stops once it has");
+
+            // A drawn card is hidden at the waste until it lands, so lifting
+            // it must land it first: nobody lifts a card they cannot see.
+            pressKey(&v, Qt::Key_Space);
+            pressKey(&v, Qt::Key_Right); // onto the waste
+            pressKey(&v, Qt::Key_Space);
+            check(v.holdingARun() && v.flightsInTheAir() == 0,
+                  "klondike: lifting the waste's card lands it first");
+            pressKey(&v, Qt::Key_Escape);
+            pressKey(&v, Qt::Key_Left); // back onto the stock
+
+            // Three drawn, so 21 more empty the stock and the next press
+            // turns the waste back under it.
+            for (int i = 0; i < 21; ++i)
+                pressKey(&v, Qt::Key_Space);
+            check(settle(&v, 5000), "klondike: the last drawn card lands");
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 1, "klondike: the waste goes back to the stock visibly");
+            check(settle(&v, 5000) && activeTimers(&v) == 0,
+                  "klondike: the returned waste lands and the timer stops");
+            // The recycled stock deals again, from the top of what was the waste.
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 1, "klondike: a recycled stock draws as before");
+        }
 
         int freecellTries = 0;
         bool freecellFlew = false;

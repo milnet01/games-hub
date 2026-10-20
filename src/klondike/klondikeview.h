@@ -159,6 +159,19 @@ private:
     // destination is captured here, when the card leaves, so anything that
     // moves the layout must clear m_flights -- see cardflight.h.
     void launchToFoundation(const Card& card, QRectF fromRect, int foundation);
+    // A draw, card by card from the stock to the waste, or the waste going
+    // back under an empty stock -- called after dealFromStock() has moved the
+    // cards in the model. `wasteBefore` is the waste's size before the draw.
+    void launchFromStock(bool recycled, std::size_t wasteBefore);
+    void startFlights();
+    // Puts a card in the air to the waste or the stock down where it was
+    // going. Both piles hide such a card until it lands, so a press that
+    // could lift or deal it must land it first. A card on its way to a
+    // foundation keeps flying.
+    void landStockCards();
+    // Flight destinations past the four foundations' 0-3.
+    static constexpr int kWasteKey = 4;
+    static constexpr int kStockKey = 5;
     // The foundation whose pile grew, given the sizes before the move. A
     // successful send does not say which one took the card.
     int grownFoundation(const std::array<std::size_t, 4>& before) const;
