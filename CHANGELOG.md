@@ -10,6 +10,10 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-20
+
+**Theme:** The card games, by keyboard and in motion
+
 ### Added
 
 - **Every game now shows its moves instead of jumping to the result** (GHUB-0065)
