@@ -36,7 +36,7 @@ KlondikeView::KlondikeView(QWidget* parent)
     // Without it setFocus() does nothing and no key ever arrives (GHUB-0168).
     setFocusPolicy(Qt::StrongFocus);
     buildActions();
-    newGame();
+    dealTable();
 }
 
 void KlondikeView::buildActions()
@@ -78,6 +78,12 @@ void KlondikeView::buildActions()
 }
 
 void KlondikeView::newGame()
+{
+    dealTable();
+    launchDeal();
+}
+
+void KlondikeView::dealTable()
 {
     // Before the deal, not after: settling puts a held run back on the table
     // it came from, and after a deal that is a fresh table it never left.
@@ -378,7 +384,7 @@ void KlondikeView::dealFromStock()
 {
     // The last draw's cards land first, so the waste's top is never a card
     // still on its way there.
-    landStockCards();
+    landHiddenCards();
     const bool recycling = m_table.stock().empty();
     const std::size_t wasteBefore = m_table.waste().size();
     m_table.dealFromStock();
@@ -491,6 +497,10 @@ void KlondikeView::paintEvent(QPaintEvent*)
             continue;
         }
         for (int i = 0; i < int(column.size()); ++i) {
+            // A dealt card still in the air is not on the column yet.
+            if (cardflight::suppressAt(m_flights, m_flightConsumed, kTableauKey + col,
+                                       column[std::size_t(i)]))
+                continue;
             const QRectF r = cardRect(PileKind::Tableau, col, i);
             if (column[std::size_t(i)].faceUp)
                 CardArt::paintFace(p, r, column[std::size_t(i)]);
@@ -546,7 +556,7 @@ void KlondikeView::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
-    landStockCards();
+    landHiddenCards();
 
     m_pressPos = event->position();
     m_pressValid = false;
@@ -692,7 +702,7 @@ void KlondikeView::mouseDoubleClickEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
-    landStockCards();
+    landHiddenCards();
 
     // The first click of the pair picked the card up (GHUB-0069). Put it back
     // before looking, or the pile's top is the card beneath it and the send
@@ -788,10 +798,32 @@ void KlondikeView::launchFromStock(bool recycled, std::size_t wasteBefore)
     startFlights();
 }
 
-void KlondikeView::landStockCards()
+void KlondikeView::launchDeal()
+{
+    const QPointF stockAt = pileOrigin(PileKind::Stock, 0).topLeft();
+    const auto& tableau = m_table.tableau();
+    int dealt = 0;
+    for (std::size_t row = 0; row < tableau.size(); ++row) {
+        for (std::size_t col = row; col < tableau.size(); ++col) {
+            if (row >= tableau[col].size())
+                continue;
+            cardflight::Flight f;
+            // Face down but for each column's last card, as it will lie.
+            f.card = tableau[col][row];
+            f.from = stockAt;
+            f.to = cardRect(PileKind::Tableau, int(col), int(row)).topLeft();
+            f.delay = dealt++ * cardflight::kStagger;
+            f.destination = kTableauKey + int(col);
+            m_flights.push_back(f);
+        }
+    }
+    startFlights();
+}
+
+void KlondikeView::landHiddenCards()
 {
     const auto landed = std::remove_if(m_flights.begin(), m_flights.end(), [](const cardflight::Flight& f) {
-        return f.destination == kWasteKey || f.destination == kStockKey;
+        return f.destination >= kWasteKey;
     });
     if (landed == m_flights.end())
         return;
@@ -903,7 +935,7 @@ QRectF KlondikeView::heldLandingRect() const
 
 void KlondikeView::pressAtCursor()
 {
-    landStockCards();
+    landHiddenCards();
     if (m_keyHolding) {
         dropAtCursor();
         return;

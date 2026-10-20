@@ -6841,6 +6841,35 @@ int main(int argc, char* argv[])
                   "draughts: leaving the game clears the air and stops the timer");
         }
 
+        // The opening deals. The owner's call (2026-10-20): New Game deals in
+        // motion, a game simply opened does not, and any press lands every
+        // card still in the air.
+        const auto newGameOf = [](GameView* view) -> QAction* {
+            for (QAction* action : view->gameActions())
+                if (action->shortcut() == QKeySequence(QKeySequence::New))
+                    return action;
+            return nullptr;
+        };
+        {
+            KlondikeView v;
+            v.resize(900, 640);
+            v.show();
+            pump(20);
+            check(v.flightsInTheAir() == 0, "klondike: a table simply opened is already dealt");
+            QAction* newGame = newGameOf(&v);
+            check(newGame != nullptr, "klondike: the view offers New Game");
+            if (newGame != nullptr) {
+                newGame->trigger();
+                check(v.flightsInTheAir() == 28, "klondike: New Game deals all 28 cards in motion");
+                check(settle(&v, 10000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                      "klondike: the deal lands and the timer stops");
+                newGame->trigger();
+                // On empty felt, so the press lands the deal and does nothing else.
+                clickAt(&v, QPointF(v.width() - 4.0, v.height() - 4.0), Qt::LeftButton);
+                check(v.flightsInTheAir() == 0, "klondike: a press lands the deal at once");
+            }
+        }
+
         int freecellTries = 0;
         bool freecellFlew = false;
         for (; freecellTries < 40 && !freecellFlew; ++freecellTries) {

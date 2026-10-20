@@ -87,7 +87,11 @@ private:
     };
 
     void buildActions();
+    // A deal the player asked for: the table, then the cards flying to it
+    // (GHUB-0065). The deal made when the view is built is dealTable() alone,
+    // because nobody asked for it and the view has no size yet.
     void newGame();
+    void dealTable();
     void undo();
 
     // Geometry
@@ -163,15 +167,21 @@ private:
     // back under an empty stock -- called after dealFromStock() has moved the
     // cards in the model. `wasteBefore` is the waste's size before the draw.
     void launchFromStock(bool recycled, std::size_t wasteBefore);
+    // The opening deal, card by card from the stock to the tableau in the
+    // order a dealer lays them: across the columns a row at a time. Called
+    // after dealTable() has laid them out in the model.
+    void launchDeal();
     void startFlights();
-    // Puts a card in the air to the waste or the stock down where it was
-    // going. Both piles hide such a card until it lands, so a press that
-    // could lift or deal it must land it first. A card on its way to a
-    // foundation keeps flying.
-    void landStockCards();
-    // Flight destinations past the four foundations' 0-3.
+    // Puts a card in the air to the waste, the stock or a tableau column
+    // down where it was going. Each of those hides such a card until it
+    // lands, so a press that could lift or deal it must land it first. A card
+    // on its way to a foundation keeps flying.
+    void landHiddenCards();
+    // Flight destinations past the four foundations' 0-3. A tableau column
+    // is kTableauKey plus its index.
     static constexpr int kWasteKey = 4;
     static constexpr int kStockKey = 5;
+    static constexpr int kTableauKey = 6;
     // The foundation whose pile grew, given the sizes before the move. A
     // successful send does not say which one took the card.
     int grownFoundation(const std::array<std::size_t, 4>& before) const;
