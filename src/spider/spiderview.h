@@ -86,7 +86,11 @@ private:
     void settleForChange();
 
     void buildActions();
+    // A deal the player asked for: the table, then the cards flying to it
+    // (GHUB-0065). The deal made when the view is built is dealTable() alone,
+    // because nobody asked for it and the view has no size yet.
     void newGame();
+    void dealTable();
     void undo();
 
     double cardWidth() const;
@@ -137,6 +141,10 @@ private:
     void launchDealtRow(const std::array<std::vector<Card>, kColumns>& before,
                         const std::array<std::vector<QRectF>, kColumns>& beforeRects,
                         const std::vector<Card>& dealt, const std::vector<int>& harvested);
+    // The opening deal, card by card from the stock across the columns a row
+    // at a time, as a dealer lays them. Called after dealTable() has laid them
+    // out in the model.
+    void launchDeal();
     void startFlights();
     // Puts every dealt card in the air down where it was going. A dealt card
     // is hidden at its column until it lands, so a press that could lift it,

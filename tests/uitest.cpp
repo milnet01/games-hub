@@ -6869,6 +6869,24 @@ int main(int argc, char* argv[])
                 check(v.flightsInTheAir() == 0, "klondike: a press lands the deal at once");
             }
         }
+        {
+            SpiderView v;
+            v.resize(1000, 700);
+            v.show();
+            pump(20);
+            check(v.flightsInTheAir() == 0, "spider: a table simply opened is already dealt");
+            QAction* newGame = newGameOf(&v);
+            check(newGame != nullptr, "spider: the view offers New Game");
+            if (newGame != nullptr) {
+                newGame->trigger();
+                check(v.flightsInTheAir() == 54, "spider: New Game deals all 54 cards in motion");
+                check(settle(&v, 10000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                      "spider: the deal lands and the timer stops");
+                newGame->trigger();
+                clickAt(&v, QPointF(v.width() - 4.0, v.height() - 4.0), Qt::LeftButton);
+                check(v.flightsInTheAir() == 0, "spider: a press lands the deal at once");
+            }
+        }
 
         int freecellTries = 0;
         bool freecellFlew = false;

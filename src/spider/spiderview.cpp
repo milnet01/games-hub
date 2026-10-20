@@ -33,7 +33,7 @@ SpiderView::SpiderView(QWidget* parent)
     // Without it setFocus() does nothing and no key ever arrives (GHUB-0168).
     setFocusPolicy(Qt::StrongFocus);
     buildActions();
-    newGame();
+    dealTable();
 }
 
 void SpiderView::buildActions()
@@ -99,6 +99,12 @@ void SpiderView::buildActions()
 }
 
 void SpiderView::newGame()
+{
+    dealTable();
+    launchDeal();
+}
+
+void SpiderView::dealTable()
 {
     // Before the deal, not after: settling puts a held run back on the table
     // it came from, and after a deal that is a fresh table it never left.
@@ -409,12 +415,19 @@ void SpiderView::paintEvent(QPaintEvent*)
             continue;
         }
         const int movable = movableRunLength(col);
-        for (int i = 0; i < int(column.size()); ++i) {
+        // A dealt card is on its way here; drawing it too shows it twice. The
+        // cards in the air are always the column's foot -- a deal lands each
+        // column top first, and a dealt row is one card -- so they are counted
+        // from the foot up, stopping at the first that has landed. Counting
+        // from the top instead would let a deeper twin of a flying card take
+        // its flight, which in a two-pack game is routine.
+        int shown = int(column.size());
+        while (shown > 0
+               && cardflight::suppressAt(m_flights, m_flightConsumed, col,
+                                         column[std::size_t(shown - 1)]))
+            --shown;
+        for (int i = 0; i < shown; ++i) {
             const QRectF r = cardRect(col, i);
-            // A dealt card is on its way here; drawing it too shows it twice.
-            if (i == int(column.size()) - 1
-                && cardflight::suppressAt(m_flights, m_flightConsumed, col, column.back()))
-                continue;
             if (column[std::size_t(i)].faceUp) {
                 CardArt::paintFace(p, r, column[std::size_t(i)]);
                 // Mark where the liftable run starts, so the player can see
@@ -899,6 +912,32 @@ void SpiderView::launchDealtRow(const std::array<std::vector<Card>, kColumns>& b
         f.to = cardRect(col, int(column.size()) - 1).topLeft();
         f.destination = col;
         m_flights.push_back(f);
+    }
+    startFlights();
+}
+
+void SpiderView::launchDeal()
+{
+    const QPointF from = stockRect().topLeft();
+    const auto& columns = m_table.columns();
+    std::size_t deepest = 0;
+    for (const std::vector<Card>& column : columns)
+        deepest = std::max(deepest, column.size());
+    int dealt = 0;
+    for (std::size_t row = 0; row < deepest; ++row) {
+        for (int col = 0; col < kColumns; ++col) {
+            const std::vector<Card>& column = columns[std::size_t(col)];
+            if (row >= column.size())
+                continue;
+            cardflight::Flight f;
+            // Face down but for each column's last card, as it will lie.
+            f.card = column[row];
+            f.from = from;
+            f.to = cardRect(col, int(row)).topLeft();
+            f.delay = dealt++ * cardflight::kStagger;
+            f.destination = col;
+            m_flights.push_back(f);
+        }
     }
     startFlights();
 }
