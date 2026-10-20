@@ -15,6 +15,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -59,6 +60,7 @@ void PyramidView::buildActions()
 void PyramidView::newGame()
 {
     m_resumed = false;
+    clearFlights();
     m_table.deal();
     Sound::instance().play(Sound::kShuffle);
     clearSelection();
@@ -76,11 +78,24 @@ void PyramidView::activate()
     refresh();
 }
 
+void PyramidView::deactivate()
+{
+    clearFlights();
+}
+
+void PyramidView::applyLegibility(bool enabled)
+{
+    clearFlights();
+    GameView::applyLegibility(enabled);
+}
+
 void PyramidView::undo()
 {
     if (!m_table.canUndo())
         return;
     m_table.undo();
+    // The cards a take sent flying are back on the table.
+    clearFlights();
     m_won = false;
     m_announced = false;
     clearSelection();
@@ -96,7 +111,7 @@ void PyramidView::undo()
 
 // The table, not the moves that made it — see KlondikeView::saveState for why
 // the card games save differently from Chess. Pyramid has no drag to fold back
-// in: cards are taken by clicking, so nothing is ever in mid-air. Version 2
+// in, and a card in the air has already left the table for good. Version 2
 // appends the keyboard cursor, last; a version-1 save still loads, with the
 // cursor where a fresh deal puts it.
 QByteArray PyramidView::saveState() const
@@ -171,6 +186,7 @@ bool PyramidView::restoreState(const QByteArray& blob)
     if (!m_table.restore(pyramid, stock, waste, int(pairs), int(redeals)))
         return false;
 
+    clearFlights();
     m_won = false;
     m_announced = false;
     m_resumed = true;
@@ -234,6 +250,18 @@ double PyramidView::pileTop() const
     return height() - captionBand(QRectF(rect())) - cardHeight() - kMargin;
 }
 
+QRectF PyramidView::rectOf(Source source, int index) const
+{
+    if (source == Source::Waste)
+        return wasteRect();
+    if (source == Source::Stock)
+        return stockRect();
+    int row = 0;
+    while (index > slotIndex(row, row))
+        ++row;
+    return pyramidRect(row, index - slotIndex(row, 0));
+}
+
 std::optional<int> PyramidView::pyramidAt(QPointF pos) const
 {
     // Bottom row first: lower cards are drawn over the ones above them.
@@ -270,8 +298,10 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
 {
     // A King is 13 on its own.
     if (card.rank == kKing) {
+        const QRectF from = rectOf(source, index);
         if (!m_table.takeKing(source, index))
             return;
+        launchTaken({ from }, { card });
         m_undoAction->setEnabled(m_table.canUndo());
         clearSelection();
         Sound::instance().play(Sound::kCardPlace);
@@ -297,6 +327,8 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
     }
 
     const Card first = m_table.cardAt(m_selectedSource, m_selectedIndex);
+    const QRectF firstFrom = rectOf(m_selectedSource, m_selectedIndex);
+    const QRectF secondFrom = rectOf(source, index);
 
     if (!m_table.takePair(source, index, m_selectedSource, m_selectedIndex)) {
         refresh(tr("%1 and %2 make %3, not 13.")
@@ -308,6 +340,8 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
         return;
     }
 
+    // The card picked first leaves first.
+    launchTaken({ firstFrom, secondFrom }, { first, card });
     m_undoAction->setEnabled(m_table.canUndo());
     clearSelection();
     Sound::instance().play(Sound::kCardPlace);
@@ -328,6 +362,43 @@ void PyramidView::dealFromStock()
     update();
     refresh();
     checkEnd();
+}
+
+void PyramidView::launchTaken(const std::vector<QRectF>& from, const std::vector<Card>& cards)
+{
+    // Off past the right edge, level with the stock and waste: away from
+    // everything still in play, so the eye follows the pair out of the game
+    // rather than onto another pile.
+    const QPointF away(width() + cardWidth() * 0.5, pileTop());
+    for (std::size_t i = 0; i < cards.size(); ++i) {
+        cardflight::Flight f;
+        f.card = cards[i];
+        f.from = from[i].topLeft();
+        f.to = away;
+        f.delay = double(i) * cardflight::kStagger;
+        f.speed = 2.2;
+        m_flights.push_back(f);
+    }
+
+    if (m_flightTimer == nullptr) {
+        m_flightTimer = new QTimer(this);
+        // 16ms is the frame budget the bench in gameshub_uitest measures.
+        m_flightTimer->setInterval(16);
+        connect(m_flightTimer, &QTimer::timeout, this, [this] {
+            if (!cardflight::advance(m_flights, 0.016))
+                m_flightTimer->stop();
+            update();
+        });
+    }
+    if (!m_flights.empty())
+        m_flightTimer->start();
+}
+
+void PyramidView::clearFlights()
+{
+    m_flights.clear();
+    if (m_flightTimer != nullptr)
+        m_flightTimer->stop();
 }
 
 void PyramidView::checkEnd()
@@ -419,6 +490,11 @@ void PyramidView::paintEvent(QPaintEvent*)
         if (m_hasSelection && m_selectedSource == Source::Waste)
             CardArt::paintHighlight(p, wasteRect(), QColor(0xff, 0xd5, 0x4f));
     }
+
+    // Taken cards on their way out, above the table.
+    for (const cardflight::Flight& f : m_flights)
+        CardArt::paintFace(p, QRectF(cardflight::positionOf(f), QSizeF(cardWidth(), cardHeight())),
+                           f.card);
 
     Theme::paintCellCursor(p, stopRect(m_cursorRow, m_cursorIndex),
                            Legibility::instance().enabled());

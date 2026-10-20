@@ -191,6 +191,51 @@ bool settle(GameView* view, int budgetMs)
     return !view->hasPendingAnimation();
 }
 
+// A Pyramid save written before the cursor existed (version 1). The bottom row
+// is six, seven, king, three, four, ten, ace and the stock's top card is a
+// queen: a pair, a king alone, a pair that does not add up, and the queen from
+// the waste against the ace. The keyboard checks and the flight checks both
+// play it.
+QByteArray handBuiltPyramid()
+{
+    std::vector<Card> deck = makeDeck(1, 4);
+    const auto take = [&deck](int rank, Suit suit) {
+        const auto it = std::find_if(deck.begin(), deck.end(), [rank, suit](const Card& c) {
+            return c.rank == rank && c.suit == suit;
+        });
+        Card c = *it;
+        deck.erase(it);
+        return c;
+    };
+    const std::vector<Card> bottom = {
+        take(6, Suit::Hearts), take(7, Suit::Spades), take(kKing, Suit::Clubs),
+        take(3, Suit::Diamonds), take(4, Suit::Clubs), take(10, Suit::Spades),
+        take(1, Suit::Hearts),
+    };
+    const Card queen = take(kQueen, Suit::Diamonds);
+
+    QByteArray blob;
+    QDataStream out(&blob, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_0);
+    out << quint32(1) << qint32(0) << qint32(0) << qint32(PyramidTable::kPyramidCards);
+    for (int i = 0; i < PyramidTable::kPyramidCards - 7; ++i) {
+        Card c = deck.back();
+        deck.pop_back();
+        c.faceUp = true;
+        cardcodec::writeCard(out, c);
+        out << qint8(0);
+    }
+    for (Card c : bottom) {
+        c.faceUp = true;
+        cardcodec::writeCard(out, c);
+        out << qint8(0);
+    }
+    deck.push_back(queen); // the stock's top
+    cardcodec::writePile(out, deck);
+    cardcodec::writePile(out, {});
+    return blob;
+}
+
 // Pump until `done()` holds, up to a deadline, and say whether it did. What
 // settle() is for flights, this is for everything else -- above all a
 // computer's reply, which settle() does not cover: a thinking pause is not an
@@ -2042,47 +2087,11 @@ void boardsTakeTheKeyboard()
               "freecell: Right along the top row stops at the last foundation");
     }
 
-    // Pyramid, from a save written before the cursor existed. The bottom row
-    // is six, seven, king, three, four, ten, ace and the stock's top card is a
-    // queen: a pair, a king alone, a pair that does not add up, and the queen
-    // from the waste against the ace. Pyramid pairs rather than moves, so Space
+    // Pyramid, from a save written before the cursor existed -- the table
+    // handBuiltPyramid() describes. Pyramid pairs rather than moves, so Space
     // picks the first card and takes the pair on the second.
     {
-        std::vector<Card> deck = makeDeck(1, 4);
-        const auto take = [&deck](int rank, Suit suit) {
-            const auto it = std::find_if(deck.begin(), deck.end(), [rank, suit](const Card& c) {
-                return c.rank == rank && c.suit == suit;
-            });
-            Card c = *it;
-            deck.erase(it);
-            return c;
-        };
-        const std::vector<Card> bottom = {
-            take(6, Suit::Hearts), take(7, Suit::Spades), take(kKing, Suit::Clubs),
-            take(3, Suit::Diamonds), take(4, Suit::Clubs), take(10, Suit::Spades),
-            take(1, Suit::Hearts),
-        };
-        const Card queen = take(kQueen, Suit::Diamonds);
-
-        QByteArray blob;
-        QDataStream out(&blob, QIODevice::WriteOnly);
-        out.setVersion(QDataStream::Qt_6_0);
-        out << quint32(1) << qint32(0) << qint32(0) << qint32(PyramidTable::kPyramidCards);
-        for (int i = 0; i < PyramidTable::kPyramidCards - 7; ++i) {
-            Card c = deck.back();
-            deck.pop_back();
-            c.faceUp = true;
-            cardcodec::writeCard(out, c);
-            out << qint8(0);
-        }
-        for (Card c : bottom) {
-            c.faceUp = true;
-            cardcodec::writeCard(out, c);
-            out << qint8(0);
-        }
-        deck.push_back(queen); // the stock's top
-        cardcodec::writePile(out, deck);
-        cardcodec::writePile(out, {});
+        const QByteArray blob = handBuiltPyramid();
 
         PyramidView pyramid;
         pyramid.resize(900, 640);
@@ -6546,6 +6555,61 @@ int main(int argc, char* argv[])
             // The recycled stock deals again, from the top of what was the waste.
             pressKey(&v, Qt::Key_Space);
             check(v.flightsInTheAir() == 1, "klondike: a recycled stock draws as before");
+        }
+
+        // Pyramid takes cards out of the game, so a taken card goes nowhere on
+        // the table; what it owes the eye is the journey out. Played on the
+        // keyboard checks' hand-built table: the six and seven first.
+        {
+            PyramidView v;
+            v.resize(900, 640);
+            v.show();
+            pump(20);
+            check(v.restoreState(handBuiltPyramid()), "pyramid: the hand-built table loads");
+            QAction* undo = nullptr;
+            for (QAction* a : v.gameActions())
+                if (a->shortcut() == QKeySequence(QKeySequence::Undo))
+                    undo = a;
+
+            pressKey(&v, Qt::Key_Space);
+            pressKey(&v, Qt::Key_Right);
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 2, "pyramid: a taken pair flies off the table");
+            const int pairInAir = v.flightsInTheAir();
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == pairInAir + 1, "pyramid: a king taken alone flies too");
+            check(settle(&v, 5000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                  "pyramid: the taken cards leave and the timer stops");
+
+            // The three and the ten, which do add up.
+            pressKey(&v, Qt::Key_Space);
+            pressKey(&v, Qt::Key_Right);
+            pressKey(&v, Qt::Key_Right);
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 2, "pyramid: the next pair flies");
+            check(undo != nullptr, "pyramid: the view offers Undo");
+            if (undo != nullptr)
+                undo->trigger();
+            check(v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                  "pyramid: undo puts the pair back, so it is no longer in the air");
+
+            // Reloading puts the cursor back on the six, so the first pair is
+            // two presses away again.
+            const auto takeSixAndSeven = [&v] {
+                pressKey(&v, Qt::Key_Space);
+                pressKey(&v, Qt::Key_Right);
+                pressKey(&v, Qt::Key_Space);
+            };
+            check(v.restoreState(handBuiltPyramid()), "pyramid: the table loads again");
+            takeSixAndSeven();
+            check(v.flightsInTheAir() == 2, "pyramid: the reloaded pair flies");
+            check(v.restoreState(handBuiltPyramid()) && v.flightsInTheAir() == 0,
+                  "pyramid: restoring a save clears the air");
+            takeSixAndSeven();
+            check(v.flightsInTheAir() == 2, "pyramid: and its pair flies again");
+            v.deactivate();
+            check(v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                  "pyramid: leaving the game clears the air and stops the timer");
         }
 
         int freecellTries = 0;

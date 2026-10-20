@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cards/card.h"
+#include "cards/cardflight.h"
 #include "gameview.h"
 #include "pyramid/pyramidtable.h"
 
@@ -9,6 +10,9 @@
 #include <QRectF>
 
 #include <optional>
+#include <vector>
+
+class QTimer;
 
 // Pyramid: clear a stack of 28 cards by taking pairs that add up to 13.
 // Kings are worth 13 on their own and go alone.
@@ -22,6 +26,11 @@ public:
     QList<QAction*> gameActions() override { return m_actions; }
     double smallestCardWidth() const override { return cardWidth(); }
     void activate() override;
+    // The flight timer is a QTimer, so leaving the game stops it (GHUB-0046).
+    void deactivate() override;
+    // A flight carries a destination captured when the card left, and the
+    // caption band moves every rect on the surface, so the switch clears them.
+    void applyLegibility(bool enabled) override;
     QByteArray saveState() const override;
     bool restoreState(const QByteArray& blob) override;
 
@@ -37,6 +46,11 @@ public:
     // A card picked as the first of a pair, by the mouse or the keyboard:
     // Pyramid has one selection, not a hand. For the tests.
     bool holdingACard() const { return m_hasSelection; }
+    // Whether a taken card is still on its way off the table, which no
+    // rendered picture can answer -- see KlondikeView::flightsInTheAir.
+    int flightsInTheAir() const { return int(m_flights.size()); }
+    // A card in the air is what settle() in the UI test waits on (GHUB-0205).
+    bool hasPendingAnimation() const override { return !m_flights.empty(); }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -65,6 +79,9 @@ private:
     // A pyramid card can only be taken once both cards resting on it are gone.
     bool isExposed(int row, int index) const { return m_table.isExposed(row, index); }
     std::optional<int> pyramidAt(QPointF pos) const;
+    // Where the card a Source and index name is drawn. A pyramid index is a
+    // slot, as the table counts them.
+    QRectF rectOf(Source source, int index) const;
 
     void select(Source source, int index);
     void clearSelection();
@@ -72,6 +89,11 @@ private:
     // whether the take is legal is the table's.
     void tryPair(Source source, int index, const Card& card);
     void dealFromStock();
+    // A taken card leaves the table visibly: it flies off past the right edge
+    // from where it lay. Nothing on the surface receives it, so nothing waits
+    // for it to land and no press has to land it first.
+    void launchTaken(const std::vector<QRectF>& from, const std::vector<Card>& cards);
+    void clearFlights();
     void checkEnd();
     void refresh(const QString& message = {});
 
@@ -91,6 +113,9 @@ private:
     // The rules. What is left here is the click, the selection and the
     // drawing.
     PyramidTable m_table;
+
+    std::vector<cardflight::Flight> m_flights;
+    QTimer* m_flightTimer = nullptr;
 
     bool m_hasSelection = false;
     Source m_selectedSource = Source::Pyramid;
