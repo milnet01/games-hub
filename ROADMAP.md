@@ -8311,6 +8311,13 @@ path, so they land together.
   turning.
 
   Still open: Draughts and the opening deals.
+  Progress (2026-10-20): Draughts, commit b5e7aca. The moved piece
+  travels its route a leg at a time, and each jumped man stays on its
+  square until the jumper has passed over it. Any press lands the move
+  first; New Game, Undo, a restore and leaving the game clear the air.
+  The board games are done.
+
+  Still open: the opening deals.
   **Layman:** Only Canasta shows cards moving; everywhere else a card is simply somewhere else the next time you look.
   Kind: ux.
   Source: in-session-2026-08-20.
@@ -9360,6 +9367,8 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   different hand (stock started at 58, 56 and 58). Leading guess,
   unproven: some deals end the hand before your third turn. Seeding
   the deal would make a failure reproducible.
+  Third sighting, 2026-10-20: failed in a direct gameshub_uitest run
+  ("stock went 59 -> 50 over 2 of your turns"), load near 6.
   **Layman:** One Canasta test failed once while the whole suite ran, then passed twice when run alone.
   Kind: test.
   Source: in-session-2026-10-20.
