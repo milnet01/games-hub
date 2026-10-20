@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=213 -->
+<!-- ants-roadmap-id-high-water: GHUB=214 -->
 
 # Games Hub — Roadmap
 
@@ -9399,6 +9399,30 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** The downloads carry a Qt version a published flaw covers, though the flaw sits in a part of Qt this app never uses.
   Kind: security.
   Source: release-check-2026-10-20.
+
+- 📋 [GHUB-0214] **A tutorial round you can choose, that plays a game with you and explains every step.**
+  The owner's request (2026-10-20): to help people learn a game, offer
+  a tutorial round or two that plays with the player while explaining
+  what is being done and what to do. It is separate from the game: a
+  player chooses it to learn, and it never replaces or alters normal
+  play.
+
+  Related to GHUB-0016 (each game explains its rules in a written page).
+  This is the guided, hands-on half; the two should share one source of
+  rule explanations rather than say the same thing twice.
+
+  Owner's standing constraints apply: the explanation goes on the play
+  surface, not the status bar (which is not read), and it must be
+  readable slowly.
+
+  Open for design time: which games get one first; whether the
+  tutorial deals a fixed, hand-built position so every lesson shows the
+  moves it means to; how the player steps through it (wait for the
+  right move, or press to go on); and whether it is one shared
+  mechanism every game plugs into.
+  **Layman:** Pick "Learn to play" and the game plays a round or two alongside you, saying what is happening and what you should do next.
+  Kind: feature.
+  Source: user-request-2026-10-20.
 
 ## P01 — Shipped
 
