@@ -6887,6 +6887,28 @@ int main(int argc, char* argv[])
                 check(v.flightsInTheAir() == 0, "spider: a press lands the deal at once");
             }
         }
+        {
+            FreeCellView v;
+            v.resize(900, 640);
+            v.show();
+            pump(20);
+            check(v.flightsInTheAir() == 0, "freecell: a table simply opened is already dealt");
+            QAction* newGame = newGameOf(&v);
+            check(newGame != nullptr, "freecell: the view offers New Game");
+            if (newGame != nullptr) {
+                newGame->trigger();
+                check(v.flightsInTheAir() == 52, "freecell: New Game deals all 52 cards in motion");
+                check(settle(&v, 10000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                      "freecell: the deal lands and the timer stops");
+                newGame->trigger();
+                clickAt(&v, QPointF(v.width() - 4.0, v.height() - 4.0), Qt::LeftButton);
+                check(v.flightsInTheAir() == 0, "freecell: a press lands the deal at once");
+                newGame->trigger();
+                pressKey(&v, Qt::Key_Escape);
+                pressKey(&v, Qt::Key_Space);
+                check(v.flightsInTheAir() == 0, "freecell: so does a key");
+            }
+        }
 
         int freecellTries = 0;
         bool freecellFlew = false;

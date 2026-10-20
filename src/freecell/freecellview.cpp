@@ -32,7 +32,7 @@ FreeCellView::FreeCellView(QWidget* parent)
     // Without it setFocus() does nothing and no key ever arrives (GHUB-0168).
     setFocusPolicy(Qt::StrongFocus);
     buildActions();
-    newGame();
+    dealTable();
 }
 
 void FreeCellView::buildActions()
@@ -50,6 +50,12 @@ void FreeCellView::buildActions()
 }
 
 void FreeCellView::newGame()
+{
+    dealTable();
+    launchDeal();
+}
+
+void FreeCellView::dealTable()
 {
     // Before the deal, not after: settling puts a held run back on the table
     // it came from, and after a deal that is a fresh table it never left.
@@ -374,7 +380,15 @@ void FreeCellView::paintEvent(QPaintEvent*)
             continue;
         }
         const int run = m_table.orderedRunLength(col);
-        for (int i = 0; i < int(column.size()); ++i) {
+        // A dealt card still in the air is not on the column yet. The cards
+        // in the air are always the column's foot, since a deal lands each
+        // column top first, so they are counted from the foot up.
+        int shown = int(column.size());
+        while (shown > 0
+               && cardflight::suppressAt(m_flights, m_flightConsumed, kColumnKey + col,
+                                         column[std::size_t(shown - 1)]))
+            --shown;
+        for (int i = 0; i < shown; ++i) {
             const QRectF r = cardRect(col, i);
             CardArt::paintFace(p, r, column[std::size_t(i)]);
             // Show where the liftable run begins, and whether it will fit.
@@ -427,6 +441,7 @@ void FreeCellView::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
+    landDealtCards();
 
     m_pressPos = event->position();
     m_pressValid = false;
@@ -590,6 +605,7 @@ void FreeCellView::mouseDoubleClickEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
+    landDealtCards();
     // The first click of the pair picked the card up (GHUB-0069). Put it back
     // before looking, or the pile's top is the card beneath it and the send
     // below plays a card nobody pointed at.
@@ -650,7 +666,36 @@ void FreeCellView::launchToFoundation(const Card& card, QRectF fromRect, int fou
     f.to = pileOrigin(PileKind::Foundation, foundation).topLeft();
     f.destination = foundation;
     m_flights.push_back(f);
+    startFlights();
+}
 
+void FreeCellView::launchDeal()
+{
+    const QPointF from((width() - cardWidth()) / 2.0, pileOrigin(PileKind::Cell, 0).top());
+    const auto& columns = m_table.columns();
+    std::size_t deepest = 0;
+    for (const std::vector<Card>& column : columns)
+        deepest = std::max(deepest, column.size());
+    int dealt = 0;
+    for (std::size_t row = 0; row < deepest; ++row) {
+        for (int col = 0; col < kColumns; ++col) {
+            const std::vector<Card>& column = columns[std::size_t(col)];
+            if (row >= column.size())
+                continue;
+            cardflight::Flight f;
+            f.card = column[row];
+            f.from = from;
+            f.to = cardRect(col, int(row)).topLeft();
+            f.delay = dealt++ * cardflight::kStagger;
+            f.destination = kColumnKey + col;
+            m_flights.push_back(f);
+        }
+    }
+    startFlights();
+}
+
+void FreeCellView::startFlights()
+{
     if (m_flightTimer == nullptr) {
         m_flightTimer = new QTimer(this);
         m_flightTimer->setInterval(16);
@@ -660,7 +705,21 @@ void FreeCellView::launchToFoundation(const Card& card, QRectF fromRect, int fou
             update();
         });
     }
-    m_flightTimer->start();
+    if (!m_flights.empty())
+        m_flightTimer->start();
+}
+
+void FreeCellView::landDealtCards()
+{
+    const auto dealt = std::remove_if(m_flights.begin(), m_flights.end(), [](const cardflight::Flight& f) {
+        return f.destination >= kColumnKey;
+    });
+    if (dealt == m_flights.end())
+        return;
+    m_flights.erase(dealt, m_flights.end());
+    if (m_flights.empty() && m_flightTimer != nullptr)
+        m_flightTimer->stop();
+    update();
 }
 
 void FreeCellView::settleForChange()
@@ -775,6 +834,7 @@ QRectF FreeCellView::heldLandingRect() const
 
 void FreeCellView::pressAtCursor()
 {
+    landDealtCards();
     if (m_keyHolding) {
         dropAtCursor();
         return;

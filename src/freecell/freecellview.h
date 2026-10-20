@@ -99,7 +99,11 @@ private:
     void settleForChange();
 
     void buildActions();
+    // A deal the player asked for: the table, then the cards flying to it
+    // (GHUB-0065). The deal made when the view is built is dealTable() alone,
+    // because nobody asked for it and the view has no size yet.
     void newGame();
+    void dealTable();
     void undo();
 
     // Layout, in card heights. cardWidth() solves its height budget from
@@ -161,6 +165,18 @@ private:
     mutable std::vector<char> m_flightConsumed;
     QTimer* m_flightTimer = nullptr;
     void launchToFoundation(const Card& card, QRectF fromRect, int foundation);
+    // The opening deal, card by card across the columns a row at a time, as
+    // a dealer lays them, from the top of the table between the free cells
+    // and the foundations. Called after dealTable() has laid them out.
+    void launchDeal();
+    void startFlights();
+    // Puts every dealt card in the air down where it was going. A column
+    // hides such a card until it lands, so a press that could lift it must
+    // land it first. A card on its way to a foundation keeps flying.
+    void landDealtCards();
+    // Flight destinations past the four foundations' 0-3. A column is
+    // kColumnKey plus its index.
+    static constexpr int kColumnKey = 4;
     int grownFoundation(const std::array<std::size_t, 4>& before) const;
 
     std::vector<Card> m_drag;
