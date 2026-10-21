@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=214 -->
+<!-- ants-roadmap-id-high-water: GHUB=215 -->
 
 # Games Hub — Roadmap
 
@@ -9423,6 +9423,27 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** Pick "Learn to play" and the game plays a round or two alongside you, saying what is happening and what you should do next.
   Kind: feature.
   Source: user-request-2026-10-20.
+
+- 📋 [GHUB-0215] **The computer plays to the situation, not just the position in front of it.**
+  Owner's request, 2026-10-21: "The more context aware the computer
+  is when playing games, the more fun it will be." Asked which kinds
+  of awareness matter; the owner picked all four:
+  1. Reads the score: plays safe when ahead, takes risks when behind.
+  2. Remembers what has been played (Hearts, Canasta): tracks the
+     cards that are gone and plays around them.
+  3. Works with its partner (Canasta): notices what the partner is
+     collecting and helps.
+  4. Adjusts to how you play: eases off after a run of losses, pushes
+     harder when you win easily, so games stay close.
+  Games with a computer opponent: Chess, Reversi, Draughts, Hearts,
+  Canasta. Not designed yet. Open questions: which game first; whether
+  4 is its own setting or replaces the fixed difficulty levels; how a
+  self-test proves each one (a hand-built position per behaviour, as
+  tests.md recommends, rather than the strength ladder, which cannot
+  separate a small change from noise).
+  **Layman:** The computer opponents notice the score, remember what has been played, help their partner and adjust to how you play, so games feel more like playing a person.
+  Kind: enhancement.
+  Source: user-request-2026-10-21.
 
 ## P01 — Shipped
 
