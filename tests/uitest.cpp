@@ -5290,6 +5290,11 @@ int main(int argc, char* argv[])
         check(paints(&hearts), "hearts view paints");
 
         {
+            // One fixed deal, so a failure here can be replayed (GHUB-0212):
+            // unseeded, every run played a different hand and no failure could
+            // be looked at twice. Released at the end of the block, so the
+            // checks after it still see fresh deals.
+            pinDealSeed(20261021);
             CanastaView canasta;
             canasta.resize(1000, 740);
             check(paints(&canasta), "canasta view paints");
@@ -5530,9 +5535,21 @@ int main(int argc, char* argv[])
             const int stockAtStart = stockLeft();
             int yourTurns = 0;
             for (int turn = 0; turn < 3; ++turn) {
-                if (!pumpUntil([&canasta] { return canasta.turnLight().seat == 0; }, 20000)
-                    || !settle(&canasta, 20000))
+                // Which wait ran out, whose turn it was and after how long:
+                // the three sightings so far could not tell a stalled seat
+                // from a slow machine, and the next one should.
+                QElapsedTimer round;
+                round.start();
+                const bool cameBack =
+                    pumpUntil([&canasta] { return canasta.turnLight().seat == 0; }, 20000);
+                if (!cameBack || !settle(&canasta, 20000)) {
+                    std::printf("      canasta: turn %d %s after %lld ms, seat %d to play: %s\n",
+                                turn + 1,
+                                cameBack ? "never settled" : "never came back to you",
+                                static_cast<long long>(round.elapsed()),
+                                canasta.turnLight().seat, qPrintable(status));
                     break;
+                }
                 clickAt(&canasta, stock, Qt::LeftButton);
                 settle(&canasta, 20000);
                 clickAt(&canasta, QPointF(canasta.width() / 2.0, canasta.height() - 60.0),
@@ -5548,6 +5565,7 @@ int main(int argc, char* argv[])
             check(stockAtEnd >= 0 && stockAtEnd < stockAtStart,
                   "canasta: play keeps moving through the stock rather than stalling");
             check(paints(&canasta), "canasta: the table still paints mid-hand");
+            unpinDealSeed();
         }
 
         PinballView pinball;

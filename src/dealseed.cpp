@@ -28,6 +28,11 @@ void pinDealSeed(unsigned seed)
     sequence().seed(seed);
 }
 
+void unpinDealSeed()
+{
+    g_pinned = false;
+}
+
 unsigned dealSeed()
 {
     if (g_pinned)

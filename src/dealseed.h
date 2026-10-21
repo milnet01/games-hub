@@ -22,3 +22,7 @@ unsigned dealSeed();
 // Pins the sequence. Call once, before any game is built -- the seeds are
 // member initialisers, so a game already constructed has taken its own.
 void pinDealSeed(unsigned seed);
+
+// Back to a random seed per game. For a test that pins one deal mid-run and
+// must not pin every check after it (GHUB-0212).
+void unpinDealSeed();

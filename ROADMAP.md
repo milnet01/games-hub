@@ -9383,6 +9383,18 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   the deal would make a failure reproducible.
   Third sighting, 2026-10-20: failed in a direct gameshub_uitest run
   ("stock went 59 -> 50 over 2 of your turns"), load near 6.
+  2026-10-21: made reproducible and self-reporting; cause still
+  unknown, so left open. The block now pins its deal (seed 20261021)
+  and releases it with the new unpinDealSeed() at the end of the
+  block, so later checks still get fresh deals; two runs and a full
+  ctest run all read "stock went 56 -> 45 over 3 of your turns". A
+  wait that runs out now prints the turn, which wait, the elapsed
+  time, the seat to play and the status line, proven by one run with
+  the wait cut to 1 ms. Measured first: 20 pinned deals (seeds 1-20)
+  all passed at load 6-12 on 12 cores, and one round took 5.3-7.2 s
+  against the 20 s budget, so neither a deal-specific stall nor plain
+  slowness is shown. Next sighting: read the printed line before
+  touching the budget.
   **Layman:** One Canasta test failed once while the whole suite ran, then passed twice when run alone.
   Kind: test.
   Source: in-session-2026-10-20.
