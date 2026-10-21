@@ -358,10 +358,12 @@ void PyramidView::tryPair(Source source, int index, const Card& card)
 
 void PyramidView::dealFromStock()
 {
+    const bool redealing = m_table.stock().empty();
     if (!m_table.drawFromStock()) {
         refresh(tr("No redeals left."));
         return;
     }
+    launchDraw(redealing);
     m_undoAction->setEnabled(m_table.canUndo());
     clearSelection();
     Sound::instance().play(Sound::kCardDeal);
@@ -403,6 +405,24 @@ void PyramidView::launchDeal()
             m_flights.push_back(f);
         }
     }
+    startFlights();
+}
+
+void PyramidView::launchDraw(bool redealt)
+{
+    cardflight::Flight f;
+    if (redealt) {
+        f.card = m_table.stock().back();
+        f.from = wasteRect().topLeft();
+        f.to = stockRect().topLeft();
+        f.destination = kStockKey;
+    } else {
+        f.card = m_table.waste().back();
+        f.from = stockRect().topLeft();
+        f.to = wasteRect().topLeft();
+        f.destination = kWasteKey;
+    }
+    m_flights.push_back(f);
     startFlights();
 }
 
@@ -522,24 +542,37 @@ void PyramidView::paintEvent(QPaintEvent*)
         }
     }
 
-    if (m_table.stock().empty())
+    // A redealt stock still in the air leaves the slot showing until it lands.
+    const std::vector<Card>& stock = m_table.stock();
+    if (stock.empty() || cardflight::suppressAt(m_flights, m_flightConsumed, kStockKey, stock.back()))
         CardArt::paintSlot(p, stockRect(),
                            m_table.redealsLeft() ? tr("Redeal") : QString());
     else
         CardArt::paintBack(p, stockRect());
 
-    if (m_table.waste().empty()) {
+    // A drawn card still in the air leaves the one beneath it showing.
+    const std::vector<Card>& waste = m_table.waste();
+    std::size_t wasteShown = waste.size();
+    while (wasteShown > 0
+           && cardflight::suppressAt(m_flights, m_flightConsumed, kWasteKey, waste[wasteShown - 1]))
+        --wasteShown;
+    if (wasteShown == 0) {
         CardArt::paintSlot(p, wasteRect());
     } else {
-        CardArt::paintFace(p, wasteRect(), m_table.waste().back());
+        CardArt::paintFace(p, wasteRect(), waste[wasteShown - 1]);
         if (m_hasSelection && m_selectedSource == Source::Waste)
             CardArt::paintHighlight(p, wasteRect(), QColor(0xff, 0xd5, 0x4f));
     }
 
-    // Taken cards on their way out, above the table.
-    for (const cardflight::Flight& f : m_flights)
-        CardArt::paintFace(p, QRectF(cardflight::positionOf(f), QSizeF(cardWidth(), cardHeight())),
-                           f.card);
+    // Cards in the air, above the table: taken ones on their way out, drawn
+    // ones face up, and a redealt stock face down.
+    for (const cardflight::Flight& f : m_flights) {
+        const QRectF r(cardflight::positionOf(f), QSizeF(cardWidth(), cardHeight()));
+        if (f.card.faceUp)
+            CardArt::paintFace(p, r, f.card);
+        else
+            CardArt::paintBack(p, r);
+    }
 
     Theme::paintCellCursor(p, stopRect(m_cursorRow, m_cursorIndex),
                            Legibility::instance().enabled());

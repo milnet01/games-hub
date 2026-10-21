@@ -10,6 +10,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Changed
+
+- **Pyramid's draw slides to the waste instead of jumping there** (GHUB-0216)
+  A card you draw now travels from the stock to the waste. A redeal
+  sends the pile back to the stock face down, as Klondike's does.
+
 ## [1.2.0] - 2026-10-20
 
 **Theme:** The card games, by keyboard and in motion

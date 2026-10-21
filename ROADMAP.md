@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=215 -->
+<!-- ants-roadmap-id-high-water: GHUB=216 -->
 
 # Games Hub — Roadmap
 
@@ -8605,6 +8605,19 @@ writer it waits for.
   **Layman:** Tidy away the copy of the old version used to film the trailer, once the website session says the clips are fine.
   Kind: chore.
   Source: in-session-2026-10-15.
+
+- ✅ [GHUB-0216] **Pyramid's draw slides to the waste instead of jumping there.**
+  Left over from GHUB-0065, which animated Pyramid's deal and its taken
+  pairs but not the stock. A draw now flies the card from the stock to
+  the waste, and a redeal flies one face-down card back to the stock,
+  as Klondike's draw and recycle do. The waste shows the card beneath
+  until the drawn one lands, and the stock shows its Redeal slot until
+  the redealt pile arrives. A press lands either at once, as it lands
+  the deal. Shipped 2026-10-21; checks in gameshub_uitest's Pyramid
+  flight block.
+  **Layman:** In Pyramid, a card you draw now slides from the stock to the waste, and a redeal slides the pile back.
+  Kind: enhancement.
+  Source: in-session-2026-10-20.
 
 ## 1.4.0 — Getting it to other people
 

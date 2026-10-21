@@ -101,9 +101,16 @@ private:
     // the top, as a dealer lays it. A dealt card's destination is its slot,
     // which is how the pyramid hides it until it lands; a taken card's is -1.
     void launchDeal();
+    // A draw slides the card from the stock to the waste; a redeal sends one
+    // back the other way, carrying the stock's new top card, as Klondike's
+    // does. Keyed past the last slot, so the pyramid never matches them.
+    static constexpr int kWasteKey = PyramidTable::kPyramidCards;
+    static constexpr int kStockKey = kWasteKey + 1;
+    void launchDraw(bool redealt);
     void startFlights();
-    // Puts every dealt card in the air down on its slot, so a press never
-    // picks up a card the pyramid is still hiding. Taken cards keep flying.
+    // Puts every dealt or drawn card in the air down where it is going, so a
+    // press never picks up a card the table is still hiding. Taken cards keep
+    // flying.
     void landDealtCards();
     void clearFlights();
     void checkEnd();

@@ -4725,6 +4725,8 @@ int main(int argc, char* argv[])
                                          (640.0 - 40.0) / (1.4 + 6 * 0.52 + 1.6));
             clickAt(&pyramid, QPointF(860 / 2.0 - card * 0.75, 640 - card * 0.7 - 16),
                     Qt::LeftButton);
+            // The drawn card slides to the waste; a resumed table has it there.
+            check(settle(&pyramid, 5000), "pyramid: the drawn card lands before the picture");
 
             const QImage played = renderOf(&pyramid);
             const QByteArray saved = pyramid.saveState();
@@ -6636,6 +6638,26 @@ int main(int argc, char* argv[])
             v.deactivate();
             check(v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
                   "pyramid: leaving the game clears the air and stops the timer");
+
+            // A draw used to jump: the card was simply on the waste in the
+            // next frame. Down from the six reaches the stock, the waste being
+            // empty, and the cursor stays there through every draw.
+            check(v.restoreState(handBuiltPyramid()), "pyramid: the table loads for the draws");
+            pressKey(&v, Qt::Key_Down);
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 1, "pyramid: a drawn card slides to the waste");
+            check(settle(&v, 5000) && activeTimers(&v) == 0,
+                  "pyramid: the drawn card lands and the timer stops");
+            // The hand-built stock is the 24 cards the pyramid did not take,
+            // so 23 more draws empty it and the next press redeals.
+            for (int draw = 1; draw < 24; ++draw) {
+                pressKey(&v, Qt::Key_Space);
+                settle(&v, 5000);
+            }
+            pressKey(&v, Qt::Key_Space);
+            check(v.flightsInTheAir() == 1, "pyramid: a redeal sends the waste back visibly");
+            check(settle(&v, 5000) && activeTimers(&v) == 0,
+                  "pyramid: the redealt stock lands and the timer stops");
         }
 
         // Chess moves a piece rather than a card, but the question is the same:
@@ -6941,11 +6963,11 @@ int main(int argc, char* argv[])
                 check(settle(&v, 10000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
                       "pyramid: the deal lands and the timer stops");
                 // Down from the bottom row is the stock, and turning a stock
-                // card sends nothing flying, so whatever is left is the deal.
+                // card sends that one card flying, so anything more is the deal.
                 newGame->trigger();
                 pressKey(&v, Qt::Key_Down);
                 pressKey(&v, Qt::Key_Space);
-                check(v.flightsInTheAir() == 0, "pyramid: a press lands the deal at once");
+                check(v.flightsInTheAir() == 1, "pyramid: a press lands the deal at once");
             }
         }
         {
