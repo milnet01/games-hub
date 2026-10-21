@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=216 -->
+<!-- ants-roadmap-id-high-water: GHUB=219 -->
 
 # Games Hub — Roadmap
 
@@ -8618,6 +8618,40 @@ writer it waits for.
   **Layman:** In Pyramid, a card you draw now slides from the stock to the waste, and a redeal slides the pile back.
   Kind: enhancement.
   Source: in-session-2026-10-20.
+
+- ✅ [GHUB-0217] **The turn light is a glow alone, with no ring drawn round it.**
+  Owner's call, 2026-10-21: "the circle (more like an ellipse) drawn
+  around the active player light, can we remove that please. The
+  spotlight is sufficient." The ring is the outline Theme::paintTurnLight
+  draws over the glow, kept so the cue did not depend on colour alone;
+  the owner has ruled the glow enough. The uitest check "the turn light
+  carries an outline" goes with it.
+  Shipped 2026-10-21. Theme::paintTurnLight draws the gradient alone;
+  spec GHUB-0063 § 1, § 4.1, INV-6 and § 15 amended, no review gate at
+  the owner's choice.
+  **Layman:** The gold ring around the active player's light goes; the glow stays.
+  Kind: ux.
+  Source: user-request-2026-10-21.
+
+- 📋 [GHUB-0218] **On a card, the keyboard cursor is a slim outline outside the card, not a band over its edge.**
+  Owner's report, 2026-10-21: the border round the cards makes some
+  of them harder to see. It is the keyboard cursor:
+  Theme::paintCellCursor draws a gold band INSIDE the rect, 7% of its
+  width, so on a card it covers the corner index. Owner chose: draw
+  it outside the card, thinner, in the card games (Klondike, Spider,
+  FreeCell, Pyramid, Hearts, Canasta). Board games keep the in-cell
+  cursor, since their squares touch and there is no outside.
+  **Layman:** The gold frame that marks your place no longer covers the edge of the card, where its number and suit are.
+  Kind: ux.
+  Source: user-request-2026-10-21.
+
+- 📋 [GHUB-0219] **The keyboard cursor shows only once you use the keys, and hides when you click.**
+  Owner's call, 2026-10-21, with GHUB-0218: hidden until a key moves or
+  presses it, hidden again on a mouse click. Every game with a
+  keyboard cursor.
+  **Layman:** Playing with the mouse shows no cursor frame at all; pressing an arrow key brings it back.
+  Kind: ux.
+  Source: user-request-2026-10-21.
 
 ## 1.4.0 — Getting it to other people
 

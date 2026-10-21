@@ -19,7 +19,7 @@ whose turn it is without reading anything.
 ## 1. Goal
 
 In Hearts, Canasta, Chess, Draughts and Reversi, the seat or side whose turn
-it is carries a soft gold light with a gold outline. When the turn passes
+it is carries a soft gold light. When the turn passes
 during play, the leaving light fades out as the arriving one fades in, once,
 and the table then holds still. It is stronger when the legibility switch is
 on. A game at rest still asks for no repaints.
@@ -56,6 +56,9 @@ legibility switch; the blur is faked; it fades in once and does not pulse.
 
 - **The light crosses over rather than jumping, and it is big** — the owner,
   2026-09-21 (§ 15).
+- **The light is the glow alone, with no outline** — the owner, 2026-10-21
+  (§ 15, GHUB-0217). This overrules the filed constraint that the glow is not
+  the only cue.
 
 The calls in § 4 that were this spec's rather than the owner's went to him on
 2026-09-21. § 15 records what he said.
@@ -76,9 +79,8 @@ inline constexpr int kTurnLightFadeMs = 300;
 inline constexpr int kTurnBandDepth = 26;
 
 // A soft light filling `area`: one radial gradient in kGold shaped to the
-// ellipse inscribed in `area`, plus a gold outline of that ellipse so the
-// cue survives any colour vision. Both scale with `level` (0 to 1).
-// `legible` raises the gradient's peak and doubles the outline width. Hands
+// ellipse inscribed in `area`, and nothing round it. It scales with `level`
+// (0 to 1), and `legible` raises its peak. Hands
 // the painter back as it found it.
 void paintTurnLight(QPainter& p, const QRectF& area, double level, bool legible);
 ```
@@ -89,7 +91,7 @@ One gradient, never a computed blur, on the precedent of
 **The light is shaped to its area, not drawn as a circle inside it.** The
 painter translates to the area's centre, scales by its half-width and
 half-height, and draws a unit radial gradient. An oblong area therefore gives
-an ellipse and a square one a circle, and the outline is that same ellipse.
+an ellipse and a square one a circle.
 The owner asked for a bigger light and for a shape other than a small circle
 (2026-09-21); § 4.5 gives each view an area worth filling, and this is what
 fills it.
@@ -342,16 +344,15 @@ creates. Each names the rule its fixture isolates.
   *Breaks when:* `paintTurnLight` ignores `legible`, or `applyLegibility()`
   touches the fade state.
 
-- **INV-6** — The light is not colour alone: at level 1 its outline is drawn,
-  and it is the ellipse inscribed in the area rather than the area's border.
+- **INV-6** — The light is a glow shaped to the ellipse inscribed in its
+  area, with no outline round it (GHUB-0217).
   *Test:* `tests/uitest.cpp`, inside `turnLightAnswersTheSwitch`: paint
   `Theme::paintTurnLight` alone onto a transparent image over a known oblong
   rectangle. Assert a pixel on the ellipse — the midpoint of the rectangle's
-  top edge — is more opaque than one just inside it, where the gradient fades.
-  Assert a corner pixel of the rectangle is fully transparent, which no
-  rectangular outline could leave bare. The fixture isolates the outline from
-  the gradient, and the shape from the area.
-  *Breaks when:* the painter draws the gradient only, or outlines the
+  top edge — is less opaque than one just inside it, where the glow is.
+  Assert a corner pixel of the rectangle is fully transparent, which a light
+  filling the rectangle could not leave bare.
+  *Breaks when:* the painter draws an outline on the ellipse, or fills the
   rectangle instead of the ellipse.
 
 - **INV-7** — When the turn passes during play, both lights are up at once and
@@ -498,3 +499,11 @@ questions asked:
 - **No review gate on this amendment.** The owner asked not to run
   `review-contract` for a change of this size. Recorded here and in the commit
   body, per `CLAUDE.md` § Review history.
+
+Asked 2026-10-21, on the owner's own request:
+
+- **The outline goes; the glow is enough.** "The circle (more like an
+  ellipse) drawn around the active player light, can we remove that please.
+  The spotlight is sufficient." § 1, § 4.1 and INV-6 changed (GHUB-0217).
+- **No review gate on this amendment either**, at the owner's choice when
+  asked the same day.

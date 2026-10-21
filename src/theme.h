@@ -72,10 +72,9 @@ inline int turnBandDepth(int room)
 }
 
 // A soft light filling `area`: one radial gradient in kGold shaped to the
-// ellipse inscribed in `area`, plus a gold outline of that ellipse so the cue
-// survives any colour vision. Both scale with `level` (0 to 1); a level of 0
-// draws nothing. `legible` raises the gradient's peak and doubles the outline
-// width. Hands the painter back as it found it.
+// ellipse inscribed in `area`, with no outline (GHUB-0217). It scales with
+// `level` (0 to 1); a level of 0 draws nothing. `legible` raises the
+// gradient's peak. Hands the painter back as it found it.
 //
 // The light is shaped to its area rather than drawn as a circle inside it, so
 // an oblong area gives an ellipse and a square one a circle — the owner asked

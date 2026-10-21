@@ -2502,10 +2502,10 @@ void turnLightAnswersTheSwitch()
     const int midX = int(area.center().x());
     const int onEllipse = qAlpha(plain.pixel(midX, int(area.top())));
     const int justInside = qAlpha(plain.pixel(midX, int(area.top()) + 12));
-    check(onEllipse > justInside,
-          "the turn light carries an outline, so it is not colour alone");
+    // The owner asked for the ring to go and the glow to stay (GHUB-0217).
+    check(onEllipse < justInside, "the turn light is a glow with no outline round it");
     check(qAlpha(plain.pixel(int(area.left()) + 1, int(area.top()) + 1)) == 0,
-          "and the outline is the ellipse inside the area, not the area's own border");
+          "and the glow is the ellipse inside the area, not the area itself");
 
     // INV-5: the switch is read at paint time, so it must not disturb the
     // cross-fade it is read during. A level already at 1 would hide that.

@@ -16,6 +16,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   A card you draw now travels from the stock to the waste. A redeal
   sends the pile back to the stock face down, as Klondike's does.
 
+- **The turn light is a glow alone, with no ring round it** (GHUB-0217)
+  In Hearts, Canasta, Chess, Draughts and Reversi, the gold ring drawn
+  round the light of whoever's turn it is has gone. The glow still shows
+  the turn, and is still stronger in large play.
+
 ## [1.2.0] - 2026-10-20
 
 **Theme:** The card games, by keyboard and in motion

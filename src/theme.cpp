@@ -149,19 +149,8 @@ void paintTurnLight(QPainter& p, const QRectF& area, double level, bool legible)
     p.setBrush(glow);
     p.drawEllipse(QPointF(0, 0), 1.0, 1.0);
     p.restore();
-
-    // The outline, drawn unscaled so its width is even all the way round: a
-    // stroke under the transform above would be thin at the ends of a long
-    // ellipse and thick at its sides. It is the half of the cue that does not
-    // depend on seeing the colour.
-    p.save();
-    p.setRenderHint(QPainter::Antialiasing, true);
-    QColor edge = kGold;
-    edge.setAlphaF(float(lit * (legible ? 0.95 : 0.72)));
-    p.setPen(QPen(edge, legible ? 6.0 : 3.0));
-    p.setBrush(Qt::NoBrush);
-    p.drawEllipse(area);
-    p.restore();
+    // No outline round it: the owner asked for the ring to go, the glow
+    // being enough on its own (GHUB-0217).
 }
 
 void paintCellCursor(QPainter& p, const QRectF& cell, bool legible)
