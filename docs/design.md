@@ -270,6 +270,14 @@ each of the four went up by one, every earlier version still loads with the
 cursor left where a fresh game puts it, and `tests/saves/` is untouched.
 Klondike followed the same route to version 2.
 
+**On a card the cursor is `Theme::paintCardCursor`, outside the card**
+(GHUB-0218). The cell cursor's band sits inside its rect, which on a card
+covered the corner index the owner reads cards by. The card cursor is a slim
+gold line past a small gap, rounded to the card's own corner, with a dark
+hairline outside it for a white card beside it. Its widths are fixed rather
+than a share of the card, so a large card does not grow it back into a band.
+`cardCursorLeavesTheCardAlone` checks that nothing lands on the card.
+
 **The cursor is drawn only from a key press until the next click**
 (GHUB-0219), so someone playing with the mouse sees no frame on the card they
 are about to click. `GameView::event` sets `keyboardCursorShown()` before the

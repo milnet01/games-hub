@@ -2654,13 +2654,13 @@ void CanastaView::paintCursor(QPainter& p)
     const bool legible = Legibility::instance().enabled();
 
     if (m_cursorRow == kCentreRow) {
-        Theme::paintCellCursor(p, centreStopRect(m_cursorIndex), legible);
+        Theme::paintCardCursor(p, centreStopRect(m_cursorIndex), legible);
         return;
     }
     if (m_cursorRow == kMeldRow) {
         for (const auto& [rank, r] : meldStops())
             if (rank == m_cursorIndex)
-                Theme::paintCellCursor(p, r, legible);
+                Theme::paintCardCursor(p, r, legible);
         return;
     }
     const int n = int(m_engine.hand(0).size());
@@ -2671,7 +2671,7 @@ void CanastaView::paintCursor(QPainter& p)
     p.save();
     p.translate(handCentre(m_cursorIndex, n, isSelected(m_cursorIndex) || m_cursorIndex == m_hover));
     p.rotate(handAngle(m_cursorIndex, n));
-    Theme::paintCellCursor(p, QRectF(-cardWidth() * 0.5, -cardHeight() * 0.5, cardWidth(), cardHeight()),
+    Theme::paintCardCursor(p, QRectF(-cardWidth() * 0.5, -cardHeight() * 0.5, cardWidth(), cardHeight()),
                            legible);
     p.restore();
 }

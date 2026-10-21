@@ -21,6 +21,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   round the light of whoever's turn it is has gone. The glow still shows
   the turn, and is still stronger in large play.
 
+- **On a card, the keyboard cursor no longer covers the card's edge** (GHUB-0218)
+  In Klondike, Spider, FreeCell, Pyramid, Hearts and Canasta, the gold
+  frame is now a slim line just outside the card, so the corner number
+  and suit stay in full view. The board games keep their frame.
+
 - **The keyboard cursor stays hidden until you use the keys** (GHUB-0219)
   The gold frame that marks your place appears when you press a key, and
   goes away when you click. Playing with the mouse shows no frame at

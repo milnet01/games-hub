@@ -94,6 +94,13 @@ void paintTurnLight(QPainter& p, const QRectF& area, double level, bool legible)
 // Hands the painter back as it found it.
 void paintCellCursor(QPainter& p, const QRectF& cell, bool legible);
 
+// The keyboard cursor on a card, or on a run or meld of them: a slim gold
+// outline OUTSIDE `card`, past a small gap, so nothing on the card is covered.
+// The cell cursor's band sat over the corner index, which is how a card is
+// read (GHUB-0218). A dark hairline runs round its outside, for a white card
+// beside it. `legible` thickens it. Hands the painter back as it found it.
+void paintCardCursor(QPainter& p, const QRectF& card, bool legible);
+
 // Ink and plate for paintCaption(). Measured at 13.15:1 by
 // scripts/legibility-check.py, which holds the pair and requires 4.5 of it —
 // WCAG's bar for body text rather than the 3.0 a large glyph would need,

@@ -726,7 +726,7 @@ void HeartsView::paintEvent(QPaintEvent*)
 
     // Only once the keys are in use (GHUB-0219).
     if (!hand.empty() && keyboardCursorShown())
-        Theme::paintCellCursor(p, handCardRect(m_cursor), legible);
+        Theme::paintCardCursor(p, handCardRect(m_cursor), legible);
 
     paintStatusCaption(p, captionArea());
 }

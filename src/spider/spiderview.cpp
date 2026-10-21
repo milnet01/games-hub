@@ -480,7 +480,7 @@ void SpiderView::paintEvent(QPaintEvent*)
         }
         // Only once the keys are in use (GHUB-0219).
         if (keyboardCursorShown())
-            Theme::paintCellCursor(p, cursorRect(), Legibility::instance().enabled());
+            Theme::paintCardCursor(p, cursorRect(), Legibility::instance().enabled());
     }
 
     paintStatusCaption(p, QRectF(rect()));

@@ -8633,7 +8633,7 @@ writer it waits for.
   Kind: ux.
   Source: user-request-2026-10-21.
 
-- 📋 [GHUB-0218] **On a card, the keyboard cursor is a slim outline outside the card, not a band over its edge.**
+- ✅ [GHUB-0218] **On a card, the keyboard cursor is a slim outline outside the card, not a band over its edge.**
   Owner's report, 2026-10-21: the border round the cards makes some
   of them harder to see. It is the keyboard cursor:
   Theme::paintCellCursor draws a gold band INSIDE the rect, 7% of its
@@ -8641,6 +8641,12 @@ writer it waits for.
   it outside the card, thinner, in the card games (Klondike, Spider,
   FreeCell, Pyramid, Hearts, Canasta). Board games keep the in-cell
   cursor, since their squares touch and there is no outside.
+  Shipped 2026-10-21. Theme::paintCardCursor: a 2.5 px gold line
+  (4 px in large play) 2 px outside the card, rounded to CardArt's
+  corner, with a dark hairline outside. Klondike, Spider, FreeCell,
+  Pyramid, Hearts and Canasta use it; the board games keep
+  paintCellCursor. Checked by cardCursorLeavesTheCardAlone, and by eye
+  on --shot pictures of Klondike and Hearts.
   **Layman:** The gold frame that marks your place no longer covers the edge of the card, where its number and suit are.
   Kind: ux.
   Source: user-request-2026-10-21.

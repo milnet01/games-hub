@@ -52,6 +52,7 @@
 #include <QMouseEvent>
 #include <QElapsedTimer>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPixmap>
 #include <QPushButton>
 #include <QStatusBar>
@@ -1451,6 +1452,46 @@ void cursorWaitsForTheKeys()
         check(!view->keyboardCursorShown(),
               qPrintable(QStringLiteral("%1: a click puts it away again").arg(game)));
     }
+}
+
+// ---- cardCursorLeavesTheCardAlone (GHUB-0218) ----
+//
+// On a card the cursor is an outline outside its edge: the corner index is
+// how a card is read, and the cell cursor's band used to cover it.
+void cardCursorLeavesTheCardAlone()
+{
+    const QRectF card(40, 40, 120, 170);
+    const auto paintAlone = [&card](bool legible) {
+        QImage canvas(240, 260, QImage::Format_ARGB32);
+        canvas.fill(Qt::transparent);
+        QPainter p(&canvas);
+        Theme::paintCardCursor(p, card, legible);
+        p.end();
+        return canvas;
+    };
+    for (const bool legible : { false, true }) {
+        const QImage drawn = paintAlone(legible);
+        // The card as CardArt paints it, rounded corners and all: the outline
+        // follows those corners, so it crosses the bare square corners of the
+        // rectangle, where there is no card to cover.
+        QPainterPath face;
+        const double corner = std::max(2.0, card.width() * 0.075);
+        face.addRoundedRect(card, corner, corner);
+        int inside = 0;
+        for (int y = int(card.top()); y < int(card.bottom()); ++y)
+            for (int x = int(card.left()); x < int(card.right()); ++x)
+                if (face.contains(QPointF(x + 0.5, y + 0.5)) && qAlpha(drawn.pixel(x, y)) != 0)
+                    ++inside;
+        check(inside == 0, legible ? "card cursor: in large play nothing lands on the card"
+                                   : "card cursor: nothing lands on the card");
+        // Just past the gap, level with the middle of the card's left edge.
+        int outside = 0;
+        for (int x = int(card.left()) - 12; x < int(card.left()); ++x)
+            outside = std::max(outside, qAlpha(drawn.pixel(x, int(card.center().y()))));
+        check(outside > 200, legible ? "card cursor: in large play it shows beside the card"
+                                     : "card cursor: it shows beside the card");
+    }
+    check(paintAlone(false) != paintAlone(true), "card cursor: large play draws it bolder");
 }
 
 // NOT covered here: what the cursor LOOKS like. A gold band of the right width
@@ -7563,6 +7604,7 @@ int main(int argc, char* argv[])
 
     boardsTakeTheKeyboard();
     cursorWaitsForTheKeys();
+    cardCursorLeavesTheCardAlone();
 
     turnLightFollowsTheTurn();
     turnLightComesUpAndHolds();

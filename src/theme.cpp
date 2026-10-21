@@ -180,6 +180,31 @@ void paintCellCursor(QPainter& p, const QRectF& cell, bool legible)
     p.restore();
 }
 
+void paintCardCursor(QPainter& p, const QRectF& card, bool legible)
+{
+    // Fixed widths rather than a share of the card: the owner asked for a much
+    // smaller border, and a share of a large card grows back into a band.
+    const double gap = 2.0;
+    const double band = legible ? 4.0 : 2.5;
+    // Rounded to match the card's own corner -- CardArt's corner(), from the
+    // width, which for a run or a meld is still one card's.
+    const double cardRadius = std::max(2.0, card.width() * 0.075);
+
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setBrush(Qt::NoBrush);
+    const double goldOut = gap + band / 2.0;
+    p.setPen(QPen(kGold, band));
+    p.drawRoundedRect(card.adjusted(-goldOut, -goldOut, goldOut, goldOut),
+                      cardRadius + goldOut, cardRadius + goldOut);
+
+    const double edgeOut = gap + band + 0.5;
+    p.setPen(QPen(QColor(0, 0, 0, 160), 1));
+    p.drawRoundedRect(card.adjusted(-edgeOut, -edgeOut, edgeOut, edgeOut),
+                      cardRadius + edgeOut, cardRadius + edgeOut);
+    p.restore();
+}
+
 namespace {
 
 // The joints a status sentence already has: a run of two or more spaces, or
