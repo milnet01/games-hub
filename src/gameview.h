@@ -273,10 +273,23 @@ public:
     // and does not use this, because there the box gates the next hand.
     void announceLater(int delayMs, std::function<void()> fn);
 
+    // Whether the keyboard cursor is drawn: from the first key press, until
+    // the next click. Someone playing with the mouse sees no frame on what
+    // they are about to click (GHUB-0219). A game paints its cursor only
+    // while this holds; Sudoku ignores it, its highlighted cell being where a
+    // click puts the next digit.
+    bool keyboardCursorShown() const { return m_keysInUse; }
+
 Q_SIGNALS:
     // Text for the hub's status bar.
     void statusChanged(const QString& text);
 
+protected:
+    // Watches every key press and click on the way to the game's own handlers,
+    // so no game has to remember to set keyboardCursorShown() itself.
+    bool event(QEvent* event) override;
+
 private:
     QString m_lastStatus;
+    bool m_keysInUse = false;
 };

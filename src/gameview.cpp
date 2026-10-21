@@ -3,6 +3,7 @@
 #include "legibility.h"
 #include "theme.h"
 
+#include <QEvent>
 #include <QFontMetricsF>
 #include <QTimer>
 
@@ -78,4 +79,20 @@ double GameView::captionBand(const QRectF& area) const
     // then the caption simply overlaps a little; a faceless card cannot be
     // recovered from at all.
     return std::min(fm.height() * 3.1, area.height() * 0.22);
+}
+
+bool GameView::event(QEvent* event)
+{
+    // Before the game's own handler, so a key that moves the cursor is drawn
+    // with the cursor already up. Shortcuts arrive as ShortcutOverride, not
+    // KeyPress, so Ctrl+Z on the toolbar does not count as using the keys.
+    const QEvent::Type type = event->type();
+    if (type == QEvent::KeyPress && !m_keysInUse) {
+        m_keysInUse = true;
+        update();
+    } else if (type == QEvent::MouseButtonPress && m_keysInUse) {
+        m_keysInUse = false;
+        update();
+    }
+    return QWidget::event(event);
 }

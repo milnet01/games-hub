@@ -397,9 +397,11 @@ void MinesweeperView::paintEvent(QPaintEvent*)
     // The keyboard cursor, over the squares: it says where the next Space digs,
     // so nothing may sit on top of it. Nothing is drawn while the field is
     // covered -- the paused branch above has already returned.
-    Theme::paintCellCursor(p, QRectF(r.x() + m_cursorCol * cell, r.y() + m_cursorRow * cell,
-                                     cell, cell),
-                           Legibility::instance().enabled());
+    // Only once the keys are in use (GHUB-0219).
+    if (keyboardCursorShown())
+        Theme::paintCellCursor(p, QRectF(r.x() + m_cursorCol * cell, r.y() + m_cursorRow * cell,
+                                         cell, cell),
+                               Legibility::instance().enabled());
 
     paintStatusCaption(p, QRectF(rect()));
 }

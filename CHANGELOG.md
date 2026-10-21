@@ -21,6 +21,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   round the light of whoever's turn it is has gone. The glow still shows
   the turn, and is still stronger in large play.
 
+- **The keyboard cursor stays hidden until you use the keys** (GHUB-0219)
+  The gold frame that marks your place appears when you press a key, and
+  goes away when you click. Playing with the mouse shows no frame at
+  all. Sudoku keeps its highlighted square, since a click uses it too.
+
 ## [1.2.0] - 2026-10-20
 
 **Theme:** The card games, by keyboard and in motion

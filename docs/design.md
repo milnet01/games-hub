@@ -270,6 +270,14 @@ each of the four went up by one, every earlier version still loads with the
 cursor left where a fresh game puts it, and `tests/saves/` is untouched.
 Klondike followed the same route to version 2.
 
+**The cursor is drawn only from a key press until the next click**
+(GHUB-0219), so someone playing with the mouse sees no frame on the card they
+are about to click. `GameView::event` sets `keyboardCursorShown()` before the
+game's own handler runs, and every game but Sudoku paints its cursor only
+while it holds. Sudoku's highlighted cell is also where a click puts the next
+digit, so it stays. `cursorWaitsForTheKeys` in `tests/uitest.cpp` checks
+each of the others.
+
 ### The hub
 
 `src/hubwindow.*` — the tile grid and one page per game in a `QStackedWidget`.

@@ -775,8 +775,10 @@ void ChessView::paintEvent(QPaintEvent*)
     // The keyboard cursor, over the pieces: it says where the next Space lands,
     // so nothing may sit on top of it. The lifted-piece highlight above is a
     // plain line UNDER the pieces, which is what keeps the two cues apart.
-    Theme::paintCellCursor(p, squareRect({ m_cursorRow, m_cursorCol }),
-                           Legibility::instance().enabled());
+    // Only once the keys are in use (GHUB-0219).
+    if (keyboardCursorShown())
+        Theme::paintCellCursor(p, squareRect({ m_cursorRow, m_cursorCol }),
+                               Legibility::instance().enabled());
 
     paintStatusCaption(p, QRectF(rect()));
 }

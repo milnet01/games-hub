@@ -2647,9 +2647,9 @@ void CanastaView::keyPressEvent(QKeyEvent* event)
 
 void CanastaView::paintCursor(QPainter& p)
 {
-    // Not over the summary a scored hand shows, and not while a drag has the
-    // cards in the air.
-    if (m_awaitingContinue || m_dragging)
+    // Not over the summary a scored hand shows, not while a drag has the
+    // cards in the air, and not until the keys are in use (GHUB-0219).
+    if (m_awaitingContinue || m_dragging || !keyboardCursorShown())
         return;
     const bool legible = Legibility::instance().enabled();
 

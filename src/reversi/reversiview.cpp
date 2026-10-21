@@ -574,9 +574,11 @@ void ReversiView::paintEvent(QPaintEvent*)
 
     // The keyboard cursor, over everything else on the board: it says where the
     // next Space lands, so nothing may sit on top of it.
-    Theme::paintCellCursor(p, QRectF(r.x() + m_cursorCol * cell, r.y() + m_cursorRow * cell,
-                                     cell, cell),
-                           legible);
+    // Only once the keys are in use (GHUB-0219).
+    if (keyboardCursorShown())
+        Theme::paintCellCursor(p, QRectF(r.x() + m_cursorCol * cell, r.y() + m_cursorRow * cell,
+                                         cell, cell),
+                               legible);
 
     // Reversi's status line is already the right sentence for the board: whose
     // turn it is AND the score, which is the number a player checks most and

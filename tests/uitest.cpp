@@ -1412,6 +1412,47 @@ bool tickTurnLight(GameView* view)
 // written. HubWindow::openGame has been calling setFocus() on every view for
 // months, and on ten of them it did nothing.
 //
+// ---- cursorWaitsForTheKeys (GHUB-0219) ----
+//
+// The keyboard cursor is drawn only once a key has been pressed, and a click
+// hides it again: someone playing with the mouse sees no frame at all. Every
+// game with a keyboard cursor but Sudoku, whose cell highlight is also where
+// a click puts the next digit.
+void cursorWaitsForTheKeys()
+{
+    ChessView chess;
+    ReversiView reversi;
+    DraughtsView draughts;
+    MinesweeperView mines;
+    KlondikeView klondike;
+    SpiderView spider;
+    FreeCellView freecell;
+    PyramidView pyramid;
+    HeartsView hearts;
+    CanastaView canasta;
+    const std::pair<GameView*, const char*> games[] = {
+        { &chess, "chess" },         { &reversi, "reversi" }, { &draughts, "draughts" },
+        { &mines, "minesweeper" },   { &klondike, "klondike" }, { &spider, "spider" },
+        { &freecell, "freecell" },   { &pyramid, "pyramid" }, { &hearts, "hearts" },
+        { &canasta, "canasta" },
+    };
+    for (const auto& [view, name] : games) {
+        const QString game = QString::fromUtf8(name);
+        view->resize(1000, 740);
+        settle(view, 10000);
+        check(!view->keyboardCursorShown(),
+              qPrintable(QStringLiteral("%1: a game just opened shows no cursor").arg(game)));
+        const QImage before = renderOf(view);
+        // Shift moves nothing in any game, so the cursor is the only change.
+        pressKey(view, Qt::Key_Shift);
+        check(view->keyboardCursorShown() && renderOf(view) != before,
+              qPrintable(QStringLiteral("%1: a key press brings the cursor up").arg(game)));
+        clickAt(view, QPointF(2.0, 2.0), Qt::LeftButton);
+        check(!view->keyboardCursorShown(),
+              qPrintable(QStringLiteral("%1: a click puts it away again").arg(game)));
+    }
+}
+
 // NOT covered here: what the cursor LOOKS like. A gold band of the right width
 // is a painting question, and the shot harness is what answers it --
 // `--shot --game chess` with and without `--legible`.
@@ -7521,6 +7562,7 @@ int main(int argc, char* argv[])
     idsAndKeysSurviveATranslation();
 
     boardsTakeTheKeyboard();
+    cursorWaitsForTheKeys();
 
     turnLightFollowsTheTurn();
     turnLightComesUpAndHolds();

@@ -8645,10 +8645,14 @@ writer it waits for.
   Kind: ux.
   Source: user-request-2026-10-21.
 
-- 📋 [GHUB-0219] **The keyboard cursor shows only once you use the keys, and hides when you click.**
+- ✅ [GHUB-0219] **The keyboard cursor shows only once you use the keys, and hides when you click.**
   Owner's call, 2026-10-21, with GHUB-0218: hidden until a key moves or
   presses it, hidden again on a mouse click. Every game with a
   keyboard cursor.
+  Shipped 2026-10-21. GameView::event sets keyboardCursorShown() on a
+  key press and clears it on a click; every game with a cursor but
+  Sudoku paints it only while it holds. Checked by
+  cursorWaitsForTheKeys in tests/uitest.cpp.
   **Layman:** Playing with the mouse shows no cursor frame at all; pressing an arrow key brings it back.
   Kind: ux.
   Source: user-request-2026-10-21.

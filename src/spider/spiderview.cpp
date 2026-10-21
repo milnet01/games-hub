@@ -478,7 +478,9 @@ void SpiderView::paintEvent(QPaintEvent*)
                 CardArt::paintFace(p, first.translated(0, i * cardHeight() * 0.26),
                                    m_drag[std::size_t(i)]);
         }
-        Theme::paintCellCursor(p, cursorRect(), Legibility::instance().enabled());
+        // Only once the keys are in use (GHUB-0219).
+        if (keyboardCursorShown())
+            Theme::paintCellCursor(p, cursorRect(), Legibility::instance().enabled());
     }
 
     paintStatusCaption(p, QRectF(rect()));
