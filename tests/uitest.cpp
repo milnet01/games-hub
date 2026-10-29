@@ -6289,35 +6289,35 @@ int main(int argc, char* argv[])
     // Every game reachable from any page without going back to the tiles. The
     // title is what says which page opened; the hub sets it from the game's label.
     {
-        HubWindow hub;
-        hub.show();
+        HubWindow menuHub;
+        menuHub.show();
         pump(30);
-        auto* menu = hub.findChild<QMenu*>(QStringLiteral("gamesMenu"));
+        auto* menu = menuHub.findChild<QMenu*>(QStringLiteral("gamesMenu"));
         check(menu != nullptr, "games menu: the hub has one");
-        QAction* back = hub.findChild<QAction*>(QStringLiteral("backAction"));
+        QAction* back = menuHub.findChild<QAction*>(QStringLiteral("backAction"));
         if (menu != nullptr && back != nullptr) {
             check(!menu->actions().isEmpty() && menu->actions().first() == back,
                   "games menu: it leads with the way back");
-            int opened = 0;
-            for (const QString& name : hub.gameNames()) {
-                auto* open = hub.findChild<QAction*>(QStringLiteral("openGame/") + name);
+            int fromMenu = 0;
+            for (const QString& name : menuHub.gameNames()) {
+                auto* open = menuHub.findChild<QAction*>(QStringLiteral("openGame/") + name);
                 if (open == nullptr || !menu->actions().contains(open))
                     continue;
                 open->trigger();
                 pump(10);
-                if (hub.windowTitle().startsWith(name + QStringLiteral(" ")) && back->isVisible())
-                    ++opened;
+                if (menuHub.windowTitle().startsWith(name + QStringLiteral(" ")) && back->isVisible())
+                    ++fromMenu;
             }
-            check(opened == int(hub.gameNames().size()),
+            check(fromMenu == int(menuHub.gameNames().size()),
                   qPrintable(QStringLiteral("games menu: every game opens from it, "
                                             "straight from another game -- %1 of %2")
-                                 .arg(opened)
-                                 .arg(hub.gameNames().size())));
+                                 .arg(fromMenu)
+                                 .arg(menuHub.gameNames().size())));
             back->trigger();
             pump(10);
             check(!back->isVisible(), "games menu: and All Games goes back to the tiles");
         }
-        hub.close();
+        menuHub.close();
         pump(10);
     }
 
@@ -6333,17 +6333,17 @@ int main(int argc, char* argv[])
         QSettings().setValue(QStringLiteral("saved/Reversi"), blob.readAll());
         QSettings().sync();
 
-        HubWindow hub;
-        hub.show();
+        HubWindow markHub;
+        markHub.show();
         pump(30);
-        const auto tileSays = [&hub](const QString& game) {
-            for (QPushButton* tile : hub.findChildren<QPushButton*>())
+        const auto tileSays = [&markHub](const QString& game) {
+            for (QPushButton* tile : markHub.findChildren<QPushButton*>())
                 if (tile->accessibleName() == game)
                     return tile->accessibleDescription();
             return QString();
         };
-        const auto menuSays = [&hub](const QString& game) {
-            QAction* a = hub.findChild<QAction*>(QStringLiteral("openGame/") + game);
+        const auto menuSays = [&markHub](const QString& game) {
+            QAction* a = markHub.findChild<QAction*>(QStringLiteral("openGame/") + game);
             return a != nullptr ? a->text() : QString();
         };
         check(tileSays(QStringLiteral("Reversi")).endsWith(QStringLiteral("In progress")),
@@ -6355,23 +6355,23 @@ int main(int argc, char* argv[])
         check(menuSays(QStringLiteral("Chess")) == QStringLiteral("Chess"),
               "in progress: and leaves the others as they are");
 
-        auto* notice = hub.findChild<QLabel*>(QStringLiteral("resumeNotice"));
-        auto* timer = hub.findChild<QTimer*>(QStringLiteral("resumeNoticeTimer"));
+        auto* notice = markHub.findChild<QLabel*>(QStringLiteral("resumeNotice"));
+        auto* timer = markHub.findChild<QTimer*>(QStringLiteral("resumeNoticeTimer"));
         check(notice != nullptr && timer != nullptr, "resumed: the hub has a notice for it");
         if (notice != nullptr && timer != nullptr) {
-            hub.openGameNamed(QStringLiteral("Reversi"));
+            markHub.openGameNamed(QStringLiteral("Reversi"));
             pump(20);
             check(notice->isVisible() && !notice->text().isEmpty(),
                   "resumed: opening a saved game says so on the board");
             check(timer->isActive() && timer->interval() >= 4000,
                   "resumed: and leaves it up long enough to read slowly");
 
-            hub.openGameNamed(QStringLiteral("Chess"));
+            markHub.openGameNamed(QStringLiteral("Chess"));
             pump(20);
             check(!notice->isVisible(), "resumed: a fresh game says nothing of the sort");
         }
 
-        QAction* back = hub.findChild<QAction*>(QStringLiteral("backAction"));
+        QAction* back = markHub.findChild<QAction*>(QStringLiteral("backAction"));
         if (back != nullptr)
             back->trigger();
         pump(20);
@@ -6379,7 +6379,7 @@ int main(int argc, char* argv[])
               "in progress: opening a game and leaving it untouched does not mark it");
         check(tileSays(QStringLiteral("Reversi")).endsWith(QStringLiteral("In progress")),
               "in progress: the resumed game is still marked after leaving it");
-        hub.close();
+        markHub.close();
         pump(10);
         QSettings().remove(QStringLiteral("saved"));
         QSettings().sync();
