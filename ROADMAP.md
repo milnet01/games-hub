@@ -8476,7 +8476,7 @@ writer it waits for.
   Kind: ux.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
+- ✅ [GHUB-0030] **The toolbar label goes stale if anything but the button moves the switch.**
   Not a defect today, and deliberately not fixed while filing: the
   toolbar action is the only writer of Legibility, so its own toggled
   signal keeps the label right, and spec GHUB-0017 §4.3 specifies
@@ -8511,6 +8511,13 @@ writer it waits for.
   is GHUB-0068, the settings dialog: a legibility control there is the
   second writer this bullet predicts, and the one connect should land in the
   same change rather than after it.
+  Shipped already, found 2026-10-29. e928fc3 (2026-09-02, GHUB-0155..0157)
+  added the connect from Legibility::changed to the button's setChecked,
+  for --legible; the 2026-09-08 check above missed it. The hub block in
+  tests/uitest.cpp that asks whether the button "follows the switch when
+  something else moves it" locks it. Proved red 2026-10-29: with that
+  connect removed and rebuilt, that check and "and carries its label
+  across with it" both fail; restored, all UI checks pass.
 
 - 📋 [GHUB-0061] **There is no way to get from one game to another without going back to the front door.**
   The menu bar holds one menu, `&Help`. Every move between games goes through the
