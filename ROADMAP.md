@@ -8402,7 +8402,7 @@ this stays a MINOR.
 GHUB-0030 lands with GHUB-0068, because that settings dialog is the second
 writer it waits for.
 
-- 📋 [GHUB-0060] **One window that stays where you put it, instead of fifteen remembered shapes fighting each other.**
+- ✅ [GHUB-0060] **One window that stays where you put it, instead of fifteen remembered shapes fighting each other.**
   **This reverses a deliberate feature, and the owner has asked for it.**
   `hubwindow.cpp`'s `geometryKey()` stores a separate geometry per page --
   `window/geometry/<game>` for each of the fourteen, plus `window/geometry/menu`
@@ -8442,6 +8442,14 @@ writer it waits for.
   this is built. Nothing breaks for an upgrading player, so this is a MINOR and
   lands in 1.3.0. Dropping the old sizes instead would make that
   release 2.0.0.
+  Owner's call, 2026-10-29: the tile grid's old size
+  (window/geometry/menu) seeds the new key. Shipped 2026-10-29: one key,
+  window/geometry, restored once when the window opens; the first
+  write deletes the per-page children. keepChosenSize() puts the size
+  back after a page's minimum clamped the window up, and a clamped size
+  is never stored. Locked by the uitest "one size:", "clamp:" and
+  "upgrade:" checks; the first and last fail on the old hub, the clamp
+  checks were proved by two deliberate breakages.
   **Layman:** The window should stay the size and place you left it, rather than resizing and hopping about every time you open a game.
   Kind: ux.
   Source: user-request-2026-08-20.
@@ -8600,6 +8608,9 @@ writer it waits for.
   Open for the owner: whether the filters are toggle buttons above
   the grid or a combo box, and whether "All" is a filter or the
   absence of one.
+  Owner's call, 2026-10-29: the filters are a row of toggle buttons
+  above the grid, not a combo box, and "All" is a button of its own,
+  first in the row and lit when nothing is filtered.
   **Layman:** The game list gets buttons to show only one kind of game, and a star to keep your favourites together.
   Kind: feature.
   Source: user-request-2026-09-02.

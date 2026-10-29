@@ -291,17 +291,26 @@ each of the others.
 `src/hubwindow.*` — the tile grid and one page per game in a `QStackedWidget`.
 Games are constructed lazily on first open. Each tile paints its own
 miniature; `openGameNamed()` backs the `--game` flag. It also owns two things
-every game inherits: window size and position, kept **per page** so each game
-reopens the size it was left, and saved games — a game that overrides
+every game inherits: one window size and position for the whole app, and
+saved games — a game that overrides
 `GameView::saveState()`/`restoreState()` is stored and restored the next time
 it is opened, with no save dialog anywhere. An empty state means
 "nothing worth keeping" and clears the stored one, which is how a finished
-game avoids resuming onto its own final scores. `geometryKey()` and `saveKey()`
-build those keys from the game's id, `Entry::name`, never from the label the
-tile shows: a label is translated, and a key built from one would move with the
-language (GHUB-0161). Renaming an id orphans its saved position and its window
-size, silently and with no migration. Changing an id is a decision, not a
-tidy-up.
+game avoids resuming onto its own final scores. `saveKey()` builds its key
+from the game's id, `Entry::name`, never from the label the tile shows: a label
+is translated, and a key built from one would move with the language
+(GHUB-0161). Renaming an id orphans its saved position, silently and with no
+migration. Changing an id is a decision, not a tidy-up.
+
+**The window size is restored once, when the window opens, and switching pages
+never touches it** (GHUB-0060). It lives under `window/geometry`. Up to 1.2 each
+page kept its own under `window/geometry/<page>`; the first write deletes those,
+and an upgrade with no `window/geometry` yet opens at the tile grid's old size.
+**A page's minimum still clamps the window up**, and Canasta's is the largest.
+`keepChosenSize()` holds the size from before the clamp, puts it back when the
+page goes, and nothing stores the clamped size — otherwise one visit to Canasta
+would make every game Canasta-sized. The UI test's "clamp:" checks lock both
+halves.
 
 **`saveState()` is called on a one-second tick while the game is on screen,
 not only on the way out**, so it has to stay cheap — the dearest today is
@@ -348,9 +357,9 @@ resizing.
 `src/legibility.*` — `Legibility`, the app-wide legibility preference
 (`display/legibility`, default off). It is no longer the only thing this app
 stores outside a game's own group: `audio/muted` (`sound.cpp`), `donate/ask`
-and `donate/launches` are app-wide too, and `window/geometry/<page>` and
-`saved/<game>` are written per page and per game by `hubwindow.cpp`'s
-`geometryKey()` and `saveKey()`. **Anything sweeping stored state — a settings
+and `donate/launches` are app-wide too, and `hubwindow.cpp` writes
+`window/geometry` through `geometryKey()` and `saved/<game>`, per game, through
+`saveKey()`. **Anything sweeping stored state — a settings
 reset, a migration — has every one of those families to handle, PLUS every
 per-game group**: `scores.cpp` writes `<game>/best_*` keys and Canasta keeps its
 House set under `canasta/house/` and its target under `canasta/target`, so a

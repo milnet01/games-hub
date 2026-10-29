@@ -53,7 +53,7 @@ public:
 
 private:
     struct Entry {
-        // The game's id: saved/<name>, window/geometry/<name> and --game <name>.
+        // The game's id: saved/<name> and --game <name>.
         // Fixed and never translated (GHUB-0161 § 4.3).
         QString name;
         // What the tile and the window title show. Translated; with no
@@ -73,14 +73,20 @@ private:
     void openGame(int index);
     void showMenu();
     void setGameActions(GameView* view);
-    // Window size and position are kept per page, so the hub and each game come
-    // back the size you last left them.
     GameView* currentView() const;
+    // One window size and position for the whole app (GHUB-0060), written on
+    // the way out of every page and restored once, when the window first opens.
     void rememberPage();
     // Hidden pages stop deciding how small the window can be made. See the
     // definition for what goes wrong without it.
     void onlyTheOpenPageSetsTheFloor();
-    void applyPageGeometry(const QString& page);
+    void restoreGeometryOnce();
+    // Puts the window back to the size the player chose once a page that forced
+    // it bigger has gone. `before` is the size from just before the switch.
+    void keepChosenSize(const QSize& before);
+    // True while the window is only the size it is because the open page's
+    // minimum forced it up -- a size nobody chose, so it is never stored.
+    bool clampedByPage() const;
     // A game's position, kept between sessions for the games that offer one.
     void storeSave(const Entry& e);
     // Reads back whether a settings write actually landed, and says so once if
@@ -113,10 +119,16 @@ private:
     QLabel* m_status = nullptr;
     QList<QAction*> m_gameActions;
     QList<Entry> m_entries;
-    // Which page's geometry is currently on screen: a game's name, or empty
-    // for the tile menu.
+    // Which page is on screen: a game's name, or empty for the tile menu.
     QString m_page;
     bool m_geometryReady = false;
+    // The size the player chose, held while a page's minimum has forced the
+    // window larger than it (m_clampedTo). Invalid when nothing is clamped.
+    QSize m_chosenSize;
+    QSize m_clampedTo;
+    // The per-page sizes from before GHUB-0060 are deleted once per run, by
+    // the first write -- never by a hub told not to remember.
+    bool m_oldSizesForgotten = false;
     bool m_remembering = true;
     // Each page's own size policy, kept so a hidden page can be given Ignored
     // and handed its own back when it comes forward.

@@ -669,20 +669,43 @@ void HubWindow::buildChrome()
 
 namespace {
 
-// Both keys are built from the game's id, Entry::name, and never from the
+// One window, one key (GHUB-0060). Up to 1.2 every page kept its own size under
+// window/geometry/<page>, and restoring it on every switch made the window
+// resize and jump across the screen each time a game was opened. Those
+// children of this key are what forgetOldSizes() deletes.
+const QString& geometryKey()
+{
+    static const QString key = QStringLiteral("window/geometry"); // untranslated: settings key
+    return key;
+}
+
+// The tile grid's old size, which is the one the owner chose to carry across:
+// it is the window every launch opened at.
+const QString& oldMenuGeometryKey()
+{
+    static const QString key = QStringLiteral("window/geometry/menu"); // untranslated: settings key
+    return key;
+}
+
+// Deletes the per-page sizes one by one. QSettings::remove(geometryKey()) would
+// take them all in one call -- and the new value with them, since a key and
+// its children go together.
+void forgetOldSizes(QSettings& s)
+{
+    s.beginGroup(geometryKey());
+    const QStringList old = s.childKeys();
+    for (const QString& key : old)
+        s.remove(key);
+    s.endGroup();
+}
+
+// The save key is built from the game's id, Entry::name, and never from the
 // label the tile shows. A label is translated, so a key built from one would
-// move every player's saved game and window size the day a translation loaded
-// (GHUB-0161 § 4.3). Changing an id still ORPHANS both, silently and with no
+// move every player's saved game the day a translation loaded (GHUB-0161
+// § 4.3). Changing an id still ORPHANS the save, silently and with no
 // migration -- the player just finds a game that has forgotten them -- so
 // renaming one is a decision, not a tidy-up. Best scores are unaffected: their
 // keys are fixed strings each game chooses.
-QString geometryKey(const QString& page)
-{
-    if (page.isEmpty())
-        return QStringLiteral("window/geometry/menu"); // untranslated: settings key
-    return QStringLiteral("window/geometry/") + page;  // untranslated: settings key
-}
-
 QString saveKey(const QString& game)
 {
     return QStringLiteral("saved/") + game; // untranslated: settings key
@@ -709,7 +732,17 @@ void HubWindow::rememberPage()
     // saveGeometry() carries the position, the size and whether the window was
     // maximised, which is why it is used rather than pos() and size().
     QSettings s;
-    if (writeIfChanged(s, geometryKey(m_page), saveGeometry()))
+    bool wrote = false;
+    if (!m_oldSizesForgotten) {
+        forgetOldSizes(s);
+        m_oldSizesForgotten = true;
+        wrote = true;
+    }
+    // A size the open page forced is not one to keep: stored, it would become
+    // every game's size from then on. What is on disk already is the player's.
+    if (!clampedByPage())
+        wrote = writeIfChanged(s, geometryKey(), saveGeometry()) || wrote;
+    if (wrote)
         checkSettingsWritable(s);
 
     for (const Entry& e : m_entries)
@@ -765,7 +798,7 @@ void HubWindow::autosaveTick()
         return;
 
     QSettings s;
-    bool wrote = writeIfChanged(s, geometryKey(m_page), saveGeometry());
+    bool wrote = !clampedByPage() && writeIfChanged(s, geometryKey(), saveGeometry());
     for (const Entry& e : m_entries) {
         if (e.view == nullptr || e.name != m_page)
             continue;
@@ -821,8 +854,8 @@ void HubWindow::onlyTheOpenPageSetsTheFloor()
 
     // Lowering the floors is not enough on its own. The window's own minimum is
     // computed from the central widget THROUGH the stack, and that chain is
-    // recalculated lazily -- so the resize applyPageGeometry is about to do
-    // would be clamped straight back up by the stale figure. Same walk
+    // recalculated lazily -- so the resize keepChosenSize is about to do would
+    // be clamped straight back up by the stale figure. Same walk
     // CanastaView::applyLegibility makes, for the same reason.
     m_stack->updateGeometry();
     for (QWidget* w = m_stack; w != nullptr; w = w->parentWidget()) {
@@ -833,20 +866,52 @@ void HubWindow::onlyTheOpenPageSetsTheFloor()
     }
 }
 
-void HubWindow::applyPageGeometry(const QString& page)
+void HubWindow::restoreGeometryOnce()
 {
+    if (m_geometryReady)
+        return;
+    m_geometryReady = true;
+
     // restoreGeometry() answers false on a blob it cannot read -- one written
     // by another Qt, or a truncated one. Dropping that answer let a corrupt key
     // count as "restored", so the fallback below was skipped and the window
-    // opened with no sizing at all.
-    const QVariant saved = QSettings().value(geometryKey(page));
+    // opened with no sizing at all. A player upgrading from 1.2 has no
+    // window/geometry yet, and gets the tile grid's old size instead.
+    const QSettings s;
+    QVariant saved = s.value(geometryKey());
+    if (!saved.isValid())
+        saved = s.value(oldMenuGeometryKey());
     const bool restored = saved.isValid() && restoreGeometry(saved.toByteArray());
-    if (!restored && !m_geometryReady)
-        resize(880, 680); // first run, or nothing readable remembered for anything
-    // Switching to a game that has never been sized keeps the size you are
-    // already looking at, rather than jumping to an arbitrary default.
-    m_page = page;
-    m_geometryReady = true;
+    if (!restored)
+        resize(880, 680); // first run, or nothing readable remembered
+}
+
+bool HubWindow::clampedByPage() const
+{
+    return m_chosenSize.isValid() && size() == m_clampedTo;
+}
+
+void HubWindow::keepChosenSize(const QSize& before)
+{
+    if (!m_geometryReady || isMaximized() || isFullScreen())
+        return;
+
+    // Canasta's minimum is far larger than Chess's, and Qt clamps the window up
+    // to whatever the open page asks for. With one size for the whole app that
+    // clamp would become the size of every game once it was stored -- the trap
+    // CanastaView::applyLegibility already solves for its own switch, solved
+    // the same way: hold the size from before the clamp, and put it back as
+    // soon as the page that forced it has gone. A window the player has resized
+    // since is no longer the clamped one, and what they chose stands.
+    const QSize chosen = clampedByPage() ? m_chosenSize : before;
+    if (size() != chosen)
+        resize(chosen); // clamped up again if this page needs more
+    if (size() != chosen) {
+        m_chosenSize = chosen;
+        m_clampedTo = size();
+    } else {
+        m_chosenSize = QSize();
+    }
 }
 
 void HubWindow::storeSave(const Entry& e)
@@ -878,6 +943,7 @@ void HubWindow::closeEvent(QCloseEvent* event)
 
 void HubWindow::showMenu()
 {
+    const QSize before = size();
     rememberPage();
     if (GameView* leaving = currentView())
         leaving->deactivate();
@@ -885,15 +951,19 @@ void HubWindow::showMenu()
     m_backAction->setVisible(false);
     m_autosave->stop(); // nothing to bank on the tile grid
     m_stack->setCurrentWidget(m_menuHost);
+    m_page.clear();
     onlyTheOpenPageSetsTheFloor();
     setWindowTitle(hubTitle());
     m_status->setText(tr("%n games. Pick one.", nullptr, int(m_entries.size())));
-    applyPageGeometry(QString());
+    keepChosenSize(before);
+    restoreGeometryOnce();
 }
 
 void HubWindow::openGame(int index)
 {
     Entry& e = m_entries[index];
+    // Taken before anything moves: building a new page can raise the floor.
+    const QSize before = size();
     rememberPage();
     if (GameView* leaving = currentView(); leaving != nullptr && leaving != e.view)
         leaving->deactivate();
@@ -926,9 +996,10 @@ void HubWindow::openGame(int index)
     setGameActions(e.view);
     m_backAction->setVisible(true);
     m_stack->setCurrentIndex(e.pageIndex);
+    m_page = e.name;
     onlyTheOpenPageSetsTheFloor();
     setWindowTitle(hubTitle(e.label));
-    applyPageGeometry(e.name);
+    keepChosenSize(before);
     e.view->activate();
     e.view->setFocus();
     m_autosave->start();

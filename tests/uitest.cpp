@@ -1129,7 +1129,7 @@ void idsAndKeysSurviveATranslation()
     // The one game opened. Solitaire because it offers a save, and because its
     // id and its blurb differ ("Klondike"), so the two cannot be confused.
     const QString id = QStringLiteral("Solitaire");
-    const QString geometryKey = QStringLiteral("window/geometry/") + id;
+    const QString geometryKey = QStringLiteral("window/geometry");
     const QString saveKey = QStringLiteral("saved/") + id;
     // Before as well as after. A marked key written by an earlier run -- a
     // build with the defect, or one that died before the cleanup at the end --
@@ -1197,7 +1197,7 @@ void idsAndKeysSurviveATranslation()
     QCoreApplication::removeTranslator(&marker);
 
     const QSettings s;
-    check(s.contains(geometryKey), "translation: returning to the menu wrote window/geometry/<id>");
+    check(s.contains(geometryKey), "translation: returning to the menu wrote window/geometry");
     check(s.contains(saveKey), "translation: and the game's position under saved/<id>");
     QStringList marked;
     for (const QString& key : s.allKeys())
@@ -4435,7 +4435,7 @@ int main(int argc, char* argv[])
         // The hub writes the window size when a page is left, and opening a
         // game to photograph it goes through that path -- so even a shot that
         // is about to be refused for a bad --size had already overwritten it.
-        const QString sizeKey = QStringLiteral("window/geometry/menu");
+        const QString sizeKey = QStringLiteral("window/geometry");
         QSettings().remove(sizeKey);
         QSettings().sync();
 
@@ -4502,6 +4502,177 @@ int main(int argc, char* argv[])
               "hub: canasta really does ask for more room than chess");
         check(after == alone,
               "hub: and going back to chess gives its own floor back");
+    }
+
+    // ---- One window, one size (GHUB-0060) ----
+    //
+    // Up to 1.2 each page kept its own size and restored it on every switch,
+    // so the window resized and jumped every time a game was opened. Now the
+    // size is the player's, whichever page they set it on.
+    {
+        QSettings().remove(QStringLiteral("window/geometry"));
+        QSettings().sync();
+
+        HubWindow hub;
+        hub.show();
+        pump(30);
+        QAction* back = hub.findChild<QAction*>(QStringLiteral("backAction"));
+        check(back != nullptr, "one size: there is a way back to the tiles");
+
+        hub.resize(1000, 700);
+        pump(30);
+        hub.openGameNamed(QStringLiteral("Chess"));
+        pump(60);
+        check(hub.size() == QSize(1000, 700), "one size: opening a game leaves the window alone");
+
+        hub.resize(820, 640);
+        pump(30);
+        if (back != nullptr)
+            back->trigger();
+        pump(60);
+        check(hub.size() == QSize(820, 640),
+              qPrintable(QStringLiteral("one size: the tiles keep the size you gave the game -- "
+                                        "got %1x%2")
+                             .arg(hub.size().width())
+                             .arg(hub.size().height())));
+
+        hub.openGameNamed(QStringLiteral("Reversi"));
+        pump(60);
+        check(hub.size() == QSize(820, 640), "one size: and so does the next game");
+        hub.close();
+        pump(10);
+        QSettings().remove(QStringLiteral("window/geometry"));
+        QSettings().sync();
+    }
+
+    // ---- A big game's minimum is not stored as everyone's size ----
+    //
+    // Qt clamps the window up to the open page's minimum, and Canasta's is the
+    // largest. With one shared size, storing that clamp would make every game
+    // Canasta-sized for good -- so the size from before the clamp is put back
+    // when Canasta goes, and is what gets stored if the window closes on it.
+    {
+        QSettings().remove(QStringLiteral("window/geometry"));
+        QSettings().sync();
+
+        QSize small;
+        {
+            HubWindow hub;
+            hub.show();
+            pump(30);
+            hub.openGameNamed(QStringLiteral("Canasta"));
+            pump(60);
+            const QSize floor = hub.minimumSizeHint();
+            QAction* back = hub.findChild<QAction*>(QStringLiteral("backAction"));
+            if (back != nullptr)
+                back->trigger();
+            pump(60);
+
+            small = QSize(floor.width() - 80, floor.height() - 80);
+            hub.resize(small);
+            pump(30);
+            check(hub.size() == small, "clamp: the tiles can be made smaller than canasta needs");
+
+            hub.openGameNamed(QStringLiteral("Canasta"));
+            pump(60);
+            std::printf("      clamp: chose %dx%d, canasta's floor %dx%d, opened at %dx%d\n",
+                        small.width(), small.height(), floor.width(), floor.height(),
+                        hub.size().width(), hub.size().height());
+            check(hub.size().width() >= floor.width() && hub.size().height() >= floor.height(),
+                  "clamp: canasta still gets the room it needs");
+
+            if (back != nullptr)
+                back->trigger();
+            pump(60);
+            check(hub.size() == small, "clamp: leaving canasta gives back the size you chose");
+
+            hub.openGameNamed(QStringLiteral("Canasta"));
+            pump(60);
+            hub.close(); // closed while canasta holds the window large
+            pump(10);
+        }
+        HubWindow next;
+        next.show();
+        pump(30);
+        check(next.size() == small,
+              qPrintable(QStringLiteral("clamp: closing on canasta stores your size, not its "
+                                        "floor -- got %1x%2")
+                             .arg(next.size().width())
+                             .arg(next.size().height())));
+        next.close();
+        pump(10);
+        QSettings().remove(QStringLiteral("window/geometry"));
+        QSettings().sync();
+    }
+
+    // ---- An upgrade keeps the tile grid's old size and drops the rest ----
+    //
+    // Owner's call, 2026-10-29: the size carried across from 1.2 is the tile
+    // grid's, the one every launch opened at. The fourteen per-game sizes go.
+    {
+        QByteArray menuSize;
+        QByteArray chessSize;
+        {
+            // Shown, as the player's window was when 1.2 stored it: an unshown
+            // window's geometry restores to a different size. Both sizes fit the
+            // offscreen screen, which is 800 wide: restoreGeometry() shrinks a
+            // window to fit its screen, and resize() does not.
+            HubWindow w;
+            w.setRemembering(false);
+            w.show();
+            w.resize(700, 540);
+            pump(30);
+            menuSize = w.saveGeometry();
+            w.resize(560, 480);
+            pump(30);
+            chessSize = w.saveGeometry();
+        }
+        {
+            QSettings s;
+            s.remove(QStringLiteral("window/geometry"));
+            s.setValue(QStringLiteral("window/geometry/menu"), menuSize);
+            s.setValue(QStringLiteral("window/geometry/Chess"), chessSize);
+            s.sync();
+        }
+        {
+            HubWindow quiet;
+            quiet.setRemembering(false);
+            quiet.show();
+            pump(30);
+            check(quiet.size() == QSize(700, 540),
+                  qPrintable(QStringLiteral("upgrade: opens at the tile grid's old size -- got %1x%2")
+                                 .arg(quiet.size().width())
+                                 .arg(quiet.size().height())));
+            quiet.openGameNamed(QStringLiteral("Chess"));
+            pump(60);
+            quiet.close();
+            pump(10);
+        }
+        check(QSettings().contains(QStringLiteral("window/geometry/Chess")),
+              "upgrade: a hub told not to remember leaves the old sizes alone");
+        {
+            HubWindow hub;
+            hub.show();
+            pump(30);
+            hub.close();
+            pump(10);
+        }
+        QSettings after;
+        after.beginGroup(QStringLiteral("window/geometry"));
+        const QStringList left = after.childKeys();
+        after.endGroup();
+        if (!left.isEmpty())
+            std::printf("      upgrade: old sizes left: %s\n", qPrintable(left.join(QStringLiteral(", "))));
+        check(left.isEmpty(), "upgrade: the old per-page sizes are deleted");
+        check(after.contains(QStringLiteral("window/geometry")), "upgrade: and one size is stored");
+        {
+            HubWindow again;
+            again.show();
+            pump(30);
+            check(again.size() == QSize(700, 540), "upgrade: which is the size carried across");
+        }
+        after.remove(QStringLiteral("window/geometry"));
+        after.sync();
     }
 
     // ---- Card art hands the painter back as it found it ----

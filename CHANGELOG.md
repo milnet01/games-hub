@@ -12,6 +12,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **The window stays the size and place you leave it** (GHUB-0060)
+  Opening a game, or going back to the tiles, no longer resizes the
+  window or moves it across the screen. One size now serves every game.
+  Your first start after updating opens at the size the tiles screen
+  had. A game that needs more room, such as Canasta, still widens the
+  window while it is open, and gives your size back when you leave it.
+
 - **Pyramid's draw slides to the waste instead of jumping there** (GHUB-0216)
   A card you draw now travels from the stock to the waste. A redeal
   sends the pile back to the stock face down, as Klondike's does.
