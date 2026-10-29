@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=219 -->
+<!-- ants-roadmap-id-high-water: GHUB=220 -->
 
 # Games Hub — Roadmap
 
@@ -8559,7 +8559,7 @@ writer it waits for.
   Kind: ux.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0062] **The hub knows which games you have left half-played and shows it in the one place he does not look.**
+- ✅ [GHUB-0062] **The hub knows which games you have left half-played and shows it in the one place he does not look.**
   The save machinery works and is invisible. A game that overrides `saveState()`
   is stored on close and restored the next time it is opened, with no dialogue
   anywhere -- which is the right design. But the hub then announces it with
@@ -8586,6 +8586,11 @@ writer it waits for.
   and hold it. And the existing rule that an empty state clears the stored save is
   what keeps this honest: a finished game correctly carries no mark, so the
   indicator means "in progress" rather than "has ever been played".
+  Shipped 2026-10-29: a gold "In progress" badge across the top of
+  the tile's miniature, "— in progress" after the name in the Games
+  menu, and a notice over the board for six seconds on a resume,
+  sized up with large play. Settings are read when the grid or the
+  menu is shown, never from a paint.
   **Layman:** Games you have in progress look exactly like games you have never opened, and the only notice that a game resumed appears in the status bar.
   Kind: ux.
   Source: in-session-2026-08-20.
@@ -9535,6 +9540,19 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** The computer opponents notice the score, remember what has been played, help their partner and adjust to how you play, so games feel more like playing a person.
   Kind: enhancement.
   Source: user-request-2026-10-21.
+
+- 📋 [GHUB-0220] **A resumed Hearts game can come back to an empty table with every score at nought.**
+  Seen 2026-10-29 while photographing GHUB-0062: a scratch copy of
+  the owner's settings, `--shot --game hearts`, showed the table with
+  no cards, North, West and East at (0), Pass 3 Cards greyed and Next
+  Hand live. The installed 6de01c2 build shows the same, so GHUB-0062
+  did not cause it. Unknown: whether the save is a finished hand
+  waiting on Next Hand (then the scores should not all be nought) or
+  a restore that dropped the hand. Start from heartsview.cpp's
+  saveState() and restoreState() against that save.
+  **Layman:** Opening Hearts from where you left it showed no cards and all scores at zero, with only Next Hand to press.
+  Kind: investigate.
+  Source: in-session-2026-10-29.
 
 ## P01 — Shipped
 

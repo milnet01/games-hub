@@ -22,6 +22,8 @@
 #include "twenty48/twenty48view.h"
 
 #include <QApplication>
+#include <QEvent>
+#include <QFontMetricsF>
 #include <QGridLayout>
 #include <QLabel>
 #include <QMenu>
@@ -73,6 +75,17 @@ public:
         setToolTip(blurb);
     }
 
+    // A word across the top of the miniature -- "In progress" -- or none when
+    // empty. Held rather than looked up, so a hover repaint reads no settings.
+    void setBadge(const QString& badge)
+    {
+        if (badge == m_badge)
+            return;
+        m_badge = badge;
+        setAccessibleDescription(badge.isEmpty() ? m_blurb : m_blurb + QStringLiteral(". ") + badge);
+        update();
+    }
+
 protected:
     void paintEvent(QPaintEvent*) override
     {
@@ -109,6 +122,21 @@ protected:
         p.setPen(QColor(0x9e, 0xa8, 0xb2));
         const QRectF blurbRect(r.left() + 8, nameRect.bottom(), r.width() - 16, 20);
         p.drawText(blurbRect, Qt::AlignHCenter | Qt::AlignTop, m_blurb);
+
+        // Dark on gold, bold, at the title's size: it has to be found at a
+        // glance across the grid, not read off the corner of a miniature.
+        if (!m_badge.isEmpty()) {
+            p.setFont(title);
+            const QFontMetricsF fm(title);
+            const double w = fm.horizontalAdvance(m_badge) + 20;
+            const double h = fm.height() + 6;
+            const QRectF pill(art.center().x() - w / 2, art.top() + 6, w, h);
+            QPainterPath shape;
+            shape.addRoundedRect(pill, h / 2, h / 2);
+            p.fillPath(shape, QColor(0xf2, 0xc1, 0x4e));
+            p.setPen(QColor(0x1e, 0x22, 0x26));
+            p.drawText(pill, Qt::AlignCenter, m_badge);
+        }
     }
 
     void enterEvent(QEnterEvent*) override { update(); }
@@ -117,6 +145,7 @@ protected:
 private:
     QString m_name;
     QString m_blurb;
+    QString m_badge;
     std::function<void(QPainter&, const QRectF&)> m_art;
 };
 
@@ -499,6 +528,17 @@ void HubWindow::buildEntries()
     };
 }
 
+namespace {
+
+// A game's label as a menu entry. A lone & in a menu is a mnemonic marker, and
+// a translated label may hold one.
+QString menuText(QString label)
+{
+    return label.replace(QLatin1Char('&'), QStringLiteral("&&"));
+}
+
+} // namespace
+
 void HubWindow::buildChrome()
 {
     m_stack = new QStackedWidget(this);
@@ -527,6 +567,7 @@ void HubWindow::buildChrome()
             openGame(i);
         });
         grid->addWidget(tile, i / 3, i % 3);
+        m_tiles << tile;
     }
     outer->addLayout(grid);
     outer->addStretch(1);
@@ -655,16 +696,16 @@ void HubWindow::buildChrome()
     gamesMenu->addSeparator();
     for (int i = 0; i < m_entries.size(); ++i) {
         const Entry& e = m_entries[i];
-        // A lone & in a menu is a mnemonic marker; a translated label may hold one.
-        QString text = e.label;
-        text.replace(QLatin1Char('&'), QStringLiteral("&&"));
-        auto* open = gamesMenu->addAction(text);
+        auto* open = gamesMenu->addAction(menuText(e.label));
         open->setObjectName(QStringLiteral("openGame/") + e.name);
+        m_menuEntries << open;
         connect(open, &QAction::triggered, this, [this, i] {
             Sound::instance().play(Sound::kClick);
             openGame(i);
         });
     }
+    // Inside a game the grid is not shown, so the menu refreshes its own marks.
+    connect(gamesMenu, &QMenu::aboutToShow, this, &HubWindow::markGamesInProgress);
 
     // A Help menu rather than a fifteenth tile: the grid keeps all of its slots
     // for games, and "about this program" is where a stranger already looks.
@@ -682,6 +723,28 @@ void HubWindow::buildChrome()
 
     m_status = new QLabel(this);
     statusBar()->addWidget(m_status, 1);
+
+    // Over the board rather than in the status bar, which is not read during
+    // play. It passes clicks through, so a player who starts at once is not
+    // blocked by it, and it stays long enough to be read slowly.
+    m_resumeNotice = new QLabel(m_stack);
+    m_resumeNotice->setObjectName(QStringLiteral("resumeNotice"));
+    m_resumeNotice->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_resumeNotice->setAlignment(Qt::AlignCenter);
+    m_resumeNotice->setStyleSheet(QStringLiteral(
+        "QLabel { background: rgba(20, 24, 28, 225); color: #f2c14e;" // untranslated: style sheet
+        " border: 2px solid #f2c14e; border-radius: 10px; padding: 10px 22px; }")); // untranslated: style sheet
+    m_resumeNotice->hide();
+    m_resumeNoticeTimer = new QTimer(this);
+    m_resumeNoticeTimer->setObjectName(QStringLiteral("resumeNoticeTimer"));
+    m_resumeNoticeTimer->setSingleShot(true);
+    m_resumeNoticeTimer->setInterval(6000);
+    connect(m_resumeNoticeTimer, &QTimer::timeout, m_resumeNotice, &QWidget::hide);
+    m_stack->installEventFilter(this);
+    connect(&Legibility::instance(), &Legibility::changed, this, [this] {
+        if (!m_resumeNotice->isHidden())
+            layOutResumeNotice();
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -733,6 +796,56 @@ QString saveKey(const QString& game)
 }
 
 } // namespace
+
+bool HubWindow::inProgress(const Entry& e) const
+{
+    // The open game answers for itself: the tick banks it but never clears,
+    // so a hand finished a moment ago is still on disk until the game is left.
+    if (e.view != nullptr && e.name == m_page)
+        return !e.view->saveState().isEmpty();
+    return QSettings().contains(saveKey(e.name));
+}
+
+void HubWindow::markGamesInProgress()
+{
+    for (int i = 0; i < m_entries.size(); ++i) {
+        const Entry& e = m_entries[i];
+        const bool on = inProgress(e);
+        // Every tile is a GameTile; m_tiles holds the base type only because
+        // GameTile is private to this file.
+        static_cast<GameTile*>(m_tiles[i])->setBadge(on ? tr("In progress") : QString());
+        const QString text = menuText(e.label);
+        m_menuEntries[i]->setText(on ? tr("%1 — in progress").arg(text) : text);
+    }
+}
+
+void HubWindow::showResumeNotice()
+{
+    m_resumeNotice->setText(tr("Carried on from where you left off."));
+    layOutResumeNotice();
+    m_resumeNotice->show();
+    m_resumeNotice->raise();
+    m_resumeNoticeTimer->start();
+}
+
+void HubWindow::layOutResumeNotice()
+{
+    // Sized here rather than once, so it follows the large-play switch.
+    QFont f = font();
+    f.setBold(true);
+    f.setPointSizeF(f.pointSizeF() + (Legibility::instance().enabled() ? 9 : 5));
+    m_resumeNotice->setFont(f);
+    m_resumeNotice->adjustSize();
+    const QSize size = m_resumeNotice->size();
+    m_resumeNotice->move((m_stack->width() - size.width()) / 2, 24);
+}
+
+bool HubWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_stack && event->type() == QEvent::Resize && !m_resumeNotice->isHidden())
+        layOutResumeNotice();
+    return QMainWindow::eventFilter(watched, event);
+}
 
 GameView* HubWindow::currentView() const
 {
@@ -973,6 +1086,8 @@ void HubWindow::showMenu()
     m_autosave->stop(); // nothing to bank on the tile grid
     m_stack->setCurrentWidget(m_menuHost);
     m_page.clear();
+    m_resumeNotice->hide();
+    markGamesInProgress();
     onlyTheOpenPageSetsTheFloor();
     setWindowTitle(hubTitle());
     m_status->setText(tr("%n games. Pick one.", nullptr, int(m_entries.size())));
@@ -1024,8 +1139,11 @@ void HubWindow::openGame(int index)
     e.view->activate();
     e.view->setFocus();
     m_autosave->start();
-    if (resumed)
+    m_resumeNotice->hide();
+    if (resumed) {
         m_status->setText(tr("Carried on from where you left off."));
+        showResumeNotice();
+    }
 }
 
 QStringList HubWindow::gameNames() const

@@ -17,6 +17,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   opens at once, from inside another game or from the tiles. Inside a
   game, the menu also offers All Games, which goes back to the tiles.
 
+- **Games you have left half-played are marked** (GHUB-0062)
+  Their tiles carry a gold "In progress" badge, and the Games menu adds
+  "in progress" after their names. When one carries on where you left
+  it, a notice says so across the top of the board for a few seconds,
+  not only in the status bar.
+
 ### Changed
 
 - **The window stays the size and place you leave it** (GHUB-0060)

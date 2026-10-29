@@ -302,6 +302,16 @@ is translated, and a key built from one would move with the language
 (GHUB-0161). Renaming an id orphans its saved position, silently and with no
 migration. Changing an id is a decision, not a tidy-up.
 
+**A game with something stored is marked on its tile and its Games menu
+entry, and a resume is said on the board** (GHUB-0062). The status bar is not
+read during play, so `showResumeNotice()` puts a notice over the top of the
+board for six seconds, passing clicks through. `markGamesInProgress()` reads
+the settings when the grid or the menu is shown, never from a paint. The open
+game answers from its own `saveState()` instead, because the tick never clears
+a stored save. Most games save nothing until the first move, so for them the
+mark means "in progress", not "has been opened"; the UI test checks this for
+Chess.
+
 **The window size is restored once, when the window opens, and switching pages
 never touches it** (GHUB-0060). It lives under `window/geometry`. Up to 1.2 each
 page kept its own under `window/geometry/<page>`; the first write deletes those,

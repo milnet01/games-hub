@@ -13,6 +13,7 @@ class QToolBar;
 #include <QSizePolicy>
 
 class QLabel;
+class QPushButton;
 class QTimer;
 class QSettings;
 
@@ -99,9 +100,19 @@ private:
     // Banks the open game where it stands. Runs on the autosave timer, so it
     // only ever writes -- see the definition for why it must not clear.
     void autosaveTick();
+    // Marks the games with something stored, on their tiles and their Games
+    // menu entries (GHUB-0062). Reads settings for every game, so it runs
+    // when the grid or the menu is shown and never from a paint.
+    void markGamesInProgress();
+    bool inProgress(const Entry& e) const;
+    // Says on the board, not only in the status bar, that a game came back.
+    void showResumeNotice();
+    // Sizes it for the large-play switch and centres it over the board.
+    void layOutResumeNotice();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
 
@@ -119,6 +130,12 @@ private:
     QLabel* m_status = nullptr;
     QList<QAction*> m_gameActions;
     QList<Entry> m_entries;
+    // Parallel to m_entries: each game's tile and its Games menu entry.
+    QList<QPushButton*> m_tiles;
+    QList<QAction*> m_menuEntries;
+    // Over the top of the board for a few seconds after a game resumes.
+    QLabel* m_resumeNotice = nullptr;
+    QTimer* m_resumeNoticeTimer = nullptr;
     // Which page is on screen: a game's name, or empty for the tile menu.
     QString m_page;
     bool m_geometryReady = false;

@@ -6321,6 +6321,70 @@ int main(int argc, char* argv[])
         pump(10);
     }
 
+    // ---- Games in progress are marked, and a resume is said on the board (GHUB-0062) ----
+    //
+    // Reversi gets a real save from the corpus; Chess has none. The marks must
+    // tell them apart, and opening a fresh game must not mark it: the mark
+    // means "in progress", not "has been opened".
+    {
+        QSettings().remove(QStringLiteral("saved"));
+        QFile blob(QDir(corpusDir()).filePath(QStringLiteral("Reversi.bin")));
+        check(blob.open(QIODevice::ReadOnly), "in progress: the Reversi save is in the corpus");
+        QSettings().setValue(QStringLiteral("saved/Reversi"), blob.readAll());
+        QSettings().sync();
+
+        HubWindow hub;
+        hub.show();
+        pump(30);
+        const auto tileSays = [&hub](const QString& game) {
+            for (QPushButton* tile : hub.findChildren<QPushButton*>())
+                if (tile->accessibleName() == game)
+                    return tile->accessibleDescription();
+            return QString();
+        };
+        const auto menuSays = [&hub](const QString& game) {
+            QAction* a = hub.findChild<QAction*>(QStringLiteral("openGame/") + game);
+            return a != nullptr ? a->text() : QString();
+        };
+        check(tileSays(QStringLiteral("Reversi")).endsWith(QStringLiteral("In progress")),
+              "in progress: a saved game's tile says so");
+        check(!tileSays(QStringLiteral("Chess")).contains(QStringLiteral("In progress")),
+              "in progress: and a game with nothing saved does not");
+        check(menuSays(QStringLiteral("Reversi")).endsWith(QStringLiteral("in progress")),
+              "in progress: the Games menu says so too");
+        check(menuSays(QStringLiteral("Chess")) == QStringLiteral("Chess"),
+              "in progress: and leaves the others as they are");
+
+        auto* notice = hub.findChild<QLabel*>(QStringLiteral("resumeNotice"));
+        auto* timer = hub.findChild<QTimer*>(QStringLiteral("resumeNoticeTimer"));
+        check(notice != nullptr && timer != nullptr, "resumed: the hub has a notice for it");
+        if (notice != nullptr && timer != nullptr) {
+            hub.openGameNamed(QStringLiteral("Reversi"));
+            pump(20);
+            check(notice->isVisible() && !notice->text().isEmpty(),
+                  "resumed: opening a saved game says so on the board");
+            check(timer->isActive() && timer->interval() >= 4000,
+                  "resumed: and leaves it up long enough to read slowly");
+
+            hub.openGameNamed(QStringLiteral("Chess"));
+            pump(20);
+            check(!notice->isVisible(), "resumed: a fresh game says nothing of the sort");
+        }
+
+        QAction* back = hub.findChild<QAction*>(QStringLiteral("backAction"));
+        if (back != nullptr)
+            back->trigger();
+        pump(20);
+        check(!tileSays(QStringLiteral("Chess")).contains(QStringLiteral("In progress")),
+              "in progress: opening a game and leaving it untouched does not mark it");
+        check(tileSays(QStringLiteral("Reversi")).endsWith(QStringLiteral("In progress")),
+              "in progress: the resumed game is still marked after leaving it");
+        hub.close();
+        pump(10);
+        QSettings().remove(QStringLiteral("saved"));
+        QSettings().sync();
+    }
+
 
     // ---- The window fits beside your work (GHUB-0042) ----
     //
