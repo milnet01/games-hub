@@ -4914,6 +4914,11 @@ int main(int argc, char* argv[])
                                          (640.0 - 24.0) / (1.4 * 2.5));
             const double tall = card * 1.4;
             const double columnTop = 12 + tall + tall * 0.22;
+            // The keyboard cursor is drawn only once a key has been pressed
+            // (GHUB-0219), and the walk-back below presses one. Shift is no
+            // FreeCell key, so pressing it here and after the undo puts the
+            // cursor in both pictures and moves nothing.
+            pressKey(&freecell, Qt::Key_Shift);
             const QImage beforeTheMove = renderOf(&freecell);
             const QPoint cursorBefore = freecell.cursorSpot();
             dragBetween(&freecell, QPointF(12 + card / 2, columnTop + tall * (6 * 0.27 + 0.15)),
@@ -4941,6 +4946,7 @@ int main(int argc, char* argv[])
                 // are a movable run, it comes back one card higher -- so this
                 // check failed on some deals until the cursor was
                 // walked back down before comparing.
+                pressKey(&freecell, Qt::Key_Shift);
                 for (int i = 0; i < 4 && freecell.cursorSpot() != cursorBefore; ++i)
                     pressKey(&freecell, Qt::Key_Down);
                 check(renderOf(&freecell) == beforeTheMove,
