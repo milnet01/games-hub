@@ -8527,7 +8527,7 @@ writer it waits for.
   connect removed and rebuilt, that check and "and carries its label
   across with it" both fail; restored, all UI checks pass.
 
-- 📋 [GHUB-0061] **There is no way to get from one game to another without going back to the front door.**
+- ✅ [GHUB-0061] **There is no way to get from one game to another without going back to the front door.**
   The menu bar holds one menu, `&Help`. Every move between games goes through the
   tile grid: Escape or the toolbar's back button to the grid, scroll to the tile,
   click it. For a collection whose whole premise is fourteen games in one place,
@@ -8551,6 +8551,10 @@ writer it waits for.
 
   The grid's own density is worth a look at that point, but it is a separate
   question and should not be bundled here.
+  Shipped 2026-10-29: a &Games menu before &Help, built from the
+  registry, so a new game joins it with its tile. It leads with the
+  toolbar's own "All Games" action, which hides on the tile grid.
+  No Ctrl+<n> accelerators: the item left them as "if wanted".
   **Layman:** To switch games you must always return to the tile screen first; there is no menu listing the games.
   Kind: ux.
   Source: in-session-2026-08-20.

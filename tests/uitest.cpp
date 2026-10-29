@@ -44,6 +44,7 @@
 #include <QFileInfo>
 #include <QSettings>
 #include <QLabel>
+#include <QMenu>
 #include <QMenuBar>
 #include <QFontDatabase>
 #include <QFontMetricsF>
@@ -6281,6 +6282,43 @@ int main(int argc, char* argv[])
                 hasHelpMenu = true;
         }
         check(hasHelpMenu, "the hub has a Help menu for it to live in");
+    }
+
+    // ---- Games menu (GHUB-0061) ----
+    //
+    // Every game reachable from any page without going back to the tiles. The
+    // title is what says which page opened; the hub sets it from the game's label.
+    {
+        HubWindow hub;
+        hub.show();
+        pump(30);
+        auto* menu = hub.findChild<QMenu*>(QStringLiteral("gamesMenu"));
+        check(menu != nullptr, "games menu: the hub has one");
+        QAction* back = hub.findChild<QAction*>(QStringLiteral("backAction"));
+        if (menu != nullptr && back != nullptr) {
+            check(!menu->actions().isEmpty() && menu->actions().first() == back,
+                  "games menu: it leads with the way back");
+            int opened = 0;
+            for (const QString& name : hub.gameNames()) {
+                auto* open = hub.findChild<QAction*>(QStringLiteral("openGame/") + name);
+                if (open == nullptr || !menu->actions().contains(open))
+                    continue;
+                open->trigger();
+                pump(10);
+                if (hub.windowTitle().startsWith(name + QStringLiteral(" ")) && back->isVisible())
+                    ++opened;
+            }
+            check(opened == int(hub.gameNames().size()),
+                  qPrintable(QStringLiteral("games menu: every game opens from it, "
+                                            "straight from another game -- %1 of %2")
+                                 .arg(opened)
+                                 .arg(hub.gameNames().size())));
+            back->trigger();
+            pump(10);
+            check(!back->isVisible(), "games menu: and All Games goes back to the tiles");
+        }
+        hub.close();
+        pump(10);
     }
 
 

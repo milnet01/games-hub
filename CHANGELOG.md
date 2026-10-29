@@ -10,6 +10,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Added
+
+- **A Games menu goes straight from one game to another** (GHUB-0061)
+  The menu bar now has a Games menu listing every game. Pick one and it
+  opens at once, from inside another game or from the tiles. Inside a
+  game, the menu also offers All Games, which goes back to the tiles.
+
 ### Changed
 
 - **The window stays the size and place you leave it** (GHUB-0060)

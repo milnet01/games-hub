@@ -645,6 +645,27 @@ void HubWindow::buildChrome()
     nameButton(m_legibilityAction, tr("Large play"),
                tr("Larger cards and higher-contrast play"));
 
+    // A route between games that does not go through the tile grid (GHUB-0061).
+    // Built from m_entries, so a new game joins the menu when it joins the grid.
+    // "All Games" is the toolbar's own back action rather than a copy, so it
+    // hides on the grid with the button and keeps the one Escape shortcut.
+    auto* gamesMenu = menuBar()->addMenu(tr("&Games"));
+    gamesMenu->setObjectName(QStringLiteral("gamesMenu"));
+    gamesMenu->addAction(m_backAction);
+    gamesMenu->addSeparator();
+    for (int i = 0; i < m_entries.size(); ++i) {
+        const Entry& e = m_entries[i];
+        // A lone & in a menu is a mnemonic marker; a translated label may hold one.
+        QString text = e.label;
+        text.replace(QLatin1Char('&'), QStringLiteral("&&"));
+        auto* open = gamesMenu->addAction(text);
+        open->setObjectName(QStringLiteral("openGame/") + e.name);
+        connect(open, &QAction::triggered, this, [this, i] {
+            Sound::instance().play(Sound::kClick);
+            openGame(i);
+        });
+    }
+
     // A Help menu rather than a fifteenth tile: the grid keeps all of its slots
     // for games, and "about this program" is where a stranger already looks.
     // The ellipsis is the standard promise that pressing it opens something
