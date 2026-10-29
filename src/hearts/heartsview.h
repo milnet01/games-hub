@@ -72,6 +72,14 @@ protected:
     // check here: it paints happily, off the edge of the window.
     QRectF opponentStackRect(int seat) const;
 
+    // One line per seat: points this hand and the running total. The hand-over
+    // box reads it, and so does the panel drawn on the table between hands.
+    QString scoreSummary() const;
+    // Where that panel sits, or a null rect while a hand is being played.
+    // Reachable from a test because a resumed hand-over has no box and no
+    // status bar anyone reads: the panel is the only place its scores show.
+    QRectF scorePanelRect() const;
+
 private:
     void buildActions();
     // A deal the player asked for: the hands, then the cards flying round the
@@ -105,6 +113,10 @@ private:
     void pressAtCursor();
     QString refusalFor(const Card& card) const;
     void announceHand();
+    // What the score panel says: scoreSummary() and what to press, or empty
+    // while a hand is being played. And the area paintCaption() places it in.
+    QString scorePanelText() const;
+    QRectF scorePanelArea() const;
 
     // Whose turn § 4.2 lights, and the area its light fills. The area is the
     // seat's own cards grown by half a card's width on every side and clipped
@@ -116,6 +128,8 @@ private:
     double cardWidth() const;
     double cardHeight() const { return cardWidth() * 1.4; }
     QRectF opponentRect(int seat) const;
+    // The strip an opponent's name is drawn in, under their stack.
+    QRectF seatLabelRect(int seat) const;
 
     QList<QAction*> m_actions;
     QAction* m_passAction = nullptr;

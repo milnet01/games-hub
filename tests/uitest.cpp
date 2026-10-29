@@ -5438,6 +5438,47 @@ int main(int argc, char* argv[])
                     check(after.load(in) && after.phase() != HeartsEngine::Phase::HandOver,
                           "hearts: and triggering it deals the next hand");
                 }
+
+                // And the scores are on the table (GHUB-0220). A save made
+                // after the box was closed stores it as announced, so a resume
+                // shows no box, and the status bar is not read. What was left
+                // was an empty table with every seat at (0) -- the card counts
+                // -- and nothing saying what anyone had scored.
+                struct ScoreProbe : HeartsView {
+                    using HeartsView::scorePanelRect;
+                    using HeartsView::scoreSummary;
+                };
+                QByteArray closed(over);
+                closed[closed.size() - 1] = char(1); // announced: the box was seen
+                ScoreProbe resumedOver;
+                resumedOver.resize(900, 620);
+                check(resumedOver.restoreState(closed),
+                      "hearts: a hand-over whose box was closed loads");
+                const QRectF panel = resumedOver.scorePanelRect();
+                check(!panel.isNull() && QRectF(resumedOver.rect()).contains(panel),
+                      "hearts: and its scores are on a panel on the table");
+                const QImage shown = renderOf(&resumedOver);
+                check(!panel.isNull()
+                          && shown.pixelColor(QPoint(int(panel.left()) + 4, int(panel.center().y())))
+                              == Theme::kCaptionPlate,
+                      "hearts: and the panel is painted, not only placed");
+                const QStringList seats { QStringLiteral("You"), QStringLiteral("West"),
+                                          QStringLiteral("North"), QStringLiteral("East") };
+                bool everySeat = true;
+                for (int p = 0; p < HeartsEngine::kPlayers; ++p) {
+                    const QString line = QStringLiteral("%1: %2 this hand, %3 total")
+                                             .arg(seats[p])
+                                             .arg(engine.handPoints(p))
+                                             .arg(engine.total(p));
+                    if (!resumedOver.scoreSummary().contains(line))
+                        everySeat = false;
+                }
+                check(everySeat, "hearts: every seat's hand and total, as the save holds them");
+
+                ScoreProbe dealing;
+                dealing.resize(900, 620);
+                check(dealing.scorePanelRect().isNull(),
+                      "hearts: and a hand being played has no panel over it");
             }
         }
 

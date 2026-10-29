@@ -9541,7 +9541,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: enhancement.
   Source: user-request-2026-10-21.
 
-- 📋 [GHUB-0220] **A resumed Hearts game can come back to an empty table with every score at nought.**
+- ✅ [GHUB-0220] **A resumed Hearts game can come back to an empty table with every score at nought.**
   Seen 2026-10-29 while photographing GHUB-0062: a scratch copy of
   the owner's settings, `--shot --game hearts`, showed the table with
   no cards, North, West and East at (0), Pass 3 Cards greyed and Next
@@ -9550,6 +9550,12 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   waiting on Next Hand (then the scores should not all be nought) or
   a restore that dropped the hand. Start from heartsview.cpp's
   saveState() and restoreState() against that save.
+  Resolved 2026-10-29. The save was a finished hand waiting on Next Hand,
+  and its scores were intact (18, 0, 0, 8). The "(0)" beside each name
+  is the cards in hand, which is none between hands. The scores showed
+  only in the status bar and the Hand over box, and a save made after
+  the box closed restores without it. Fixed by a score panel on the
+  table whenever a hand or game is over (owner's choice, 2026-10-29).
   **Layman:** Opening Hearts from where you left it showed no cards and all scores at zero, with only Next Hand to press.
   Kind: investigate.
   Source: in-session-2026-10-29.

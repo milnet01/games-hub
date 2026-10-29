@@ -291,16 +291,7 @@ void HeartsView::announceHand()
         const bool newBest = over && !shared && m_engine.winner() == 0
             && Scores::instance().recordLow(Scores::heartsBestScore(), m_engine.total(0));
 
-        // One whole line per seat, joined rather than appended to, so no
-        // translated sentence is built from pieces.
-        QStringList lines;
-        for (int p = 0; p < HeartsEngine::kPlayers; ++p) {
-            lines << tr("%1: %2 this hand, %3 total")
-                         .arg(tr(kSeatNames[p]))
-                         .arg(m_engine.handPoints(p))
-                         .arg(m_engine.total(p));
-        }
-        QString detail = lines.join(QLatin1Char('\n'));
+        QString detail = scoreSummary();
 
         QMessageBox box(this);
         box.setWindowTitle(over ? tr("Game over") : tr("Hand over"));
@@ -343,6 +334,62 @@ void HeartsView::announceHand()
         else
             startNextHand();
     });
+}
+
+QString HeartsView::scoreSummary() const
+{
+    // One whole line per seat, joined rather than appended to, so no
+    // translated sentence is built from pieces.
+    QStringList lines;
+    for (int p = 0; p < HeartsEngine::kPlayers; ++p) {
+        lines << tr("%1: %2 this hand, %3 total")
+                     .arg(tr(kSeatNames[p]))
+                     .arg(m_engine.handPoints(p))
+                     .arg(m_engine.total(p));
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString HeartsView::scorePanelText() const
+{
+    // Headed by the caption, which is not painted on its own while the panel
+    // is up: two plates in the middle of an empty table compete for the eye.
+    QStringList lines;
+    switch (m_engine.phase()) {
+    case HeartsEngine::Phase::HandOver:
+        lines << captionText() << scoreSummary();
+        lines << tr("Press Next Hand to deal.");
+        break;
+    case HeartsEngine::Phase::GameOver:
+        lines << captionText() << scoreSummary();
+        break;
+    case HeartsEngine::Phase::Passing:
+    case HeartsEngine::Phase::Playing:
+        break;
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+QRectF HeartsView::scorePanelArea() const
+{
+    // The whole table, moved so the plate centres where the trick is played:
+    // between hands that is the one empty place. On a short window that
+    // centre puts the plate over North's name, so it never starts above the
+    // bottom of that label.
+    const QRectF table(rect());
+    const QRectF plate = Theme::captionRect(table, scorePanelText(), captionFont(table), Qt::AlignTop);
+    const double middle = trickCardRect(0).united(trickCardRect(2)).center().y();
+    const double belowNorth = seatLabelRect(2).bottom() + 6;
+    const double top = std::max(middle - plate.height() / 2, belowNorth);
+    return table.translated(0, top - plate.top());
+}
+
+QRectF HeartsView::scorePanelRect() const
+{
+    const QString text = scorePanelText();
+    if (text.isEmpty())
+        return {};
+    return Theme::captionRect(scorePanelArea(), text, captionFont(QRectF(rect())), Qt::AlignTop);
 }
 
 QString HeartsView::captionText() const
@@ -616,6 +663,11 @@ QRectF HeartsView::opponentRect(int seat) const
     }
 }
 
+QRectF HeartsView::seatLabelRect(int seat) const
+{
+    return { 8, opponentRect(seat).bottom() + 20, width() - 16.0, 20 };
+}
+
 // ---------------------------------------------------------------------------
 // Painting
 // ---------------------------------------------------------------------------
@@ -662,7 +714,7 @@ void HeartsView::paintEvent(QPaintEvent*)
         const QString text = QStringLiteral("%1 (%2)")
                                  .arg(tr(kSeatNames[seat]))
                                  .arg(n);
-        const QRectF label(8, r.bottom() + 20, width() - 16, 20);
+        const QRectF label = seatLabelRect(seat);
         // Qt::Alignment rather than int: these are flag enums, so storing them
         // in an int makes the `|` below a signed bitwise operation.
         const Qt::Alignment align = (seat == 1) ? Qt::AlignLeft
@@ -686,6 +738,11 @@ void HeartsView::paintEvent(QPaintEvent*)
                    m_engine.currentPlayer() == 0 ? tr("Your lead")
                                                  : tr("Waiting…"));
     }
+
+    // Between hands, the scores where the trick was (GHUB-0220).
+    const QString scores = scorePanelText();
+    if (!scores.isEmpty())
+        Theme::paintCaption(p, scorePanelArea(), scores, captionFont(QRectF(rect())), Qt::AlignTop);
 
     // The player's hand, left to right.
     const std::vector<Card>& hand = m_engine.hand(0);
@@ -728,7 +785,8 @@ void HeartsView::paintEvent(QPaintEvent*)
     if (!hand.empty() && keyboardCursorShown())
         Theme::paintCardCursor(p, handCardRect(m_cursor), legible);
 
-    paintStatusCaption(p, captionArea());
+    if (scores.isEmpty())
+        paintStatusCaption(p, captionArea());
 }
 
 void HeartsView::launchDeal()

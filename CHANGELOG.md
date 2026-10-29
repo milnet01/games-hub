@@ -51,6 +51,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   goes away when you click. Playing with the mouse shows no frame at
   all. Sudoku keeps its highlighted square, since a click uses it too.
 
+- **Hearts shows the scores on the table between hands** (GHUB-0220)
+  When a hand ends, the middle of the table lists each player's points
+  for that hand and their total, and says to press Next Hand. It stays
+  there after you close the Hand over box, and after a restart. Before,
+  a game resumed at that point showed an empty table. The number beside
+  each name counts the cards in hand, so it read as a score of nought.
+
 ## [1.2.0] - 2026-10-20
 
 **Theme:** The card games, by keyboard and in motion
