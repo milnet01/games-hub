@@ -114,8 +114,11 @@ QString KlondikeView::rulesText() const
         "you like.</p>"
         "<p>You win when all fifty-two cards are on the foundations.</p>"
         "<p>The score goes up by ten for each card put on a foundation, by five for "
-        "each move into a column, and by five for each card turned face up. Your "
-        "best score is kept.</p>"
+        "each card moved from the waste into a column, and by five for each card "
+        "turned face up. Moving cards from one column to another scores nothing. "
+        "Taking a card back down off a foundation costs fifteen, so it never pays "
+        "to move a card down and up again. The score never drops below zero. "
+        "Your best score is kept.</p>"
 
         "<h3>Controls</h3>"
         "<p><b>With the mouse:</b></p>"

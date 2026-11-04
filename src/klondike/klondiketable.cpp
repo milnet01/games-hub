@@ -176,7 +176,10 @@ bool KlondikeTable::dropOnTableau(int column)
         return false;
     for (const Card& c : m_held)
         m_tableau[std::size_t(column)].push_back(c);
-    m_score += kScoreTableauMove;
+    if (m_heldFrom == PileKind::Waste)
+        m_score += kScoreTableauMove;
+    else if (m_heldFrom == PileKind::Foundation)
+        m_score = std::max(0, m_score - kScoreFromFoundation);
     m_held.clear();
     revealSource();
     return true;

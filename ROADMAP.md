@@ -9671,12 +9671,19 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: test.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0228] **Klondike's score can be raised without limit by moving one card back and forth.**
+- ✅ [GHUB-0228] **Klondike's score can be raised without limit by moving one card back and forth.**
   Reported from reading the code, unverified: dropOnTableau gives +5
   for a card taken from a foundation back to a column, and returning it
   scores +10 again, so the score -- and the stored best -- can be
   pumped. Check how standard scoring treats this and whether the
   stored best needs a reset once fixed.
+  Confirmed and fixed 2026-11-04, wider than reported: a run moved
+  between two columns that both took it also scored +5 each way. Now
+  scored by source: waste to column +5, column to column 0, foundation
+  to column -15 (kScoreFromFoundation), floored at 0. Self-test
+  klondikeScoreCannotBePumped was red first (round trip 100 -> 115;
+  column shuffle +10), green after. Stored bests already inflated cannot
+  be told apart and are left alone.
   **Layman:** In Solitaire you can earn points forever by moving a card down from a finished pile and back up.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).

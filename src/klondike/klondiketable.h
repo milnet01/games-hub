@@ -29,6 +29,11 @@ public:
     static constexpr int kScoreToFoundation = 10;
     static constexpr int kScoreTableauMove = 5;
     static constexpr int kScoreTurnUp = 5;
+    // Taking a card back down off a foundation costs more than putting it up
+    // paid, so no round trip can raise the score (GHUB-0228). A run moved
+    // between columns scores nothing for the same reason; only a card off the
+    // waste earns kScoreTableauMove. The score never goes below nought.
+    static constexpr int kScoreFromFoundation = 15;
 
     KlondikeTable() { deal(); }
 

@@ -2717,6 +2717,69 @@ void klondikeRefusesMovesThatChangeNothing()
     check(table.score() == scoreBefore, "klondike: and scores nothing");
 }
 
+// GHUB-0228: no round trip may pay. A card taken back down from a foundation
+// scored a tableau move and then scored the foundation again on its return,
+// and a run moved between two columns that both took it scored each way --
+// so the score, and the stored best with it, could be raised without limit.
+void klondikeScoreCannotBePumped()
+{
+    std::array<std::vector<Card>, KT::kColumns> tableau;
+    std::array<std::vector<Card>, KT::kFoundations> foundations;
+    std::vector<Card> pack = makeDeck(1, 4);
+    auto take = [&pack](Suit suit, int rank) {
+        const auto it = std::find_if(pack.begin(), pack.end(), [&](const Card& c) {
+            return c.suit == suit && c.rank == rank;
+        });
+        Card c = *it;
+        pack.erase(it);
+        c.faceUp = true;
+        return c;
+    };
+
+    // The two of clubs on its foundation fits the red three in column 0. The
+    // red seven in column 1 fits the black eight in column 2 as well.
+    foundations[0] = { take(Suit::Clubs, kAce), take(Suit::Clubs, 2) };
+    tableau[0] = { take(Suit::Hearts, 3) };
+    tableau[1] = { take(Suit::Spades, 8), take(Suit::Hearts, 7) };
+    tableau[2] = { take(Suit::Clubs, 8) };
+    // The waste's top card, a black six, fits the red seven.
+    const std::vector<Card> waste = { take(Suit::Spades, 6) };
+    int col = 3;
+    for (Card& c : pack) {
+        c.faceUp = true;
+        tableau[std::size_t(col)].push_back(c);
+        col = 3 + ((col - 2) % (KT::kColumns - 3));
+    }
+
+    KT table;
+    check(table.restore({}, waste, foundations, tableau, 1, 100),
+          "klondike score: the test position is one the rules could reach");
+    const int start = table.score();
+
+    // Down from the foundation and straight back up.
+    check(!table.lift(KT::PileKind::Foundation, 0, 1).empty() && table.dropOnTableau(0),
+          "klondike score: the two of clubs comes down onto the red three");
+    check(!table.lift(KT::PileKind::Tableau, 0, 1).empty() && table.dropOnFoundation(0),
+          "klondike score: and goes back up");
+    std::printf("      foundation round trip: %d -> %d\n", start, table.score());
+    check(table.score() < start, "klondike score: a foundation round trip costs, never pays");
+
+    // Between two columns that both take the seven, and back.
+    const int beforeShuffle = table.score();
+    check(!table.lift(KT::PileKind::Tableau, 1, 1).empty() && table.dropOnTableau(2),
+          "klondike score: the red seven moves to the other black eight");
+    check(!table.lift(KT::PileKind::Tableau, 2, 1).empty() && table.dropOnTableau(1),
+          "klondike score: and back");
+    check(table.score() == beforeShuffle, "klondike score: moving between columns scores nothing");
+
+    // A real move still pays: the waste's six onto the seven.
+    const int beforeWaste = table.score();
+    check(!table.lift(KT::PileKind::Waste, 0, 0).empty() && table.dropOnTableau(1),
+          "klondike score: the six comes off the waste onto the seven");
+    check(table.score() == beforeWaste + KT::kScoreTableauMove,
+          "klondike score: and a card off the waste still scores");
+}
+
 void klondikeFaceDownCardsAreOutOfReach()
 {
     KT table;
@@ -6407,6 +6470,7 @@ int main()
     klondikeStackingRules();
     savedGamesRefuseTheImpossible();
     klondikeRefusesMovesThatChangeNothing();
+    klondikeScoreCannotBePumped();
     klondikeFaceDownCardsAreOutOfReach();
     klondikeTurningUncoversTheCardBelow();
     klondikeUndoDoesNotLoseACard();

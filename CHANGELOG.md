@@ -17,6 +17,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   what you are aiming for, how it plays here, and which keys and clicks
   do what. Large play makes the words larger there too.
 
+### Fixed
+
+- **Solitaire's score can no longer be raised by moving cards back and forth** (GHUB-0228)
+  Taking a card down off a foundation now costs 15 points, and moving
+  cards between columns scores nothing. Before, moving one card down
+  and up again, or between two columns, added points every time, so
+  the score and the best score could grow without limit. A card moved
+  from the waste into a column still scores 5.
+
 ## [1.3.0] - 2026-11-04
 
 **Theme:** Getting around the app
