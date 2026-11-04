@@ -75,26 +75,34 @@ option(GAMESHUB_UPDATER "Build the self-updater (release downloads only)" OFF)
 ```
 
 - **OFF** (the default, and every `cmake --install`, OBS and Flatpak build):
-  none of the networked update source is compiled into `gameshub`, and no
-  update menu entry or setting exists. **This does not remove `Qt6::Network`
+  none of `src/update/*` is compiled into `gameshub`, and no update menu
+  entry or setting exists. **This does not remove `Qt6::Network`
   from the binary**: it is already a direct dependency today, pulled in through
   `Qt6::Multimedia`'s link interface (`readelf -d build/gameshub` lists
   `libQt6Network.so.6`, checked 2026-11-04). The guarantee is that no code of
   ours calls it.
 - **ON**: `release.yml` passes it for both downloads. `ci.yml` passes it
   too, so the networked half compiles and its offline tests run on both
-  platforms.
+  platforms. The Linux leg also configures a second tree with the default,
+  builds only `gameshub` in it, and runs INV-2's `nm` check there.
 
 The work splits the way the games do: a part with no network and no widgets
 that the self-test can drive, and a part that talks to the network and the
 screen.
 
-- `src/update/updatelogic.*` — QtCore only, always built, linked into
-  `gameshub_selftest`. Version parsing and comparison, reading the releases
-  JSON, choosing assets, collecting notes, the once-a-day rule, and the
-  Ed25519 verifier. It takes the running version and the clock as arguments:
-  `GAMESHUB_VERSION` is defined only for the app and view targets, and a
-  supplied clock is what lets INV-7 be tested.
+- `src/update/updatelogic.*` — QtCore only, in a library of its own. It is
+  always built and always linked into `gameshub_selftest`, and linked into
+  `gameshub` and `gameshub_uitest` only with `GAMESHUB_UPDATER`. It is not
+  in `GAME_CORE_SOURCES`, because `gameshub_core` is linked into every
+  `gameshub`. Version parsing and comparison, reading the releases JSON,
+  choosing assets, collecting notes, the once-a-day rule, `detectInstall()`
+  and the Ed25519 verifier. It reads no settings and no environment: the
+  running version, the clock, the stored `update/*` values, the environment
+  variables and the key all arrive as arguments. `GAMESHUB_VERSION` is
+  defined only for the app and view targets, and a supplied clock is what
+  lets INV-7 be tested.
+- Everything under `src/update/*` is in namespace `update`, which INV-2's
+  `nm` check counts.
 - `src/update/updater.*`, `src/update/updatedialog.*` — built only with
   `GAMESHUB_UPDATER`. The network calls, the first-run question, the offer
   dialog, the download, the swap and the relaunch.
@@ -134,14 +142,24 @@ This is the state until the owner answers § 3's open question.
 
 ### 4.3 The public key
 
-`src/update/updatekey.h` holds the 32-byte public key as a byte array. **It
+`updatekey.h`, a new header beside `src/update/updatelogic.*`, holds the
+32-byte public key as a byte array. **It
 ships empty.** An empty key makes the updater inert everywhere (INV-2), so the
 feature can be merged before the owner has a key. Filling it in is a one-line
 change, made in the same commit that first sets the secret.
 
-The `release.yml` comparison in § 4.2 reads this file, so its layout is
-something the workflow binds to: one `constexpr` array of 32 hex bytes, or
-empty.
+The `release.yml` comparison in § 4.2 reads this file, so its form is fixed.
+It is one line, in one of two states:
+
+```cpp
+inline constexpr std::array<unsigned char, 0> kUpdatePublicKey{};
+inline constexpr std::array<unsigned char, 32> kUpdatePublicKey{0x1a, 0x2b, /* … 32 bytes */};
+```
+
+The workflow takes the `0x..` tokens on that line, in order. None means
+empty. Otherwise there must be 32, equal to the last 32 bytes of
+`openssl pkey -pubout -outform DER` run on the secret. The app treats
+`kUpdatePublicKey.empty()` as inert.
 
 ### 4.4 Which installs may update
 
@@ -179,9 +197,12 @@ Settings keys, all under `update/`:
 - **Help → Check for updates** always checks, because asking is consent for
   that one request. It ignores `update/skipped` and says "You have the newest
   version" when that is so.
-- **Nothing in this section runs during `--shot`, `--bench`, or a test.** The
-  hub already has a "not remembering" state for `--shot`
-  (`HubWindow::setRemembering`); the updater is not started in it.
+- **The updater starts only when `main()` starts it**, after the command
+  line is parsed, and never under `--shot`, where the hub is already not
+  remembering (`HubWindow::setRemembering`). `HubWindow`'s constructor
+  starts nothing. The updater's network access is an interface passed in,
+  so a test builds an updater with a counting fake (INV-1). Every other
+  test builds none, so it makes no request and sees no first-run question.
 
 ### 4.6 The check
 
@@ -252,17 +273,17 @@ download page instead.
   *Breaks when:* the check starts before the first-run question is
   answered, or reads an absent key as yes.
 
-- **INV-2** — **Only the AppImage and Zip installs, built with the switch and
-  carrying a key, contain or run update code.** A build without
-  `GAMESHUB_UPDATER` contains none of the networked half (§ 4.1). A build with
-  it, but with an empty key or outside an AppImage on Linux, makes no request
-  and shows no update menu entry or setting.
+- **INV-2** — **Only a build with the switch contains update code, and only
+  the AppImage and Zip installs of one carrying a key run it.** A build
+  without `GAMESHUB_UPDATER` contains nothing from `src/update/*` (§ 4.1). A
+  build with it, but with an empty key or outside an AppImage on Linux,
+  makes no request and shows no update menu entry or setting.
   *Test:* the self-test checks `detectInstall()` against each row of § 4.4's
   table, with the environment and key supplied by the test. On a default
-  build, `nm -C --defined-only build/gameshub | grep -c 'Updater::'` → `0`
+  build, `nm -C --defined-only build/gameshub | grep -c 'update::'` → `0`
   (run 2026-11-04 on today's build; the same command counting `HubWindow::`
-  is the control that it sees our symbols). CI's Linux leg runs it on a
-  default configure.
+  is the control that it sees our symbols). CI's Linux leg runs it on its
+  second, default tree (§ 4.1).
   *Breaks when:* a distribution or Flatpak build turns the switch on, or the
   detection treats a build directory as an AppImage.
 
@@ -293,15 +314,15 @@ download page instead.
   progress is saved first.** The new image starts only after the old PID has
   exited, from an environment without the old `APPIMAGE`, `APPDIR` and
   `ARGV0`, and the exit before it went through `HubWindow::closeEvent`.
-  *Test:* manual, on a real AppImage: install `1.x.0` over an older signed
-  build mid-game; the app closes, reopens on the new version, and the game
+  *Test:* manual, on a real AppImage: install `1.x.0` over an older build
+  that carries the real key, mid-game; the app closes, reopens on the new version, and the game
   resumes. No automated test can mount an AppImage on the CI runners.
   *Breaks when:* the app re-executes itself in place (the finbreak field
   failure), or quits by a path that skips `closeEvent`.
 
 - **INV-6** — **Each release's signatures match the key the app carries.**
   When the signing secret is set, every uploaded asset has a `.sig` that
-  verifies, and the secret's public key equals `src/update/updatekey.h`'s.
+  verifies, and the secret's public key equals `updatekey.h`'s (§ 4.3).
   *Test:* `release.yml`, the round-trip step in § 4.2; a mismatch fails the
   publish before anything is uploaded.
   *Breaks when:* the key is rotated in the secret but not in the source, or
@@ -337,7 +358,9 @@ download page instead.
   network) and INV-4's install half (scratch directory, throwaway key). Built
   only with `GAMESHUB_UPDATER`, which CI sets.
 - `release.yml` — INV-6, on every tagged release.
-- Manual — INV-5, once, on the first release that carries the real key.
+- Manual — INV-5, once, on the second release that carries the real key.
+  The first keyed release is the earliest build that can verify a download,
+  so it is the one updated from.
 
 Each automated test is seen failing first: against a verifier that accepts
 everything, a compare that is textual, and a check that ignores
@@ -380,10 +403,17 @@ everything, a compare that is textual, and a check that ignores
 
 ## 11. Cross-doc impact
 
-- `SECURITY.md` § What it touches — the "No network" bullet is rewritten in
-  the same change: what is fetched (the releases list and, on Update now, two
-  files), from where (`api.github.com`, `github.com`), on whose consent
-  (§ 4.5), and how a download is verified (§ 4.8).
+- `SECURITY.md` § What it touches — three bullets are rewritten in the same
+  change.
+  - "No network": what is fetched (the releases list and, on Update now, two
+    files), from where, on whose consent (§ 4.5), and how a download is
+    verified (§ 4.8). The hosts are `api.github.com` and `github.com`, whose
+    asset downloads redirect to `release-assets.githubusercontent.com`
+    (`curl -sI` on the v1.3.0 AppImage, 2026-11-04).
+  - "The one input it parses that it did not write": the releases JSON and
+    the downloaded file join the saved game.
+  - "The files it writes": an AppImage install also replaces `$APPIMAGE` and
+    writes two temporary files beside it.
 - `docs/specs/GHUB-0025-downloadable-builds.md` — amended when this is built:
   INV-7's plugin assertion gains the `tls` plugin directory for both
   downloads, and § 4.3 gains the signing step.
@@ -401,8 +431,8 @@ Rows live in `../reviews/GHUB-0043-self-update-loop-log.md`.
 
 No new Qt module: `Qt6::Network` is already in the binary through
 `Qt6::Multimedia` (§ 4.1). The release builds call it; no other build does. No new
-third-party library: the Ed25519 verifier is a small public-domain routine in
-`src/update/`, its licence recorded in `packaging/THIRD-PARTY.md`. A check
+third-party library: the Ed25519 verifier is a small public-domain routine
+beside `src/update/updatelogic.*`, its licence recorded in `packaging/THIRD-PARTY.md`. A check
 holds at most 1 MiB in memory; a download at most 200 MiB on disk beside
 `$APPIMAGE`, deleted on any failure.
 
