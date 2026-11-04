@@ -8635,15 +8635,6 @@ writer it waits for.
   Kind: feature.
   Source: user-request-2026-09-02.
 
-- 📋 [GHUB-0210] **Remove the v1.1.0 trailer worktree once the trailer is approved.**
-  `build-v110/` holds a registered git worktree at tag v1.1.0
-  (`build-v110/wt`), its build, and the clip script, kept for
-  re-takes. Remove with `git worktree remove build-v110/wt`, then
-  the folder. Clips went to /mnt/Games/Trailers/incoming/games-hub/.
-  **Layman:** Tidy away the copy of the old version used to film the trailer, once the website session says the clips are fine.
-  Kind: chore.
-  Source: in-session-2026-10-15.
-
 - ✅ [GHUB-0216] **Pyramid's draw slides to the waste instead of jumping there.**
   Left over from GHUB-0065, which animated Pyramid's deal and its taken
   pairs but not the stock. A draw now flies the card from the stock to
@@ -9580,6 +9571,15 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** Opening Hearts from where you left it showed no cards and all scores at zero, with only Next Hand to press.
   Kind: investigate.
   Source: in-session-2026-10-29.
+
+- 📋 [GHUB-0210] **Remove the v1.1.0 trailer worktree once the trailer is approved.**
+  `build-v110/` holds a registered git worktree at tag v1.1.0
+  (`build-v110/wt`), its build, and the clip script, kept for
+  re-takes. Remove with `git worktree remove build-v110/wt`, then
+  the folder. Clips went to /mnt/Games/Trailers/incoming/games-hub/.
+  **Layman:** Tidy away the copy of the old version used to film the trailer, once the website session says the clips are fine.
+  Kind: chore.
+  Source: in-session-2026-10-15.
 
 ## P01 — Shipped
 
