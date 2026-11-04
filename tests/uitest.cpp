@@ -7648,6 +7648,37 @@ int main(int argc, char* argv[])
                 clickAt(&v, QPointF(v.width() - 4.0, v.height() - 4.0), Qt::LeftButton);
                 check(v.flightsInTheAir() == 0, "spider: a press lands the deal at once");
             }
+            // GHUB-0229. The suit count is a new deal too, so it goes through
+            // the same path as New Game: the old deal settles and the new one
+            // flies in.
+            auto* twoSuits = v.findChild<QAction*>(QStringLiteral("spider-suits-2"));
+            check(twoSuits != nullptr, "spider: the view offers 2 Suits");
+            if (twoSuits != nullptr) {
+                twoSuits->trigger();
+                check(v.flightsInTheAir() == 54,
+                      "spider: switching suits deals all 54 cards in motion");
+                check(settle(&v, 10000) && v.flightsInTheAir() == 0,
+                      "spider: and that deal lands");
+            }
+        }
+        {
+            // GHUB-0229. A resumed game switched to a fresh deal is untouched,
+            // so it saves nothing -- the switch must clear m_resumed.
+            SpiderView played;
+            played.resize(900, 640);
+            clickAt(&played, QPointF(played.width() - 20, played.height() - 20), Qt::LeftButton);
+            settle(&played, 20000);
+            const QByteArray saved = played.saveState();
+            SpiderView resumed;
+            resumed.resize(900, 640);
+            check(resumed.restoreState(saved), "spider: a played game reads back");
+            auto* oneSuit = resumed.findChild<QAction*>(QStringLiteral("spider-suits-1"));
+            if (oneSuit != nullptr) {
+                oneSuit->trigger();
+                settle(&resumed, 10000);
+            }
+            check(oneSuit != nullptr && resumed.saveState().isEmpty(),
+                  "spider: a fresh deal after switching suits saves nothing");
         }
         {
             FreeCellView v;

@@ -37,6 +37,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   it, and arrow keys pressed while paused are ignored instead of being
   saved up to steer the snake the moment play resumes.
 
+- **Changing Spider's number of suits deals like New Game** (GHUB-0229)
+  The new deal now flies onto the table, and any cards still flying
+  from the old deal land first. A saved game switched to a new suit
+  count no longer saves the untouched new deal as if it were a game in
+  progress.
+
 ## [1.3.0] - 2026-11-04
 
 **Theme:** Getting around the app

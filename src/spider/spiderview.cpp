@@ -33,7 +33,7 @@ SpiderView::SpiderView(QWidget* parent)
     // Without it setFocus() does nothing and no key ever arrives (GHUB-0168).
     setFocusPolicy(Qt::StrongFocus);
     buildActions();
-    dealTable();
+    dealTable(m_table.suits());
 }
 
 void SpiderView::buildActions()
@@ -78,21 +78,10 @@ void SpiderView::buildActions()
         const int suits = mode.suits;
         connect(a, &QAction::triggered, this, [this, suits] {
             // The deal takes the suit count, so changing it and dealing is one
-            // step rather than two.
-            m_table.deal(suits);
-            Sound::instance().play(Sound::kShuffle);
-            m_drag.clear();
-            m_dragging = false;
-            m_pressValid = false;
-            // deal() empties the table's hand, so a keyboard hold has gone too.
-            m_keyHolding = false;
-            m_cursorCol = 0;
-            m_cursorDepth = 99;
-            clampCursor();
-            m_won = false;
-            m_undoAction->setEnabled(false);
-            update();
-            refresh();
+            // step rather than two -- and the same step New Game takes, so the
+            // old deal settles and the new one flies in (GHUB-0229).
+            dealTable(suits);
+            launchDeal();
         });
         m_actions.append(a);
     }
@@ -170,17 +159,17 @@ QString SpiderView::rulesText() const
 
 void SpiderView::newGame()
 {
-    dealTable();
+    dealTable(m_table.suits());
     launchDeal();
 }
 
-void SpiderView::dealTable()
+void SpiderView::dealTable(int suits)
 {
     // Before the deal, not after: settling puts a held run back on the table
     // it came from, and after a deal that is a fresh table it never left.
     settleForChange();
     m_resumed = false;
-    m_table.deal(m_table.suits());
+    m_table.deal(suits);
     Sound::instance().play(Sound::kShuffle);
     m_cursorCol = 0;
     m_cursorDepth = 99;

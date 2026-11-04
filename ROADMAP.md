@@ -9693,12 +9693,16 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0229] **Spider's suit-count switch redeals without settling the old deal.**
+- ✅ [GHUB-0229] **Spider's suit-count switch redeals without settling the old deal.**
   Reported from reading the code, unverified: the 1 Suit / 2 Suits / 4
   Suits handler in SpiderView::buildActions redeals itself instead of
   through dealTable(), so it skips settleForChange(), never resets
   m_resumed, and plays no deal animation. Look at what the player sees
   before changing it.
+  Confirmed and fixed 2026-11-04: the suit switch now calls dealTable()
+  then launchDeal(), the same path as New Game, so it settles the old
+  deal, clears m_resumed and animates. Two UI checks red first, green
+  after.
   **Layman:** Changing Spider's number of suits mid-deal may leave cards flying from the old deal.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).

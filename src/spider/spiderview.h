@@ -89,9 +89,10 @@ private:
     void buildActions();
     // A deal the player asked for: the table, then the cards flying to it
     // (GHUB-0065). The deal made when the view is built is dealTable() alone,
-    // because nobody asked for it and the view has no size yet.
+    // because nobody asked for it and the view has no size yet. Changing the
+    // suit count is a deal the player asked for too (GHUB-0229).
     void newGame();
-    void dealTable();
+    void dealTable(int suits);
     void undo();
 
     double cardWidth() const;
