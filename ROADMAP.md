@@ -9575,11 +9575,18 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: investigate.
   Source: in-session-2026-10-29.
 
-- 📋 [GHUB-0210] **Remove the v1.1.0 trailer worktree once the trailer is approved.**
+- ✅ [GHUB-0210] **Remove the v1.1.0 trailer worktree once the trailer is approved.**
   `build-v110/` holds a registered git worktree at tag v1.1.0
   (`build-v110/wt`), its build, and the clip script, kept for
   re-takes. Remove with `git worktree remove build-v110/wt`, then
   the folder. Clips went to /mnt/Games/Trailers/incoming/games-hub/.
+  Done 2026-11-04, after the website session confirmed (msg 1188) the
+  trailer was approved 2026-10-16 and needs no re-takes. Worktree
+  build-v110/wt removed (it was clean, at v1.1.0's commit 11740fe, so
+  the tag still holds it), and its build deleted. The files with no
+  other copy -- rec-all.sh, build.log, cfg/, rec/, shots/, data/ and
+  verify/ -- were copied first to .archive/trailer-v1.1.0/ (ignored by
+  git) and the copies diffed before build-v110/ was removed.
   **Layman:** Tidy away the copy of the old version used to film the trailer, once the website session says the clips are fine.
   Kind: chore.
   Source: in-session-2026-10-15.
