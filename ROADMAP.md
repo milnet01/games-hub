@@ -8531,6 +8531,9 @@ writer it waits for.
   something else moves it" locks it. Proved red 2026-10-29: with that
   connect removed and rebuilt, that check and "and carries its label
   across with it" both fail; restored, all UI checks pass.
+  Release note (1.3.0): no CHANGELOG entry -- the fix shipped in e928fc3
+  on 2026-09-02 under GHUB-0155..0157; closing it here changed nothing a
+  player sees.
 
 - ✅ [GHUB-0061] **There is no way to get from one game to another without going back to the front door.**
   The menu bar holds one menu, `&Help`. Every move between games goes through the
