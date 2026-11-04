@@ -3401,6 +3401,41 @@ int main(int argc, char* argv[])
     // sweep of the whole grid is what guarantees that — most cells are clues
     // and refuse the mark, and which ones is decided by a freshly generated
     // puzzle.
+    // GHUB-0223, owner's call 2026-11-04: Sudoku plays with the mouse alone.
+    // Click a square, then a key of the digit row under the grid.
+    {
+        Legibility::instance().setEnabled(false);
+        for (const QSize size : { QSize(560, 600), QSize(340, 380), QSize(900, 500) }) {
+            SudokuView sudoku;
+            sudoku.resize(size);
+            const QString at = QStringLiteral(" at %1x%2").arg(size.width()).arg(size.height());
+            int row = -1;
+            int col = -1;
+            for (int r = 0; r < 9 && row < 0; ++r)
+                for (int c = 0; c < 9 && row < 0; ++c)
+                    if (!sudoku.isClueAt(r, c)) {
+                        row = r;
+                        col = c;
+                    }
+            const QRectF widget(sudoku.rect());
+            bool keysFit = true;
+            for (int d = 0; d <= 9; ++d) {
+                const QRectF key = sudoku.padKeyRect(d);
+                if (key.isEmpty() || !widget.contains(key)
+                    || key.top() <= sudoku.cellRect(8, 0).bottom())
+                    keysFit = false;
+            }
+            check(keysFit, ("sudoku: every key of the digit row sits below the grid"
+                            + at).toUtf8().constData());
+            clickAt(&sudoku, sudoku.cellRect(row, col).center(), Qt::LeftButton);
+            clickAt(&sudoku, sudoku.padKeyRect(5).center(), Qt::LeftButton);
+            check(sudoku.valueAt(row, col) == 5,
+                  ("sudoku: a click on 5 writes 5 in the chosen square" + at).toUtf8().constData());
+            clickAt(&sudoku, sudoku.padKeyRect(0).center(), Qt::LeftButton);
+            check(sudoku.valueAt(row, col) == 0,
+                  ("sudoku: and Erase empties it" + at).toUtf8().constData());
+        }
+    }
     {
         Legibility::instance().setEnabled(false);
         SudokuView sudoku;

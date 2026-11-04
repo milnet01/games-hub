@@ -32,6 +32,15 @@ constexpr QColor kGridLine { 0x9a, 0x93, 0x82 };
 constexpr QColor kGridHeavy { 0x3c, 0x38, 0x30 };
 constexpr int kFrameWidth = 9;
 
+// The digit row under the grid, so the puzzle plays with the mouse alone
+// (GHUB-0223, owner's call 2026-11-04). Sizes are in cells. A key is as tall as
+// a square and its digit is drawn at the grid's own 0.52, so the row reads like
+// the board it writes to; Erase is wider because it carries a word.
+constexpr double kPadGap = 0.3;     // frame to keys
+constexpr double kPadHeight = 1.0;  // a key's height
+constexpr double kEraseUnits = 1.6; // Erase's width, in digit-key widths
+constexpr double kKeySpacing = 0.08; // between keys, in digit-key widths
+
 // Nine pencil marks sit in a fixed 3x3 pattern inside one cell — 5 is always
 // the middle — so each gets a third of the cell and the pattern is how you
 // know which digit without reading it. Both ratios are of the cell, matching
@@ -229,8 +238,12 @@ QString SudokuView::rulesText() const
         "<h3>Controls</h3>"
         "<p><b>With the mouse:</b></p>"
         "<ul>"
-        "<li>Click a square to select it. Digits are typed on the keyboard; the "
-        "mouse only selects.</li>"
+        "<li>Click a square to select it.</li>"
+        "<li>Then click a digit in the row of keys under the grid to write it there. "
+        "In pencil mode the keys turn grey, and a click adds that note, or takes it "
+        "away if it is already there.</li>"
+        "<li>Erase empties the selected square. In pencil mode it clears its "
+        "notes.</li>"
         "</ul>"
         "<p><b>With the keyboard:</b></p>"
         "<ul>"
@@ -308,14 +321,79 @@ void SudokuView::deactivate()
 
 double SudokuView::cellSize() const
 {
-    const int available = std::min(width(), height()) - 2 * (kFrameWidth + 6);
-    return std::max(12.0, std::floor(available / double(SudokuGrid::kSize)));
+    // The digit row comes out of the height, below the frame, with a little
+    // paper left under it.
+    const int frame = kFrameWidth + 6;
+    const double byWidth = (width() - 2 * frame) / double(SudokuGrid::kSize);
+    const double byHeight =
+        (height() - 2 * frame - 6) / (SudokuGrid::kSize + kPadGap + kPadHeight);
+    return std::max(12.0, std::floor(std::min(byWidth, byHeight)));
 }
 
 QRect SudokuView::boardRect() const
 {
-    const int side = int(cellSize()) * SudokuGrid::kSize;
-    return { (width() - side) / 2, (height() - side) / 2, side, side };
+    const double cell = cellSize();
+    const int side = int(cell) * SudokuGrid::kSize;
+    // The grid and the digit row are centred together, as one block.
+    const int block = side + int(std::ceil(cell * (kPadGap + kPadHeight)));
+    return { (width() - side) / 2, (height() - block) / 2, side, side };
+}
+
+QRectF SudokuView::cellRect(int row, int col) const
+{
+    const QRect r = boardRect();
+    const double cell = cellSize();
+    return { r.x() + col * cell, r.y() + row * cell, cell, cell };
+}
+
+QRectF SudokuView::padKeyRect(int digit) const
+{
+    if (digit < 0 || digit > 9)
+        return {};
+    const QRect r = boardRect();
+    const double cell = cellSize();
+    const double unit = r.width() / (9 + kEraseUnits + 9 * kKeySpacing);
+    // 1 to 9 left to right, then Erase -- which the keyboard calls 0.
+    const int slot = digit == 0 ? 9 : digit - 1;
+    const double top = r.y() + r.height() + kFrameWidth + 6 + cell * kPadGap;
+    return { r.x() + slot * unit * (1 + kKeySpacing), top,
+             digit == 0 ? unit * kEraseUnits : unit, cell * kPadHeight };
+}
+
+void SudokuView::paintPad(QPainter& p) const
+{
+    const double cell = cellSize();
+    QFont digitFont = font();
+    digitFont.setPointSizeF(cell * 0.52);
+    // Pencil mode writes notes, so the keys take the notes' ink to say so.
+    const QColor ink = m_pencil ? kPencilInk : kOwnInk;
+
+    for (int d = 0; d <= 9; ++d) {
+        const QRectF key = padKeyRect(d).adjusted(0.5, 0.5, -0.5, -0.5);
+        p.setPen(QPen(kGridHeavy, 1.5));
+        p.setBrush(kPaper);
+        p.drawRoundedRect(key, cell * 0.12, cell * 0.12);
+        p.setBrush(Qt::NoBrush);
+        p.setPen(ink);
+        if (d != 0) {
+            p.setFont(digitFont);
+            p.drawText(key, Qt::AlignCenter, QString::number(d));
+            continue;
+        }
+        // The word is fitted to its key rather than given a fixed size, so a
+        // wide font or a long translation still fits.
+        const QString erase = tr("Erase");
+        QFont f = font();
+        f.setBold(true);
+        double size = cell * 0.30;
+        f.setPointSizeF(size);
+        while (size > 6.0 && QFontMetricsF(f).horizontalAdvance(erase) > key.width() * 0.9) {
+            size -= 0.5;
+            f.setPointSizeF(size);
+        }
+        p.setFont(f);
+        p.drawText(key, Qt::AlignCenter, erase);
+    }
 }
 
 // The one place the mark font is decided, so paintEvent and the two accessors
@@ -558,6 +636,8 @@ void SudokuView::paintEvent(QPaintEvent*)
             }
         }
     }
+
+    paintPad(p);
 }
 
 // ---------------------------------------------------------------------------
@@ -568,6 +648,13 @@ void SudokuView::mousePressEvent(QMouseEvent* event)
 {
     if (m_paused)
         return;
+    for (int d = 0; d <= 9; ++d) {
+        if (padKeyRect(d).contains(event->position())) {
+            setFocus();
+            enter(d);
+            return;
+        }
+    }
     const QRect r = boardRect();
     if (!r.contains(event->position().toPoint()))
         return;

@@ -6,6 +6,7 @@
 #include <QElapsedTimer>
 #include <QFont>
 
+class QPainter;
 class QTimer;
 
 class SudokuView : public GameView
@@ -43,6 +44,13 @@ public:
     bool marksFitCell() const;
     bool marksFitAt(double pointSize) const;
 
+    // Where things are, so a check can click them (GHUB-0223). A square, and a
+    // key of the digit row under the grid: 1 to 9, and 0 for Erase.
+    QRectF cellRect(int row, int col) const;
+    QRectF padKeyRect(int digit) const;
+    int valueAt(int row, int col) const { return m_grid.value(row, col); }
+    bool isClueAt(int row, int col) const { return m_grid.isClue(row, col); }
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -60,6 +68,7 @@ private:
     QRect boardRect() const;
     double cellSize() const;
     QFont markFont() const;
+    void paintPad(QPainter& p) const;
 
     QList<QAction*> m_actions;
     SudokuGrid m_grid;

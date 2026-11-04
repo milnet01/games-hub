@@ -795,6 +795,12 @@ Core: `pyramidtable.*`. View: `pyramidview.*`. Both in `src/pyramid/`.
 
 Core: `sudokugrid.*`. View: `sudokuview.*`. Both in `src/sudoku/`.
 
+**A row of digit keys under the grid makes the puzzle playable with the mouse
+alone** (GHUB-0223). `cellSize()` takes the row out of the height, and
+`boardRect()` centres grid and row as one block, so a layout change moves both.
+A click on a key goes through `enter()`, the keyboard's path, so pencil mode,
+clue squares and sounds behave the same either way.
+
 **`QPainter::drawText(rect, flags, text)` clips to the rect, so a font is
 bounded by its LINE box and not by its ink.** Sudoku's pencil marks are the
 case: nine sit in a fixed 3×3 pattern inside one cell, each centred in a cell

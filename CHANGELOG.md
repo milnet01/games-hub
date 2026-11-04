@@ -17,6 +17,22 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   what you are aiming for, how it plays here, and which keys and clicks
   do what. Large play makes the words larger there too.
 
+- **Sudoku plays with the mouse alone** (GHUB-0223)
+  A row of large digit keys, 1 to 9 and Erase, sits under the grid.
+  Click a square, then a key. In pencil mode the keys write notes. The
+  grid is a little smaller to make room.
+
+### Changed
+
+- **2048 saves your best score the moment you pass it** (GHUB-0231)
+  Before, the best was saved only when the board got stuck, so a game
+  left with New Game lost the best the status line had been showing.
+  Now neither New Game nor Undo can lose it.
+
+- **Pinball's right Shift key works the right flipper** (GHUB-0234)
+  Left Shift works the left flipper and right Shift the right one.
+  Before, both Shift keys worked the left flipper.
+
 ### Fixed
 
 - **Solitaire's score can no longer be raised by moving cards back and forth** (GHUB-0228)
@@ -48,19 +64,10 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   of the mouse lowers only the flipper the mouse raised, so a flipper
   you are holding with a key stays up.
 
-- **Pinball's right Shift key works the right flipper** (GHUB-0234)
-  Left Shift works the left flipper and right Shift the right one.
-  Before, both Shift keys worked the left flipper.
-
 - **Sudoku's notes no longer change out of sight** (GHUB-0224)
   In pencil mode, a square that holds a digit now takes no notes. Before,
   notes typed there were hidden under the digit and came back when it
   was cleared.
-
-- **2048 saves your best score the moment you pass it** (GHUB-0231)
-  Before, the best was saved only when the board got stuck, so a game
-  left with New Game lost the best the status line had been showing.
-  Now neither New Game nor Undo can lose it.
 
 ## [1.3.0] - 2026-11-04
 

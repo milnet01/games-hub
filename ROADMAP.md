@@ -9625,12 +9625,18 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: test.
   Source: in-session-2026-11-04.
 
-- 📋 [GHUB-0223] **Sudoku cannot be played with the mouse alone.**
+- ✅ [GHUB-0223] **Sudoku cannot be played with the mouse alone.**
   Reported by the GHUB-0016 rules writer from reading the code:
   SudokuView::mousePressEvent only selects a square and there is no
   on-screen digit pad, so every digit needs the keyboard. Every other
   game here plays with either. Verify by playing before designing a
   fix (a row of digit buttons under the grid is the obvious shape).
+  Confirmed in code and built 2026-11-04, owner's call the same day: a
+  row of digit keys 1-9 and Erase under the grid. Click a square, then
+  a key; keys go through enter(), so pencil mode works. UI checks at
+  three window sizes red first (stub pad), green after; shots checked at
+  560x640 and at 340x460 with large play. Real mouse play is by eye
+  only.
   **Layman:** In Sudoku the mouse only picks a square; there is no way to put a number in without the keyboard.
   Kind: accessibility.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
