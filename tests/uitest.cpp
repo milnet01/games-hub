@@ -2808,8 +2808,16 @@ void updaterAsksBeforeItChecks()
 }
 
 // INV-4's install half: only a file that verifies replaces $APPIMAGE.
+//
+// Linux only, because installing is (§ 4.4): the Windows zip opens the
+// download page and never reaches this path. Run on Windows it failed the
+// swap -- seen on the wintest box, 2026-11-05 -- which says something about
+// replacing a file on Windows and nothing about the app.
 void updaterInstallsOnlyWhatVerifies()
 {
+#ifndef Q_OS_LINUX
+    std::printf("SKIP  update: the install half is Linux-only, as installing is\n");
+#else
     const QString version = QStringLiteral("9.9.9");
     const QString file = QStringLiteral("GamesHub-%1-x86_64.AppImage").arg(version);
     const QString base = QStringLiteral("https://github.com/milnet01/games-hub/releases/download/v%1/")
@@ -2895,6 +2903,7 @@ void updaterInstallsOnlyWhatVerifies()
           "update: a download cut short changes nothing and leaves nothing");
 
     clearUpdateSettings();
+#endif
 }
 #endif // GAMESHUB_UPDATER
 
