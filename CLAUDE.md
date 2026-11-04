@@ -72,6 +72,13 @@ while leaving `Exec=/usr/local/bin/gameshub` pointing at nothing.
 The panel launcher runs the **installed** copy, so re-run `cmake --install`
 after changing code or the pinned icon keeps launching the old build.
 
+**Install from a tree configured WITHOUT `GAMESHUB_UPDATER`.**
+`scripts/local-ci.sh` configures `build/` with `ci.yml`'s flags, which turn
+the self-updater on (GHUB-0043). An installed copy must carry no update code,
+and `cmake --install build` would give it some. The code would stay inert
+there, since only an AppImage updates, but it would break the spec's INV-2.
+`build-default/` is the default tree CI's `nm` check builds.
+
 ## Run the pipeline locally before pushing
 
 ```bash
