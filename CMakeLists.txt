@@ -194,6 +194,7 @@ set(GAME_VIEW_SOURCES
     src/legibility.cpp
     src/donate.cpp
     src/donatedialog.cpp
+    src/preferencesdialog.cpp
     src/scores.cpp
     src/cards/cardart.cpp
     src/cards/cardflight.cpp

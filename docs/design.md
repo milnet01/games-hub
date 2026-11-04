@@ -18,8 +18,9 @@ rules.
 
 One line each: what the part owns, then its files.
 
-- **The hub** — the tile grid, one page per game, window sizes and saved
-  games. `src/hubwindow.*` and `src/main.cpp`.
+- **The hub** — the tile grid, one page per game, window sizes, saved
+  games and the Preferences window. `src/hubwindow.*`,
+  `src/preferencesdialog.*` and `src/main.cpp`.
 - **The game contract** — what every game offers the hub. `src/gameview.*`.
 - **App-wide services** — legibility (`src/legibility.*`,
   `src/legiblefont.h`), sound (`src/sound.*`), best scores (`src/scores.*`),
@@ -322,6 +323,14 @@ out of the grid and puts the kept ones back in order, so a filtered grid has no
 holes. The tests find tiles by their `tile/<id>` object name, because the
 filter row is made of push buttons too.
 
+**Preferences (`src/preferencesdialog.*`) shows every app-wide setting in one
+place** (GHUB-0068): sound, volume, large play and the support reminder. It
+writes each through the setting's own owner — `Sound`, `Legibility`,
+`donate::` — and holds no copy, so it cannot disagree with the toolbar. Changes
+apply at once, with Close as the only button. Per-game rules stay in their
+games. It has no "reset everything" button: a reset would have every stored
+family below to clear, and none is built.
+
 **The window size is restored once, when the window opens, and switching pages
 never touches it** (GHUB-0060). It lives under `window/geometry`. Up to 1.2 each
 page kept its own under `window/geometry/<page>`; the first write deletes those,
@@ -376,7 +385,8 @@ resizing.
 
 `src/legibility.*` — `Legibility`, the app-wide legibility preference
 (`display/legibility`, default off). It is no longer the only thing this app
-stores outside a game's own group: `audio/muted` (`sound.cpp`), `donate/ask`
+stores outside a game's own group: `audio/muted` and `audio/volume`
+(`sound.cpp`), `donate/ask`
 and `donate/launches` are app-wide too, and `hubwindow.cpp` writes
 `window/geometry` through `geometryKey()`, `saved/<game>`, per game, through
 `saveKey()`, and `hub/filter` and `hub/favourites` through `filterKey()` and

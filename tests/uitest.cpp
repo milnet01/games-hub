@@ -4,6 +4,7 @@
 
 #include "donate.h"
 #include "donatedialog.h"
+#include "preferencesdialog.h"
 #include "funding.h"
 #include "gameview.h"
 #include "legibility.h"
@@ -36,6 +37,7 @@
 #include <QTimer>
 #include <QAction>
 #include <QCheckBox>
+#include <QSlider>
 #include <QDataStream>
 #include <QDeadlineTimer>
 #include <QFile>
@@ -6561,6 +6563,84 @@ int main(int argc, char* argv[])
         pump(10);
         QSettings().remove(QStringLiteral("hub"));
         QSettings().sync();
+    }
+
+    // ---- One window shows every app-wide setting (GHUB-0068) ----
+    //
+    // Each box is checked against the store it claims to set, and the whole
+    // lot is put back afterwards so later blocks see the settings they expect.
+    {
+        const bool wasMuted = Sound::instance().muted();
+        const double wasVolume = Sound::instance().volume();
+        const bool wasLarge = Legibility::instance().enabled();
+        const bool wasAsking = donate::asksEnabled();
+
+        {
+            PreferencesDialog prefs;
+            auto* sound = prefs.findChild<QCheckBox*>(QStringLiteral("prefSound"));
+            auto* volume = prefs.findChild<QSlider*>(QStringLiteral("prefVolume"));
+            auto* legible = prefs.findChild<QCheckBox*>(QStringLiteral("prefLegible"));
+            auto* asking = prefs.findChild<QCheckBox*>(QStringLiteral("prefDonateAsk"));
+            check(sound != nullptr && volume != nullptr && legible != nullptr && asking != nullptr,
+                  "preferences: sound, volume, large play and the support reminder are all there");
+            if (sound != nullptr && volume != nullptr && legible != nullptr && asking != nullptr) {
+                check(sound->isChecked() == !wasMuted && legible->isChecked() == wasLarge
+                          && asking->isChecked() == wasAsking,
+                      "preferences: each box opens showing what is in force");
+
+                sound->setChecked(true);
+                volume->setValue(30);
+                check(std::abs(Sound::instance().volume() - 0.3) < 1e-9,
+                      "preferences: the slider sets the volume");
+                check(std::abs(QSettings().value(QStringLiteral("audio/volume")).toDouble() - 0.3) < 1e-9,
+                      "preferences: and the volume is kept for next time");
+                sound->setChecked(false);
+                check(Sound::instance().muted(), "preferences: unticking sound mutes it");
+                check(!volume->isEnabled(), "preferences: and greys out the volume");
+
+                legible->setChecked(!wasLarge);
+                check(Legibility::instance().enabled() == !wasLarge,
+                      "preferences: the large-play box moves the app-wide switch");
+                legible->setChecked(wasLarge);
+
+                asking->setChecked(!wasAsking);
+                check(donate::asksEnabled() == !wasAsking,
+                      "preferences: the support reminder can be turned off and on here");
+                asking->setChecked(wasAsking);
+            }
+        }
+
+        // Through the menu: the toolbar's sound switch follows the dialog.
+        Sound::instance().setMuted(false);
+        HubWindow prefsHub;
+        prefsHub.show();
+        pump(20);
+        QAction* open = prefsHub.findChild<QAction*>(QStringLiteral("preferencesAction"));
+        QAction* soundSwitch = prefsHub.findChild<QAction*>(QStringLiteral("soundAction"));
+        check(open != nullptr && soundSwitch != nullptr, "preferences: the hub has a menu entry for it");
+        if (open != nullptr && soundSwitch != nullptr) {
+            bool shown = false;
+            QTimer::singleShot(0, &prefsHub, [&shown] {
+                auto* dialog = qobject_cast<PreferencesDialog*>(QApplication::activeModalWidget());
+                shown = dialog != nullptr;
+                if (dialog == nullptr)
+                    return;
+                if (auto* box = dialog->findChild<QCheckBox*>(QStringLiteral("prefSound")))
+                    box->setChecked(false);
+                dialog->reject();
+            });
+            open->trigger();
+            check(shown, "preferences: the menu entry opens the window");
+            check(!soundSwitch->isChecked(),
+                  "preferences: and the toolbar's sound switch follows what was chosen there");
+        }
+        prefsHub.close();
+        pump(10);
+
+        Sound::instance().setMuted(wasMuted);
+        Sound::instance().setVolume(wasVolume);
+        Legibility::instance().setEnabled(wasLarge);
+        donate::setAsksEnabled(wasAsking);
     }
 
     // ---- The window fits beside your work (GHUB-0042) ----

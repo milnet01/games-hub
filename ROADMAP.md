@@ -8454,7 +8454,7 @@ writer it waits for.
   Kind: ux.
   Source: user-request-2026-08-20.
 
-- 📋 [GHUB-0068] **There are five places to change a setting and no place to change settings.**
+- ✅ [GHUB-0068] **There are five places to change a setting and no place to change settings.**
   Sound is a toolbar toggle. Legibility is the toolbar toggle beside it.
   Minesweeper's difficulty is a toolbar action inside Minesweeper. Canasta's house
   rules are a dialog reached from inside Canasta. The donate prompt's on/off lives
@@ -8480,6 +8480,11 @@ writer it waits for.
   "reset everything" button, and the warning already written down is that clearing
   the donate switch while leaving the counter fires the prompt on the very next
   start. If that button is built, it handles all four or it is not built.
+  Shipped 2026-11-04. Settings → Preferences
+  (QKeySequence::Preferences): sound, volume (new, stored as
+  audio/volume), large play, the support reminder. Applies at once;
+  Close only. Toolbar switches kept. No reset button built. GHUB-0043's
+  update-checking switch goes here when it is built.
   **Layman:** Preferences are scattered across the toolbar, a menu and a dialog, with no single settings window.
   Kind: ux.
   Source: in-session-2026-08-20.

@@ -10,6 +10,7 @@ namespace {
 // at static-initialisation time, and QStringLiteral's data is static, so the
 // copy this returns costs nothing.
 QString mutedKey() { return QStringLiteral("audio/muted"); } // untranslated: settings key
+QString volumeKey() { return QStringLiteral("audio/volume"); } // untranslated: settings key
 }
 
 Sound& Sound::instance()
@@ -31,6 +32,8 @@ Sound::Sound()
     // the mute was discarded on every launch, while README introduces the two
     // as a pair and says the setting is remembered.
     m_muted = QSettings().value(mutedKey(), false).toBool();
+    // Set in Preferences (GHUB-0068) and kept the same way.
+    m_volume = qBound(0.0, QSettings().value(volumeKey(), m_volume).toDouble(), 1.0);
 
     // The effects are parentless QObjects held by a static, and a static is
     // destroyed after main has returned and taken the application with it --
@@ -63,6 +66,7 @@ void Sound::setMuted(bool muted)
 void Sound::setVolume(double volume)
 {
     m_volume = qBound(0.0, volume, 1.0);
+    QSettings().setValue(volumeKey(), m_volume);
     for (Voices& voices : m_effects)
         for (QSoundEffect* effect : voices.players)
             effect->setVolume(float(m_volume));

@@ -80,9 +80,9 @@ score, fewest Spider and FreeCell moves, most Pyramid pairs cleared, lowest
 winning Hearts total, highest winning Canasta score, and the Snake, 2048 and
 Pinball high scores.
 
-**The window remembers itself.** Size and position are kept for each game
-separately as well as for the tile menu, so a game you like large opens large
-and the menu comes back where you left it.
+**The window remembers itself.** It opens at the size and place you left it,
+and opening a game does not move or resize it. A game that needs more room,
+such as Canasta, widens it while it is open and gives your size back after.
 
 **So do the settings you choose.** Minesweeper reopens on the difficulty you
 last played, and Canasta on the rule set you last used — Classic or House. You
@@ -109,10 +109,19 @@ bar.
 
 ## Playing
 
-**The two switches at the right of the toolbar apply to every game.** 🔊 Sound
+**The two switches at the left of the toolbar apply to every game.** 🔊 Sound
 turns the effects on and off. 🔍 reads **Normal** or **Large**: turn it on for
 larger, higher-contrast play. It is remembered, so you set it once. The label
 always says which way it is set now, not what clicking will do.
+
+**Settings → Preferences shows every app-wide setting in one window**: sound,
+its volume, large play, and whether the app asks now and then for support.
+Changes apply at once and are remembered. Each game's own rules stay in that
+game.
+
+**The buttons above the tiles show one kind of game** — Board, Cards, Puzzle or
+Arcade — or your Favourites. Click the star on a tile, or press F on it, to make
+it a favourite.
 
 > Every game answers that switch, and not all of them in the same way. Most
 > put what they are saying onto the board itself, in large type, because the

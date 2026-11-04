@@ -30,6 +30,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   in Favourites. Your stars and your chosen button are still there
   next time.
 
+- **One window shows every app-wide setting** (GHUB-0068)
+  Settings → Preferences holds sound, its volume, large play, and
+  whether the app asks now and then for support. Changes apply at once
+  and are remembered. The volume is new: it used to be fixed at half.
+  The toolbar switches are still there.
+
 ### Changed
 
 - **The window stays the size and place you leave it** (GHUB-0060)

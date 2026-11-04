@@ -40,10 +40,7 @@ public:
     bool muted() const { return m_muted; }
     void setMuted(bool muted);
 
-    // 0.0 to 1.0. Nothing calls these yet and they are kept on purpose:
-    // GHUB-0068's Preferences dialog names volume as one of the app-wide
-    // switches it will hold, so this is the API that work needs rather than
-    // dead code.
+    // 0.0 to 1.0, set from Preferences and stored under audio/volume.
     double volume() const { return m_volume; }
     void setVolume(double volume);
 

@@ -3,6 +3,7 @@
 #include "donatedialog.h"
 #include "gameview.h"
 #include "legibility.h"
+#include "preferencesdialog.h"
 #include "sound.h"
 #include "cards/card.h"
 #include "chess/chessart.h"
@@ -909,6 +910,24 @@ void HubWindow::buildChrome()
     }
     // Inside a game the grid is not shown, so the menu refreshes its own marks.
     connect(gamesMenu, &QMenu::aboutToShow, this, &HubWindow::markGamesInProgress);
+
+    // One place that shows every app-wide setting (GHUB-0068). The toolbar
+    // switches stay as the one-click route; this is where all of them can be
+    // seen at once, and where a setting with no toolbar home can live.
+    auto* settingsMenu = menuBar()->addMenu(tr("&Settings"));
+    auto* preferencesAction = new QAction(tr("Preferences…"), this);
+    preferencesAction->setObjectName(QStringLiteral("preferencesAction"));
+    preferencesAction->setShortcut(QKeySequence::Preferences);
+    preferencesAction->setStatusTip(tr("Sound, volume, large play and reminders, for every game"));
+    connect(preferencesAction, &QAction::triggered, this, [this] {
+        PreferencesDialog dialog(this);
+        dialog.exec();
+        // The dialog sets Sound directly. The toolbar switch follows here; its
+        // own toggled handler then writes the matching label. Large play needs
+        // no such line -- its switch listens to Legibility::changed.
+        m_soundAction->setChecked(!Sound::instance().muted());
+    });
+    settingsMenu->addAction(preferencesAction);
 
     // A Help menu rather than a fifteenth tile: the grid keeps all of its slots
     // for games, and "about this program" is where a stranger already looks.
