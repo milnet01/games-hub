@@ -409,7 +409,9 @@ bool Updater::defaultRelaunch(const QString& appImage)
     env.remove(QStringLiteral("ARGV0"));
     waiter.setProcessEnvironment(env);
     waiter.setWorkingDirectory(QDir::homePath());
-#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+// Unix only: QProcess has no such call on Windows, where nothing relaunches
+// (the zip opens the download page instead) but this still has to compile.
+#if defined(Q_OS_UNIX) && QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
     waiter.setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession);
 #endif
     if (!waiter.startDetached())
