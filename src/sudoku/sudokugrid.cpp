@@ -134,7 +134,10 @@ void SudokuGrid::set(int row, int col, int value)
 
 void SudokuGrid::toggleMark(int row, int col, int digit)
 {
-    if (isClue(row, col) || digit < 1 || digit > 9)
+    // A square holding a digit takes no notes: they are drawn only on an empty
+    // square, so they would change unseen and come back when the digit is
+    // cleared (GHUB-0224).
+    if (isClue(row, col) || value(row, col) != 0 || digit < 1 || digit > 9)
         return;
     m_marks[index(row, col)] ^= std::uint16_t(1u << unsigned(digit - 1));
 }

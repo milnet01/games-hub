@@ -9635,11 +9635,15 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: accessibility.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0224] **Sudoku's pencil notes can change unseen under a written digit.**
+- ✅ [GHUB-0224] **Sudoku's pencil notes can change unseen under a written digit.**
   Reported from reading the code, unverified: in pencil mode, typing
   on a square holding your digit edits its notes, but paintEvent skips
   notes when a digit is present, and set(..., 0) keeps notes on
   purpose, so they reappear when the digit is cleared.
+  Confirmed and fixed 2026-11-04: SudokuGrid::toggleMark refuses a
+  square holding a digit, and pencil mode there does nothing and makes
+  no sound. Three self-test checks red first, green after. How to play
+  says so.
   **Layman:** In Sudoku, notes typed on a square that already holds a number are hidden, then reappear later.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).

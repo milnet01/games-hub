@@ -220,7 +220,7 @@ QString SudokuView::rulesText() const
         "repeats. It does not tell you whether a digit matches the answer.</li>"
         "<li><b>Pencil marks</b> are small notes of the digits that might fit a "
         "square. A square can hold up to nine of them. Writing a real digit in the "
-        "square clears its notes.</li>"
+        "square clears its notes, and a square holding a digit takes no notes.</li>"
         "</ul>"
         "<p>The puzzle is solved when every square holds the right digit. The "
         "clock runs from the start of the puzzle. Your best time is kept for each "
@@ -383,6 +383,10 @@ void SudokuView::enter(int digit)
         return;
 
     if (m_pencil) {
+        // A square holding a digit has no notes to change, so pencil mode
+        // there does nothing -- and makes no noise saying it did (GHUB-0224).
+        if (m_grid.value(m_row, m_col) != 0)
+            return;
         // Delete in pencil mode clears this cell's marks. It used to fall
         // through to set(row, col, 0), which writes a zero already there and
         // deliberately does NOT clear marks -- a visible no-op that still made

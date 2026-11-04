@@ -35,7 +35,7 @@ public:
     // Setting a cell is refused on a clue; 0 clears it.
     void set(int row, int col, int value);
 
-    // Pencil marks, one bit per digit 1-9.
+    // Pencil marks, one bit per digit 1-9. Only an empty square takes them.
     std::uint16_t marks(int row, int col) const { return m_marks[index(row, col)]; }
     void toggleMark(int row, int col, int digit);
     void clearMarks(int row, int col) { m_marks[index(row, col)] = 0; }

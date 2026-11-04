@@ -1169,6 +1169,26 @@ void sudokuGeneration()
     const int before = grid.value(lockedRow, lockedCol);
     grid.set(lockedRow, lockedCol, before == 1 ? 2 : 1);
     check(grid.value(lockedRow, lockedCol) == before, "sudoku: a clue cannot be overwritten");
+
+    // GHUB-0224. Notes are hidden under a written digit, so a square holding
+    // one takes no notes: they would change unseen and come back when the
+    // digit is cleared.
+    int openRow = -1;
+    int openCol = -1;
+    for (int r = 0; r < SudokuGrid::kSize && openRow < 0; ++r)
+        for (int c = 0; c < SudokuGrid::kSize && openRow < 0; ++c)
+            if (!grid.isClue(r, c)) {
+                openRow = r;
+                openCol = c;
+            }
+    grid.set(openRow, openCol, 5);
+    grid.toggleMark(openRow, openCol, 3);
+    check(grid.marks(openRow, openCol) == 0, "sudoku: a square holding a digit takes no notes");
+    grid.set(openRow, openCol, 0);
+    check(grid.marks(openRow, openCol) == 0,
+          "sudoku: and clearing the digit brings back no hidden notes");
+    grid.toggleMark(openRow, openCol, 3);
+    check(grid.marks(openRow, openCol) == (1u << 2), "sudoku: an empty square still takes notes");
 }
 
 // ---------------------------------------------------------------------------

@@ -48,6 +48,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   of the mouse lowers only the flipper the mouse raised, so a flipper
   you are holding with a key stays up.
 
+- **Sudoku's notes no longer change out of sight** (GHUB-0224)
+  In pencil mode, a square that holds a digit now takes no notes. Before,
+  notes typed there were hidden under the digit and came back when it
+  was cleared.
+
 ## [1.3.0] - 2026-11-04
 
 **Theme:** Getting around the app
