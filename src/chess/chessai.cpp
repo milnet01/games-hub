@@ -1,4 +1,5 @@
 #include "chessai.h"
+#include "dealseed.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -383,6 +384,15 @@ bool searchBestMove(const Board& board, int depth, Move& out, int* score)
 
 bool chooseMove(const Board& board, Level level, Move& out)
 {
+    // Ties between equally good moves are broken from dealSeed(), so --seed
+    // reaches the computer's choice and two runs at one seed play one game
+    // (GHUB-0227). Drawn here, as the search starts, rather than when the tie
+    // is met: a search abandoned mid-way still finishes on its worker thread,
+    // and drawing late would let it take a seed meant for the next search.
+    // Local, so two searches on two threads share nothing. The index is
+    // rng() % n rather than a std::uniform_int_distribution, which maps one
+    // seed to different picks under different compilers (code-traps.md).
+    std::mt19937 rng { dealSeed() };
     const LevelPlan plan = planFor(level);
     // Only a level that plays something other than the top move needs every
     // score to be trustworthy, and those levels are the shallow ones, so the
@@ -422,16 +432,7 @@ bool chooseMove(const Board& board, Level level, Move& out)
         if (best[i].second >= cutoff)
             candidates.push_back(best[i].first);
 
-    // thread_local, not merely static (GHUB-0047). The search now runs on a
-    // worker thread, and a search that has been abandoned keeps running until
-    // it finishes -- so two threads can be inside this function at once. C++
-    // guarantees thread-safe INITIALISATION of a function-local static and
-    // nothing about using one, so a plain static here is a data race and
-    // undefined behaviour. Per-thread seeding is no loss: this only breaks ties
-    // between equally good moves.
-    static thread_local std::mt19937 rng { std::random_device {}() };
-    std::uniform_int_distribution<std::size_t> pick(0, candidates.size() - 1);
-    out = candidates[pick(rng)];
+    out = candidates[std::size_t(rng() % candidates.size())];
     return true;
 }
 

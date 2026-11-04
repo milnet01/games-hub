@@ -1,4 +1,5 @@
 #include "draughtsboard.h"
+#include "dealseed.h"
 
 #include <algorithm>
 #include <climits>
@@ -285,6 +286,15 @@ int negamax(const DraughtsBoard& board, Side side, int depth, int alpha, int bet
 bool chooseDraughtsMove(const DraughtsBoard& board, Side side, DraughtsLevel level,
                         DraughtsMove& out)
 {
+    // Ties between equally good moves are broken from dealSeed(), so --seed
+    // reaches the computer's choice and two runs at one seed play one game
+    // (GHUB-0227). Drawn here, as the search starts, rather than when the tie
+    // is met: a search abandoned mid-way still finishes on its worker thread,
+    // and drawing late would let it take a seed meant for the next search.
+    // Local, so two searches on two threads share nothing. The index is
+    // rng() % n rather than a std::uniform_int_distribution, which maps one
+    // seed to different picks under different compilers (code-traps.md).
+    std::mt19937 rng { dealSeed() };
     const std::vector<DraughtsMove> moves = board.legalMoves(side);
     if (moves.empty())
         return false;
@@ -305,15 +315,6 @@ bool chooseDraughtsMove(const DraughtsBoard& board, Side side, DraughtsLevel lev
         }
     }
 
-    // thread_local, not merely static (GHUB-0047). The search now runs on a
-    // worker thread, and a search that has been abandoned keeps running until
-    // it finishes -- so two threads can be inside this function at once. C++
-    // guarantees thread-safe INITIALISATION of a function-local static and
-    // nothing about using one, so a plain static here is a data race and
-    // undefined behaviour. Per-thread seeding is no loss: this only breaks ties
-    // between equally good moves.
-    static thread_local std::mt19937 rng { std::random_device {}() };
-    std::uniform_int_distribution<std::size_t> pick(0, bestMoves.size() - 1);
-    out = bestMoves[pick(rng)];
+    out = bestMoves[std::size_t(rng() % bestMoves.size())];
     return true;
 }

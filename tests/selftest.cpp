@@ -33,7 +33,10 @@
 #include <QDataStream>
 #include <QIODevice>
 #include <deque>
+#include <functional>
 #include <random>
+#include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -6352,6 +6355,59 @@ void savedBoardsAreRechecked()
           "saves: a draughts board of the wrong size is refused");
 }
 
+// GHUB-0227. Chess, Reversi and Draughts break ties between equally good
+// moves at random. Under a pinned seed that choice must repeat, or two runs at
+// one --seed play different games. Each opening has several equal moves, so
+// across eight seeds the choice must also vary -- otherwise "repeats" would
+// pass on an AI that never had a tie to break.
+void boardAisBreakTiesFromTheSeed()
+{
+    const auto followsTheSeed = [](const char* game, const std::function<int()>& choose) {
+        bool repeats = true;
+        std::set<int> seen;
+        for (unsigned seed = 1; seed <= 8; ++seed) {
+            pinDealSeed(seed);
+            const int first = choose();
+            pinDealSeed(seed);
+            if (choose() != first)
+                repeats = false;
+            seen.insert(first);
+        }
+        unpinDealSeed();
+        std::printf("      %s: %zu different opening moves across 8 seeds\n", game, seen.size());
+        check(repeats, (std::string(game) + ": one seed, one tie-break").c_str());
+        check(seen.size() > 1, (std::string(game) + ": and the seed still varies it").c_str());
+    };
+
+    followsTheSeed("reversi", [] {
+        const std::optional<Move> m = chooseMove(Board {}, Player::Black, Difficulty::Easy);
+        return m ? m->row * 8 + m->col : -1;
+    });
+    followsTheSeed("chess", [] {
+        chess::Move m;
+        if (!chess::chooseMove(chess::ChessGame {}.board(), chess::Level::Easy, m))
+            return -1;
+        return ((m.from.row * 8 + m.from.col) * 8 + m.to.row) * 8 + m.to.col;
+    });
+    // The draughts opening has one best move at every level, so the tie comes
+    // from a board that is the same turned half a circle: two kings a side,
+    // each matched by its twin, so a move and its mirror always score alike.
+    std::vector<Piece> cells(kBoardCells, Piece::Empty);
+    cells[std::size_t(2 * kBoardSize + 1)] = Piece::RedKing;
+    cells[std::size_t(5 * kBoardSize + 6)] = Piece::RedKing;
+    cells[std::size_t(0 * kBoardSize + 7)] = Piece::WhiteKing;
+    cells[std::size_t(7 * kBoardSize + 0)] = Piece::WhiteKing;
+    DraughtsBoard mirrored;
+    check(mirrored.restore(cells, 0), "draughts: the half-turn position loads");
+    followsTheSeed("draughts", [&mirrored] {
+        DraughtsMove m;
+        if (!chooseDraughtsMove(mirrored, Side::Red, DraughtsLevel::Easy, m))
+            return -1;
+        const Square to = m.destination();
+        return ((m.from.row * 8 + m.from.col) * 8 + to.row) * 8 + to.col;
+    });
+}
+
 } // namespace
 
 int main()
@@ -6360,6 +6416,7 @@ int main()
     reversiRules();
     reversiGamesTerminate();
     reversiEngineStrength();
+    boardAisBreakTiesFromTheSeed();
 
     section("Minesweeper");
     minesweeperRules();

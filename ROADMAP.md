@@ -9670,12 +9670,17 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: ux.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0227] **Chess, Reversi and Draughts break ties with std::random_device, out of --seed's reach.**
+- ✅ [GHUB-0227] **Chess, Reversi and Draughts break ties with std::random_device, out of --seed's reach.**
   Reported from reading the code, unverified: the three board-game
   AIs break ties between equal moves with std::random_device rather
   than dealSeed(), which .claude/rules/shots.md says new randomness
   should use. Matters for any shot or check that pins --seed and plays
   the computer's turns.
+  Confirmed and fixed 2026-11-04: each chooser draws a local mt19937
+  from dealSeed() as its search starts and picks with rng() % n; the
+  pinned dealSeed() sequence is now behind a mutex, since the AIs draw
+  from worker threads. Self-test checks for all three games red first,
+  green after. Not player-visible, so no changelog entry.
   **Layman:** The computer's choice between equally good moves ignores the seed, so two runs with one seed can differ.
   Kind: test.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).

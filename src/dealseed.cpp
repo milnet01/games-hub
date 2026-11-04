@@ -1,5 +1,6 @@
 #include "dealseed.h"
 
+#include <mutex>
 #include <random>
 
 namespace {
@@ -20,21 +21,33 @@ std::mt19937& sequence()
     return rng;
 }
 
+// Pinned, the sequence is shared state, and the board games' computer players
+// draw from it on their worker threads (GHUB-0227) -- so every touch of it
+// takes this lock.
+std::mutex& sequenceLock()
+{
+    static std::mutex lock;
+    return lock;
+}
+
 } // namespace
 
 void pinDealSeed(unsigned seed)
 {
+    const std::lock_guard<std::mutex> hold(sequenceLock());
     g_pinned = true;
     sequence().seed(seed);
 }
 
 void unpinDealSeed()
 {
+    const std::lock_guard<std::mutex> hold(sequenceLock());
     g_pinned = false;
 }
 
 unsigned dealSeed()
 {
+    const std::lock_guard<std::mutex> hold(sequenceLock());
     if (g_pinned)
         return sequence()();
     return std::random_device {}();
