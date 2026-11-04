@@ -8820,6 +8820,11 @@ question can be changed afterwards.
   which is the other half of the same story.
   Waiting-on: user (who generates and holds the Ed25519 release-signing key, and may it be added to the repo as a GitHub Actions secret?, 2026-11-04)
   Recommendation: you generate it on this machine with one command a session gives you, keep the private half offline (a password manager or a USB stick), and add it as a repository secret yourself, so no session ever holds it. Everything else -- the check, the release-notes offer, the in-tree verifier and the swap -- can be specced and built without the key, against a test key that is thrown away. The item is network-facing and replaces its own executable, so it gets a spec and its review before code.
+  Spec docs/specs/GHUB-0043-self-update.md accepted 2026-11-04 after
+  review-contract's two loops (14 verified findings, all fixed; loop log
+  in docs/reviews/GHUB-0043-self-update-loop-log.md). Ready to build
+  against a throwaway test key; key custody is still Waiting-on: user
+  (above).
   **Layman:** Games Hub checks GitHub for a newer release, shows the changelog for every version you have missed, and updates itself when you say yes.
   Kind: feature.
   Source: user-request-2026-08-20.
