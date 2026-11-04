@@ -8595,7 +8595,7 @@ writer it waits for.
   Kind: ux.
   Source: in-session-2026-08-20.
 
-- 📋 [GHUB-0167] **Filter the tile grid, including a favourites filter.**
+- ✅ [GHUB-0167] **Filter the tile grid, including a favourites filter.**
   The grid lists every game and nothing narrows it; it already
   scrolls, and the roadmap queue adds more.
 
@@ -8620,6 +8620,12 @@ writer it waits for.
   Owner's call, 2026-10-29: the filters are a row of toggle buttons
   above the grid, not a combo box, and "All" is a button of its own,
   first in the row and lit when nothing is filtered.
+  Shipped 2026-11-04. Filter row above the grid (All, Board, Cards,
+  Puzzle, Arcade, Favourites), each game's kind declared in
+  buildEntries(); a star on each tile, clicked or F, stored under
+  hub/favourites; the lit filter under hub/filter. Board: Chess,
+  Reversi, Draughts. Cards: the six card games. Puzzle: Minesweeper,
+  Sudoku, 2048. Arcade: Snake, Pinball.
   **Layman:** The game list gets buttons to show only one kind of game, and a star to keep your favourites together.
   Kind: feature.
   Source: user-request-2026-09-02.

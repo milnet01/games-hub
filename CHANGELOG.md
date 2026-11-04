@@ -23,6 +23,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   it, a notice says so across the top of the board for a few seconds,
   not only in the status bar.
 
+- **Buttons above the tiles show one kind of game, or your favourites** (GHUB-0167)
+  A row of buttons sits over the tiles: All, Board, Cards, Puzzle,
+  Arcade and Favourites. The lit one is in force. Each tile has a star
+  in its corner; click it, or press F on the tile, to keep that game
+  in Favourites. Your stars and your chosen button are still there
+  next time.
+
 ### Changed
 
 - **The window stays the size and place you leave it** (GHUB-0060)

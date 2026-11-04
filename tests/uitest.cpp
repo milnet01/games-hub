@@ -75,6 +75,19 @@ namespace {
 
 int g_failures = 0;
 
+// The hub's game tiles, and nothing else that is a push button -- since
+// GHUB-0167 the filter row above the grid is made of push buttons too.
+QList<QPushButton*> hubTiles(const QObject* hub)
+{
+    QList<QPushButton*> tiles;
+    if (hub == nullptr)
+        return tiles;
+    for (QPushButton* b : hub->findChildren<QPushButton*>())
+        if (b->objectName().startsWith(QStringLiteral("tile/")))
+            tiles << b;
+    return tiles;
+}
+
 // Hoisted out of the deactivate() block when GHUB-0065 gave a second caller a
 // reason to ask the same question: how many of this widget's timers are still
 // running.
@@ -1168,7 +1181,7 @@ void idsAndKeysSurviveATranslation()
 
         QWidget* grid = hub.findChild<QWidget*>(QStringLiteral("gamesHubTileGrid"));
         const QList<QPushButton*> tiles =
-            grid != nullptr ? grid->findChildren<QPushButton*>() : QList<QPushButton*>();
+            hubTiles(grid);
         QStringList plain;
         for (QPushButton* tile : tiles)
             if (!tile->accessibleName().startsWith(MarkingTranslator::mark()))
@@ -3595,7 +3608,7 @@ int main(int argc, char* argv[])
         // the buttons the grid actually holds rather than of a count, which
         // would go stale the next time a game is added.
         QStringList mute;
-        for (QPushButton* tile : hub.findChildren<QPushButton*>()) {
+        for (QPushButton* tile : hubTiles(&hub)) {
             if (tile->accessibleName().isEmpty() || tile->accessibleDescription().isEmpty())
                 mute << tile->accessibleName();
         }
@@ -5884,7 +5897,7 @@ int main(int argc, char* argv[])
     QLabel* status = statusLabel(&hub);
     check(status != nullptr, "the hub has a status line");
 
-    const QList<QPushButton*> tiles = hub.findChildren<QPushButton*>();
+    const QList<QPushButton*> tiles = hubTiles(&hub);
     // One tile per registered game, whatever the count has grown to.
     const int expected = hub.gameNames().size();
     std::printf("      hub registers %d games\n", expected);
@@ -6384,7 +6397,7 @@ int main(int argc, char* argv[])
         markHub.show();
         pump(30);
         const auto tileSays = [&markHub](const QString& game) {
-            for (QPushButton* tile : markHub.findChildren<QPushButton*>())
+            for (QPushButton* tile : hubTiles(&markHub))
                 if (tile->accessibleName() == game)
                     return tile->accessibleDescription();
             return QString();
@@ -6432,6 +6445,123 @@ int main(int argc, char* argv[])
         QSettings().sync();
     }
 
+
+    // ---- The grid filters by kind, and keeps favourites (GHUB-0167) ----
+    //
+    // The kinds come from each game's registration, so they are checked as a
+    // partition -- every game under exactly one kind -- rather than as a list
+    // that would need editing whenever a game is added.
+    {
+        QSettings().remove(QStringLiteral("hub"));
+        QSettings().sync();
+
+        HubWindow filterHub;
+        filterHub.show();
+        pump(30);
+        const auto filterButton = [&filterHub](const char* id) {
+            return filterHub.findChild<QPushButton*>(QStringLiteral("filter/") + QLatin1String(id));
+        };
+        const auto shown = [&filterHub] {
+            QStringList names;
+            for (QPushButton* tile : hubTiles(&filterHub))
+                if (!tile->isHidden())
+                    names << tile->accessibleName();
+            return names;
+        };
+        const auto tileFor = [&filterHub](const QString& game) {
+            return filterHub.findChild<QPushButton*>(QStringLiteral("tile/") + game);
+        };
+        const char* const order[] = { "all", "board", "cards", "puzzle", "arcade", "favourites" };
+        bool present = true;
+        for (const char* id : order)
+            present = present && filterButton(id) != nullptr;
+        check(present, "filter: the row has All, the four kinds and Favourites");
+        if (present) {
+            check(filterButton("all")->isChecked(), "filter: All is lit when nothing is filtered");
+            check(shown().size() == filterHub.gameNames().size(),
+                  "filter: and every game is shown");
+
+            int counted = 0;
+            QStringList seen;
+            for (const char* id : { "board", "cards", "puzzle", "arcade" }) {
+                filterButton(id)->click();
+                pump(5);
+                const QStringList kind = shown();
+                std::printf("      %s: %s\n", id, qPrintable(kind.join(QStringLiteral(", "))));
+                check(!kind.isEmpty(), qPrintable(QStringLiteral("filter: %1 shows some games")
+                                                      .arg(QLatin1String(id))));
+                counted += kind.size();
+                seen << kind;
+            }
+            seen.removeDuplicates();
+            check(counted == filterHub.gameNames().size() && seen.size() == counted,
+                  "filter: the four kinds hold every game exactly once");
+            filterButton("cards")->click();
+            pump(5);
+            check(shown().contains(QStringLiteral("Canasta")) && !shown().contains(QStringLiteral("Chess")),
+                  "filter: Cards keeps Canasta and drops Chess");
+            check(filterButton("cards")->isChecked() && !filterButton("all")->isChecked(),
+                  "filter: only the chosen filter is lit");
+
+            auto* none = filterHub.findChild<QLabel*>(QStringLiteral("noFavourites"));
+            filterButton("favourites")->click();
+            pump(5);
+            check(shown().isEmpty() && none != nullptr && !none->isHidden(),
+                  "favourites: with none starred, the grid says how to add one");
+
+            // F on a tile stars it, even while it is filtered out of sight.
+            QPushButton* chess = tileFor(QStringLiteral("Chess"));
+            check(chess != nullptr, "favourites: Chess has a tile");
+            if (chess != nullptr) {
+                pressKey(chess, Qt::Key_F);
+                pump(5);
+                check(shown() == QStringList { QStringLiteral("Chess") },
+                      "favourites: F on a tile stars it");
+                check(chess->accessibleDescription().contains(QStringLiteral("Favourite")),
+                      "favourites: and a screen reader hears that it is starred");
+                check(none != nullptr && none->isHidden(),
+                      "favourites: and the how-to line goes once there is one");
+            }
+
+            // A click on the star stars the game and does not open it.
+            filterButton("all")->click();
+            pump(5);
+            QPushButton* hearts = tileFor(QStringLiteral("Hearts"));
+            QAction* back = filterHub.findChild<QAction*>(QStringLiteral("backAction"));
+            if (hearts != nullptr && back != nullptr) {
+                clickAt(hearts, QPointF(hearts->width() - 26, 25), Qt::LeftButton);
+                pump(10);
+                check(hearts->accessibleDescription().contains(QStringLiteral("Favourite")),
+                      "favourites: a click on the star stars the game");
+                check(!back->isVisible(), "favourites: and does not open it");
+            } else {
+                check(false, "favourites: Hearts has a tile and the hub a back action");
+            }
+            filterButton("favourites")->click();
+            pump(5);
+        }
+        filterHub.close();
+        pump(10);
+
+        // Both choices outlast the window.
+        HubWindow again;
+        again.show();
+        pump(30);
+        QPushButton* fav = again.findChild<QPushButton*>(QStringLiteral("filter/favourites"));
+        check(fav != nullptr && fav->isChecked(), "filter: the chosen filter is remembered");
+        QStringList kept;
+        for (QPushButton* tile : hubTiles(&again))
+            if (!tile->isHidden())
+                kept << tile->accessibleName();
+        kept.sort();
+        check(kept == (QStringList { QStringLiteral("Chess"), QStringLiteral("Hearts") }),
+              qPrintable(QStringLiteral("favourites: the stars are remembered -- got \"%1\"")
+                             .arg(kept.join(QStringLiteral(", ")))));
+        again.close();
+        pump(10);
+        QSettings().remove(QStringLiteral("hub"));
+        QSettings().sync();
+    }
 
     // ---- The window fits beside your work (GHUB-0042) ----
     //

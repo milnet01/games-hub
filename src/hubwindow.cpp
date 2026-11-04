@@ -22,6 +22,11 @@
 #include "twenty48/twenty48view.h"
 
 #include <QApplication>
+#include <QButtonGroup>
+#include <QCursor>
+#include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <QEvent>
 #include <QFontMetricsF>
 #include <QGridLayout>
@@ -41,6 +46,7 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 
+#include <cmath>
 #include <numbers>
 
 namespace {
@@ -62,6 +68,7 @@ public:
         setMinimumSize(190, 190);
         setCursor(Qt::PointingHandCursor);
         setFlat(true);
+        setMouseTracking(true); // so the star can light under the pointer
 
         // The tile paints its own miniature and never calls setText, so
         // QAccessibleButton had nothing at all to report: a screen reader met
@@ -82,9 +89,25 @@ public:
         if (badge == m_badge)
             return;
         m_badge = badge;
-        setAccessibleDescription(badge.isEmpty() ? m_blurb : m_blurb + QStringLiteral(". ") + badge);
+        describe();
         update();
     }
+
+    // The star in the corner (GHUB-0167). `word` is what a screen reader hears
+    // for a starred game, and empty when the game is not starred.
+    void setFavourite(bool on, const QString& word)
+    {
+        if (on == m_favourite && word == m_favouriteWord)
+            return;
+        m_favourite = on;
+        m_favouriteWord = word;
+        describe();
+        update();
+    }
+
+    // Run when the star is clicked, or F is pressed on the tile. The rest of
+    // the tile still opens the game.
+    void onStar(std::function<void()> f) { m_onStar = std::move(f); }
 
 protected:
     void paintEvent(QPaintEvent*) override
@@ -123,6 +146,8 @@ protected:
         const QRectF blurbRect(r.left() + 8, nameRect.bottom(), r.width() - 16, 20);
         p.drawText(blurbRect, Qt::AlignHCenter | Qt::AlignTop, m_blurb);
 
+        paintStar(p, starRect());
+
         // Dark on gold, bold, at the title's size: it has to be found at a
         // glance across the grid, not read off the corner of a miniature.
         if (!m_badge.isEmpty()) {
@@ -142,10 +167,101 @@ protected:
     void enterEvent(QEnterEvent*) override { update(); }
     void leaveEvent(QEvent*) override { update(); }
 
+    // A press on the star is the star's, not the tile's: it must not open the
+    // game. Taken on press and acted on at release, as a button would be.
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton && starRect().contains(event->position())) {
+            m_starPressed = true;
+            event->accept();
+            return;
+        }
+        QPushButton::mousePressEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        if (m_starPressed && event->button() == Qt::LeftButton) {
+            m_starPressed = false;
+            event->accept();
+            if (starRect().contains(event->position()) && m_onStar)
+                m_onStar();
+            return;
+        }
+        QPushButton::mouseReleaseEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        update(); // the star brightens under the pointer
+        QPushButton::mouseMoveEvent(event);
+    }
+
+    void keyPressEvent(QKeyEvent* event) override
+    {
+        if (event->key() == Qt::Key_F && event->modifiers() == Qt::NoModifier && m_onStar) {
+            m_onStar();
+            event->accept();
+            return;
+        }
+        QPushButton::keyPressEvent(event);
+    }
+
 private:
+    // Top right of the tile, clear of the miniature at the smallest tile size.
+    // Large enough to hit without aiming: the owner reads slowly, and a small
+    // target is a miss that opens a game instead.
+    QRectF starRect() const
+    {
+        const QRectF r = rect().adjusted(4, 4, -4, -4);
+        return QRectF(r.right() - 36, r.top() + 6, 30, 30);
+    }
+
+    void paintStar(QPainter& p, const QRectF& box) const
+    {
+        QPolygonF star;
+        const QPointF c = box.center();
+        const double outer = box.width() / 2 - 1;
+        const double inner = outer * 0.45;
+        for (int i = 0; i < 10; ++i) {
+            const double a = -std::numbers::pi / 2 + i * std::numbers::pi / 5;
+            const double rad = (i % 2 == 0) ? outer : inner;
+            star << QPointF(c.x() + rad * std::cos(a), c.y() + rad * std::sin(a));
+        }
+        const bool hot = underMouse()
+            && box.contains(mapFromGlobal(QCursor::pos()).toPointF());
+        p.save();
+        if (m_favourite) {
+            p.setPen(QPen(QColor(0x1e, 0x22, 0x26), 1.5));
+            p.setBrush(QColor(0xf2, 0xc1, 0x4e));
+        } else {
+            // An outline when not starred, so the place to click is always
+            // there to be found, and brighter under the pointer.
+            p.setPen(QPen(hot ? QColor(0xf2, 0xc1, 0x4e) : QColor(0x9e, 0xa8, 0xb2), 2));
+            p.setBrush(Qt::NoBrush);
+        }
+        p.drawPolygon(star);
+        p.restore();
+    }
+
+    // What a screen reader hears after the name. "In progress" stays last.
+    void describe()
+    {
+        QString text = m_blurb;
+        if (!m_favouriteWord.isEmpty())
+            text += QStringLiteral(". ") + m_favouriteWord;
+        if (!m_badge.isEmpty())
+            text += QStringLiteral(". ") + m_badge;
+        setAccessibleDescription(text);
+    }
+
     QString m_name;
     QString m_blurb;
     QString m_badge;
+    QString m_favouriteWord;
+    bool m_favourite = false;
+    bool m_starPressed = false;
+    std::function<void()> m_onStar;
     std::function<void(QPainter&, const QRectF&)> m_art;
 };
 
@@ -485,46 +601,46 @@ void HubWindow::buildEntries()
     m_entries = {
         { QStringLiteral("Chess"), // untranslated: the game's id
           tr("Chess"), tr("The full game"), chessTile,
-          [] { return new ChessView; } },
+          [] { return new ChessView; }, Category::Board },
         { QStringLiteral("Reversi"), // untranslated: the game's id
           tr("Reversi"), tr("Flip the board"), reversiTile,
-          [] { return new ReversiView; } },
+          [] { return new ReversiView; }, Category::Board },
         { QStringLiteral("Draughts"), // untranslated: the game's id
           tr("Draughts"), tr("Checkers, with kings"), draughtsTile,
-          [] { return new DraughtsView; } },
+          [] { return new DraughtsView; }, Category::Board },
         { QStringLiteral("Minesweeper"), // untranslated: the game's id
           tr("Minesweeper"), tr("Clear the field"), minesweeperTile,
-          [] { return new MinesweeperView; } },
+          [] { return new MinesweeperView; }, Category::Puzzle },
         { QStringLiteral("Solitaire"), // untranslated: the game's id
           tr("Solitaire"), tr("Klondike"), klondikeTile,
-          [] { return new KlondikeView; } },
+          [] { return new KlondikeView; }, Category::Cards },
         { QStringLiteral("Spider"), // untranslated: the game's id
           tr("Spider"), tr("Solitaire, harder"), spiderTile,
-          [] { return new SpiderView; } },
+          [] { return new SpiderView; }, Category::Cards },
         { QStringLiteral("FreeCell"), // untranslated: the game's id
           tr("FreeCell"), tr("Solitaire, solvable"), freecellTile,
-          [] { return new FreeCellView; } },
+          [] { return new FreeCellView; }, Category::Cards },
         { QStringLiteral("Pyramid"), // untranslated: the game's id
           tr("Pyramid"), tr("Pairs make 13"), pyramidTile,
-          [] { return new PyramidView; } },
+          [] { return new PyramidView; }, Category::Cards },
         { QStringLiteral("Sudoku"), // untranslated: the game's id
           tr("Sudoku"), tr("Fill the grid"), sudokuTile,
-          [] { return new SudokuView; } },
+          [] { return new SudokuView; }, Category::Puzzle },
         { QStringLiteral("Hearts"), // untranslated: the game's id
           tr("Hearts"), tr("Avoid the tricks"), heartsTile,
-          [] { return new HeartsView; } },
+          [] { return new HeartsView; }, Category::Cards },
         { QStringLiteral("Canasta"), // untranslated: the game's id
           tr("Canasta"), tr("Melds and partners"), canastaTile,
-          [] { return new CanastaView; } },
+          [] { return new CanastaView; }, Category::Cards },
         { QStringLiteral("Snake"), // untranslated: the game's id
           tr("Snake"), tr("Eat and grow"), snakeTile,
-          [] { return new SnakeView; } },
+          [] { return new SnakeView; }, Category::Arcade },
         { QStringLiteral("2048"), // untranslated: the game's id
           tr("2048"), tr("Slide and merge"), twenty48Tile,
-          [] { return new Twenty48View; } },
+          [] { return new Twenty48View; }, Category::Puzzle },
         { QStringLiteral("Pinball"), // untranslated: the game's id
           tr("Pinball"), tr("Keep it alive"), pinballTile,
-          [] { return new PinballView; } },
+          [] { return new PinballView; }, Category::Arcade },
     };
 }
 
@@ -535,6 +651,23 @@ namespace {
 QString menuText(QString label)
 {
     return label.replace(QLatin1Char('&'), QStringLiteral("&&"));
+}
+
+// The filter row's choices as stored under hub/filter. Settings values, so
+// never translated: a translation must not reset the player's filter.
+const QString kFilterAll = QStringLiteral("all"); // untranslated: settings value
+const QString kFilterFavourites = QStringLiteral("favourites"); // untranslated: settings value
+
+const QString& filterKey()
+{
+    static const QString key = QStringLiteral("hub/filter"); // untranslated: settings key
+    return key;
+}
+
+const QString& favouritesKey()
+{
+    static const QString key = QStringLiteral("hub/favourites"); // untranslated: settings key
+    return key;
 }
 
 } // namespace
@@ -557,8 +690,74 @@ void HubWindow::buildChrome()
     outer->addWidget(heading);
     outer->addSpacing(10);
 
-    auto* grid = new QGridLayout;
-    grid->setSpacing(14);
+    // The filter row (GHUB-0167): toggle buttons rather than a combo box, so
+    // every choice is on screen at once, and "All" is a button of its own,
+    // first and lit when nothing is filtered (owner's call, 2026-10-29).
+    m_favourites = QSettings().value(favouritesKey()).toStringList();
+    m_filter = QSettings().value(filterKey(), kFilterAll).toString();
+    auto* filters = new QHBoxLayout;
+    filters->setSpacing(8);
+    m_filterGroup = new QButtonGroup(this);
+    m_filterGroup->setExclusive(true);
+    const QList<std::pair<QString, QString>> choices = {
+        { kFilterAll, tr("All") },
+        { categoryId(Category::Board), tr("Board") },
+        { categoryId(Category::Cards), tr("Cards") },
+        { categoryId(Category::Puzzle), tr("Puzzle") },
+        { categoryId(Category::Arcade), tr("Arcade") },
+        { kFilterFavourites, tr("★ Favourites") },
+    };
+    bool known = false;
+    for (const auto& choice : choices)
+        known = known || choice.first == m_filter;
+    if (!known)
+        m_filter = kFilterAll; // a value from a later build, or a hand edit
+    for (const auto& [id, text] : choices) {
+        auto* button = new QPushButton(text, m_menuPage);
+        button->setObjectName(QStringLiteral("filter/") + id);
+        button->setCheckable(true);
+        button->setChecked(id == m_filter);
+        button->setCursor(Qt::PointingHandCursor);
+        // Lit means gold, not a slightly darker grey: which filter is on has to
+        // be seen from across the grid.
+        button->setStyleSheet(QStringLiteral(
+            "QPushButton { background: #2f353b; color: #f0f2f4; border: 2px solid #4a535c;" // untranslated: style sheet
+            " border-radius: 8px; padding: 6px 14px; font-weight: bold; }" // untranslated: style sheet
+            " QPushButton:hover { border-color: #5aa87a; }" // untranslated: style sheet
+            " QPushButton:checked { background: #f2c14e; color: #1e2226; border-color: #f2c14e; }")); // untranslated: style sheet
+        QFont bf = button->font();
+        bf.setPointSizeF(bf.pointSizeF() + 1);
+        button->setFont(bf);
+        m_filterGroup->addButton(button);
+        filters->addWidget(button);
+        connect(button, &QPushButton::clicked, this, [this, chosen = id] {
+            if (chosen == m_filter)
+                return;
+            Sound::instance().play(Sound::kClick);
+            m_filter = chosen;
+            if (m_remembering)
+                QSettings().setValue(filterKey(), m_filter);
+            applyFilter();
+        });
+    }
+    filters->addStretch(1);
+    outer->addLayout(filters);
+    outer->addSpacing(10);
+
+    m_noFavourites = new QLabel(
+        tr("No favourites yet. Click the star on a game's tile, or press F on it, to add one."),
+        m_menuPage);
+    m_noFavourites->setObjectName(QStringLiteral("noFavourites"));
+    m_noFavourites->setWordWrap(true);
+    QFont nf = m_noFavourites->font();
+    nf.setPointSizeF(nf.pointSizeF() + 3);
+    m_noFavourites->setFont(nf);
+    m_noFavourites->setStyleSheet(QStringLiteral("QLabel { color: #f2c14e; padding: 12px 0; }")); // untranslated: style sheet
+    m_noFavourites->hide();
+    outer->addWidget(m_noFavourites);
+
+    m_grid = new QGridLayout;
+    m_grid->setSpacing(14);
     for (int i = 0; i < m_entries.size(); ++i) {
         const Entry& e = m_entries[i];
         auto* tile = new GameTile(e.label, e.blurb, e.paintTile, m_menuPage);
@@ -566,11 +765,15 @@ void HubWindow::buildChrome()
             Sound::instance().play(Sound::kClick);
             openGame(i);
         });
-        grid->addWidget(tile, i / 3, i % 3);
+        // Found by name in the tests, which must tell a tile from a filter button.
+        tile->setObjectName(QStringLiteral("tile/") + e.name);
+        tile->onStar([this, i] { toggleFavourite(i); });
+        tile->setToolTip(tr("%1. Click the star, or press F, to add it to your favourites.").arg(e.blurb));
         m_tiles << tile;
     }
-    outer->addLayout(grid);
+    outer->addLayout(m_grid);
     outer->addStretch(1);
+    applyFilter();
 
     // The grid goes in a scroller, and that is what makes the window's promise
     // keepable. Fourteen 190px tiles are five rows deep, so an un-scrolled grid
@@ -817,6 +1020,59 @@ void HubWindow::markGamesInProgress()
         const QString text = menuText(e.label);
         m_menuEntries[i]->setText(on ? tr("%1 — in progress").arg(text) : text);
     }
+}
+
+QString HubWindow::categoryId(Category c)
+{
+    switch (c) {
+    case Category::Board: return QStringLiteral("board"); // untranslated: settings value
+    case Category::Cards: return QStringLiteral("cards"); // untranslated: settings value
+    case Category::Puzzle: return QStringLiteral("puzzle"); // untranslated: settings value
+    case Category::Arcade: return QStringLiteral("arcade"); // untranslated: settings value
+    }
+    return QString();
+}
+
+bool HubWindow::passesFilter(const Entry& e) const
+{
+    if (m_filter == kFilterFavourites)
+        return m_favourites.contains(e.name);
+    return m_filter == kFilterAll || m_filter == categoryId(e.category);
+}
+
+void HubWindow::applyFilter()
+{
+    // Every tile leaves the layout and the kept ones go back in their usual
+    // order, so a filtered grid has no holes where the others were.
+    for (QPushButton* tile : std::as_const(m_tiles))
+        m_grid->removeWidget(tile);
+    int shown = 0;
+    for (int i = 0; i < m_entries.size(); ++i) {
+        const Entry& e = m_entries[i];
+        auto* tile = static_cast<GameTile*>(m_tiles[i]);
+        const bool starred = m_favourites.contains(e.name);
+        tile->setFavourite(starred, starred ? tr("Favourite") : QString());
+        const bool keep = passesFilter(e);
+        tile->setVisible(keep);
+        if (keep) {
+            m_grid->addWidget(tile, shown / 3, shown % 3);
+            ++shown;
+        }
+    }
+    m_noFavourites->setVisible(shown == 0 && m_filter == kFilterFavourites);
+}
+
+void HubWindow::toggleFavourite(int index)
+{
+    const QString& name = m_entries[index].name;
+    if (m_favourites.contains(name))
+        m_favourites.removeAll(name);
+    else
+        m_favourites << name;
+    Sound::instance().play(Sound::kClick);
+    if (m_remembering)
+        QSettings().setValue(favouritesKey(), m_favourites);
+    applyFilter();
 }
 
 void HubWindow::showResumeNotice()

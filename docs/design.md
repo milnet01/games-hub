@@ -312,6 +312,16 @@ a stored save. Most games save nothing until the first move, so for them the
 mark means "in progress", not "has been opened"; the UI test checks this for
 Chess.
 
+**The grid filters by kind, and keeps favourites** (GHUB-0167). Each game
+names its `Category` where it is registered in `buildEntries()`, so the filter
+row holds no list of its own to go stale. A game names exactly one kind, and
+the UI test checks the four kinds hold every game exactly once. Favourites are
+the player's, not the game's, so they are stored: `hub/favourites`, a list of
+game ids, beside `hub/filter`, the lit button. `applyFilter()` takes every tile
+out of the grid and puts the kept ones back in order, so a filtered grid has no
+holes. The tests find tiles by their `tile/<id>` object name, because the
+filter row is made of push buttons too.
+
 **The window size is restored once, when the window opens, and switching pages
 never touches it** (GHUB-0060). It lives under `window/geometry`. Up to 1.2 each
 page kept its own under `window/geometry/<page>`; the first write deletes those,
@@ -368,8 +378,9 @@ resizing.
 (`display/legibility`, default off). It is no longer the only thing this app
 stores outside a game's own group: `audio/muted` (`sound.cpp`), `donate/ask`
 and `donate/launches` are app-wide too, and `hubwindow.cpp` writes
-`window/geometry` through `geometryKey()` and `saved/<game>`, per game, through
-`saveKey()`. **Anything sweeping stored state — a settings
+`window/geometry` through `geometryKey()`, `saved/<game>`, per game, through
+`saveKey()`, and `hub/filter` and `hub/favourites` through `filterKey()` and
+`favouritesKey()`. **Anything sweeping stored state — a settings
 reset, a migration — has every one of those families to handle, PLUS every
 per-game group**: `scores.cpp` writes `<game>/best_*` keys and Canasta keeps its
 House set under `canasta/house/` and its target under `canasta/target`, so a

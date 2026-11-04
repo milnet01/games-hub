@@ -54,6 +54,7 @@ save paragraph above describes.
 **The settings store.** Renaming a key, or changing what a value means, loses
 the setting without saying so. The families are `display/legibility`,
 `donate/ask` and `donate/launches`; `window/geometry` and `saved/<game>`;
+`hub/filter` and `hub/favourites`;
 the per-game keys, which are scores AND remembered preferences (`chess/wins`,
 `sudoku/best_time_*`, `freecell/best_moves`, `minesweeper/level` and the rest);
 and Canasta's `canasta/house/*` and `canasta/target`. **Adding a

@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QList>
 #include <QSize>
+#include <QStringList>
 
 #include <functional>
 
@@ -12,6 +13,8 @@ class QToolBar;
 #include <QHash>
 #include <QSizePolicy>
 
+class QButtonGroup;
+class QGridLayout;
 class QLabel;
 class QPushButton;
 class QTimer;
@@ -53,6 +56,12 @@ public:
     QStringList gameNames() const;
 
 private:
+    // The kind of game, which the filter row narrows the grid by (GHUB-0167).
+    // Declared by each game where it is registered, so the filters can never
+    // hold a list of their own that goes stale when a game is added. A game
+    // names exactly one, so the filters split the grid rather than overlap.
+    enum class Category { Board, Cards, Puzzle, Arcade };
+
     struct Entry {
         // The game's id: saved/<name> and --game <name>.
         // Fixed and never translated (GHUB-0161 § 4.3).
@@ -65,6 +74,7 @@ private:
         // than a generic placeholder.
         std::function<void(QPainter&, const QRectF&)> paintTile;
         std::function<GameView*()> create;
+        Category category = Category::Board;
         GameView* view = nullptr;
         int pageIndex = -1;
     };
@@ -105,6 +115,14 @@ private:
     // when the grid or the menu is shown and never from a paint.
     void markGamesInProgress();
     bool inProgress(const Entry& e) const;
+    // Shows only the tiles the chosen filter keeps, in their usual order, and
+    // says so on the grid when the favourites filter has nothing to show.
+    void applyFilter();
+    bool passesFilter(const Entry& e) const;
+    // A kind's id as hub/filter stores it. Never translated.
+    static QString categoryId(Category c);
+    // Stars or unstars a game, and keeps the choice between sessions.
+    void toggleFavourite(int index);
     // Says on the board, not only in the status bar, that a game came back.
     void showResumeNotice();
     // Sizes it for the large-play switch and centres it over the board.
@@ -133,6 +151,17 @@ private:
     // Parallel to m_entries: each game's tile and its Games menu entry.
     QList<QPushButton*> m_tiles;
     QList<QAction*> m_menuEntries;
+    // The tile grid's layout, re-filled whenever the filter changes.
+    QGridLayout* m_grid = nullptr;
+    // The filter row above the grid: All, the four kinds, then Favourites.
+    QButtonGroup* m_filterGroup = nullptr;
+    // Said on the grid itself when Favourites is chosen and nothing is starred.
+    QLabel* m_noFavourites = nullptr;
+    // The chosen filter's id, as stored under hub/filter: "all", a kind, or
+    // "favourites". Never translated -- it is a settings value.
+    QString m_filter;
+    // Starred games, by id (Entry::name), as stored under hub/favourites.
+    QStringList m_favourites;
     // Over the top of the board for a few seconds after a game resumes.
     QLabel* m_resumeNotice = nullptr;
     QTimer* m_resumeNoticeTimer = nullptr;
