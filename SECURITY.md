@@ -65,11 +65,16 @@ are reported to The Qt Project under its
 here — but do open an issue if a release is still shipping a Qt version with
 a known advisory, because bumping it is this project's job.
 
-**Last checked: 2026-10-20**, against Qt's
+**Last checked: 2026-11-04**, against Qt's
 [list of known vulnerabilities](https://wiki.qt.io/List_of_known_vulnerabilities_in_Qt_products),
-for the downloads' Qt 6.11.3. The list's newest Qt advisory,
-CVE-2026-101201, is an out-of-bounds read in Qt Core's JSON parsing,
-fixed in 6.11.3. One advisory's range covers 6.11.3: CVE-2026-15037, XML
-injection in QDom, affected "before Qt 6.12.0". QDom is in the Qt XML
-module, which this app does not link (`CMakeLists.txt` finds Widgets,
-Multimedia and Concurrent only), so it is not reachable here.
+for the downloads' Qt 6.11.3. One advisory's range covers 6.11.3:
+CVE-2026-15037, XML injection in QDom, affected "before Qt 6.12.0". QDom is
+in the Qt XML module, which this app does not link (`CMakeLists.txt` finds
+Widgets, Multimedia and Concurrent only), so it is not reachable here.
+
+The downloads stay on 6.11.3 for now, because 6.12.0 is no better: the list
+names it under two advisories that 6.11.3 is clear of. CVE-2026-100140 is in
+Qt5Compat's XML parser, which this app does not link. CVE-2026-105924 is in
+converting CBOR to JSON, which nothing in `src/` does. Both are fixed in
+6.12.1, which fixes CVE-2026-15037 as well, and the downloads move to it once
+Qt publishes it (GHUB-0213).

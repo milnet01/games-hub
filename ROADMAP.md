@@ -9494,7 +9494,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: test.
   Source: in-session-2026-10-20.
 
-- 📋 [GHUB-0213] **Move the downloads' bundled Qt from 6.11.3 to 6.12.0.**
+- 📋 [GHUB-0213] **Move the downloads' bundled Qt from 6.11.3 to 6.12.1, once Qt publishes it.**
   CVE-2026-15037, XML injection in QDom, is listed as affecting Qt
   "before Qt 6.12.0", which covers the 6.11.3 that ci.yml and
   release.yml pin (QT_VERSION). QDom is in Qt XML, which this app does
@@ -9503,6 +9503,16 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   the pinned Qt. The list's own impact text says "through 6.11", which
   conflicts with its range; confirm before treating 6.11.3 as affected.
   The Qt installer pins (AQT_SRC, scripts/install-qt.py) move with it.
+  2026-11-04: retargeted to 6.12.1. Qt's list now names 6.12.0 under two
+  advisories 6.11.3 is clear of (CVE-2026-100140, Qt5Compat XML;
+  CVE-2026-105924, CBOR to JSON), both fixed in 6.12.1, so 6.12.0 would
+  trade one unreachable advisory for two. None of the three is
+  reachable: no Qt XML, Qt5Compat or CBOR use in src/. 6.12.1 was not on
+  download.qt.io for linux_x64 or windows_x86 that day (404). When it
+  is: QT_VERSION in ci.yml and release.yml; the Windows folder layout
+  matched 6.11.3's for 6.12.0, and aqtinstall had no release newer than
+  3.3.0, so AQT_SRC stays. Local Qt here is already 6.12.0 and builds
+  clean. SECURITY.md § Bundled Qt updated the same day.
   **Layman:** The downloads carry a Qt version a published flaw covers, though the flaw sits in a part of Qt this app never uses.
   Kind: security.
   Source: release-check-2026-10-20.
