@@ -30,6 +30,8 @@ public:
     // here, and Pinball had no override at all: leaving the table for another
     // game left the ball rolling, and it drained while nobody was watching.
     void deactivate() override;
+    // Read-only, so a check can see which flippers are up (GHUB-0232).
+    const PinballTable& table() const { return m_table; }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -46,6 +48,14 @@ private:
     void tick();
     void refresh();
     void announceGameOver();
+    // Every launch route goes through here, so each one sounds the same.
+    void launchBall();
+
+    // A flipper is up while anything holds it: a key, or the mouse. Lowering
+    // it on one release would drop a flipper another key still holds
+    // (GHUB-0232). One bit per thing that can hold it.
+    enum Hold : unsigned { kHoldArrow = 1, kHoldLetter = 2, kHoldShift = 4, kHoldMouse = 8 };
+    void hold(bool left, unsigned source, bool down);
 
     void paintFlipper(QPainter& p, const PinballTable::Flipper& f) const;
     void paintPlayfieldArt(QPainter& p) const;
@@ -81,5 +91,7 @@ private:
     double m_celebrate = 0.0;
     int m_lastScore = 0;
     bool m_plungerHeld = false;
+    unsigned m_leftHolds = 0;
+    unsigned m_rightHolds = 0;
     bool m_announced = false;
 };

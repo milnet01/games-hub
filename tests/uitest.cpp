@@ -5949,6 +5949,38 @@ int main(int argc, char* argv[])
 
         PinballView pinball;
         check(paints(&pinball), "pinball view paints");
+
+        // GHUB-0232. The Launch button sounds like Space and a click do, and
+        // letting go of the mouse lowers only the flipper the mouse raised.
+        {
+            PinballView table;
+            table.resize(460, 760);
+            QAction* launch = nullptr;
+            for (QAction* a : table.gameActions())
+                if (a->text() == QStringLiteral("Launch"))
+                    launch = a;
+            check(launch != nullptr && table.table().ballInLane(),
+                  "pinball: a ball waits in the lane for the Launch button");
+            if (launch != nullptr) {
+                Sound::instance().play(Sound::kClick);
+                launch->trigger();
+                check(Sound::instance().lastRequested() == QLatin1String(Sound::kLaunch),
+                      "pinball: the Launch button plays the launch sound");
+            }
+            check(!table.table().ballInLane(), "pinball: and the ball is in play");
+
+            QKeyEvent leftDown(QEvent::KeyPress, Qt::Key_Left, Qt::NoModifier);
+            QCoreApplication::sendEvent(&table, &leftDown);
+            clickAt(&table, QPointF(table.width() * 0.75, table.height() * 0.5), Qt::LeftButton);
+            check(table.table().leftFlipper().pressed,
+                  "pinball: releasing the mouse leaves a key-held flipper up");
+            check(!table.table().rightFlipper().pressed,
+                  "pinball: and lowers the flipper the mouse raised");
+            QKeyEvent leftUp(QEvent::KeyRelease, Qt::Key_Left, Qt::NoModifier);
+            QCoreApplication::sendEvent(&table, &leftUp);
+            check(!table.table().leftFlipper().pressed,
+                  "pinball: letting go of the key lowers it");
+        }
     }
 
     // ---- The hub opens each game and comes back ----

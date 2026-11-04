@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=233 -->
+<!-- ants-roadmap-id-high-water: GHUB=234 -->
 
 # Games Hub — Roadmap
 
@@ -9731,10 +9731,15 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0232] **Pinball's small control slips: a silent Launch button, and releasing the mouse drops both flippers.**
+- ✅ [GHUB-0232] **Pinball's small control slips: a silent Launch button, and releasing the mouse drops both flippers.**
   Reported from reading the code, unverified: the Launch toolbar
   button plays no launch sound; a mouse release drops both flippers,
   even one held by a key; both Shift keys work the left flipper.
+  Confirmed and fixed 2026-11-04: all three launch routes go through
+  launchBall(), which plays the sound; each flipper stays up while any
+  key or the mouse holds it. Two UI checks red first, green after. The
+  Shift half is a controls change, so it is split out to its own item
+  waiting on the owner.
   **Layman:** Small Pinball glitches: the Launch button makes no sound, and letting go of the mouse drops a flipper held by a key.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
@@ -9751,6 +9756,16 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** Canasta's bonus for going out in one go checks only your own melds, not your partner's; the family may score it differently.
   Kind: investigate.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0234] **Pinball's right Shift key works the left flipper.**
+  Qt reports both Shift keys as Qt::Key_Shift, so keyPressEvent sends
+  either to the left flipper, and How to play says Shift is left.
+  Telling them apart needs the native scan code, which differs by
+  platform. A controls change, so it waits on the owner.
+  Waiting-on: owner -- should right Shift work the right flipper?
+  **Layman:** In Pinball both Shift keys move the left flipper; many players expect right Shift to move the right one.
+  Kind: ux.
+  Source: in-session-2026-11-04 (split from GHUB-0232).
 
 ## P01 — Shipped
 

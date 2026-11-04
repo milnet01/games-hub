@@ -36,6 +36,9 @@ public:
     static Sound& instance();
 
     void play(const QString& name);
+    // The last effect asked for, muted or not. A test reads it, because no
+    // test can hear whether a sound played (GHUB-0232).
+    QString lastRequested() const { return m_lastRequested; }
 
     bool muted() const { return m_muted; }
     void setMuted(bool muted);
@@ -50,6 +53,8 @@ private:
     // Deletes every effect and stops new ones being built. Run from the
     // application's destructor, while Qt is still there to delete them into.
     void releaseEffects();
+
+    QString m_lastRequested;
 
     // Each effect keeps a few players in rotation: QSoundEffect restarts
     // rather than overlapping, and pinball fires the same sound in bursts.

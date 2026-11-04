@@ -74,6 +74,7 @@ void Sound::setVolume(double volume)
 
 void Sound::play(const QString& name)
 {
+    m_lastRequested = name;
     if (m_muted || !m_available)
         return;
 

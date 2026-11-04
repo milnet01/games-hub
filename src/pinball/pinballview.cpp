@@ -49,7 +49,7 @@ void PinballView::buildActions()
 
     auto* launch = new QAction(tr("Launch"), this);
     connect(launch, &QAction::triggered, this, [this] {
-        m_table.launch();
+        launchBall();
         setFocus();
     });
     m_actions.append(launch);
@@ -79,6 +79,26 @@ void PinballView::activate()
 void PinballView::deactivate()
 {
     m_timer->stop();
+    // A key let go of while another game had focus never reaches this view,
+    // so its hold would keep the flipper up for good.
+    m_leftHolds = 0;
+    m_rightHolds = 0;
+    m_table.setFlipper(true, false);
+    m_table.setFlipper(false, false);
+}
+
+void PinballView::launchBall()
+{
+    if (m_table.ballInLane())
+        Sound::instance().play(Sound::kLaunch);
+    m_table.launch();
+}
+
+void PinballView::hold(bool left, unsigned source, bool down)
+{
+    unsigned& holds = left ? m_leftHolds : m_rightHolds;
+    holds = down ? (holds | source) : (holds & ~source);
+    m_table.setFlipper(left, holds != 0);
 }
 
 void PinballView::tick()
@@ -485,14 +505,23 @@ void PinballView::keyPressEvent(QKeyEvent* event)
 
     switch (event->key()) {
     case Qt::Key_Left:
+        hold(true, kHoldArrow, true);
+        Sound::instance().play(Sound::kFlipper);
+        break;
     case Qt::Key_Z:
+        hold(true, kHoldLetter, true);
+        Sound::instance().play(Sound::kFlipper);
+        break;
     case Qt::Key_Shift:
-        m_table.setFlipper(true, true);
+        hold(true, kHoldShift, true);
         Sound::instance().play(Sound::kFlipper);
         break;
     case Qt::Key_Right:
+        hold(false, kHoldArrow, true);
+        Sound::instance().play(Sound::kFlipper);
+        break;
     case Qt::Key_M:
-        m_table.setFlipper(false, true);
+        hold(false, kHoldLetter, true);
         Sound::instance().play(Sound::kFlipper);
         break;
     case Qt::Key_Space:
@@ -510,19 +539,23 @@ void PinballView::keyReleaseEvent(QKeyEvent* event)
 
     switch (event->key()) {
     case Qt::Key_Left:
+        hold(true, kHoldArrow, false);
+        break;
     case Qt::Key_Z:
+        hold(true, kHoldLetter, false);
+        break;
     case Qt::Key_Shift:
-        m_table.setFlipper(true, false);
+        hold(true, kHoldShift, false);
         break;
     case Qt::Key_Right:
+        hold(false, kHoldArrow, false);
+        break;
     case Qt::Key_M:
-        m_table.setFlipper(false, false);
+        hold(false, kHoldLetter, false);
         break;
     case Qt::Key_Space:
         m_plungerHeld = false;
-        if (m_table.ballInLane())
-            Sound::instance().play(Sound::kLaunch);
-        m_table.launch();
+        launchBall();
         break;
     default:
         GameView::keyReleaseEvent(event);
@@ -538,10 +571,9 @@ void PinballView::mousePressEvent(QMouseEvent* event)
         return;
 
     if (m_table.ballInLane()) {
-        Sound::instance().play(Sound::kLaunch);
-        m_table.launch();
+        launchBall();
     } else {
-        m_table.setFlipper(event->position().x() < width() / 2.0, true);
+        hold(event->position().x() < width() / 2.0, kHoldMouse, true);
         Sound::instance().play(Sound::kFlipper);
     }
 }
@@ -550,8 +582,8 @@ void PinballView::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton)
         return;
-    m_table.setFlipper(true, false);
-    m_table.setFlipper(false, false);
+    hold(true, kHoldMouse, false);
+    hold(false, kHoldMouse, false);
 }
 
 // How to play (GHUB-0016). Written for this collection, from what this file and

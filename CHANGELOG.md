@@ -43,6 +43,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   count no longer saves the untouched new deal as if it were a game in
   progress.
 
+- **Pinball's Launch button makes the launch sound, and flippers stay up while held** (GHUB-0232)
+  The Launch button now sounds like Space and a click do. Letting go
+  of the mouse lowers only the flipper the mouse raised, so a flipper
+  you are holding with a key stays up.
+
 ## [1.3.0] - 2026-11-04
 
 **Theme:** Getting around the app
