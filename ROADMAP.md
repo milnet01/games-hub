@@ -9771,12 +9771,17 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: investigate.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0234] **Pinball's right Shift key works the left flipper.**
+- ✅ [GHUB-0234] **Pinball's right Shift key works the left flipper.**
   Qt reports both Shift keys as Qt::Key_Shift, so keyPressEvent sends
   either to the left flipper, and How to play says Shift is left.
   Telling them apart needs the native scan code, which differs by
   platform. A controls change, so it waits on the owner.
   Waiting-on: owner -- should right Shift work the right flipper?
+  Owner's call 2026-11-04: right Shift works the right flipper.
+  isRightShift() reads the native scan code (62 on X11/Wayland, 0x36 on
+  Windows); an unreadable one stays left. UI check red first, green
+  after, with synthetic scan codes; a real keyboard is checked by eye
+  only. How to play updated.
   **Layman:** In Pinball both Shift keys move the left flipper; many players expect right Shift to move the right one.
   Kind: ux.
   Source: in-session-2026-11-04 (split from GHUB-0232).

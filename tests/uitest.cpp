@@ -6008,6 +6008,30 @@ int main(int argc, char* argv[])
             QCoreApplication::sendEvent(&table, &leftUp);
             check(!table.table().leftFlipper().pressed,
                   "pinball: letting go of the key lowers it");
+
+            // GHUB-0234, owner's call 2026-11-04: right Shift works the right
+            // flipper. Qt gives both Shifts one key code; only the scan code
+            // tells them apart, and it differs by platform.
+#ifdef Q_OS_WIN
+            constexpr quint32 kRightShiftScan = 0x36;
+            constexpr quint32 kLeftShiftScan = 0x2A;
+#else
+            constexpr quint32 kRightShiftScan = 62;
+            constexpr quint32 kLeftShiftScan = 50;
+#endif
+            const auto shift = [&table](QEvent::Type type, quint32 scan) {
+                QKeyEvent e(type, Qt::Key_Shift, Qt::NoModifier, scan, 0, 0);
+                QCoreApplication::sendEvent(&table, &e);
+            };
+            shift(QEvent::KeyPress, kRightShiftScan);
+            check(table.table().rightFlipper().pressed && !table.table().leftFlipper().pressed,
+                  "pinball: right Shift works the right flipper");
+            shift(QEvent::KeyRelease, kRightShiftScan);
+            check(!table.table().rightFlipper().pressed, "pinball: and letting go lowers it");
+            shift(QEvent::KeyPress, kLeftShiftScan);
+            check(table.table().leftFlipper().pressed && !table.table().rightFlipper().pressed,
+                  "pinball: left Shift works the left flipper");
+            shift(QEvent::KeyRelease, kLeftShiftScan);
         }
     }
 

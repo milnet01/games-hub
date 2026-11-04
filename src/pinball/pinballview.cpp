@@ -21,6 +21,19 @@
 
 namespace {
 constexpr int kFrameMs = 16;
+
+// Qt gives both Shift keys one key code, so only the hardware scan code tells
+// right Shift from left, and the code differs by platform (GHUB-0234, owner's
+// call 2026-11-04). A Shift whose side cannot be read works the left flipper,
+// as every Shift did before.
+bool isRightShift(const QKeyEvent* event)
+{
+#ifdef Q_OS_WIN
+    return event->nativeScanCode() == 0x36;
+#else
+    return event->nativeScanCode() == 62; // X11 and Wayland keycode: evdev 54 + 8
+#endif
+}
 constexpr QColor kPlayfield { 0x1b, 0x21, 0x3d };
 constexpr QColor kWallInk { 0x7d, 0x8a, 0xa8 };
 }
@@ -513,7 +526,7 @@ void PinballView::keyPressEvent(QKeyEvent* event)
         Sound::instance().play(Sound::kFlipper);
         break;
     case Qt::Key_Shift:
-        hold(true, kHoldShift, true);
+        hold(!isRightShift(event), kHoldShift, true);
         Sound::instance().play(Sound::kFlipper);
         break;
     case Qt::Key_Right:
@@ -545,7 +558,7 @@ void PinballView::keyReleaseEvent(QKeyEvent* event)
         hold(true, kHoldLetter, false);
         break;
     case Qt::Key_Shift:
-        hold(true, kHoldShift, false);
+        hold(!isRightShift(event), kHoldShift, false);
         break;
     case Qt::Key_Right:
         hold(false, kHoldArrow, false);
@@ -620,8 +633,8 @@ QString PinballView::rulesText() const
         "<h3>Controls</h3>"
         "<ul>"
         "<li>Space: hold to pull the plunger back, and let go to launch.</li>"
-        "<li>Left flipper: Left arrow, Z, or Shift.</li>"
-        "<li>Right flipper: Right arrow or M.</li>"
+        "<li>Left flipper: Left arrow, Z, or left Shift.</li>"
+        "<li>Right flipper: Right arrow, M, or right Shift.</li>"
         "<li>A flipper stays up for as long as you hold its key.</li>"
         "<li>Mouse: while the ball waits in the lane, a left click launches it gently. "
         "During play, hold the left button on the left half of the window "

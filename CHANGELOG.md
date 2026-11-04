@@ -48,6 +48,10 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   of the mouse lowers only the flipper the mouse raised, so a flipper
   you are holding with a key stays up.
 
+- **Pinball's right Shift key works the right flipper** (GHUB-0234)
+  Left Shift works the left flipper and right Shift the right one.
+  Before, both Shift keys worked the left flipper.
+
 - **Sudoku's notes no longer change out of sight** (GHUB-0224)
   In pencil mode, a square that holds a digit now takes no notes. Before,
   notes typed there were hidden under the digit and came back when it
