@@ -503,16 +503,19 @@ void MinesweeperView::mousePressEvent(QMouseEvent* event)
 
 void MinesweeperView::digAt(int row, int col)
 {
-    if (!m_started) {
+    // A dig on an already-open number chords, which is what most players
+    // expect from a modern Minesweeper.
+    const bool changed = m_field->at(row, col).revealed ? m_field->chord(row, col)
+                                                        : m_field->reveal(row, col);
+    // The clock starts with the first dig that opens something. A dig on a
+    // flag does nothing, and used to start timing a field whose mines were
+    // not yet laid (GHUB-0225).
+    if (changed && !m_started) {
         m_started = true;
         m_elapsedMs = 0;
         m_clock.start();
         m_tick->start();
     }
-    // A dig on an already-open number chords, which is what most players
-    // expect from a modern Minesweeper.
-    const bool changed = m_field->at(row, col).revealed ? m_field->chord(row, col)
-                                                        : m_field->reveal(row, col);
     if (changed && m_field->state() != Minefield::State::Lost)
         Sound::instance().play(Sound::kDig);
 }

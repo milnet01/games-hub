@@ -26,6 +26,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   the score and the best score could grow without limit. A card moved
   from the waste into a column still scores 5.
 
+- **Minesweeper's clock waits for your first real dig** (GHUB-0225)
+  Clicking a flagged square before you had dug anywhere started the
+  clock, though nothing opened. Now the clock starts with the first dig
+  that opens a square.
+
 ## [1.3.0] - 2026-11-04
 
 **Theme:** Getting around the app

@@ -4813,6 +4813,23 @@ int main(int argc, char* argv[])
         std::printf("      flag red covers %.2f%% of the board\n", share);
         check(share < 2.0, "minesweeper: flag red does not bleed into dug squares");
 
+        // GHUB-0225: a dig on a flag does nothing, so it must not start the
+        // clock either -- before the fix it did, timing a game whose mines
+        // were not even laid yet.
+        {
+            MinesweeperView unstarted;
+            unstarted.resize(720, 720);
+            clickAt(&unstarted, QPointF(360, 360), Qt::RightButton); // a flag
+            clickAt(&unstarted, QPointF(360, 360), Qt::LeftButton);  // dig on the flag
+            pump(20);
+            std::printf("      timers running after digging a flag: %d\n", activeTimers(&unstarted));
+            check(activeTimers(&unstarted) == 0,
+                  "minesweeper: digging a flag before the first dig does not start the clock");
+            clickAt(&unstarted, QPointF(200, 200), Qt::LeftButton); // a real dig
+            pump(20);
+            check(activeTimers(&unstarted) > 0, "minesweeper: and a real first dig does");
+        }
+
         // Chess is driven by clicking one square then another, so the check is
         // that a real pawn move lands and the engine answers it — the whole
         // loop, not just that the widget paints.

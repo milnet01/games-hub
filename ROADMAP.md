@@ -9644,10 +9644,15 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0225] **Minesweeper's clock can start on a click that dug nothing.**
+- ✅ [GHUB-0225] **Minesweeper's clock can start on a click that dug nothing.**
   Reported from reading the code, unverified: digAt starts the clock
   before reveal(), so a left click on a flagged square before any real
   dig starts timing without laying the mines.
+  Confirmed and fixed 2026-11-04: digAt now starts the clock only when
+  the dig changed the field. A UI check was red first (one timer running
+  after digging a flag), green after; refresh() runs after every dig and
+  stops the clock on a win or loss, so an instant first-dig win is still
+  timed correctly.
   **Layman:** Clicking a flagged square before the first real dig starts the timer early.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
