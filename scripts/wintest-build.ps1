@@ -54,7 +54,7 @@ set "PATH=$cmakeBin;$ninjaBin;$qt\bin;%PATH%"
 set "CMAKE_PREFIX_PATH=$qt"
 cd /d "$Src" || exit /b 1
 echo === Configure
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGAMESHUB_WERROR=$Werror || exit /b 1
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGAMESHUB_WERROR=$Werror -DGAMESHUB_UPDATER=ON || exit /b 1
 echo === Build
 cmake --build build || exit /b 1
 echo === Test
