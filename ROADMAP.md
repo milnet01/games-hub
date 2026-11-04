@@ -8731,6 +8731,8 @@ question can be changed afterwards.
 
   The app-ID is fixed at this step and every later packaging step inherits it,
   Flathub included.
+  Waiting-on: user (which app-ID: za.co.antsprojectshub.GamesHub or io.github.milnet01.<name>?, 2026-11-04)
+  The ID is permanent once a package or Flathub listing carries it, and every file this item writes is named after it (.desktop, metainfo, icon), so nothing is drafted until it is chosen. The siblings differ: finbreak uses io.github.milnet01.finbreak, Ants Terminal za.co.antsprojectshub.AntsTerminal. Recommendation: za.co.antsprojectshub.GamesHub -- the newer sibling's form, and the brand the website carries; the domain already has to stay up for email and the site. The GitHub form is the safer pick only if the domain might ever lapse (the TrueHost zone went missing once). The upload to build.opensuse.org is also yours to approve, as it publishes; the spec, debian/ recipe and metainfo can be written and built locally first.
   **Layman:** Install Games Hub with your distribution's own package manager instead of downloading a file.
   Kind: package.
   Source: user-request-2026-08-20.
@@ -8763,6 +8765,10 @@ question can be changed afterwards.
   why that item fixes them and this one reuses them. A screenshot set and a
   summary that reads well in a software centre are part of the deliverable
   rather than an afterthought -- this is a shop window.
+  Waits on GHUB-0044's app-ID (Waiting-on: user there, 2026-11-04); this
+  item reuses it. The Flathub submission is itself a pull request from
+  your GitHub account to flathub/flathub, so it needs your go-ahead when
+  it comes.
   **Layman:** Games Hub appears in GNOME Software, KDE Discover and flathub.org like any other app.
   Kind: package.
   Source: user-request-2026-08-20.
@@ -8812,6 +8818,8 @@ question can be changed afterwards.
   from where, on whose consent, and how the download is verified. GHUB-0054
   extends this item's signing key to the artifacts a person downloads by hand,
   which is the other half of the same story.
+  Waiting-on: user (who generates and holds the Ed25519 release-signing key, and may it be added to the repo as a GitHub Actions secret?, 2026-11-04)
+  Recommendation: you generate it on this machine with one command a session gives you, keep the private half offline (a password manager or a USB stick), and add it as a repository secret yourself, so no session ever holds it. Everything else -- the check, the release-notes offer, the in-tree verifier and the swap -- can be specced and built without the key, against a test key that is thrown away. The item is network-facing and replaces its own executable, so it gets a spec and its review before code.
   **Layman:** Games Hub checks GitHub for a newer release, shows the changelog for every version you have missed, and updates itself when you say yes.
   Kind: feature.
   Source: user-request-2026-08-20.
