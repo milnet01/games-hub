@@ -28,6 +28,10 @@ public:
     // while you are in another game.
     void deactivate() override;
 
+    // Whether a turn is waiting for the next step. For the UI test, which
+    // checks that a key pressed while paused is not saved up (GHUB-0230).
+    bool hasQueuedTurn() const { return m_board.pending() != m_board.direction(); }
+
     // The grid's size belongs to the rules, not to the drawing. Kept here as
     // the names the view already used so the painter reads the same.
     static constexpr int kGridWidth = SnakeBoard::kWidth;
@@ -51,6 +55,7 @@ private:
 
     QList<QAction*> m_actions;
     QTimer* m_timer = nullptr;
+    QAction* m_pause = nullptr;
 
     // The rules. Everything below is the clock and the presentation: how fast
     // the snake moves, whether it has been set going, and whether the hub has

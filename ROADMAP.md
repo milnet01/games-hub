@@ -9703,13 +9703,17 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0230] **Snake's Pause button gets out of step with the game.**
+- ✅ [GHUB-0230] **Snake's Pause button gets out of step with the game.**
   Reported from reading the code, unverified: New Game does not untick
   Pause, so after pause then New Game the button stays ticked while the
   snake runs and the next Space only unticks it. activate() also
   restarts a paused game on return to Snake with Pause still ticked.
   Arrow keys pressed while paused are queued (up to two) and run on
   resume, which may surprise a slow reader.
+  Confirmed and fixed 2026-11-04: newGame() unticks Pause; activate()
+  does not restart a game the player paused; direction keys are ignored
+  while paused. Three UI checks red first, green after. Snake's How to
+  play text updated to match.
   **Layman:** In Snake, after pausing and starting a new game, the Pause button stays pressed while the snake runs.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).

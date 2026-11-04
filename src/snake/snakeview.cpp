@@ -43,6 +43,7 @@ void SnakeView::buildActions()
     m_actions.append(newAction);
 
     auto* pause = new QAction(tr("Pause"), this);
+    m_pause = pause;
     pause->setCheckable(true);
     pause->setShortcut(QKeySequence(Qt::Key_Space));
     connect(pause, &QAction::toggled, this, [this](bool on) {
@@ -66,6 +67,9 @@ void SnakeView::newGame()
     m_started = false;
     m_running = false;
     m_timer->stop();
+    // A new game starts unpaused. Left ticked, the button read Paused over a
+    // running snake and the next Space only unticked it (GHUB-0230).
+    m_pause->setChecked(false);
     setFocus();
     update();
     refresh();
@@ -74,7 +78,8 @@ void SnakeView::newGame()
 void SnakeView::activate()
 {
     setFocus();
-    if (m_started && !m_board.dead()) {
+    // A game you paused stays paused when you come back to it (GHUB-0230).
+    if (m_started && !m_board.dead() && !m_pause->isChecked()) {
         m_running = true;
         m_timer->start(m_speedMs);
     }
@@ -248,6 +253,11 @@ void SnakeView::keyPressEvent(QKeyEvent* event)
         return;
     }
 
+    // Paused, a turn is ignored rather than saved up: two of them waiting
+    // could steer the snake into a wall the moment play resumes (GHUB-0230).
+    if (m_pause->isChecked())
+        return;
+
     // The core decides whether the turn is legal; a reversal into your own
     // neck is refused there rather than here.
     if (!m_board.turn(wanted))
@@ -286,7 +296,9 @@ QString SnakeView::rulesText() const
         "<li>Your best score is kept. The end of each game shows your score "
         "and your best.</li>"
         "<li>If you leave Snake for another game, it pauses. "
-        "It carries on when you come back.</li>"
+        "It carries on when you come back, unless you had paused it "
+        "yourself; then it waits for you to press Space.</li>"
+        "<li>While the game is paused, the arrow keys do nothing.</li>"
         "</ul>"
 
         "<h3>Controls</h3>"

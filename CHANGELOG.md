@@ -31,6 +31,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   clock, though nothing opened. Now the clock starts with the first dig
   that opens a square.
 
+- **Snake's Pause button always tells the truth** (GHUB-0230)
+  New Game now lifts a pause, so the button no longer reads Paused over
+  a moving snake. A game you paused stays paused when you come back to
+  it, and arrow keys pressed while paused are ignored instead of being
+  saved up to steer the snake the moment play resumes.
+
 ## [1.3.0] - 2026-11-04
 
 **Theme:** Getting around the app

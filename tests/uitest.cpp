@@ -3789,6 +3789,35 @@ int main(int argc, char* argv[])
             snake.activate();
             check(activeTimers(&snake) > 0, "snake: and picks up again when you come back");
             snake.deactivate();
+
+            // GHUB-0230: the Pause button and the game must agree.
+            QAction* pause = nullptr;
+            QAction* fresh = nullptr;
+            for (QAction* a : snake.gameActions()) {
+                if (a->isCheckable())
+                    pause = a;
+                else if (a->shortcut() == QKeySequence(QKeySequence::New))
+                    fresh = a;
+            }
+            check(pause != nullptr && fresh != nullptr, "snake: has a Pause and a New Game button");
+            if (pause != nullptr && fresh != nullptr) {
+                snake.activate();
+                pause->setChecked(true);
+                snake.deactivate();
+                snake.activate();
+                check(activeTimers(&snake) == 0,
+                      "snake: a paused game stays paused when you come back to it");
+                fresh->trigger();
+                check(!pause->isChecked(), "snake: New Game lifts the pause");
+                pressKey(&snake, Qt::Key_Right);
+                check(activeTimers(&snake) > 0, "snake: so the new game runs when you start it");
+                pause->setChecked(true);
+                pressKey(&snake, Qt::Key_Up);
+                pause->setChecked(false);
+                check(!snake.hasQueuedTurn(),
+                      "snake: a key pressed while paused is not saved up for later");
+                snake.deactivate();
+            }
         }
 
         // Pinball is the case that was found first, and the one game whose
