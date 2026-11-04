@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=234 -->
+<!-- ants-roadmap-id-high-water: GHUB=235 -->
 
 # Games Hub — Roadmap
 
@@ -10411,6 +10411,23 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   Source: user-request-2026-08-24.
 
 ### 🧰 Tests
+
+- 📋 [GHUB-0235] **The Windows test box builds with exactly the flags CI's Windows leg uses.**
+  scripts/wintest-build.ps1 hand-copies ci.yml's Configure line. It
+  reads only the werror value out of ci.yml (via wintest-ci.sh), so when
+  GHUB-0043 added -DGAMESHUB_UPDATER=ON to ci.yml the box kept building
+  without it: a green wintest run on 96cbe62 never compiled
+  src/update/updater.cpp, the file whose Windows break it was run to
+  check. Fixed by hand in ac6e3bf (the ps1 now passes the flag), but the
+  copy will drift again on the next flag.
+  Fix: have wintest-ci.sh read the whole Windows Configure line's -D flags
+  out of ci.yml, as it reads werror, and pass them through -- or fail
+  loudly when ci.yml's Windows configure carries a flag the script does
+  not pass. Check: add a dummy -D flag to ci.yml's Configure and see the
+  wintest run either use it or refuse.
+  **Layman:** The spare Windows computer that checks a change before it is pushed tests the same build CI does, rather than a slightly different one.
+  Kind: fix.
+  Source: found-2026-11-05-building-GHUB-0043.
 
 ### 🎨 More games, if wanted
 
