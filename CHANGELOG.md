@@ -53,6 +53,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   notes typed there were hidden under the digit and came back when it
   was cleared.
 
+- **2048 saves your best score the moment you pass it** (GHUB-0231)
+  Before, the best was saved only when the board got stuck, so a game
+  left with New Game lost the best the status line had been showing.
+  Now neither New Game nor Undo can lose it.
+
 ## [1.3.0] - 2026-11-04
 
 **Theme:** Getting around the app

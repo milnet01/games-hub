@@ -9731,11 +9731,16 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0231] **2048 records the best score at the stuck moment, before an Undo can change it.**
+- ✅ [GHUB-0231] **2048 records the best score at the stuck moment, before an Undo can change it.**
   Reported from reading the code, unverified: undo() clears
   m_finished, but the best score was recorded when the board stuck and
   the stuck box shows again. Decide whether a best should wait for a
   game that can no longer be undone.
+  Owner's call 2026-11-04: the best is saved as the score passes it,
+  as the status line already showed it; Undo and New Game never lower
+  it. push() now records it; the stuck box says "a new best" when this
+  game set it. Two UI checks red first, green after. How to play says
+  so.
   **Layman:** In 2048, undoing after the board is stuck works, but the best score was already saved and the stuck box comes back.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).

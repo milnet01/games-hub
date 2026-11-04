@@ -5394,6 +5394,34 @@ int main(int argc, char* argv[])
             check(!resumed.restoreState(forged), "2048: a tile that is not a power of two is refused");
             check(renderOf(&resumed) == played, "2048: and refusing that changes nothing either");
         }
+        {
+            // GHUB-0231, owner's call 2026-11-04: the best is saved as the
+            // score passes it, as the status line already shows it, so
+            // neither New Game nor Undo can lose it.
+            const QString key = QStringLiteral("twenty48/best_score");
+            Scores::instance().clear();
+            QByteArray pair;
+            QDataStream out(&pair, QIODevice::WriteOnly);
+            out.setVersion(QDataStream::Qt_6_0);
+            out << quint32(1) << qint32(0) << false;
+            for (int i = 0; i < 16; ++i)
+                out << qint32(i < 2 ? 2 : 0);
+            Twenty48View board;
+            board.resize(520, 560);
+            check(board.restoreState(pair), "2048: a board of two 2s loads");
+            pressKey(&board, Qt::Key_Left);
+            check(Scores::instance().best(key) == 4,
+                  "2048: a score passing the best is saved at once");
+            QAction* newGame = nullptr;
+            for (QAction* a : board.gameActions())
+                if (a->text() == QStringLiteral("New Game"))
+                    newGame = a;
+            if (newGame != nullptr)
+                newGame->trigger();
+            check(newGame != nullptr && Scores::instance().best(key) == 4,
+                  "2048: and New Game keeps it");
+            Scores::instance().clear();
+        }
 
         // ---- And the two that used to lose everything (GHUB-0007, GHUB-0009) ----
         //

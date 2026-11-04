@@ -81,4 +81,9 @@ private:
     // "delete the stored game". Same flag, same reason, as the six games the
     // 2026-08-31 audit fixed.
     bool m_resumed = false;
+    // The best is saved as the score passes it (GHUB-0231, owner's call
+    // 2026-11-04), so by the time the board sticks there is nothing left to
+    // record. This remembers that this game set it, for the stuck box's
+    // wording. Cleared by newGame().
+    bool m_setBest = false;
 };

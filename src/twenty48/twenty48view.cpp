@@ -105,6 +105,7 @@ void Twenty48View::newGame()
     m_board.newGame();
     m_finished = false;
     m_resumed = false;
+    m_setBest = false;
     m_undoAction->setEnabled(false);
     setFocus();
     update();
@@ -144,6 +145,10 @@ void Twenty48View::push(Direction direction)
     }
 
     m_board.spawn();
+    // Saved the moment the score passes it, which is what the status line
+    // already shows as Best -- so New Game and Undo never lose it (GHUB-0231).
+    if (m_board.score() > 0 && Scores::instance().recordHigh(bestKey(), m_board.score()))
+        m_setBest = true;
     m_undoAction->setEnabled(m_board.canUndo());
     Sound::instance().play(Sound::kCardPlace);
     update();
@@ -158,7 +163,7 @@ void Twenty48View::checkEnd()
 
     m_finished = true;
     Sound::instance().play(Sound::kLose);
-    const bool newBest = Scores::instance().recordHigh(bestKey(), m_board.score());
+    const bool newBest = m_setBest;
     refresh();
 
     announceLater(200, [this, newBest] {
@@ -391,7 +396,8 @@ QString Twenty48View::rulesText() const
         "<li>Every join adds the new tile's number to your score.</li>"
         "<li>Making 2048 does not end the game. You can carry on playing.</li>"
         "<li>The game ends when every space is full and no two touching tiles match.</li>"
-        "<li>Your best score is kept. An unfinished game is kept too, "
+        "<li>Your best score is saved the moment you pass it, so Undo and New Game "
+        "never lose it. An unfinished game is kept too, "
         "and comes back when you return.</li>"
         "</ul>"
 
