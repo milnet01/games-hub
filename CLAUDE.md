@@ -179,6 +179,11 @@ loads when a file under `src/`, `tests/`, `tools/` or `assets/` is opened.
 Packaging traps are in `.claude/rules/release.md`, and comparing shots in
 `.claude/rules/shots.md`.
 
+**A doc that names a file not yet written, in backticks, fails the push
+gate.** `scripts/doc-refs-check.py` resolves every backticked path, so a spec
+describing files it will create must name them as a glob (`src/update/*`) or
+in plain words until they exist. Hit 2026-11-04 by the GHUB-0043 spec.
+
 **`pkill -f <pattern>` will kill this session's own shell** when the pattern
 appears in the command line being run. Use `pkill -x gameshub`.
 
