@@ -74,6 +74,16 @@
 #include <random>
 #include <cstdio>
 #include <cstring>
+#include <optional>
+#include <span>
+
+#ifdef GAMESHUB_UPDATER
+#include "update/updater.h"
+
+#include <QAction>
+#include <QDir>
+#include <QTemporaryDir>
+#endif
 
 namespace {
 
@@ -2651,6 +2661,242 @@ void turnLightAnswersTheSwitch()
                   qPrintable(game.name + QStringLiteral(": and the picture comes back the same")));
     }
 }
+
+#ifdef GAMESHUB_UPDATER
+// ---------------------------------------------------------------------------
+// The self-updater (GHUB-0043), with its network replaced by a counter. Built
+// only with GAMESHUB_UPDATER, which CI sets.
+// ---------------------------------------------------------------------------
+
+// Every request is counted; a URL with no body served fails, as a dead network
+// does. The answer arrives from the event loop, as a real one would.
+class FakeNetwork : public update::Network
+{
+public:
+    int requests = 0;
+    QHash<QString, QByteArray> bodies;
+
+    std::function<void()> get(const QUrl& url, qint64 cap, QIODevice* sink, Progress,
+                              Done done) override
+    {
+        ++requests;
+        Reply r;
+        const auto it = bodies.constFind(url.toString());
+        if (it != bodies.constEnd() && it->size() <= cap) {
+            r.ok = true;
+            if (sink != nullptr)
+                r.ok = sink->write(*it) == it->size();
+            else
+                r.body = *it;
+        }
+        QTimer::singleShot(0, [done, r] { done(r); });
+        return [] {};
+    }
+};
+
+void clearUpdateSettings()
+{
+    QSettings s;
+    s.remove(QStringLiteral("update"));
+    s.sync();
+}
+
+// RFC 8032 § 7.1's second test key and its signature over the single byte
+// 0x72: a published throwaway, so the install is driven end to end without
+// any real signing key existing.
+const QByteArray& testKey()
+{
+    static const QByteArray k = QByteArray::fromHex(
+        "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c");
+    return k;
+}
+std::span<const unsigned char> testKeySpan()
+{
+    return { reinterpret_cast<const unsigned char*>(testKey().constData()), 32 };
+}
+
+// INV-1: nothing leaves the machine without consent.
+void updaterAsksBeforeItChecks()
+{
+    QWidget window;
+    QTemporaryDir dir;
+    const QString image = dir.path() + QStringLiteral("/GamesHub.AppImage");
+
+    clearUpdateSettings();
+    {
+        FakeNetwork net;
+        update::Updater u(update::Install::AppImage, image, testKeySpan(), net, &window);
+        bool asked = false;
+        int requestsWhenAsked = -1;
+        u.askConsent = [&] {
+            asked = true;
+            requestsWhenAsked = net.requests;
+            return false;
+        };
+        u.start();
+        check(net.requests == 0 && !asked,
+              "update: starting the updater asks nothing until the window is up");
+        pump(50);
+        check(asked && requestsWhenAsked == 0,
+              "update: with no answer stored, the question comes before any request");
+        check(net.requests == 0, "update: answering no makes no request");
+        const QSettings s;
+        check(s.contains(QStringLiteral("update/auto"))
+                  && !s.value(QStringLiteral("update/auto")).toBool(),
+              "update: and the answer is kept");
+
+        PreferencesDialog prefs;
+        auto* daily = prefs.findChild<QCheckBox*>(QStringLiteral("prefUpdateDaily"));
+        check(daily != nullptr && !daily->isChecked(),
+              "update: Preferences shows the daily check, as answered");
+        if (daily != nullptr)
+            daily->setChecked(true);
+        check(QSettings().value(QStringLiteral("update/auto")).toBool(),
+              "update: and changing it there changes the answer");
+        if (daily != nullptr)
+            daily->setChecked(false); // back to "no", which the next block reads
+    }
+    {
+        PreferencesDialog prefs;
+        check(prefs.findChild<QCheckBox*>(QStringLiteral("prefUpdateDaily")) == nullptr,
+              "update: with no updater running, Preferences shows no such switch");
+    }
+    {
+        FakeNetwork net;
+        update::Updater u(update::Install::AppImage, image, testKeySpan(), net, &window);
+        bool asked = false;
+        u.askConsent = [&] {
+            asked = true;
+            return true;
+        };
+        QStringList told;
+        u.tell = [&](const QString& text, const QUrl&) { told << text; };
+        u.start();
+        pump(50);
+        check(!asked && net.requests == 0,
+              "update: with the answer no, a later launch neither asks nor checks");
+        u.checkAction()->trigger();
+        pump(50);
+        check(net.requests == 1, "update: Help -> Check for updates makes exactly one request");
+        check(told.size() == 1 && told.first().contains(QStringLiteral("could not be reached")),
+              "update: and says so in one sentence when the server cannot be reached");
+    }
+
+    clearUpdateSettings();
+    {
+        FakeNetwork net;
+        update::Updater u(update::Install::AppImage, image, testKeySpan(), net, &window);
+        u.askConsent = [] { return true; };
+        QStringList told;
+        u.tell = [&](const QString& text, const QUrl&) { told << text; };
+        u.start();
+        pump(50);
+        check(net.requests == 1, "update: answering yes makes one request");
+        check(told.isEmpty(), "update: and a failed automatic check says nothing");
+        check(QSettings().contains(QStringLiteral("update/lastCheck")),
+              "update: the attempt is recorded even though it failed");
+    }
+    {
+        // INV-7 in place: the failed attempt above still counts.
+        FakeNetwork net;
+        update::Updater u(update::Install::AppImage, image, testKeySpan(), net, &window);
+        u.start();
+        pump(50);
+        check(net.requests == 0, "update: so a second launch the same day makes none");
+    }
+    clearUpdateSettings();
+}
+
+// INV-4's install half: only a file that verifies replaces $APPIMAGE.
+void updaterInstallsOnlyWhatVerifies()
+{
+    const QString version = QStringLiteral("9.9.9");
+    const QString file = QStringLiteral("GamesHub-%1-x86_64.AppImage").arg(version);
+    const QString base = QStringLiteral("https://github.com/milnet01/games-hub/releases/download/v%1/")
+                             .arg(version);
+    const QString releases
+        = QStringLiteral(R"([{"tag_name":"v%1","name":"%1","body":"Notes.","draft":false,)"
+                         R"("prerelease":false,"html_url":"https://github.com/milnet01/games-hub/releases/tag/v%1",)"
+                         R"("assets":[{"name":"%2","browser_download_url":"%3%2"},)"
+                         R"({"name":"%2.sig","browser_download_url":"%3%2.sig"}]}])")
+              .arg(version, file, base);
+    const QByteArray signature = QByteArray::fromHex(
+        "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da"
+        "085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00");
+    const QByteArray oldImage("the image already installed");
+
+    struct Outcome {
+        QByteArray image;
+        QStringList entries;
+        QString relaunched;
+        QStringList told;
+        bool executable = false;
+    };
+    // Serves the releases list, the .sig, and `payload` as the download
+    // (or no download at all), then runs Help -> Check for updates and
+    // answers Update now.
+    auto run = [&](const std::optional<QByteArray>& payload) {
+        Outcome out;
+        QWidget window;
+        QTemporaryDir dir;
+        const QString image = dir.path() + QStringLiteral("/GamesHub.AppImage");
+        {
+            QFile f(image);
+            if (f.open(QIODevice::WriteOnly))
+                f.write(oldImage);
+        }
+        FakeNetwork net;
+        net.bodies.insert(QStringLiteral("https://api.github.com/repos/milnet01/games-hub/releases"),
+                          releases.toUtf8());
+        net.bodies.insert(base + file + QStringLiteral(".sig"), signature);
+        if (payload)
+            net.bodies.insert(base + file, *payload);
+
+        update::Updater u(update::Install::AppImage, image, testKeySpan(), net, &window);
+        u.present = [](const update::Offer&) { return update::Updater::Choice::Install; };
+        u.tell = [&](const QString& text, const QUrl&) { out.told << text; };
+        u.relaunch = [&](const QString& path) {
+            out.relaunched = path;
+            return true;
+        };
+        u.checkNow();
+        pump(200);
+
+        QFile f(image);
+        if (f.open(QIODevice::ReadOnly))
+            out.image = f.readAll();
+        out.executable = (f.permissions() & QFileDevice::ExeOwner) != 0;
+        out.entries = QDir(dir.path()).entryList(QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot);
+        return out;
+    };
+
+    const Outcome good = run(QByteArray::fromHex("72"));
+    check(good.image == QByteArray::fromHex("72") && good.executable,
+          "update: a download that verifies replaces the AppImage, executable");
+    check(good.entries == QStringList { QStringLiteral("GamesHub.AppImage") },
+          "update: and leaves no temporary file beside it");
+    check(good.relaunched.endsWith(QStringLiteral("/GamesHub.AppImage")),
+          "update: then hands over to the relaunch");
+
+    const Outcome tampered = run(QByteArray::fromHex("73"));
+    check(tampered.image == oldImage,
+          "update: a download that does not verify leaves the AppImage byte for byte");
+    check(tampered.entries == QStringList { QStringLiteral("GamesHub.AppImage") },
+          "update: and is deleted, with nothing else left behind");
+    check(tampered.relaunched.isEmpty()
+              && tampered.told.size() == 1
+              && tampered.told.first().contains(QStringLiteral("could not be verified")),
+          "update: and the player is told that nothing changed");
+
+    const Outcome cut = run(std::nullopt);
+    check(cut.image == oldImage
+              && cut.entries == QStringList { QStringLiteral("GamesHub.AppImage") }
+              && cut.relaunched.isEmpty(),
+          "update: a download cut short changes nothing and leaves nothing");
+
+    clearUpdateSettings();
+}
+#endif // GAMESHUB_UPDATER
 
 } // namespace
 
@@ -8408,6 +8654,11 @@ int main(int argc, char* argv[])
     fuzzSavedGames(150);
 
     frameCost();
+
+#ifdef GAMESHUB_UPDATER
+    updaterAsksBeforeItChecks();
+    updaterInstallsOnlyWhatVerifies();
+#endif
 
     pinDealSeed(20260929);
     canastaTakesTheKeyboard();

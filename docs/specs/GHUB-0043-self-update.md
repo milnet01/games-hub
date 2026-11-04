@@ -248,12 +248,13 @@ The download-page button opens the release's `html_url` only if it is an
 
 In this order, and stopping at the first failure:
 
-1. Download the AppImage and its `.sig` into the directory holding
-   `$APPIMAGE`, under temporary names. Same directory, so the final rename
-   is atomic. The download is capped at 200 MiB, and a progress bar shows
-   it with a Cancel button.
+1. Download the `.sig` into memory: it is 64 bytes, and anything else stops
+   here. Then download the AppImage into the directory holding `$APPIMAGE`,
+   under a temporary name. Same directory, so the final rename is atomic.
+   The download is capped at 200 MiB, and a progress bar shows it with a
+   Cancel button.
 2. Verify the signature over the downloaded bytes against the compiled-in
-   key. **On failure, delete both files and stop.** Nothing is installed.
+   key. **On failure, delete the file and stop.** Nothing is installed.
 3. Mark the file executable and rename it over `$APPIMAGE`.
 4. Start a detached waiter, then quit through the normal exit path. The
    waiter is `/bin/sh` in its own session. It waits until this process's
@@ -420,7 +421,7 @@ everything, a compare that is textual, and a check that ignores
   - "The one input it parses that it did not write": the releases JSON and
     the downloaded file join the saved game.
   - "The files it writes": an AppImage install also replaces `$APPIMAGE` and
-    writes two temporary files beside it.
+    writes one temporary file beside it.
 - `docs/specs/GHUB-0025-downloadable-builds.md` — amended when this is built:
   INV-7's plugin assertion gains the `tls` plugin directory for both
   downloads, and § 4.3 gains the signing step.

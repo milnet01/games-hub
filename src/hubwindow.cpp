@@ -945,7 +945,8 @@ void HubWindow::buildChrome()
     m_rulesAction->setEnabled(false); // nothing to explain on the tile grid
     connect(m_rulesAction, &QAction::triggered, this, &HubWindow::showRules);
     helpMenu->addAction(m_rulesAction);
-    helpMenu->addSeparator();
+    m_helpMenu = helpMenu;
+    m_helpSeparator = helpMenu->addSeparator();
     auto* donateAction = new QAction(tr("Support this project…"), this);
     donateAction->setObjectName(QStringLiteral("donateAction"));
     donateAction->setStatusTip(tr("Ways to support the collection"));
@@ -1431,6 +1432,11 @@ void HubWindow::openGame(int index)
         m_status->setText(tr("Carried on from where you left off."));
         showResumeNotice();
     }
+}
+
+void HubWindow::addHelpAction(QAction* action)
+{
+    m_helpMenu->insertAction(m_helpSeparator, action);
 }
 
 QStringList HubWindow::gameNames() const

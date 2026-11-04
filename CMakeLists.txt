@@ -115,7 +115,19 @@ if(NOT GAMESHUB_SANITIZE)
     endif()
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Multimedia Concurrent)
+# GHUB-0043. The self-updater exists only in the two downloads release.yml
+# builds, and CI turns it on so its tests run. Every other build -- a
+# `cmake --install`, a distribution package, a Flatpak -- is replaced by its
+# own package manager, so it carries no update code at all: an updater that
+# overwrites a file it does not own is worse than none. CI's Linux leg checks a
+# default build for update symbols, which is what holds this line.
+option(GAMESHUB_UPDATER "Build the self-updater (release downloads only)" OFF)
+
+if(GAMESHUB_UPDATER)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Multimedia Concurrent Network)
+else()
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Multimedia Concurrent)
+endif()
 qt_standard_project_setup()
 
 
@@ -243,6 +255,37 @@ target_include_directories(gameshub_views PUBLIC src "${CMAKE_CURRENT_BINARY_DIR
 target_compile_definitions(gameshub_views PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
 target_link_libraries(gameshub_views PUBLIC Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
 
+# The updater's decisions: versions, the releases list, the once-a-day rule,
+# which installs may update, and the signature check. QtCore only and reads no
+# stored state, like a rules core -- but NOT in GAME_CORE_SOURCES, because
+# gameshub_core is linked into every gameshub and this must not be. Always
+# built, so the self-test proves these rules on every build; reaching the app
+# takes the switch.
+add_library(gameshub_update_logic OBJECT
+    src/update/updatelogic.cpp
+    src/update/ed25519.cpp
+)
+target_include_directories(gameshub_update_logic PUBLIC src)
+target_link_libraries(gameshub_update_logic PUBLIC Qt6::Core)
+
+# The half that talks to the network and the screen, built only with the
+# switch. GAMESHUB_UPDATER reaches the views too, which is where Preferences
+# adds its switch; without the definition it names nothing in update::. The
+# executables link both libraries below, by name: an object library's code
+# reaches only a target that links it directly, never one that links a
+# library linking it.
+if(GAMESHUB_UPDATER)
+    add_library(gameshub_updater OBJECT
+        src/update/updater.cpp
+        src/update/updatedialog.cpp
+    )
+    target_include_directories(gameshub_updater PUBLIC src "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    target_compile_definitions(gameshub_updater PRIVATE GAMESHUB_VERSION="${PROJECT_VERSION}")
+    target_link_libraries(gameshub_updater PUBLIC gameshub_update_logic
+                          Qt6::Widgets Qt6::Network)
+    target_compile_definitions(gameshub_views PUBLIC GAMESHUB_UPDATER)
+endif()
+
 # sounds.qrc stays on the two executables that need it rather than moving into
 # gameshub_views. It is one file of the hundred-odd, so it buys almost nothing,
 # and a Qt resource reaching a binary through another object is exactly the
@@ -263,7 +306,7 @@ add_executable(gameshub_selftest
     tests/selftest.cpp
 )
 target_include_directories(gameshub_selftest PRIVATE src)
-target_link_libraries(gameshub_selftest PRIVATE gameshub_core Qt6::Core)
+target_link_libraries(gameshub_selftest PRIVATE gameshub_core gameshub_update_logic Qt6::Core)
 
 # Drives real game widgets offscreen to check they build, paint and respond.
 qt_add_executable(gameshub_uitest
@@ -280,6 +323,11 @@ target_compile_definitions(gameshub_uitest PRIVATE GAMESHUB_VERSION="${PROJECT_V
                                                    GAMESHUB_SOURCE_DIR="${GAMESHUB_SOURCE_DIR_FWD}")
 target_link_libraries(gameshub_uitest PRIVATE gameshub_core gameshub_views
                                              Qt6::Widgets Qt6::Multimedia Qt6::Concurrent)
+
+if(GAMESHUB_UPDATER)
+    target_link_libraries(gameshub PRIVATE gameshub_updater gameshub_update_logic)
+    target_link_libraries(gameshub_uitest PRIVATE gameshub_updater gameshub_update_logic)
+endif()
 
 enable_testing()
 add_test(NAME selftest COMMAND gameshub_selftest)

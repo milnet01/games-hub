@@ -50,6 +50,13 @@ A few things worth knowing before you download:
   repository published. The same command works on the Windows zip. Version
   0.6.0 and earlier were published before this record existed, so the check
   fails on those as well.
+- **A download can tell you when a new version is out.** The first time you
+  open it, it asks whether to check once a day; nothing is checked before
+  you answer. Help → *Check for updates* works either way. When there is a
+  new version it shows what changed. On Linux, *Update now* downloads it,
+  checks it is this project's own, and restarts into it, keeping your game.
+  On Windows it opens the download page instead. This switches on with the
+  first release signed for it; until then the downloads check nothing.
 
 ## The games
 

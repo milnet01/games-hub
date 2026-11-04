@@ -17,6 +17,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   what you are aiming for, how it plays here, and which keys and clicks
   do what. Large play makes the words larger there too.
 
+- **The downloads can update themselves, once the signing key exists**
+  The Linux AppImage and the Windows zip can check GitHub once a day for a
+  new version, if you agree on first launch, and Help → Check for updates
+  asks at any time. A new version is shown with what changed in every
+  version you missed. On Linux, Update now downloads it, checks its
+  signature, replaces the file and restarts, keeping your game; on Windows
+  it opens the download page. Nothing is checked, and no menu entry shows,
+  until a release is signed with the project's key, which does not exist
+  yet. A copy built or installed any other way has none of this
+  (GHUB-0043).
+
 - **Sudoku plays with the mouse alone** (GHUB-0223)
   A row of large digit keys, 1 to 9 and Erase, sits under the grid.
   Click a square, then a key. In pencil mode the keys write notes. The

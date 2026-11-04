@@ -15,6 +15,10 @@
 
 #include <cmath>
 
+#ifdef GAMESHUB_UPDATER
+#include "update/updater.h"
+#endif
+
 PreferencesDialog::PreferencesDialog(QWidget* parent)
     : QDialog(parent)
 {
@@ -100,6 +104,18 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     asking->setChecked(donate::asksEnabled());
     connect(asking, &QCheckBox::toggled, this, [](bool on) { donate::setAsksEnabled(on); });
     outer->addWidget(asking);
+
+#ifdef GAMESHUB_UPDATER
+    // Only where an updater exists (GHUB-0043 § 4.4): a build or an install
+    // that cannot update shows no switch that would do nothing.
+    if (update::Updater* updater = update::Updater::active()) {
+        auto* daily = new QCheckBox(tr("Check once a day for a new version"), this);
+        daily->setObjectName(QStringLiteral("prefUpdateDaily"));
+        daily->setChecked(updater->automatic());
+        connect(daily, &QCheckBox::toggled, updater, &update::Updater::setAutomatic);
+        outer->addWidget(daily);
+    }
+#endif
 
     auto* note = new QLabel(
         tr("Changes take effect at once and are remembered. Each game's own rules and "

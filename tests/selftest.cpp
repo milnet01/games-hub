@@ -21,6 +21,14 @@
 #include "klondike/klondiketable.h"
 #include "pyramid/pyramidtable.h"
 #include "twenty48/twenty48board.h"
+#include "update/ed25519.h"
+#include "update/updatelogic.h"
+
+#include <QBuffer>
+#include <QFile>
+#include <QTemporaryDir>
+#include <QTimeZone>
+#include <span>
 
 #include <chrono>
 #include <cmath>
@@ -6408,6 +6416,311 @@ void boardAisBreakTiesFromTheSeed()
     });
 }
 
+// ---------------------------------------------------------------------------
+// The self-updater's decisions (GHUB-0043). No network: every rule here takes
+// what it decides on as an argument.
+// ---------------------------------------------------------------------------
+
+std::span<const unsigned char> keyOf(const QByteArray& k)
+{
+    return { reinterpret_cast<const unsigned char*>(k.constData()),
+             static_cast<std::size_t>(k.size()) };
+}
+
+// INV-4, the verifier half. RFC 8032 § 7.1's first three vectors, re-derived
+// with OpenSSL on 2026-11-04 (the empty message with Python's cryptography,
+// since OpenSSL will not sign zero bytes). The long message is the second
+// key's, signed by OpenSSL, and is what crosses SHA-512's block edges.
+void updateSignaturesAreChecked()
+{
+    struct Vector {
+        const char* key;
+        const char* message;
+        const char* signature;
+    };
+    const Vector vectors[] = {
+        { "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a", "",
+          "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155"
+          "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b" },
+        { "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c", "72",
+          "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da"
+          "085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00" },
+        { "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025", "af82",
+          "6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac"
+          "18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a" },
+    };
+    bool allVerify = true;
+    bool tamperedMessageFails = true;
+    bool tamperedSignatureFails = true;
+    for (const Vector& v : vectors) {
+        const QByteArray key = QByteArray::fromHex(v.key);
+        const QByteArray message = QByteArray::fromHex(v.message);
+        const QByteArray sig = QByteArray::fromHex(v.signature);
+        allVerify = allVerify && update::signatureMatches(message, sig, keyOf(key));
+        if (!message.isEmpty()) {
+            QByteArray m = message;
+            m[0] = char(m[0] ^ 0x01);
+            tamperedMessageFails = tamperedMessageFails
+                && !update::signatureMatches(m, sig, keyOf(key));
+        }
+        QByteArray s = sig;
+        s[10] = char(s[10] ^ 0x01);
+        tamperedSignatureFails = tamperedSignatureFails
+            && !update::signatureMatches(message, s, keyOf(key));
+    }
+    check(allVerify, "update: RFC 8032's test signatures verify");
+    check(tamperedMessageFails, "update: one changed byte of the file fails");
+    check(tamperedSignatureFails, "update: one changed byte of the signature fails");
+
+    const QByteArray key2 = QByteArray::fromHex(vectors[1].key);
+    QByteArray longMessage;
+    for (int i = 0; i < 1000; ++i)
+        longMessage.append(char((i * 7 + 3) % 256));
+    const QByteArray longSig = QByteArray::fromHex(
+        "886a68bd48048abb1e43cb1c509cb12f6d4babff5da6476466b8507cd6fc1023"
+        "602b08ab523ed9f81a59c9844df1f92d36d9db311be04dc634a9a4c2b56fe308");
+    check(update::signatureMatches(longMessage, longSig, keyOf(key2)),
+          "update: a message longer than a hash block verifies");
+
+    // Fed in uneven pieces, as a download arrives: the result must not
+    // depend on where the pieces break.
+    bool piecesAgree = true;
+    for (const int step : { 1, 7, 127, 128, 129, 300 }) {
+        update::Ed25519Check c(keyOf(key2), keyOf(longSig));
+        for (qsizetype at = 0; at < longMessage.size(); at += step) {
+            const qsizetype n = std::min<qsizetype>(step, longMessage.size() - at);
+            c.addData(reinterpret_cast<const unsigned char*>(longMessage.constData() + at),
+                      static_cast<std::size_t>(n));
+        }
+        piecesAgree = piecesAgree && c.verified();
+    }
+    check(piecesAgree, "update: the check is the same however the file arrives");
+
+    QBuffer device(&longMessage);
+    check(device.open(QIODevice::ReadOnly), "update: (setup) the buffer opens");
+    check(update::signatureMatches(device, longSig, keyOf(key2)),
+          "update: a file is checked from its device");
+
+    // S + L is the same signature spelled differently. TweetNaCl accepts it;
+    // RFC 8032 § 5.1.7 does not, and neither does this.
+    const unsigned char order[32] = { 0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58,
+                                      0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14,
+                                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10 };
+    QByteArray malleable = QByteArray::fromHex(vectors[1].signature);
+    unsigned carry = 0;
+    for (int i = 0; i < 32; ++i) {
+        const unsigned sum = static_cast<unsigned char>(malleable[32 + i]) + order[i] + carry;
+        malleable[32 + i] = char(sum & 0xff);
+        carry = sum >> 8;
+    }
+    check(!update::signatureMatches(QByteArray::fromHex("72"), malleable, keyOf(key2)),
+          "update: a second spelling of a valid signature is refused");
+
+    check(!update::signatureMatches(QByteArray::fromHex("72"), longSig.left(63), keyOf(key2)),
+          "update: a short signature is refused");
+    check(!update::signatureMatches(QByteArray::fromHex("72"),
+                                    QByteArray::fromHex(vectors[1].signature), {}),
+          "update: an empty key verifies nothing");
+}
+
+// INV-3's version half: a tag is "v" and three numbers, and they compare as
+// numbers.
+void updateVersionsAreStrict()
+{
+    const auto v = update::parseTag(QStringLiteral("v1.4.0"));
+    check(v && v->major == 1 && v->minor == 4 && v->patch == 0, "update: v1.4.0 is a version");
+    bool refused = true;
+    for (const char* tag : { "v1.4", "v1.4.0-rc.1", "latest", "1.4.0", "v01.4.0", "v1.4.0.1",
+                             "v-1.4.0", "v1.4.0 ", "" })
+        refused = refused && !update::parseTag(QString::fromLatin1(tag));
+    check(refused, "update: anything else is not a version, never a guess");
+    check(*update::parseTag(QStringLiteral("v1.10.0")) > *update::parseTag(QStringLiteral("v1.9.0")),
+          "update: 1.10.0 is newer than 1.9.0");
+}
+
+// One release in the shape the GitHub API returns.
+QString releaseJson(const QString& tag, const QStringList& assets, bool draft = false,
+                    bool prerelease = false)
+{
+    QStringList list;
+    for (const QString& a : assets)
+        list << QStringLiteral(R"({"name":"%1","browser_download_url":"https://github.com/milnet01/games-hub/releases/download/%2/%1"})")
+                    .arg(a, tag);
+    return QStringLiteral(R"({"tag_name":"%1","name":"%2","body":"Notes for %2.","draft":%3,"prerelease":%4,"html_url":"https://github.com/milnet01/games-hub/releases/tag/%1","assets":[%5]})")
+        .arg(tag, tag.mid(1), draft ? QStringLiteral("true") : QStringLiteral("false"),
+             prerelease ? QStringLiteral("true") : QStringLiteral("false"),
+             list.join(QLatin1Char(',')));
+}
+
+QStringList signedAssets(const QString& version)
+{
+    const QString img = QStringLiteral("GamesHub-%1-x86_64.AppImage").arg(version);
+    const QString zip = QStringLiteral("GamesHub-%1-windows-x64.zip").arg(version);
+    return { img, img + QStringLiteral(".sig"), zip, zip + QStringLiteral(".sig") };
+}
+
+std::optional<update::Offer> offerFrom(const QStringList& releases, const char* running,
+                                       const QString& skipped = {}, bool automatic = true,
+                                       update::Install install = update::Install::AppImage)
+{
+    const auto parsed = update::parseReleases(
+        (QLatin1Char('[') + releases.join(QLatin1Char(',')) + QLatin1Char(']')).toUtf8());
+    if (!parsed)
+        return std::nullopt;
+    return update::chooseOffer(*parsed, *update::parseVersion(QString::fromLatin1(running)),
+                               install, skipped, automatic);
+}
+
+// INV-3: only a strictly newer, well-formed, signed release is offered.
+void updateOffersOnlyANewerSignedRelease()
+{
+    const QString v140 = releaseJson(QStringLiteral("v1.4.0"), signedAssets(QStringLiteral("1.4.0")));
+    const auto newer = offerFrom({ v140 }, "1.3.0");
+    check(newer && newer->newest.version.toString() == QLatin1String("1.4.0")
+              && newer->file.name == QLatin1String("GamesHub-1.4.0-x86_64.AppImage")
+              && newer->signature.name == QLatin1String("GamesHub-1.4.0-x86_64.AppImage.sig"),
+          "update: a newer signed release is offered, with its file and signature");
+    check(!offerFrom({ v140 }, "1.4.0"), "update: the version already running is not offered");
+    check(!offerFrom({ v140 }, "1.5.0"), "update: an older one is not offered");
+
+    bool malformedIgnored = true;
+    for (const char* tag : { "v1.4", "v1.4.0-rc.1", "latest" })
+        malformedIgnored = malformedIgnored
+            && !offerFrom({ releaseJson(QString::fromLatin1(tag), signedAssets(QStringLiteral("1.4.0"))) },
+                          "1.3.0");
+    check(malformedIgnored, "update: v1.4, v1.4.0-rc.1 and latest are not offered");
+    check(!offerFrom({ releaseJson(QStringLiteral("v1.4.0"), signedAssets(QStringLiteral("1.4.0")), true) },
+                     "1.3.0"),
+          "update: a draft is not offered");
+    check(!offerFrom({ releaseJson(QStringLiteral("v1.4.0"), signedAssets(QStringLiteral("1.4.0")), false, true) },
+                     "1.3.0"),
+          "update: a pre-release is not offered");
+    check(!offerFrom({ releaseJson(QStringLiteral("v1.4.0"),
+                                   { QStringLiteral("GamesHub-1.4.0-x86_64.AppImage") }) },
+                     "1.3.0"),
+          "update: a release with no .sig is not offered");
+    check(!offerFrom({ releaseJson(QStringLiteral("v1.4.0"),
+                                   { QStringLiteral("GamesHub-1.4.0-x86_64.AppImage.sig") }) },
+                     "1.3.0"),
+          "update: nor one with a .sig and no file");
+
+    check(!offerFrom({ v140 }, "1.3.0", QStringLiteral("1.4.0"), true),
+          "update: a skipped version is not offered automatically");
+    check(offerFrom({ v140 }, "1.3.0", QStringLiteral("1.4.0"), false).has_value(),
+          "update: but Help -> Check for updates still offers it");
+
+    const auto zip = offerFrom({ v140 }, "1.3.0", {}, true, update::Install::Zip);
+    check(zip && zip->file.name == QLatin1String("GamesHub-1.4.0-windows-x64.zip"),
+          "update: the Windows download is offered the zip");
+
+    const auto tens = offerFrom({ releaseJson(QStringLiteral("v1.10.0"), signedAssets(QStringLiteral("1.10.0"))) },
+                                "1.9.0");
+    check(tens.has_value(), "update: 1.10.0 is offered over 1.9.0, compared as numbers");
+
+    // The newest is offered and every missed release's notes come with it,
+    // newest first -- in whatever order the API listed them.
+    const auto several = offerFrom(
+        { releaseJson(QStringLiteral("v1.3.1"), {}), v140,
+          releaseJson(QStringLiteral("v1.5.0"), signedAssets(QStringLiteral("1.5.0"))),
+          releaseJson(QStringLiteral("v1.2.0"), {}) },
+        "1.3.0");
+    const QString notes = several ? update::notesMarkdown(several->missed) : QString();
+    check(several && several->newest.version.toString() == QLatin1String("1.5.0")
+              && several->missed.size() == 3,
+          "update: the newest is offered, with every release since this one");
+    check(notes.indexOf(QLatin1String("1.5.0")) < notes.indexOf(QLatin1String("1.4.0"))
+              && notes.indexOf(QLatin1String("1.4.0")) < notes.indexOf(QLatin1String("1.3.1"))
+              && notes.contains(QLatin1String("Notes for 1.3.1."))
+              && !notes.contains(QLatin1String("1.2.0")),
+          "update: their notes run newest first, and stop at this version");
+
+    check(!update::parseReleases("{\"message\":\"rate limited\"}").has_value()
+              && !update::parseReleases("not json").has_value(),
+          "update: a reply that is not a list of releases is a failure, not \"none\"");
+    check(!offerFrom({ v140 }, "1.3.0", {}, true, update::Install::Inert),
+          "update: an inert install is offered nothing");
+}
+
+// INV-2: § 4.4's table, row by row after the first (which is CI's nm check).
+void updateOnlyRealDownloadsUpdate()
+{
+    const QByteArray realKey(32, '\x01');
+    const auto key = keyOf(realKey);
+    using update::Install;
+    using update::Platform;
+
+    QTemporaryDir dir;
+    const QString image = dir.path() + QStringLiteral("/GamesHub.AppImage");
+    {
+        QFile f(image);
+        check(f.open(QIODevice::WriteOnly) && f.write("image") == 5,
+              "update: (setup) a stand-in AppImage is written");
+    }
+    const QString mount = dir.path() + QStringLiteral("/.mount_Games");
+    const QString inside = mount + QStringLiteral("/usr/bin/gameshub");
+
+    check(update::detectInstall(Platform::Linux, image, mount, inside, {}) == Install::Inert
+              && update::detectInstall(Platform::Windows, {}, {}, QStringLiteral("C:/g/gameshub.exe"), {})
+                  == Install::Inert,
+          "update: with no key compiled in, nothing updates (Linux or Windows)");
+    check(update::detectInstall(Platform::Linux, image, mount, inside, key) == Install::AppImage,
+          "update: a running AppImage installs its own updates");
+    check(update::detectInstall(Platform::Linux, {}, {}, QStringLiteral("/usr/bin/gameshub"), key)
+              == Install::Inert,
+          "update: an installed copy with no AppImage around it is inert");
+    check(update::detectInstall(Platform::Linux, dir.path() + QStringLiteral("/gone.AppImage"),
+                                mount, inside, key)
+              == Install::Inert,
+          "update: $APPIMAGE naming no file is inert");
+    check(update::detectInstall(Platform::Linux, image, mount,
+                                QStringLiteral("/home/me/Games_Hub/build/gameshub"), key)
+              == Install::Inert,
+          "update: a build directory with $APPIMAGE left set is inert");
+    check(update::detectInstall(Platform::Linux, image, mount,
+                                mount + QStringLiteral("_other/usr/bin/gameshub"), key)
+              == Install::Inert,
+          "update: a path that only starts like $APPDIR is not inside it");
+    check(update::detectInstall(Platform::Linux, image, {}, inside, key) == Install::Inert,
+          "update: $APPIMAGE without $APPDIR is inert");
+    check(update::detectInstall(Platform::Windows, {}, {}, QStringLiteral("C:/g/gameshub.exe"), key)
+              == Install::Zip,
+          "update: the Windows download offers its download page");
+    check(update::detectInstall(Platform::Other, image, mount, inside, key) == Install::Inert,
+          "update: any other platform is inert");
+    check(update::detectInstall(Platform::Linux, image, mount, inside, keyOf(QByteArray(31, '\x01')))
+              == Install::Inert,
+          "update: a key that is not 32 bytes is no key");
+}
+
+// INV-7: at most once a day, measured from the last ATTEMPT.
+void updateChecksAtMostDaily()
+{
+    const QDateTime now(QDate(2026, 11, 4), QTime(12, 0), QTimeZone::UTC);
+    check(update::dailyCheckDue({}, now), "update: with no previous attempt a check is due");
+    check(!update::dailyCheckDue(update::stampFor(now.addSecs(-23 * 3600)), now),
+          "update: 23 hours after an attempt it is not");
+    check(update::dailyCheckDue(update::stampFor(now.addSecs(-24 * 3600)), now),
+          "update: 24 hours after, it is");
+    check(update::dailyCheckDue(update::stampFor(now.addDays(3)), now),
+          "update: a stamp in the future (a clock set back) does not stop checks for good");
+    check(update::dailyCheckDue(QStringLiteral("yesterday-ish"), now),
+          "update: an unreadable stamp counts as no attempt");
+    check(update::stampFor(now) == QLatin1String("2026-11-04T12:00:00Z"),
+          "update: the stamp is ISO-8601 UTC");
+}
+
+void updateOpensOnlyGitHubPages()
+{
+    check(update::isGitHubPage(QUrl(QStringLiteral("https://github.com/milnet01/games-hub/releases/tag/v1.4.0"))),
+          "update: the release page on github.com may be opened");
+    bool refused = true;
+    for (const char* u : { "http://github.com/milnet01/games-hub", "https://github.com.example.org/x",
+                           "https://user@github.com/x", "https://github.com:8443/x",
+                           "javascript:alert(1)", "" })
+        refused = refused && !update::isGitHubPage(QUrl(QString::fromLatin1(u)));
+    check(refused, "update: nothing else is");
+}
+
 } // namespace
 
 int main()
@@ -6559,6 +6872,14 @@ int main()
     spiderRowNeedsEveryColumnOccupied();
     spiderDealtRowSaysWhichRunsItFinished();
     spiderPlaysOutWithoutLosingACard();
+
+    section("Self-update");
+    updateSignaturesAreChecked();
+    updateVersionsAreStrict();
+    updateOffersOnlyANewerSignedRelease();
+    updateOnlyRealDownloadsUpdate();
+    updateChecksAtMostDaily();
+    updateOpensOnlyGitHubPages();
 
     // LAST, and it must stay last: it pins the deal seed for the rest of the
     // process, which would turn every random board after it into a fixed one.

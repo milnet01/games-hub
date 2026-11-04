@@ -7,7 +7,8 @@ class QLabel;
 class QSlider;
 
 // The one place that shows every app-wide setting (GHUB-0068): sound, its
-// volume, large play, and whether the app asks for support now and then.
+// volume, large play, whether the app asks for support now and then, and --
+// in a download that can update itself -- the daily update check (GHUB-0043).
 // Each game's own rules stay inside that game, where they are wanted.
 //
 // Every change applies the moment it is made, like the toolbar switches it

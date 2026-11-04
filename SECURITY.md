@@ -13,15 +13,38 @@ claims below as the whole repository's will get the score book wrong.
 
 ## What it touches
 
-- **No network.** Nothing in the app opens a socket, fetches a URL or phones
-  home. There is no telemetry and no update check.
+- **The network, in the downloads only, and only if you agree.** The Linux
+  AppImage and the Windows zip can check for a new version (GHUB-0043). A
+  copy installed any other way -- built from source, or from a distribution
+  or Flatpak package -- contains no network code of ours at all.
+  - **What is fetched, from where:** the list of releases, from
+    `api.github.com`. On Linux, **Update now** also fetches the new AppImage
+    and its signature from `github.com`, which redirects the download to
+    `release-assets.githubusercontent.com`. Nothing about you is sent; the
+    request names the app and its version, and nothing else.
+  - **On whose consent:** the first launch asks whether to check once a day,
+    and nothing is fetched before you answer. Answer no and only Help →
+    Check for updates reaches the network. The answer can be changed in
+    Settings → Preferences.
+  - **How a download is checked:** the release workflow signs each download
+    with an Ed25519 key whose public half is compiled into the app. The app
+    replaces itself only with a file whose signature verifies against that
+    key, and deletes one that does not. Until the project's key exists the
+    updater makes no request at all.
+  - There is no telemetry.
 - **No accounts, no passwords, no personal data.** There is nothing to log
   in to.
 - **The files it writes** are its own: window sizes, best scores, the house
   rules you set in Canasta, and a saved game per game. They live where
   QSettings puts them for your platform — `~/.config/GamesHub/` on Linux,
-  the registry under `HKCU\Software\GamesHub` on Windows.
-- **The one input it parses that it did not write** is a saved game, if
+  the registry under `HKCU\Software\GamesHub` on Windows. On Linux, an
+  AppImage that updates itself also replaces its own file, after writing the
+  new one under a temporary name beside it.
+- **The inputs it parses that it did not write** are three. The update
+  check's list of releases, which is read as JSON, capped at 1 MiB, and
+  never trusted to name anything but a version and a GitHub address. A
+  downloaded update, which is never run or unpacked before its signature
+  verifies. And a saved game, if
   someone hands you a settings file. Every game re-checks a save before
   restoring it rather than trusting it — a card game confirms the whole pack
   came back, Chess replays the move list through its own move generator, and

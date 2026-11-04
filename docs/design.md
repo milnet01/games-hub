@@ -398,7 +398,8 @@ stores outside a game's own group: `audio/muted` and `audio/volume`
 and `donate/launches` are app-wide too, and `hubwindow.cpp` writes
 `window/geometry` through `geometryKey()`, `saved/<game>`, per game, through
 `saveKey()`, and `hub/filter` and `hub/favourites` through `filterKey()` and
-`favouritesKey()`. **Anything sweeping stored state — a settings
+`favouritesKey()`. The self-updater writes `update/auto`, `update/lastCheck`
+and `update/skipped`, in the downloads that carry it. **Anything sweeping stored state — a settings
 reset, a migration — has every one of those families to handle, PLUS every
 per-game group**: `scores.cpp` writes `<game>/best_*` keys and Canasta keeps its
 House set under `canasta/house/` and its target under `canasta/target`, so a
@@ -481,6 +482,28 @@ reads one URL from a `custom:` line, though GitHub's `custom:` key takes a list,
 so a two-entry list stops the build whether it is quoted or not. The `funding`
 ctest case locks that. Widening the rule is the fix if a second custom link is
 ever wanted.
+
+### The self-updater
+
+`src/update/*` — the downloads' update check and Linux self-install
+(GHUB-0043). The design, its invariants and its tests are
+`docs/specs/GHUB-0043-self-update.md`; this records where it sits.
+
+**It is split the way a game is.** `updatelogic.*` and the Ed25519 verifier
+are QtCore-only and read no stored state, so the self-test drives every rule
+in them. They are kept out of `GAME_CORE_SOURCES`, in a library of their own,
+because `gameshub_core` is linked into every `gameshub`. `updater.*` and
+`updatedialog.*` hold the network, the dialogs, the swap and the relaunch.
+
+**Only `GAMESHUB_UPDATER` builds it into the app, and only `main()` starts
+it.** `release.yml` and `ci.yml` turn the switch on. Every other build has no
+update code, which CI's Linux leg checks with `nm` on a default build. The hub
+knows nothing of it beyond `HubWindow::addHelpAction()`; Preferences shows its
+switch only when `update::Updater::active()` names one.
+
+**`src/update/updatekey.h` ships empty**, and an empty key makes every install
+inert. `release.yml` parses that file's key line, so its form is fixed by the
+spec's § 4.3.
 
 ## What may depend on what
 

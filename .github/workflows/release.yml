@@ -109,7 +109,7 @@ jobs:
       - name: Build
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_INSTALL_PREFIX=/usr
+                -DCMAKE_INSTALL_PREFIX=/usr -DGAMESHUB_UPDATER=ON
           cmake --build build
 
       # The suite, on the very commit being packaged. ci.yml cannot trigger on
@@ -190,6 +190,12 @@ jobs:
           done
           if [ -z "$(ls -A AppDir/usr/plugins/multimedia 2>/dev/null)" ]; then
             echo "no Qt multimedia plugin in the AppDir" >&2; exit 1
+          fi
+          # GHUB-0043: without a TLS backend the update check cannot reach
+          # GitHub, and fails as "could not be reached" with nothing else to
+          # say why. The host's OpenSSL is used; only Qt's plugin is bundled.
+          if [ -z "$(ls -A AppDir/usr/plugins/tls 2>/dev/null)" ]; then
+            echo "no Qt TLS plugin in the AppDir" >&2; exit 1
           fi
           doc=AppDir/usr/share/doc/gameshub
           for f in "$doc/LICENSE" "$doc/THIRD-PARTY.md" \
@@ -284,7 +290,7 @@ jobs:
 
       - name: Build
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGAMESHUB_UPDATER=ON
           cmake --build build
 
       # The same, on the platform this half is for. See the Linux job.
@@ -325,6 +331,10 @@ jobs:
           }
           if (-not (Get-ChildItem 'dist\multimedia' -File -EA SilentlyContinue)) {
             throw "no Qt multimedia plugin in dist\"
+          }
+          # GHUB-0043, as on Linux: the update check needs a TLS backend.
+          if (-not (Get-ChildItem 'dist\tls' -File -EA SilentlyContinue)) {
+            throw "no Qt TLS plugin in dist\"
           }
           foreach ($f in 'dist\LICENSE','dist\THIRD-PARTY.md',
                          'dist\licenses\LGPL-3.0.txt','dist\licenses\GPL-3.0.txt') {
@@ -412,6 +422,52 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      # GHUB-0043 § 4.2. The app installs a download only when this signature
+      # verifies against the public key compiled into it (src/update/
+      # updatekey.h). Raw Ed25519 over each file's exact bytes, 64 bytes, no
+      # header. Before anything is uploaded the job proves the round trip:
+      # each .sig verifies, and the secret's public key is the one the app
+      # carries -- a release signed with any other key could never be
+      # installed (INV-6). With no secret set it signs nothing and says so;
+      # the app then offers nothing, which is the state until the owner has
+      # made the key.
+      - name: Sign the downloads for the self-updater
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -z "$UPDATE_SIGNING_KEY" ]; then
+            echo "UPDATE_SIGNING_KEY is not set: publishing unsigned."
+            echo "No installed copy will offer this release as an update."
+            exit 0
+          fi
+          umask 077
+          key="$RUNNER_TEMP/update-key.pem"
+          pub="$RUNNER_TEMP/update-pub.pem"
+          trap 'rm -f "$key" "$pub"' EXIT
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
+          openssl pkey -in "$key" -pubout -out "$pub"
+
+          lines=$(grep -c 'kUpdatePublicKey' src/update/updatekey.h || true)
+          if [ "$lines" -ne 1 ]; then
+            echo "src/update/updatekey.h names kUpdatePublicKey on $lines lines, not one" >&2
+            exit 1
+          fi
+          carried=$(grep 'kUpdatePublicKey' src/update/updatekey.h \
+                      | grep -o '0x[0-9a-fA-F][0-9a-fA-F]' | sed 's/^0x//' \
+                      | tr -d '\n' | tr 'A-F' 'a-f')
+          derived=$(openssl pkey -in "$key" -pubout -outform DER | tail -c 32 \
+                      | od -An -tx1 | tr -d ' \n')
+          if [ "${#carried}" -ne 64 ] || [ "$carried" != "$derived" ]; then
+            echo "the signing secret's public key is not the one src/update/updatekey.h carries" >&2
+            exit 1
+          fi
+
+          for f in artifacts/GamesHub-*.AppImage artifacts/GamesHub-*.zip; do
+            openssl pkeyutl -sign -rawin -inkey "$key" -in "$f" -out "$f.sig"
+            openssl pkeyutl -verify -rawin -pubin -inkey "$pub" -in "$f" -sigfile "$f.sig"
+            [ "$(stat -c %s "$f.sig")" -eq 64 ] || { echo "$f.sig is not 64 bytes" >&2; exit 1; }
+          done
+
       # A signed, publicly verifiable statement of which repository, commit
       # and workflow run produced each file, checkable with
       # `gh attestation verify` and with no key for this project to hold or
@@ -450,7 +506,10 @@ jobs:
 
           appimage=$(ls artifacts/GamesHub-*.AppImage)
           zip=$(ls artifacts/GamesHub-*.zip)
+          # The signatures, when the step above made them.
+          shopt -s nullglob
+          sigs=(artifacts/GamesHub-*.sig)
           gh release create "$GITHUB_REF_NAME" \
             --title "$title" \
             --notes-file notes.md \
-            "$appimage" "$zip"
+            "$appimage" "$zip" "${sigs[@]}"

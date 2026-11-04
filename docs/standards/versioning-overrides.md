@@ -56,6 +56,7 @@ the setting without saying so. The families are `display/legibility`,
 `audio/muted` and `audio/volume`,
 `donate/ask` and `donate/launches`; `window/geometry` and `saved/<game>`;
 `hub/filter` and `hub/favourites`;
+`update/auto`, `update/lastCheck` and `update/skipped`;
 the per-game keys, which are scores AND remembered preferences (`chess/wins`,
 `sudoku/best_time_*`, `freecell/best_moves`, `minesweeper/level` and the rest);
 and Canasta's `canasta/house/*` and `canasta/target`. **Adding a

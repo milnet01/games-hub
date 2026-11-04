@@ -12,7 +12,13 @@
 #include <QTimer>
 
 #include <cstdio>
+#include <memory>
 #include <string_view>
+
+#ifdef GAMESHUB_UPDATER
+#include "update/updatekey.h"
+#include "update/updater.h"
+#endif
 
 namespace {
 
@@ -277,6 +283,35 @@ int main(int argc, char* argv[])
     const bool owesDonatePrompt = donate::recordLaunchAndAsk();
 
     window.show();
+
+#ifdef GAMESHUB_UPDATER
+    // GHUB-0043. Started here and nowhere else: after the command line, never
+    // under --shot (which has returned above), and only for an install that
+    // may update -- the AppImage, or the Windows zip -- with a key compiled in.
+    // Everything else gets no updater, so it makes no request and shows no
+    // menu entry or setting.
+#if defined(Q_OS_LINUX)
+    constexpr auto platform = update::Platform::Linux;
+#elif defined(Q_OS_WIN)
+    constexpr auto platform = update::Platform::Windows;
+#else
+    constexpr auto platform = update::Platform::Other;
+#endif
+    const QString appImage = qEnvironmentVariable("APPIMAGE"); // untranslated: an environment variable
+    const update::Install install
+        = update::detectInstall(platform, appImage, qEnvironmentVariable("APPDIR"), // untranslated: an environment variable
+                                QCoreApplication::applicationFilePath(),
+                                update::kUpdatePublicKey);
+    std::unique_ptr<update::Network> network;
+    std::unique_ptr<update::Updater> updater;
+    if (install != update::Install::Inert) {
+        network = update::makeNetwork(&app);
+        updater = std::make_unique<update::Updater>(install, appImage, update::kUpdatePublicKey,
+                                                    *network, &window);
+        window.addHelpAction(updater->checkAction());
+        updater->start();
+    }
+#endif
 
     // Never over a game in progress. `--game` goes straight into play, and a
     // prompt landing on someone's turn is a different thing from one at the

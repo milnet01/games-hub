@@ -233,10 +233,12 @@ jobs:
           key: ccache-${{ matrix.qt_arch }}-${{ github.run_id }}
           restore-keys: ccache-${{ matrix.qt_arch }}-
 
+      # GAMESHUB_UPDATER is on, as release.yml has it, so the self-updater
+      # compiles and its offline tests run on both platforms (GHUB-0043).
       - name: Configure
         run: >
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          -DGAMESHUB_WERROR=${{ matrix.werror }}
+          -DGAMESHUB_WERROR=${{ matrix.werror }} -DGAMESHUB_UPDATER=ON
 
       - name: Build
         run: cmake --build build
@@ -245,6 +247,29 @@ jobs:
       # both binaries run headless on both runners with nothing set here.
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      # GHUB-0043 INV-2. Every build that is not a release download -- a
+      # `cmake --install`, a distribution package, a Flatpak -- takes the
+      # default, and must carry no update code at all. Counting our own hub's
+      # symbols first proves nm can see this binary's names, so a zero below
+      # means absent rather than unreadable.
+      - name: Check a default build carries no update code
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S . -B build-default -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-default --target gameshub
+          symbols=$(nm -C --defined-only build-default/gameshub)
+          ours=$(printf '%s\n' "$symbols" | grep -c 'HubWindow::' || true)
+          found=$(printf '%s\n' "$symbols" | grep -c -e 'update::' -e 'crypto_' || true)
+          echo "HubWindow symbols: $ours; update symbols: $found"
+          if [ "$ours" -eq 0 ]; then
+            echo "nm sees none of this binary's own symbols, so the check proves nothing" >&2
+            exit 1
+          fi
+          if [ "$found" -ne 0 ]; then
+            echo "a default build contains update code" >&2
+            exit 1
+          fi
 
   # GHUB-0052. restoreState() is the app's whole untrusted input surface, and
   # every bound in those parsers is invisible to an ordinary build: an
@@ -370,11 +395,13 @@ jobs:
       # configure_file generates (funding.h); nothing here includes a .moc, so
       # AUTOMOC's build-time output is not required and the build is not worth
       # its minutes. GAMESHUB_FAST_BUILD=OFF because ccache and mold have
-      # nothing to offer a job that compiles nothing.
+      # nothing to offer a job that compiles nothing. GAMESHUB_UPDATER=ON so
+      # the updater's sources are in the database and get analysed with the
+      # rest (GHUB-0043).
       - name: Configure for the compile database
         run: >
           cmake -S . -B build-tidy -G Ninja -DCMAKE_BUILD_TYPE=Release
-          -DGAMESHUB_FAST_BUILD=OFF
+          -DGAMESHUB_FAST_BUILD=OFF -DGAMESHUB_UPDATER=ON
 
       # xargs rather than run-clang-tidy, which lives in a separate package on
       # this image. xargs exits 123 when any invocation fails, so a finding

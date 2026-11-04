@@ -8773,7 +8773,7 @@ question can be changed afterwards.
   Kind: package.
   Source: user-request-2026-08-20.
 
-- 📋 [GHUB-0043] **The app tells you a new version exists, shows what changed, and installs it for you.**
+- 🚧 [GHUB-0043] **The app tells you a new version exists, shows what changed, and installs it for you.**
   A published AppImage today is a file someone downloaded once. There is no
   route from that copy to the next one except noticing the releases page, so
   every player is frozen at whichever version they happened to fetch.
@@ -8825,6 +8825,16 @@ question can be changed afterwards.
   in docs/reviews/GHUB-0043-self-update-loop-log.md). Ready to build
   against a throwaway test key; key custody is still Waiting-on: user
   (above).
+  Built 2026-11-04 against throwaway test keys only (RFC 8032's published
+  test vectors, and a scratch key deleted after the release.yml dry run).
+  Everything in the spec is in place and tested: the check, the offer, the
+  in-tree verifier, the swap and relaunch, the release signing step, and
+  CI's nm check that a default build has no update code. It stays
+  in progress, not shipped, because src/update/updatekey.h is still empty:
+  until the owner makes the key (Waiting-on above), every download is inert
+  and no player sees any of it. Shipping it is then two steps: fill in
+  updatekey.h and set the UPDATE_SIGNING_KEY secret, in one commit; then
+  run INV-5's manual check on the second keyed release.
   **Layman:** Games Hub checks GitHub for a newer release, shows the changelog for every version you have missed, and updates itself when you say yes.
   Kind: feature.
   Source: user-request-2026-08-20.

@@ -16,6 +16,7 @@ class QToolBar;
 class QButtonGroup;
 class QGridLayout;
 class QLabel;
+class QMenu;
 class QPushButton;
 class QTimer;
 class QSettings;
@@ -54,6 +55,11 @@ public:
     void setRemembering(bool on) { m_remembering = on; }
 
     QStringList gameNames() const;
+
+    // Adds an entry to the Help menu, under How to play. For main() to hand
+    // in what the hub does not build itself -- Check for updates, in the
+    // downloads that carry an updater (GHUB-0043).
+    void addHelpAction(QAction* action);
 
 private:
     // The kind of game, which the filter row narrows the grid by (GHUB-0167).
@@ -149,6 +155,9 @@ private:
     QAction* m_legibilityAction = nullptr;
     // Help -> How to play: on while a game with rules is open (GHUB-0016).
     QAction* m_rulesAction = nullptr;
+    // Where addHelpAction() puts what it is given: above this separator.
+    QMenu* m_helpMenu = nullptr;
+    QAction* m_helpSeparator = nullptr;
     QLabel* m_status = nullptr;
     QList<QAction*> m_gameActions;
     QList<Entry> m_entries;

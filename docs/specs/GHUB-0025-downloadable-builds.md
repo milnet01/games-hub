@@ -193,6 +193,12 @@ travels into any artifact built from that workspace.
 Four jobs: `verify`, then `linux` and `windows` in parallel (both
 `needs: verify`), then `publish`.
 
+Both build jobs configure with `-DGAMESHUB_UPDATER=ON`, and `publish` signs
+each download for the self-updater before attesting and uploading it, with
+the `.sig` files uploaded beside them. The signing step, its round-trip check
+against `src/update/updatekey.h` and its behaviour with no secret set are
+`docs/specs/GHUB-0043-self-update.md` § 4.2's.
+
 **`verify`** — checks out and runs two assertions, both before any build:
 §4.1's tag-versus-`CMakeLists.txt` comparison, and that `CHANGELOG.md`
 contains a `## [<version>]` heading for that version. The second exists
@@ -603,11 +609,12 @@ this reason and not as a style choice.
   that their staged tree holds **both platform plugins by name** — the one
   the app runs on and the one §4.6's running check runs on, so
   `libqxcb.so` + `libqoffscreen.so` on Linux and `qwindows.dll` +
-  `qoffscreen.dll` on Windows — and at least one file in the `multimedia`
-  directory. **The two tools use different layouts:** `linuxdeploy` keeps
-  Qt's, so it is `AppDir/usr/plugins/{platforms,multimedia}/`, while
+  `qoffscreen.dll` on Windows — and at least one file in each of the
+  `multimedia` and `tls` directories (`tls` from GHUB-0043: without it the
+  update check cannot reach GitHub). **The two tools use different layouts:** `linuxdeploy` keeps
+  Qt's, so it is `AppDir/usr/plugins/{platforms,multimedia,tls}/`, while
   `windeployqt` mirrors each plugin group into the deployment root, so it is
-  `dist\{platforms,multimedia}\`.
+  `dist\{platforms,multimedia,tls}\`.
   *Breaks when:* a deployment tool bundles linked libraries only. **This
   assertion is the only guard for the plugin real users need**, and that is
   not a legibility point: INV-5 and INV-6's running halves set
@@ -723,7 +730,7 @@ assertion, since it carries no offscreen plugin and would fail it.
 | INV-4 | The `windows-2022` CI job's compile step; `rg 'M_PI' src/` locally |
 | INV-5 | `.github/workflows/release.yml`, `Smoke-test the AppImage` |
 | INV-6 | `.github/workflows/release.yml`, `Smoke-test the portable build` |
-| INV-7 | `.github/workflows/release.yml`, the named-platform-plugin + `multimedia` assertion in both packaging jobs, at each one's own path. **Not INV-5/INV-6** — their running checks run offscreen, so they exercise the offscreen plugin and never the desktop one |
+| INV-7 | `.github/workflows/release.yml`, the named-platform-plugin + `multimedia` + `tls` assertion in both packaging jobs, at each one's own path. **Not INV-5/INV-6** — their running checks run offscreen, so they exercise the offscreen plugin and never the desktop one |
 | INV-8 | `.github/workflows/release.yml`, the licence-file assertion in both packaging jobs |
 | The AppImage runs on distributions older than the build runner | **nothing** — glibc 2.39 is a hard floor and no check tests an older system; stated as a requirement in the README instead |
 | The packaged games actually play | **partly** — the smoke tests start the hub inside the artifact under `--game spider`, so a bundle that cannot start Qt at all is caught. A game that failed to *open* would not be: `src/main.cpp:58` warns and falls back to the hub, leaving the process alive and the check green. That fourteen games play *correctly* is the test suite's job, on the same commit but not inside the artifact |
