@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=221 -->
+<!-- ants-roadmap-id-high-water: GHUB=222 -->
 
 # Games Hub — Roadmap
 
@@ -9583,6 +9583,21 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** Tidy away the copy of the old version used to film the trailer, once the website session says the clips are fine.
   Kind: chore.
   Source: in-session-2026-10-15.
+
+- ✅ [GHUB-0222] **Reversi's "a finished light asks for none at all" check counted the board's own animation against the light.**
+  It failed the Windows leg of the v1.3.0 release run (2026-11-04) and
+  twice locally that day, each time in a run where earlier checks had
+  already failed. The next check, that the view's timers have all
+  stopped, passed every time, so whatever repainted had finished inside
+  the 250 ms counting window. Most likely the computer's discs still
+  turning over after the light reached full. The check now waits for
+  every timer on the view to stop, under the same deadline the light
+  gets, before it counts; a light that never stops still fails both
+  checks. A failing count now prints the repaints and running timers.
+  Cause inferred from the passing timer check, not observed directly.
+  **Layman:** One Reversi test failed now and then on a busy computer, which stopped the 1.3.0 downloads being published.
+  Kind: test.
+  Source: in-session-2026-11-04.
 
 ## P01 — Shipped
 

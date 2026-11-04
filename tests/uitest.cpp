@@ -2490,9 +2490,22 @@ void turnLightComesUpAndHolds()
     check(settled.leavingSeat == -1, "reversi: and the computer's light has gone out");
     check(counter.count > 0, "reversi: the cross-fade asked for repaints while it ran");
 
+    // The light can reach full while the board is still animating -- the
+    // computer's discs turning over -- and on a loaded runner those last
+    // frames landed inside the window below and were counted against the
+    // light (seen on the Windows release leg, 2026-11-04). So wait for every
+    // timer on the view to stop first. A light that never stops is still
+    // caught: this wait gives up, the count below sees its repaints, and the
+    // timer check after it fails too.
+    QDeadlineTimer quiet(Theme::kTurnLightFadeMs * 8);
+    while (activeTimers(&view) > 0 && !quiet.hasExpired())
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
     pump(50); // let anything already queued drain
     counter.count = 0;
     pump(200);
+    if (counter.count != 0)
+        std::printf("      %d repaints at rest, %d timers still running\n", counter.count,
+                    activeTimers(&view));
     check(counter.count == 0, "reversi: and a finished light asks for none at all");
     check(activeTimers(&view) == 0, "reversi: the turn timer stops itself");
     view.deactivate();
