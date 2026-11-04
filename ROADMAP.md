@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=220 -->
+<!-- ants-roadmap-id-high-water: GHUB=221 -->
 
 # Games Hub — Roadmap
 
@@ -10238,6 +10238,33 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   arrive with a rules core, because six of the fourteen do not have
   one and are untestable for it (GHUB-0066). A fresh game is the cheap
   time to get that right.
+
+- 📋 [GHUB-0221] **An original falling-block game, in the genre but not a copy of any one game.**
+  The mechanic is free to use: pieces fall into a pit, the
+  player steers and turns them, and filled rows clear. What is
+  protected is a particular game's name and its look taken whole.
+  In Tetris Holding v. Xio (US, 2012) the clone lost because it
+  copied the narrow 10x20 pit, the seven four-square pieces drawn
+  as bricks, the next-piece preview, the landing outline and the
+  row-clear look, all together.
+
+  So this game differs on purpose:
+  - Its own name, with no "-tris" in it.
+  - Pieces of three or five squares, not the seven four-square ones.
+  - A wider, shallower pit.
+  - A rule of its own beyond filling rows, for example matching
+    patterns.
+  - Its own art and sounds; not the folk tune the famous game uses.
+
+  Built for the owner: large squares, an unhurried pace, a pause
+  key, and each shape marked by a pattern as well as a colour so it
+  can be read slowly. A rules core plus a view, like every game.
+
+  Not legal advice. Before it ships in a public release, a short
+  check with someone who knows copyright law is cheap insurance.
+  **Layman:** A game where shapes fall and you fit them together, with its own name, shapes and look.
+  Kind: feature.
+  Source: user-request-2026-11-04.
 
 ### 🧹 Decided against, with reasons
 
