@@ -553,3 +553,49 @@ void PinballView::mouseReleaseEvent(QMouseEvent* event)
     m_table.setFlipper(true, false);
     m_table.setFlipper(false, false);
 }
+
+// How to play (GHUB-0016). Written for this collection, from what this file and
+// pinballtable.cpp actually do: the scores are the bumper and slingshot values
+// in PinballTable::buildTable(), the three balls are newGame(), the re-parked
+// short launch is stepPhysics(), and the controls are keyPressEvent(),
+// keyReleaseEvent(), mousePressEvent() and buildActions().
+QString PinballView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Keep the ball on the table with the two flippers at the bottom, "
+        "and score as many points as you can. You have three balls.</p>"
+
+        "<h3>How it plays</h3>"
+        "<ul>"
+        "<li>Each ball starts in the launch lane, the narrow channel on the right.</li>"
+        "<li>The plunger fires it up the lane and round the curved top onto the table. "
+        "The longer you pull the plunger back, the harder it fires.</li>"
+        "<li>Even the weakest launch reaches the table. "
+        "If a ball ever rolls back down the lane, it is put back to launch again. "
+        "It is not lost.</li>"
+        "<li>The three round bumpers in the middle score 100 points each time "
+        "the ball hits them, and throw it away again.</li>"
+        "<li>The two slanted kickers just above the flippers, called slingshots, "
+        "score 50 points each time they kick the ball.</li>"
+        "<li>A ball that falls past the flippers into the gap at the bottom is lost. "
+        "The next ball then waits in the lane.</li>"
+        "<li>The game ends when the last ball is lost. Your best score is kept.</li>"
+        "<li>If you leave Pinball for another game, the table stops. "
+        "It carries on when you come back.</li>"
+        "</ul>"
+
+        "<h3>Controls</h3>"
+        "<ul>"
+        "<li>Space: hold to pull the plunger back, and let go to launch.</li>"
+        "<li>Left flipper: Left arrow, Z, or Shift.</li>"
+        "<li>Right flipper: Right arrow or M.</li>"
+        "<li>A flipper stays up for as long as you hold its key.</li>"
+        "<li>Mouse: while the ball waits in the lane, a left click launches it gently. "
+        "During play, hold the left button on the left half of the window "
+        "for the left flipper, or on the right half for the right flipper.</li>"
+        "<li>Launch button: launches the waiting ball gently.</li>"
+        "<li>New Game button, or Ctrl+N: start again with three balls.</li>"
+        "<li>There is no pause in this game.</li>"
+        "</ul>");
+}

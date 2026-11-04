@@ -24,6 +24,8 @@ public:
     explicit CanastaView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    // How to play, as the hub's Help window shows it (GHUB-0016).
+    QString rulesText() const override;
     void activate() override;
     void deactivate() override;
     TurnLight turnLight() const override { return m_turn.value(); }

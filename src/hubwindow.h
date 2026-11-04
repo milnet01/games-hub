@@ -84,6 +84,8 @@ private:
     void openGame(int index);
     void showMenu();
     void setGameActions(GameView* view);
+    // Shows the open game's rules in the shared window.
+    void showRules();
     GameView* currentView() const;
     // One window size and position for the whole app (GHUB-0060), written on
     // the way out of every page and restored once, when the window first opens.
@@ -145,6 +147,8 @@ private:
     QAction* m_backAction = nullptr;
     QAction* m_soundAction = nullptr;
     QAction* m_legibilityAction = nullptr;
+    // Help -> How to play: on while a game with rules is open (GHUB-0016).
+    QAction* m_rulesAction = nullptr;
     QLabel* m_status = nullptr;
     QList<QAction*> m_gameActions;
     QList<Entry> m_entries;

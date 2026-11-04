@@ -24,6 +24,7 @@ public:
     explicit PyramidView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    QString rulesText() const override;
     double smallestCardWidth() const override { return cardWidth(); }
     void activate() override;
     // The flight timer is a QTimer, so leaving the game stops it (GHUB-0046).

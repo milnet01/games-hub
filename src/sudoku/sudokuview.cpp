@@ -192,6 +192,69 @@ void SudokuView::buildActions()
     }
 }
 
+// GHUB-0016. The rules as SudokuGrid enforces them and the controls as
+// mousePressEvent, keyPressEvent, enter and buildActions take them.
+QString SudokuView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Fill every empty square with a digit from 1 to 9. Each row, each "
+        "column and each box must end up holding every digit exactly once.</p>"
+
+        "<h3>How it plays</h3>"
+        "<p>The grid is 9 by 9 squares. It is split into nine boxes, each 3 by 3 "
+        "squares. Every other box is shaded so the boxes are easy to tell "
+        "apart.</p>"
+        "<p>Some digits are filled in at the start. They are printed in bold, and "
+        "they cannot be changed. Every puzzle has exactly one answer, so it can be "
+        "worked out step by step, with no guessing.</p>"
+        "<p>There are three levels: Easy, Medium and Hard. Easy starts with the "
+        "most digits filled in, Hard with the fewest.</p>"
+        "<ul>"
+        "<li>The square you have selected is framed. Its row, its column and its "
+        "box are lit up.</li>"
+        "<li>Every square holding the same digit as the selected square is lit up "
+        "too.</li>"
+        "<li>While Show Errors is on, a digit you wrote that repeats another digit "
+        "in its row, column or box is drawn in a different ink. This only spots "
+        "repeats. It does not tell you whether a digit matches the answer.</li>"
+        "<li><b>Pencil marks</b> are small notes of the digits that might fit a "
+        "square. A square can hold up to nine of them. Writing a real digit in the "
+        "square clears its notes.</li>"
+        "</ul>"
+        "<p>The puzzle is solved when every square holds the right digit. The "
+        "clock runs from the start of the puzzle. Your best time is kept for each "
+        "level.</p>"
+
+        "<h3>Controls</h3>"
+        "<p><b>With the mouse:</b></p>"
+        "<ul>"
+        "<li>Click a square to select it. Digits are typed on the keyboard; the "
+        "mouse only selects.</li>"
+        "</ul>"
+        "<p><b>With the keyboard:</b></p>"
+        "<ul>"
+        "<li>The arrow keys move the selection.</li>"
+        "<li>The keys 1 to 9 write that digit in the selected square. In pencil "
+        "mode they add that note, or take it away if it is already there.</li>"
+        "<li>Backspace, Delete or 0 empties the selected square. In pencil mode "
+        "they clear its notes.</li>"
+        "</ul>"
+        "<p><b>On the toolbar:</b></p>"
+        "<ul>"
+        "<li><b>New Puzzle</b> (Ctrl+N) makes a fresh puzzle at the same "
+        "level.</li>"
+        "<li><b>Restart</b> clears everything you wrote, notes too, and sets the "
+        "clock back to zero. The puzzle stays the same.</li>"
+        "<li><b>Pause</b> stops the clock and covers the grid. Press it again to "
+        "carry on.</li>"
+        "<li><b>Pencil</b> (P) turns pencil mode on or off.</li>"
+        "<li><b>Show Errors</b> turns the repeat warning on or off.</li>"
+        "<li><b>Easy</b>, <b>Medium</b> and <b>Hard</b> choose the level. Choosing "
+        "one makes a new puzzle straight away.</li>"
+        "</ul>");
+}
+
 qint64 SudokuView::elapsedMs() const
 {
     return m_elapsedMs + ((m_paused || m_suspended) ? 0 : m_clock.elapsed());

@@ -38,6 +38,8 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QSlider>
+#include <QTextBrowser>
+#include <QTextDocumentFragment>
 #include <QDataStream>
 #include <QDeadlineTimer>
 #include <QFile>
@@ -6654,6 +6656,55 @@ int main(int argc, char* argv[])
         Sound::instance().setVolume(wasVolume);
         Legibility::instance().setEnabled(wasLarge);
         donate::setAsksEnabled(wasAsking);
+    }
+
+    // ---- Every game explains itself (GHUB-0016) ----
+    //
+    // Asked of every registered game rather than a list, so a new game that
+    // ships without its rules fails here. Each text must carry the three parts
+    // the GameView contract names, found by their headings.
+    {
+        HubWindow rulesHub;
+        rulesHub.show();
+        pump(20);
+        QAction* rules = rulesHub.findChild<QAction*>(QStringLiteral("rulesAction"));
+        check(rules != nullptr, "rules: Help has a How to play entry");
+        if (rules != nullptr) {
+            check(!rules->isEnabled(), "rules: and it is off on the tile grid, with no game to explain");
+            QStringList missing;
+            for (const QString& game : rulesHub.gameNames()) {
+                rulesHub.openGameNamed(game);
+                pump(5);
+                QString text;
+                for (GameView* v : rulesHub.findChildren<GameView*>())
+                    if (v->isVisible())
+                        text = v->rulesText();
+                const QString plain = QTextDocumentFragment::fromHtml(text).toPlainText();
+                if (!rules->isEnabled() || plain.size() < 200
+                    || !text.contains(QStringLiteral("<h3>"))) {
+                    missing << game;
+                }
+            }
+            if (!missing.isEmpty())
+                std::printf("      no usable rules: %s\n", qPrintable(missing.join(QStringLiteral(", "))));
+            check(missing.isEmpty(), "rules: every game has its rules, with headings, and the entry is on");
+
+            rulesHub.openGameNamed(QStringLiteral("Reversi"));
+            pump(5);
+            bool shown = false;
+            QTimer::singleShot(0, &rulesHub, [&shown] {
+                auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                auto* body = dialog != nullptr ? dialog->findChild<QTextBrowser*>(QStringLiteral("rulesText"))
+                                               : nullptr;
+                shown = body != nullptr && !body->toPlainText().isEmpty();
+                if (dialog != nullptr)
+                    dialog->reject();
+            });
+            rules->trigger();
+            check(shown, "rules: the entry opens a window showing the open game's rules");
+        }
+        rulesHub.close();
+        pump(10);
     }
 
     // ---- The window fits beside your work (GHUB-0042) ----

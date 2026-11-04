@@ -3,6 +3,7 @@
 #include "donatedialog.h"
 #include "gameview.h"
 #include "legibility.h"
+#include "legiblefont.h"
 #include "preferencesdialog.h"
 #include "sound.h"
 #include "cards/card.h"
@@ -24,6 +25,9 @@
 
 #include <QApplication>
 #include <QButtonGroup>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QTextBrowser>
 #include <QCursor>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -934,6 +938,14 @@ void HubWindow::buildChrome()
     // The ellipsis is the standard promise that pressing it opens something
     // rather than doing something.
     auto* helpMenu = menuBar()->addMenu(tr("&Help"));
+    m_rulesAction = new QAction(tr("How to play…"), this);
+    m_rulesAction->setObjectName(QStringLiteral("rulesAction"));
+    m_rulesAction->setShortcut(QKeySequence::HelpContents);
+    m_rulesAction->setStatusTip(tr("The aim, the rules and the controls of the game on screen"));
+    m_rulesAction->setEnabled(false); // nothing to explain on the tile grid
+    connect(m_rulesAction, &QAction::triggered, this, &HubWindow::showRules);
+    helpMenu->addAction(m_rulesAction);
+    helpMenu->addSeparator();
     auto* donateAction = new QAction(tr("Support this project…"), this);
     donateAction->setObjectName(QStringLiteral("donateAction"));
     donateAction->setStatusTip(tr("Ways to support the collection"));
@@ -1440,11 +1452,49 @@ bool HubWindow::openGameNamed(const QString& name)
     return false;
 }
 
+void HubWindow::showRules()
+{
+    GameView* view = currentView();
+    if (view == nullptr)
+        return;
+    const QString rules = view->rulesText();
+    if (rules.isEmpty())
+        return;
+
+    QString label = m_page;
+    for (const Entry& e : std::as_const(m_entries))
+        if (e.name == m_page)
+            label = e.label;
+
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("rulesDialog"));
+    dialog.setWindowTitle(tr("How to play %1").arg(label));
+    // Large play makes the words larger here too: this is reading, and the
+    // owner reads slowly.
+    if (Legibility::instance().enabled()) {
+        QFont f = dialog.font();
+        growByPoints(f, 3.0);
+        dialog.setFont(f);
+    }
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* text = new QTextBrowser(&dialog);
+    text->setObjectName(QStringLiteral("rulesText"));
+    text->setOpenExternalLinks(false);
+    text->setHtml(rules);
+    layout->addWidget(text);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.resize(Legibility::instance().enabled() ? QSize(680, 720) : QSize(560, 620));
+    dialog.exec();
+}
+
 void HubWindow::setGameActions(GameView* view)
 {
     for (QAction* a : m_gameActions)
         m_toolBar->removeAction(a);
     m_gameActions.clear();
+    m_rulesAction->setEnabled(view != nullptr && !view->rulesText().isEmpty());
 
     if (!view)
         return;

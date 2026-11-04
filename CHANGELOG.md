@@ -10,6 +10,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ## [Unreleased]
 
+### Added
+
+- **Every game explains how to play it** (GHUB-0016)
+  Help → How to play, or F1, opens the rules of the game on screen:
+  what you are aiming for, how it plays here, and which keys and clicks
+  do what. Large play makes the words larger there too.
+
 ## [1.3.0] - 2026-11-04
 
 **Theme:** Getting around the app

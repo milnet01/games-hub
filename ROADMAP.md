@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=222 -->
+<!-- ants-roadmap-id-high-water: GHUB=233 -->
 
 # Games Hub — Roadmap
 
@@ -8831,7 +8831,7 @@ on 2026-09-24.
 
 The in-app rules come first, so every new game ships with its instructions.
 
-- 📋 [GHUB-0016] **Every game explains its own rules, inside the app.**
+- ✅ [GHUB-0016] **Every game explains its own rules, inside the app.**
   Fourteen
   games ship with no instructions anywhere — a player who has never met Reversi
   or Canasta has to leave the program to learn it. Give `GameView` a virtual
@@ -8845,6 +8845,12 @@ The in-app rules come first, so every new game ships with its instructions.
   most of it is writing rather than code.
   Layman: A Rules button that tells you how to play whichever game is on
   screen.
+  Shipped 2026-11-04. GameView::rulesText() (rich text: aim, how it
+  plays here, controls) on all fourteen games; Help -> How to play (F1)
+  shows it in one shared window, larger under large play. The UI test
+  fails any registered game with no rules or no headings. Text written
+  fresh from each game's own code. Defects noticed while reading the
+  code are filed as GHUB-0223..0233.
   Kind: doc.
   Source: user-request-2026-08-10.
 
@@ -9613,6 +9619,113 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** One Reversi test failed now and then on a busy computer, which stopped the 1.3.0 downloads being published.
   Kind: test.
   Source: in-session-2026-11-04.
+
+- 📋 [GHUB-0223] **Sudoku cannot be played with the mouse alone.**
+  Reported by the GHUB-0016 rules writer from reading the code:
+  SudokuView::mousePressEvent only selects a square and there is no
+  on-screen digit pad, so every digit needs the keyboard. Every other
+  game here plays with either. Verify by playing before designing a
+  fix (a row of digit buttons under the grid is the obvious shape).
+  **Layman:** In Sudoku the mouse only picks a square; there is no way to put a number in without the keyboard.
+  Kind: accessibility.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0224] **Sudoku's pencil notes can change unseen under a written digit.**
+  Reported from reading the code, unverified: in pencil mode, typing
+  on a square holding your digit edits its notes, but paintEvent skips
+  notes when a digit is present, and set(..., 0) keeps notes on
+  purpose, so they reappear when the digit is cleared.
+  **Layman:** In Sudoku, notes typed on a square that already holds a number are hidden, then reappear later.
+  Kind: fix.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0225] **Minesweeper's clock can start on a click that dug nothing.**
+  Reported from reading the code, unverified: digAt starts the clock
+  before reveal(), so a left click on a flagged square before any real
+  dig starts timing without laying the mines.
+  **Layman:** Clicking a flagged square before the first real dig starts the timer early.
+  Kind: fix.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0226] **P means Pause in Minesweeper and Pencil in Sudoku, whose Pause has no key.**
+  A consistency question, not a fault. Found while writing the
+  controls half of GHUB-0016's rules texts. Changing a shortcut is a
+  breaking surface under docs/standards/versioning-overrides.md, so
+  this is a decision before it is a change.
+  **Layman:** The same key does different things in two games, and Sudoku's pause has no key at all.
+  Kind: ux.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0227] **Chess, Reversi and Draughts break ties with std::random_device, out of --seed's reach.**
+  Reported from reading the code, unverified: the three board-game
+  AIs break ties between equal moves with std::random_device rather
+  than dealSeed(), which .claude/rules/shots.md says new randomness
+  should use. Matters for any shot or check that pins --seed and plays
+  the computer's turns.
+  **Layman:** The computer's choice between equally good moves ignores the seed, so two runs with one seed can differ.
+  Kind: test.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0228] **Klondike's score can be raised without limit by moving one card back and forth.**
+  Reported from reading the code, unverified: dropOnTableau gives +5
+  for a card taken from a foundation back to a column, and returning it
+  scores +10 again, so the score -- and the stored best -- can be
+  pumped. Check how standard scoring treats this and whether the
+  stored best needs a reset once fixed.
+  **Layman:** In Solitaire you can earn points forever by moving a card down from a finished pile and back up.
+  Kind: fix.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0229] **Spider's suit-count switch redeals without settling the old deal.**
+  Reported from reading the code, unverified: the 1 Suit / 2 Suits / 4
+  Suits handler in SpiderView::buildActions redeals itself instead of
+  through dealTable(), so it skips settleForChange(), never resets
+  m_resumed, and plays no deal animation. Look at what the player sees
+  before changing it.
+  **Layman:** Changing Spider's number of suits mid-deal may leave cards flying from the old deal.
+  Kind: fix.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0230] **Snake's Pause button gets out of step with the game.**
+  Reported from reading the code, unverified: New Game does not untick
+  Pause, so after pause then New Game the button stays ticked while the
+  snake runs and the next Space only unticks it. activate() also
+  restarts a paused game on return to Snake with Pause still ticked.
+  Arrow keys pressed while paused are queued (up to two) and run on
+  resume, which may surprise a slow reader.
+  **Layman:** In Snake, after pausing and starting a new game, the Pause button stays pressed while the snake runs.
+  Kind: fix.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0231] **2048 records the best score at the stuck moment, before an Undo can change it.**
+  Reported from reading the code, unverified: undo() clears
+  m_finished, but the best score was recorded when the board stuck and
+  the stuck box shows again. Decide whether a best should wait for a
+  game that can no longer be undone.
+  **Layman:** In 2048, undoing after the board is stuck works, but the best score was already saved and the stuck box comes back.
+  Kind: fix.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0232] **Pinball's small control slips: a silent Launch button, and releasing the mouse drops both flippers.**
+  Reported from reading the code, unverified: the Launch toolbar
+  button plays no launch sound; a mouse release drops both flippers,
+  even one held by a key; both Shift keys work the left flipper.
+  **Layman:** Small Pinball glitches: the Launch button makes no sound, and letting go of the mouse drops a flipper held by a key.
+  Kind: fix.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
+
+- 📋 [GHUB-0233] **Canasta judges going out concealed per player, not per team.**
+  Found while writing GHUB-0016's rules: concealed going out is judged
+  by m_hasMelded[seat], per player, and still has to meet the opening
+  minimum. The rules text describes it as coded.
+  Waiting-on: user (does the family count a concealed going-out per
+  player, as now, or only when neither partner has laid anything down
+  that hand?, 2026-11-04). Recommendation: keep per player for Classic,
+  which matches the common printed rule, and add a House flag only if
+  the family plays it per team.
+  **Layman:** Canasta's bonus for going out in one go checks only your own melds, not your partner's; the family may score it differently.
+  Kind: investigate.
+  Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
 ## P01 — Shipped
 

@@ -77,6 +77,82 @@ void KlondikeView::buildActions()
     }
 }
 
+// GHUB-0016. The rules as KlondikeTable enforces them and the controls as the
+// mouse and key handlers below take them.
+QString KlondikeView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Move all the cards onto the four foundations. A foundation is a pile at "
+        "the top right that is built up in one suit, from the Ace to the King.</p>"
+
+        "<h3>How it plays</h3>"
+        "<p>The cards are dealt into seven columns, called the tableau. The first "
+        "column has one card and each column after it has one more. Only the last "
+        "card of each column is turned face up.</p>"
+        "<p>The rest of the pack is the stock. It sits face down at the top left. "
+        "Next to it is the waste, where cards from the stock are turned face up.</p>"
+        "<ul>"
+        "<li>In a column, a card goes on a card one rank higher and of the other "
+        "colour. A red six goes on a black seven.</li>"
+        "<li>You can move a single face-up card, or a face-up card together with "
+        "every card on top of it.</li>"
+        "<li>An empty column takes only a King, or a run that starts with a King.</li>"
+        "<li>When you uncover a face-down card in a column, it turns face up by "
+        "itself.</li>"
+        "<li>A foundation starts with an Ace. After that it takes the next card of "
+        "the same suit. Cards go to a foundation one at a time.</li>"
+        "<li>The top card of the waste can go to a column or a foundation.</li>"
+        "<li>The top card of a foundation can be taken back down to a column if you "
+        "need it there.</li>"
+        "</ul>"
+        "<p>Each turn of the stock moves one card, or three, to the waste. You choose "
+        "which with Draw 1 or Draw 3. When you play from a Draw 3 turn, only the top "
+        "card of the waste can be used.</p>"
+        "<p>When the stock is empty, the next turn puts the whole waste back as the "
+        "stock, in the same order. You can go through the stock as many times as "
+        "you like.</p>"
+        "<p>You win when all fifty-two cards are on the foundations.</p>"
+        "<p>The score goes up by ten for each card put on a foundation, by five for "
+        "each move into a column, and by five for each card turned face up. Your "
+        "best score is kept.</p>"
+
+        "<h3>Controls</h3>"
+        "<p><b>With the mouse:</b></p>"
+        "<ul>"
+        "<li>Click the stock to turn cards onto the waste. Click it when it is empty "
+        "to turn the waste back over.</li>"
+        "<li>Drag a card to move it. Dragging a card in a column takes the cards on "
+        "top of it too. You can let go anywhere along the column you want.</li>"
+        "<li>Or click a card to pick it up, then click where it should go. If it "
+        "cannot go there, you keep holding it. Click its own pile, or the empty "
+        "table, to put it back.</li>"
+        "<li>Double-click the top card of a pile to send it to a foundation.</li>"
+        "</ul>"
+        "<p><b>With the keyboard:</b></p>"
+        "<ul>"
+        "<li>When you use the keys, a gold frame shows where you are. It starts on "
+        "the stock.</li>"
+        "<li>Left and Right arrows move between piles. The top row is the stock, the "
+        "waste and the four foundations. The lower row is the seven columns.</li>"
+        "<li>Down arrow moves from the top row into the column below. Up and Down "
+        "arrows move along the face-up cards of a column. Up arrow from the highest "
+        "of them goes to the top row.</li>"
+        "<li>Space or Enter on the stock turns cards. On a card, it picks that card "
+        "up, with any cards on top of it. Move to another pile and press Space or "
+        "Enter again to put the cards down.</li>"
+        "<li>Escape puts held cards back where they came from.</li>"
+        "</ul>"
+        "<p><b>On the toolbar:</b></p>"
+        "<ul>"
+        "<li>New Deal starts a fresh game. Ctrl+N does the same.</li>"
+        "<li>Undo takes back your last move. Ctrl+Z does the same. You can undo many "
+        "moves in a row.</li>"
+        "<li>Draw 1 and Draw 3 choose how many cards each turn of the stock shows. "
+        "Changing it starts a new deal.</li>"
+        "</ul>");
+}
+
 void KlondikeView::newGame()
 {
     dealTable();

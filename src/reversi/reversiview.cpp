@@ -112,6 +112,70 @@ void ReversiView::buildActions()
     m_actions.append(hints);
 }
 
+// GHUB-0016. The rules as Board enforces them and the controls as
+// mousePressEvent, keyPressEvent and buildActions take them.
+QString ReversiView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Have more discs of your colour on the board than the computer when the "
+        "game ends.</p>"
+
+        "<h3>How it plays</h3>"
+        "<p>The board is 8 by 8 squares. You play Black and the computer plays "
+        "White. Black always moves first.</p>"
+        "<p>The game starts with four discs in the middle, two of each colour, "
+        "standing corner to corner.</p>"
+        "<p>On your turn you put one disc on an empty square. The square has to "
+        "trap at least one of the computer's discs, or you cannot play there.</p>"
+        "<p>To trap means this. Your new disc and one of your old discs sit at the "
+        "two ends of a straight row of White discs, with no gap. The row can run "
+        "across, up and down, or on a slant.</p>"
+        "<ul>"
+        "<li>Every trapped disc turns over and becomes yours.</li>"
+        "<li>One disc can trap rows in several directions at once. All of them "
+        "turn over.</li>"
+        "<li>The computer plays by the same rule, and turns your discs to "
+        "White.</li>"
+        "</ul>"
+        "<p>If you have no square that traps anything, your turn is passed and the "
+        "computer moves again. The same happens to the computer. A message says "
+        "who passed.</p>"
+        "<p>The game ends when neither side can move, which is usually when the "
+        "board is full. Whoever has more discs wins. The same number each is a "
+        "draw.</p>"
+        "<p>The computer has three strengths: Easy, Medium and Hard. A stronger "
+        "computer thinks further ahead. When you win, your disc count is kept as "
+        "your best at that strength.</p>"
+
+        "<h3>Controls</h3>"
+        "<p><b>With the mouse:</b></p>"
+        "<ul>"
+        "<li>Click an empty square to put a disc there. A square where you may "
+        "not play does nothing.</li>"
+        "<li>While Hints is on, a small dot marks every square where you may "
+        "play.</li>"
+        "<li>A ring marks the last disc that was put down, so you can see the "
+        "computer's reply.</li>"
+        "</ul>"
+        "<p><b>With the keyboard:</b></p>"
+        "<ul>"
+        "<li>The arrow keys move a frame from square to square. The frame shows "
+        "once you press a key, and hides again when you click.</li>"
+        "<li>Space or Enter puts a disc on the square inside the frame.</li>"
+        "</ul>"
+        "<p><b>On the toolbar:</b></p>"
+        "<ul>"
+        "<li><b>New Game</b> (Ctrl+N) starts again from the opening four "
+        "discs.</li>"
+        "<li><b>Undo</b> (Ctrl+Z) takes back your last move and the computer's "
+        "reply to it.</li>"
+        "<li><b>Easy</b>, <b>Medium</b> and <b>Hard</b> set the computer's "
+        "strength. You can change it in the middle of a game.</li>"
+        "<li><b>Hints</b> turns the dots on or off.</li>"
+        "</ul>");
+}
+
 void ReversiView::deactivate()
 {
     // An answer for a board the hub has left must not place a disc on it.

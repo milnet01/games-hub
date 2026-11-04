@@ -98,6 +98,76 @@ void SpiderView::buildActions()
     }
 }
 
+// GHUB-0016. The rules as SpiderTable enforces them and the controls as the
+// mouse and key handlers below take them.
+QString SpiderView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Build eight full runs, each from King down to Ace in one suit. A finished "
+        "run leaves the table by itself. Clear all eight to win.</p>"
+
+        "<h3>How it plays</h3>"
+        "<p>Spider uses two packs of cards. They are dealt into ten columns, called "
+        "the tableau. The first four columns get six cards and the rest get five. "
+        "Only the last card of each column is face up.</p>"
+        "<p>The cards left over are the stock. It sits face down at the bottom "
+        "right. It holds five more rows of ten cards.</p>"
+        "<p>You choose how many suits are in play with 1 Suit, 2 Suits or 4 Suits. "
+        "There are always two full packs of cards. With one suit every card is a "
+        "spade. With two suits they are spades and hearts. With four suits all the "
+        "suits appear. Fewer suits make an easier game.</p>"
+        "<ul>"
+        "<li>A card can go on any card one rank higher, whatever its suit. A seven "
+        "goes on any eight.</li>"
+        "<li>Cards only move together when they are in one suit and run down in "
+        "order. A seven, six and five of hearts can move as one. If the six were a "
+        "spade, only the five could move.</li>"
+        "<li>Any card, or any run that can move, may go into an empty column.</li>"
+        "<li>When you uncover a face-down card, it turns face up by itself.</li>"
+        "<li>When a column ends in a full run from King to Ace in one suit, that run "
+        "is taken off the table.</li>"
+        "<li>Dealing from the stock puts one new face-up card on the end of every "
+        "column. You can only deal when no column is empty.</li>"
+        "</ul>"
+        "<p>The game counts your moves. Fewer is better. Your best is kept for each "
+        "number of suits.</p>"
+
+        "<h3>Controls</h3>"
+        "<p><b>With the mouse:</b></p>"
+        "<ul>"
+        "<li>Drag a card to move it. Dragging a card takes the cards on top of it "
+        "too. You can let go anywhere along the column you want.</li>"
+        "<li>Or click a card to pick it up, then click the column it should go to. "
+        "If it cannot go there, you keep holding it. Click its own column, or the "
+        "empty table, to put it back.</li>"
+        "<li>Click the stock to deal a new row.</li>"
+        "</ul>"
+        "<p><b>With the keyboard:</b></p>"
+        "<ul>"
+        "<li>When you use the keys, a gold frame shows where you are.</li>"
+        "<li>Left and Right arrows move between the columns. One step right of the "
+        "last column is the stock.</li>"
+        "<li>Up and Down arrows move along the cards at the end of a column that can "
+        "move together.</li>"
+        "<li>Space or Enter on a card picks it up, with the cards on top of it. Move "
+        "to another column and press Space or Enter again to put them down.</li>"
+        "<li>Space or Enter on the stock deals a new row.</li>"
+        "<li>Escape puts held cards back where they came from.</li>"
+        "</ul>"
+        "<p><b>On the toolbar:</b></p>"
+        "<ul>"
+        "<li>New Deal starts a fresh game with the same number of suits. Ctrl+N does "
+        "the same.</li>"
+        "<li>Undo takes back your last move or deal. Ctrl+Z does the same. You can "
+        "undo many moves in a row.</li>"
+        "<li>Deal Row deals a new row from the stock, as a click on the stock "
+        "does.</li>"
+        "<li>1 Suit, 2 Suits and 4 Suits choose how many suits are in play. Choosing "
+        "one starts a new deal straight away.</li>"
+        "</ul>");
+}
+
 void SpiderView::newGame()
 {
     dealTable();

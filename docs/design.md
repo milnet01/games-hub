@@ -119,6 +119,14 @@ has lulls where every remaining card is counting down its delay, so two
 matching renders mean nothing. That mistake passed here every time and
 reddened both CI legs.
 
+**Every game explains itself** (GHUB-0016). `rulesText()` returns the
+game's aim, its rules as this code plays them, and its controls, as rich text
+under `<h3>` headings. The hub shows it in one shared window from Help → How
+to play (F1), so every game's rules look the same. The text lives with the
+game's view, so a new game's rules are written beside its code, and the UI
+test fails any registered game whose text is missing or has no headings. The
+words are written fresh: rule text is exactly what a rulebook's author owns.
+
 **Whose turn it is is a LIGHT, not a sentence** (GHUB-0063). `turnLight()`
 answers whose seat is lit, how far its light has come up, and whose light is
 still going out behind it; the default is "nobody", which is right for the

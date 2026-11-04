@@ -114,6 +114,84 @@ void HeartsView::buildActions()
     m_actions.append(m_nextHandAction);
 }
 
+// GHUB-0016. The rules as HeartsEngine enforces them, what its computer
+// players do, and the controls as the mouse and key handlers below take them.
+QString HeartsView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Take as few points as you can. Points come from hearts and from the "
+        "Queen of spades. When the game ends, the player with the lowest score "
+        "wins.</p>"
+
+        "<h3>How it plays</h3>"
+        "<p>There are four players. You sit at the bottom. The computer plays West "
+        "on your left, North across from you, and East on your right. Each player "
+        "gets thirteen cards.</p>"
+        "<p><b>Passing.</b> Before each hand, everyone passes three cards to another "
+        "player. The direction changes every hand. First you pass left, to West. "
+        "Then right, to East. Then across, to North. On the fourth hand nobody "
+        "passes. Then it starts again.</p>"
+        "<p><b>Tricks.</b> A trick is one round where each player puts down one "
+        "card. The first card is the lead. Everyone else must play a card of the "
+        "same suit if they have one. If they have none, they may play any card. "
+        "The highest card of the suit that was led wins the trick. Aces are high. "
+        "The winner takes the four cards and leads the next trick.</p>"
+        "<ul>"
+        "<li>Whoever holds the two of clubs leads it to start each hand.</li>"
+        "<li>On that first trick nobody may play a heart or the Queen of spades, "
+        "unless they hold nothing else.</li>"
+        "<li>You may not lead a heart until hearts are broken. Hearts are broken "
+        "once a heart, or the Queen of spades, has been played. If you hold only "
+        "hearts, you may lead one anyway.</li>"
+        "</ul>"
+        "<p><b>Scoring.</b> At the end of a hand, each heart you took is one point. "
+        "The Queen of spades is thirteen points. There are twenty-six points in "
+        "every hand.</p>"
+        "<p>If one player takes all twenty-six, that is called shooting the moon. "
+        "That player scores nothing for the hand, and every other player scores "
+        "twenty-six.</p>"
+        "<p><b>The end.</b> The game ends after a hand in which anyone reaches one "
+        "hundred points or more. The lowest total wins. Players can tie. Your best "
+        "winning score is kept, and lower is better.</p>"
+        "<p><b>The computer players.</b> When passing, they get rid of the Queen of "
+        "spades, the King and Ace of spades, and high hearts first. When they lead, "
+        "they play their lowest card, keeping clear of points. When they follow, "
+        "they play the highest card that still loses to the card that is winning. "
+        "If they cannot, they play their lowest card. The one exception is when "
+        "they play last to a trick with no points in it: then they play their "
+        "highest card. When they have none of the suit led, they throw away the "
+        "Queen of spades first, then high spades, then hearts.</p>"
+
+        "<h3>Controls</h3>"
+        "<p><b>With the mouse:</b></p>"
+        "<ul>"
+        "<li>When passing, click a card to choose it. It rises out of your hand. "
+        "Click it again to change your mind. When three are chosen, press Pass 3 "
+        "Cards.</li>"
+        "<li>When playing, click a card to play it. On your turn, cards you may not "
+        "play are dimmed. If you click one, the table says why it cannot go.</li>"
+        "</ul>"
+        "<p><b>With the keyboard:</b></p>"
+        "<ul>"
+        "<li>When you use the keys, a gold frame shows which card in your hand you "
+        "are on. Left and Right arrows move it.</li>"
+        "<li>When passing, Space chooses or unchooses the card. Enter passes the "
+        "three cards. Escape clears all your choices.</li>"
+        "<li>When playing, Space or Enter plays the card.</li>"
+        "</ul>"
+        "<p><b>On the toolbar:</b></p>"
+        "<ul>"
+        "<li>New Game starts a whole new game, with every score back at zero. Ctrl+N "
+        "does the same.</li>"
+        "<li>Pass 3 Cards sends your three chosen cards. It only works once three "
+        "are chosen.</li>"
+        "<li>Next Hand deals the next hand once a hand is over. The box that shows "
+        "the scores has a Next Hand button too.</li>"
+        "</ul>"
+        "<p>Hearts has no Undo. A card you play stays played.</p>");
+}
+
 void HeartsView::newGame()
 {
     dealTable();

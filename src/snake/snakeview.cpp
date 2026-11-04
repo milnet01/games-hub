@@ -260,3 +260,42 @@ void SnakeView::keyPressEvent(QKeyEvent* event)
         refresh();
     }
 }
+
+// How to play (GHUB-0016). Written for this collection, from what this file and
+// snakeboard.cpp actually do: the scoring is SnakeBoard::kFoodScore, the speed-up
+// is step(), and the keys are keyPressEvent() and buildActions().
+QString SnakeView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Steer the snake to the red apples. Each one makes it longer. "
+        "Keep going for as long as you can without crashing.</p>"
+
+        "<h3>How it plays</h3>"
+        "<ul>"
+        "<li>The snake lives on a grid with a wall all round it.</li>"
+        "<li>It waits at the start. It sets off when you press a direction key.</li>"
+        "<li>Once moving, it never stops. You only choose which way it turns.</li>"
+        "<li>It cannot turn straight back on itself. That key is ignored.</li>"
+        "<li>Each apple is worth 10 points. The snake grows by one square, "
+        "and a new apple appears in an empty square.</li>"
+        "<li>Each apple also makes the snake a little faster, "
+        "up to a top speed.</li>"
+        "<li>The game ends when the head hits the wall or the snake's own body. "
+        "The square the tail is just leaving is safe to move into.</li>"
+        "<li>Your best score is kept. The end of each game shows your score "
+        "and your best.</li>"
+        "<li>If you leave Snake for another game, it pauses. "
+        "It carries on when you come back.</li>"
+        "</ul>"
+
+        "<h3>Controls</h3>"
+        "<ul>"
+        "<li>Arrow keys, or W, A, S and D: turn the snake up, left, down and right.</li>"
+        "<li>You can press two turns quickly, one after the other, to take a tight corner. "
+        "The snake takes them in order.</li>"
+        "<li>Space, or the Pause button: pause, and press again to carry on.</li>"
+        "<li>New Game button, or Ctrl+N: start again.</li>"
+        "<li>The mouse is not used in this game.</li>"
+        "</ul>");
+}

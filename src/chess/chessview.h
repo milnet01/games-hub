@@ -20,6 +20,8 @@ public:
     explicit ChessView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    // How to play, as this game plays it (GHUB-0016).
+    QString rulesText() const override;
     // No cards on this board. Said out loud because the base now answers
     // -1 for "nobody answered", so a game that simply forgot is no longer
     // indistinguishable from one with nothing to measure.

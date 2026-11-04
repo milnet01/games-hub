@@ -24,6 +24,7 @@ public:
     explicit FreeCellView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    QString rulesText() const override;
     double smallestCardWidth() const override { return cardWidth(); }
     void activate() override;
     // A game that owns a QTimer overrides this — structural, not observed

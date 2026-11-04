@@ -49,6 +49,77 @@ void FreeCellView::buildActions()
     m_actions.append(m_undoAction);
 }
 
+// GHUB-0016. The rules as FreeCellTable enforces them and the controls as the
+// mouse and key handlers below take them.
+QString FreeCellView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Move all the cards onto the four foundations. A foundation is a pile at "
+        "the top right that is built up in one suit, from the Ace to the King.</p>"
+
+        "<h3>How it plays</h3>"
+        "<p>The whole pack is dealt face up into eight columns, called the tableau. "
+        "Nothing is hidden, so you can plan every move. There is no stock.</p>"
+        "<p>At the top left are four free cells. Each free cell can hold one card "
+        "while you make room.</p>"
+        "<ul>"
+        "<li>In a column, a card goes on a card one rank higher and of the other "
+        "colour. A red six goes on a black seven.</li>"
+        "<li>Any card can go into an empty free cell or an empty column.</li>"
+        "<li>A foundation starts with an Ace. After that it takes the next card of "
+        "the same suit.</li>"
+        "<li>The top card of a foundation can be taken back down if you need "
+        "it.</li>"
+        "</ul>"
+        "<p><b>Moving several cards at once.</b> You can move a run of cards from the "
+        "end of a column when they go down in order and change colour each time. "
+        "The game moves them for you through the free space on the table. How many "
+        "you can move depends on that space:</p>"
+        "<ul>"
+        "<li>Start with one card, plus one for each empty free cell.</li>"
+        "<li>Double that for each empty column.</li>"
+        "<li>When the run is going into an empty column, that column does not "
+        "count.</li>"
+        "</ul>"
+        "<p>For example, with two empty free cells and one empty column you can move "
+        "six cards onto another column. If a run is too long, the game tells you how "
+        "many cards would fit.</p>"
+        "<p>You win when all fifty-two cards are on the foundations. The game counts "
+        "your moves. Fewer is better, and your best is kept.</p>"
+
+        "<h3>Controls</h3>"
+        "<p><b>With the mouse:</b></p>"
+        "<ul>"
+        "<li>Drag a card to move it. Dragging a card in a column takes the cards on "
+        "top of it too. You can let go anywhere along the column you want.</li>"
+        "<li>Or click a card to pick it up, then click where it should go. If it "
+        "cannot go there, you keep holding it. Click its own pile, or the empty "
+        "table, to put it back.</li>"
+        "<li>Double-click the last card of a column, or a card in a free cell, to "
+        "send it to a foundation.</li>"
+        "</ul>"
+        "<p><b>With the keyboard:</b></p>"
+        "<ul>"
+        "<li>When you use the keys, a gold frame shows where you are.</li>"
+        "<li>Left and Right arrows move between piles. The top row is the four free "
+        "cells and then the four foundations. The lower row is the eight "
+        "columns.</li>"
+        "<li>Down arrow moves from the top row into the column below. Up and Down "
+        "arrows move along the cards at the end of a column that can move together. "
+        "Up arrow from the highest of them goes to the top row.</li>"
+        "<li>Space or Enter on a card picks it up, with the cards on top of it. Move "
+        "to another pile and press Space or Enter again to put them down.</li>"
+        "<li>Escape puts held cards back where they came from.</li>"
+        "</ul>"
+        "<p><b>On the toolbar:</b></p>"
+        "<ul>"
+        "<li>New Deal starts a fresh game. Ctrl+N does the same.</li>"
+        "<li>Undo takes back your last move. Ctrl+Z does the same. You can undo many "
+        "moves in a row.</li>"
+        "</ul>");
+}
+
 void FreeCellView::newGame()
 {
     dealTable();

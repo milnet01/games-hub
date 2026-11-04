@@ -365,3 +365,42 @@ bool Twenty48View::restoreState(const QByteArray& blob)
     refresh();
     return true;
 }
+
+// How to play (GHUB-0016). Written for this collection, from what this file and
+// twenty48board.cpp actually do: merging and scoring are Twenty48Board::slide(),
+// the new tile is spawn(), the end is canMove(), and the keys are
+// keyPressEvent() and buildActions().
+QString Twenty48View::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Slide numbered tiles together to build bigger numbers. "
+        "Try to make a tile that reads 2048, then keep going for a higher score.</p>"
+
+        "<h3>How it plays</h3>"
+        "<ul>"
+        "<li>The board is a square of sixteen spaces. It starts with two tiles.</li>"
+        "<li>Each move pushes every tile as far as it will go in one direction.</li>"
+        "<li>Two tiles with the same number that meet join into one tile "
+        "showing their sum. Two 8s make a 16.</li>"
+        "<li>A tile joins only once in a move. Three equal tiles in a row "
+        "make one bigger tile and leave one as it was.</li>"
+        "<li>After each move, a new tile appears in an empty space. "
+        "It is usually a 2, and now and then a 4.</li>"
+        "<li>If nothing can move that way, nothing happens and no new tile appears.</li>"
+        "<li>Every join adds the new tile's number to your score.</li>"
+        "<li>Making 2048 does not end the game. You can carry on playing.</li>"
+        "<li>The game ends when every space is full and no two touching tiles match.</li>"
+        "<li>Your best score is kept. An unfinished game is kept too, "
+        "and comes back when you return.</li>"
+        "</ul>"
+
+        "<h3>Controls</h3>"
+        "<ul>"
+        "<li>Arrow keys, or W, A, S and D: push the tiles up, left, down or right.</li>"
+        "<li>Undo button, or Ctrl+Z: take back your last move. "
+        "Only one move can be taken back.</li>"
+        "<li>New Game button, or Ctrl+N: start again.</li>"
+        "<li>The mouse is not used in this game.</li>"
+        "</ul>");
+}

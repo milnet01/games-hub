@@ -57,6 +57,75 @@ void PyramidView::buildActions()
     m_actions.append(m_undoAction);
 }
 
+// GHUB-0016. The rules as PyramidTable enforces them and the controls as the
+// mouse and key handlers below take them.
+QString PyramidView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Clear away every card in the pyramid. You do it by taking cards in "
+        "pairs that add up to thirteen.</p>"
+
+        "<h3>How it plays</h3>"
+        "<p>Twenty-eight cards are dealt face up in a pyramid of seven rows. Each "
+        "card rests on the two cards below it. The rest of the pack is the stock, "
+        "face down below the pyramid. Beside it is the waste, where cards from the "
+        "stock are turned face up.</p>"
+        "<p>Each card has a value. An Ace is one. Two to ten are the number on the "
+        "card. A Jack is eleven, a Queen twelve and a King thirteen. So these "
+        "pairs add up to thirteen:</p>"
+        "<ul>"
+        "<li>Ace and Queen</li>"
+        "<li>Two and Jack</li>"
+        "<li>Three and Ten</li>"
+        "<li>Four and Nine</li>"
+        "<li>Five and Eight</li>"
+        "<li>Six and Seven</li>"
+        "</ul>"
+        "<p>A King is thirteen on its own, so it is taken by itself.</p>"
+        "<ul>"
+        "<li>You can only take a pyramid card when nothing rests on it. That means "
+        "both cards below it have gone.</li>"
+        "<li>The top card of the waste can pair with a pyramid card.</li>"
+        "<li>Turning the stock moves one card at a time onto the waste.</li>"
+        "<li>When the stock is empty, you can turn the waste back over to make a new "
+        "stock. You may do this twice. After that, the stock cannot be used "
+        "again.</li>"
+        "</ul>"
+        "<p>You win when the pyramid is gone. Cards left in the stock or waste do not "
+        "matter. If you run out of moves, start a new deal.</p>"
+        "<p>The game counts the pairs you take. A King taken alone counts as one. "
+        "Your best is kept.</p>"
+
+        "<h3>Controls</h3>"
+        "<p><b>With the mouse:</b></p>"
+        "<ul>"
+        "<li>Click a card to pick it. It lights up. Then click the card that makes "
+        "thirteen with it, and both are taken.</li>"
+        "<li>If the two do not add up, the game tells you, and the second card "
+        "becomes the picked one.</li>"
+        "<li>Click a picked card again, or the empty table, to let it go.</li>"
+        "<li>Click a King to take it straight away.</li>"
+        "<li>Click the stock to turn a card onto the waste. When it is empty and "
+        "shows Redeal, click it to turn the waste back over.</li>"
+        "</ul>"
+        "<p><b>With the keyboard:</b></p>"
+        "<ul>"
+        "<li>When you use the keys, a gold frame shows where you are. It only stops "
+        "on cards that can be taken, the stock and the waste.</li>"
+        "<li>The arrow keys move the frame to the nearest such place in that "
+        "direction.</li>"
+        "<li>Space or Enter does what a click does there.</li>"
+        "<li>Escape lets go of the picked card.</li>"
+        "</ul>"
+        "<p><b>On the toolbar:</b></p>"
+        "<ul>"
+        "<li>New Deal starts a fresh game. Ctrl+N does the same.</li>"
+        "<li>Undo takes back your last move. Ctrl+Z does the same. You can undo many "
+        "moves in a row.</li>"
+        "</ul>");
+}
+
 void PyramidView::newGame()
 {
     dealTable();

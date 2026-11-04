@@ -114,6 +114,10 @@ turns the effects on and off. 🔍 reads **Normal** or **Large**: turn it on for
 larger, higher-contrast play. It is remembered, so you set it once. The label
 always says which way it is set now, not what clicking will do.
 
+**Help → How to play (F1) explains the game on screen**: what you are
+aiming for, the rules as this collection plays them, and which keys and clicks
+do what.
+
 **Settings → Preferences shows every app-wide setting in one window**: sound,
 its volume, large play, and whether the app asks now and then for support.
 Changes apply at once and are remembered. Each game's own rules stay in that

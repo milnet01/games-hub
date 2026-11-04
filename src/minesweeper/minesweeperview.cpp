@@ -121,6 +121,68 @@ void MinesweeperView::buildActions()
     }
 }
 
+// GHUB-0016. The rules as Minefield enforces them and the controls as
+// mousePressEvent, keyPressEvent and buildActions take them.
+QString MinesweeperView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Uncover every square that has no mine under it, without ever "
+        "uncovering a mine.</p>"
+
+        "<h3>How it plays</h3>"
+        "<p>The field is a grid of covered squares. Some of them hide mines. There "
+        "are three sizes:</p>"
+        "<ul>"
+        "<li><b>Beginner</b>: 9 by 9 squares, with 10 mines.</li>"
+        "<li><b>Intermediate</b>: 16 by 16 squares, with 40 mines.</li>"
+        "<li><b>Expert</b>: 30 squares wide and 16 high, with 99 mines.</li>"
+        "</ul>"
+        "<p>Uncovering a square is called digging. Your first dig is always safe. "
+        "The mines are only laid after it, and never on that square or the eight "
+        "around it, so the first dig opens a clear patch.</p>"
+        "<p>A dug square shows a number. The number says how many of the eight "
+        "squares touching it hide a mine. A square with no number has no mines "
+        "around it, so the game digs all its neighbours for you, and keeps "
+        "spreading.</p>"
+        "<p>Put a flag on a square you think hides a mine. A flagged square cannot "
+        "be dug until you take the flag off. The mines-left figure is the number "
+        "of mines minus the number of flags. It trusts your flags, so a wrong flag "
+        "makes it wrong too.</p>"
+        "<p>There is a shortcut. Dig on a number that already has that many flags "
+        "around it, and every other square around it is dug at once. If one of "
+        "those flags is wrong, this can uncover a mine.</p>"
+        "<p>You win when every safe square is dug. Dig a mine and you lose. All "
+        "the mines are then shown.</p>"
+        "<p>The clock starts with your first dig. Your best time is kept for each "
+        "size. The size you last chose is remembered next time.</p>"
+
+        "<h3>Controls</h3>"
+        "<p><b>With the mouse:</b></p>"
+        "<ul>"
+        "<li>Left-click a covered square to dig it.</li>"
+        "<li>Right-click a covered square to put a flag on it, or take the flag "
+        "off.</li>"
+        "<li>Left-click or middle-click a dug number to use the shortcut.</li>"
+        "</ul>"
+        "<p><b>With the keyboard:</b></p>"
+        "<ul>"
+        "<li>The arrow keys move a frame from square to square. The frame shows "
+        "once you press a key, and hides again when you click.</li>"
+        "<li>Space or Enter digs the square inside the frame. On a dug number it "
+        "uses the shortcut.</li>"
+        "<li>F puts a flag on the square inside the frame, or takes it off.</li>"
+        "</ul>"
+        "<p><b>On the toolbar:</b></p>"
+        "<ul>"
+        "<li><b>New Game</b> (Ctrl+N) starts a fresh field of the same size.</li>"
+        "<li><b>Pause</b> (P) stops the clock and covers the field. Press it again "
+        "to carry on.</li>"
+        "<li><b>Beginner</b>, <b>Intermediate</b> and <b>Expert</b> choose the "
+        "size. Choosing one starts a new field straight away.</li>"
+        "</ul>");
+}
+
 qint64 MinesweeperView::elapsedMs() const
 {
     if (!m_started)

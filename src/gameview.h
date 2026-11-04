@@ -109,6 +109,14 @@ public:
     // Actions the hub puts on the toolbar while this game is on screen.
     virtual QList<QAction*> gameActions() { return {}; }
 
+    // How to play this game (GHUB-0016), as rich text the hub shows in one
+    // shared window from Help -> How to play: the aim, the rules as THIS game
+    // plays them, and the controls, since the controls are where a player
+    // actually gets stuck. Written fresh for this collection, never copied
+    // from a rulebook. Every game overrides it; the UI test fails one that
+    // does not, so a new game cannot ship without its rules.
+    virtual QString rulesText() const { return {}; }
+
     // Called when the hub's legibility switch changes, and never at
     // construction: a game reads Legibility::instance().enabled() itself when
     // it builds. The default repaints, which is enough for a game that reads

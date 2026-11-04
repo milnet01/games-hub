@@ -18,6 +18,7 @@ public:
     explicit HeartsView(QWidget* parent = nullptr);
 
     QList<QAction*> gameActions() override { return m_actions; }
+    QString rulesText() const override;
     // The TRICK is the smallest face this game draws, at 0.9 of a hand card --
     // reporting the hand card overstated the floor by that factor.
     double smallestCardWidth() const override { return cardWidth() * 0.9; }

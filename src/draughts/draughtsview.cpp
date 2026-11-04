@@ -98,6 +98,82 @@ void DraughtsView::buildActions()
     }
 }
 
+// GHUB-0016. The rules as DraughtsBoard enforces them and the controls as
+// pressSquare, keyPressEvent and buildActions take them.
+QString DraughtsView::rulesText() const
+{
+    return tr(
+        "<h3>The aim</h3>"
+        "<p>Take all of the computer's pieces, or block them so the computer has "
+        "no move left. Either way you win.</p>"
+
+        "<h3>How it plays</h3>"
+        "<p>This is draughts as played in England, on a board of 8 by 8 squares. "
+        "Only the dark squares are used.</p>"
+        "<p>Each side starts with twelve pieces on the three rows nearest to it. "
+        "You play Red, at the bottom, and you move first. The computer plays "
+        "White.</p>"
+        "<p>A plain piece is called a <b>man</b>.</p>"
+        "<ul>"
+        "<li>A man steps one square on a slant, forward only, onto an empty "
+        "square.</li>"
+        "<li>To take a piece, jump over it on a slant. The piece must be right "
+        "next to yours, and the square just beyond it must be empty. The piece "
+        "you jump over leaves the board. A man only jumps forward.</li>"
+        "<li>If the piece that jumped can jump again from where it lands, it must "
+        "keep going. One move can take several pieces this way.</li>"
+        "<li>Taking is not optional. If any of your pieces can take, you must "
+        "take. When there is more than one way to take, you choose which. It does "
+        "not have to be the one that takes the most.</li>"
+        "</ul>"
+        "<p>A man that reaches the far side of the board is crowned and becomes a "
+        "<b>king</b>. A king moves and jumps like a man, one square at a time, but "
+        "backwards as well as forwards. If a man is crowned in the middle of a "
+        "run of jumps, the move stops there.</p>"
+        "<p>A side that has no move on its turn loses. That happens when all its "
+        "pieces are gone, or when every one of them is blocked.</p>"
+        "<p>The game is a draw after forty moves each in which no piece is taken "
+        "and no man moves, so that only kings have stepped about. A message warns "
+        "you as that count gets close.</p>"
+        "<p>The computer has three strengths: Easy, Medium and Hard. A stronger "
+        "computer thinks further ahead. The game counts how many games you have "
+        "won.</p>"
+
+        "<h3>Controls</h3>"
+        "<p><b>With the mouse:</b></p>"
+        "<ul>"
+        "<li>Click one of your pieces to pick it up. A dot marks each square it can "
+        "finish on.</li>"
+        "<li>Click a dot to make the move. For a run of jumps, click the square "
+        "where the run ends. The whole run is played for you.</li>"
+        "<li>Sometimes two runs end on the same square but take different pieces. "
+        "That square has a ring round it. Click it, and dots then mark the squares "
+        "where the runs split. Click the square you want to jump to next.</li>"
+        "<li>Click another of your pieces to pick that one up instead. Click "
+        "anywhere else to put the piece back down.</li>"
+        "<li>If the piece you click cannot move, a message says so, and says when "
+        "it is because another piece must take.</li>"
+        "<li>The last move is shaded, so you can follow the computer's reply.</li>"
+        "</ul>"
+        "<p><b>With the keyboard:</b></p>"
+        "<ul>"
+        "<li>The arrow keys move a frame from square to square. The frame shows "
+        "once you press a key, and hides again when you click.</li>"
+        "<li>Space or Enter does what a click does on the square inside the "
+        "frame.</li>"
+        "<li>Escape puts the piece you are holding back down, and drops a choice "
+        "between two runs.</li>"
+        "</ul>"
+        "<p><b>On the toolbar:</b></p>"
+        "<ul>"
+        "<li><b>New Game</b> (Ctrl+N) sets the pieces up again.</li>"
+        "<li><b>Undo</b> (Ctrl+Z) takes back your last move and the computer's "
+        "reply to it.</li>"
+        "<li><b>Easy</b>, <b>Medium</b> and <b>Hard</b> set the computer's "
+        "strength. You can change it in the middle of a game.</li>"
+        "</ul>");
+}
+
 void DraughtsView::newGame()
 {
     m_resumed = false;
