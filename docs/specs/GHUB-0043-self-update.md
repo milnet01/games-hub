@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # GHUB-0043 — Tell the player a new version exists, and install it on Linux
 
-**Status:** spec draft (2026-11-04). Not yet through `review-contract`.
+**Status:** accepted (2026-11-04).
 **Kind:** feature.
 **Source:** ROADMAP GHUB-0043 (user-request-2026-08-20; four decisions taken
 with the owner then, recorded in § 3).
@@ -97,12 +97,13 @@ screen.
   `gameshub`. Version parsing and comparison, reading the releases JSON,
   choosing assets, collecting notes, the once-a-day rule, `detectInstall()`
   and the Ed25519 verifier. It reads no settings and no environment: the
-  running version, the clock, the stored `update/*` values, the environment
-  variables and the key all arrive as arguments. `GAMESHUB_VERSION` is
-  defined only for the app and view targets, and a supplied clock is what
-  lets INV-7 be tested.
+  running version, the clock, the stored `update/*` values, the platform,
+  the environment variables, the running executable's path and the key all
+  arrive as arguments. `GAMESHUB_VERSION` is defined only for the app and
+  view targets, and a supplied clock is what lets INV-7 be tested.
 - Everything under `src/update/*` is in namespace `update`, which INV-2's
-  `nm` check counts.
+  `nm` check counts. The vendored verifier keeps its own `crypto_` names,
+  which the same check counts too.
 - `src/update/updater.*`, `src/update/updatedialog.*` — built only with
   `GAMESHUB_UPDATER`. The network calls, the first-run question, the offer
   dialog, the download, the swap and the relaunch.
@@ -156,10 +157,11 @@ inline constexpr std::array<unsigned char, 0> kUpdatePublicKey{};
 inline constexpr std::array<unsigned char, 32> kUpdatePublicKey{0x1a, 0x2b, /* … 32 bytes */};
 ```
 
-The workflow takes the `0x..` tokens on that line, in order. None means
-empty. Otherwise there must be 32, equal to the last 32 bytes of
-`openssl pkey -pubout -outform DER` run on the secret. The app treats
-`kUpdatePublicKey.empty()` as inert.
+No other line in the file names `kUpdatePublicKey`. The workflow takes the
+`0x..` tokens on that line, in order. None means empty. Otherwise there
+must be 32, equal to the last 32 bytes of `openssl pkey -pubout -outform
+DER` run on the secret. With the secret set, an empty key is a mismatch and
+fails the publish. The app treats `kUpdatePublicKey.empty()` as inert.
 
 ### 4.4 Which installs may update
 
@@ -186,8 +188,9 @@ Settings keys, all under `update/`:
 | `update/lastCheck` | when the last automatic check was **attempted**, ISO-8601 UTC |
 | `update/skipped` | a version the player chose to skip, e.g. `1.4.0` |
 
-- **The first launch with an updating install asks**, once the window is up:
-  check automatically, yes or no. No request leaves before the answer. The
+- **The first launch with an updating install asks**, in a modal dialog
+  once the window is up: check automatically, yes or no. Being modal, it
+  leaves the Help menu unreachable until it is answered. No request leaves before the answer. The
   answer is stored and can be changed in Preferences (GHUB-0068), where the
   switch joins the others.
 - **An automatic check runs only when `update/auto` is `true` and 24 hours
@@ -200,8 +203,11 @@ Settings keys, all under `update/`:
 - **The updater starts only when `main()` starts it**, after the command
   line is parsed, and never under `--shot`, where the hub is already not
   remembering (`HubWindow::setRemembering`). `HubWindow`'s constructor
-  starts nothing. The updater's network access is an interface passed in,
-  so a test builds an updater with a counting fake (INV-1). Every other
+  starts nothing. The updater is given its install kind, its key and its
+  network access, which `main()` fills from `detectInstall()`,
+  `kUpdatePublicKey` and the real network. So a test builds an updater as
+  an AppImage or Zip install, with a throwaway key and a counting fake
+  (INV-1, INV-4). Every other
   test builds none, so it makes no request and sees no first-run question.
 
 ### 4.6 The check
@@ -236,8 +242,7 @@ and offers three buttons:
 - **Skip this version** — stores `update/skipped`.
 
 The download-page button opens the release's `html_url` only if it is an
-`https://github.com/` address, the same refusal `DonateDialog` applies to its
-links.
+`https://github.com/` address.
 
 ### 4.8 Install on Linux
 
@@ -264,8 +269,8 @@ download page instead.
 
 - **INV-1** — **No request leaves the machine without consent.** An updating
   install makes no network request before `update/auto` has an answer, and
-  none automatically while it is `false`. Only Help → Check for updates
-  reaches the network then.
+  none automatically while it is `false`. While it is `false`, only Help →
+  Check for updates reaches the network.
   *Test:* `tests/uitest.cpp`, with the updater's network access replaced by a
   counting fake: a hub with `update/auto` absent, then `false`, makes zero
   requests. Answering yes makes one. Help → Check for updates with `false`
@@ -278,9 +283,11 @@ download page instead.
   without `GAMESHUB_UPDATER` contains nothing from `src/update/*` (§ 4.1). A
   build with it, but with an empty key or outside an AppImage on Linux,
   makes no request and shows no update menu entry or setting.
-  *Test:* the self-test checks `detectInstall()` against each row of § 4.4's
-  table, with the environment and key supplied by the test. On a default
-  build, `nm -C --defined-only build/gameshub | grep -c 'update::'` → `0`
+  *Test:* the self-test checks `detectInstall()` against every row of
+  § 4.4's table after the first, on both platforms' rows, with the platform,
+  environment, executable path and key supplied by the test. The first row
+  is the `nm` check's: on a default build,
+  `nm -C --defined-only build/gameshub | grep -c -e 'update::' -e 'crypto_'` → `0`
   (run 2026-11-04 on today's build; the same command counting `HubWindow::`
   is the control that it sees our symbols). CI's Linux leg runs it on its
   second, default tree (§ 4.1).
