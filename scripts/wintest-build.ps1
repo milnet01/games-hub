@@ -15,13 +15,23 @@
 # Build Tools, Qt 6.8.3 msvc2022_64 under C:\Qt, and CMake + Ninja under
 # C:\devtools. Every one of those is checked before anything is built, because a
 # missing piece otherwise surfaces as a confusing CMake error much later.
-# -Werror mirrors ci.yml's Windows matrix row, and wintest-ci.sh reads it out
-# of that workflow rather than either script restating it. Without it this
-# configured with the option OFF while CI configured it ON, so the box returned
-# green for a build the runner would have failed -- which is the exact drift
-# this file's header says it exists to prevent (GHUB-0185).
-param([string]$Src = 'C:\gameshub', [string]$Werror = 'ON')
+# -Defines is every -D flag on ci.yml's Configure line, with the Windows matrix
+# row filled in, as NAME=VALUE,NAME=VALUE. wintest-ci.sh reads it out of the
+# workflow; neither script restates it. A hand copy here drifted twice, each
+# time returning green for a build the runner would have built differently:
+# werror off (GHUB-0185), then the self-updater left out (GHUB-0235).
+param([string]$Src = 'C:\gameshub', [Parameter(Mandatory)][string]$Defines)
 $ErrorActionPreference = 'Stop'
+
+# The same shape wintest-ci.sh enforces. Checked again here because each value
+# is pasted into a batch file below, where a stray character would be a command.
+$flags = foreach ($d in $Defines.Split(',')) {
+    if ($d -notmatch '^[A-Za-z_][A-Za-z0-9_]*(:[A-Z]+)?=[A-Za-z0-9_.-]+$') {
+        Write-Error "not a NAME=VALUE CMake flag: '$d'"; exit 2
+    }
+    "-D$d"
+}
+$flags = $flags -join ' '
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { Write-Error "vswhere not found -- no Visual Studio installer on this box"; exit 2 }
@@ -54,7 +64,8 @@ set "PATH=$cmakeBin;$ninjaBin;$qt\bin;%PATH%"
 set "CMAKE_PREFIX_PATH=$qt"
 cd /d "$Src" || exit /b 1
 echo === Configure
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGAMESHUB_WERROR=$Werror -DGAMESHUB_UPDATER=ON || exit /b 1
+echo cmake -S . -B build -G Ninja $flags
+cmake -S . -B build -G Ninja $flags || exit /b 1
 echo === Build
 cmake --build build || exit /b 1
 echo === Test

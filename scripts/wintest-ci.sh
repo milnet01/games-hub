@@ -53,26 +53,57 @@ if ! git rev-parse --verify --quiet "$REF^{commit}" >/dev/null; then
 fi
 sha=$(git rev-parse --short "$REF")
 
-# Whether MSVC's warnings are fatal is ci.yml's answer, not this script's. Read
-# it out of the Windows matrix row rather than restating it: a second copy
-# drifts, and the drift is silent -- the box passes a build the runner fails.
-# GHUB-0185, which turned it on and found this script configuring it off.
-WERROR=$(python3 - <<'PY'
-import re, sys
-try:
-    body = open('.github/workflows/ci.yml', encoding='utf-8').read()
-except OSError:
-    sys.exit(1)
-row = re.search(r"- name:\s*Windows\b(.*?)(?=\n\s*- name:|\n\s{0,6}\S)", body, re.S)
-m = re.search(r"werror:\s*'?([A-Za-z]+)'?", row.group(1)) if row else None
-print(m.group(1) if m else '')
-PY
-)
-if [ -z "$WERROR" ]; then
-    echo "could not read the Windows leg's werror value out of .github/workflows/ci.yml" >&2
-    echo "That value decides whether this run means anything; fix the read rather than guessing." >&2
+# The CMake options are ci.yml's answer, not this script's. Read every -D flag
+# off the build job's Configure step, at $REF, with the Windows matrix row
+# filled in, rather than restating them: a second copy drifts, and the drift is
+# silent -- the box passes a build the runner fails. It drifted twice by hand:
+# GHUB-0185 (werror off here, on in CI) and GHUB-0235 (GHUB-0043's updater flag
+# missing here, so a green run never compiled the file it was run to check).
+#
+# Anything in that line this script cannot pass through faithfully REFUSES the
+# run: a word other than `cmake -S . -B build -G Ninja` and -D flags, a ${{ }}
+# the Windows row does not answer, or a value outside [A-Za-z0-9_.-]. The flags
+# travel as NAME=VALUE,NAME=VALUE without their -D, because PowerShell's -File
+# reads an argument starting with "-" as a parameter name; no value may hold a
+# comma, so the comma is a safe separator.
+# shellcheck disable=SC2016  # the Python must see ${{ literally
+DEFINES=$(git show "$REF:.github/workflows/ci.yml" | python3 -c '
+import re, shlex, sys, yaml
+def refuse(why):
+    sys.exit("ci.yml: " + why)
+build = yaml.safe_load(sys.stdin)["jobs"]["build"]
+rows = [r for r in build["strategy"]["matrix"]["include"] if r.get("name") == "Windows"]
+if len(rows) != 1:
+    refuse("expected one matrix row named Windows, found %d" % len(rows))
+steps = [s for s in build["steps"] if s.get("name") == "Configure"]
+if len(steps) != 1:
+    refuse("expected one build step named Configure, found %d" % len(steps))
+if steps[0].get("if") or steps[0].get("env"):
+    refuse("the Configure step has an if: or env:, which this script does not apply")
+def fill(m):
+    if m.group(1) not in rows[0]:
+        refuse("Configure reads matrix.%s, which the Windows row does not set" % m.group(1))
+    return str(rows[0][m.group(1)])
+line = re.sub(r"\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}", fill, steps[0]["run"])
+if "${{" in line:
+    refuse("Configure holds an expression this script cannot fill in: " + line.strip())
+words = shlex.split(line)
+if words[:7] != ["cmake", "-S", ".", "-B", "build", "-G", "Ninja"]:
+    refuse("Configure does not begin cmake -S . -B build -G Ninja: " + line.strip())
+defines = []
+for w in words[7:]:
+    m = re.fullmatch(r"-D([A-Za-z_][A-Za-z0-9_]*(?::[A-Z]+)?=[A-Za-z0-9_.-]+)", w)
+    if not m:
+        refuse("Configure carries %r, which this script cannot pass to the box" % w)
+    defines.append(m.group(1))
+if not defines:
+    refuse("Configure carries no -D flags, which is not the line this script was written for")
+print(",".join(defines))
+') || {
+    echo "could not read the Windows Configure flags out of .github/workflows/ci.yml at $REF" >&2
+    echo "Those flags decide whether this run means anything; fix the read rather than guessing." >&2
     exit 2
-fi
+}
 
 say "== Reaching $HOST"
 # Probe with PowerShell rather than `cmd /c ver`: it is what the build script
@@ -111,5 +142,5 @@ win_dest=${DEST//\//\\}
 # -tt so ctest's progress arrives as it happens rather than in one lump at the
 # end; a five-minute silence reads as a hang.
 ssh -tt -o BatchMode=yes -o ServerAliveInterval=30 "$HOST" \
-    "powershell -NoProfile -ExecutionPolicy Bypass -File $DEST/scripts/wintest-build.ps1 -Src \"$win_dest\" -Werror $WERROR" |
+    "powershell -NoProfile -ExecutionPolicy Bypass -File $DEST/scripts/wintest-build.ps1 -Src \"$win_dest\" -Defines $DEFINES" |
     tr -d '\r'
