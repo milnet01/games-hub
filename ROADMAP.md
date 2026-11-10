@@ -10514,7 +10514,7 @@ the opening minimums, guarded by scripts/scorepad-check.py.
 
 ### 🧰 Tests
 
-- 📋 [GHUB-0235] **The Windows test box builds with exactly the flags CI's Windows leg uses.**
+- ✅ [GHUB-0235] **The Windows test box builds with exactly the flags CI's Windows leg uses.**
   scripts/wintest-build.ps1 hand-copies ci.yml's Configure line. It
   reads only the werror value out of ci.yml (via wintest-ci.sh), so when
   GHUB-0043 added -DGAMESHUB_UPDATER=ON to ci.yml the box kept building
@@ -10527,6 +10527,13 @@ the opening minimums, guarded by scripts/scorepad-check.py.
   loudly when ci.yml's Windows configure carries a flag the script does
   not pass. Check: add a dummy -D flag to ci.yml's Configure and see the
   wintest run either use it or refuse.
+  Done 2026-11-10 in 6df1455. wintest-ci.sh reads every -D flag off
+  the build job's Configure step at the commit under test, with the
+  Windows matrix row filled in, and refuses what it cannot pass through.
+  Checked: the reader passes a made-up -DGHUB_DUMMY=1 through and
+  refuses a spaced value and an unset matrix key; the old reader sent
+  werror alone. A wintest run on 6df1455 configured with CI's exact line
+  and passed 10/10.
   **Layman:** The spare Windows computer that checks a change before it is pushed tests the same build CI does, rather than a slightly different one.
   Kind: fix.
   Source: found-2026-11-05-building-GHUB-0043.
