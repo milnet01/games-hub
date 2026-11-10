@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=235 -->
+<!-- ants-roadmap-id-high-water: GHUB=241 -->
 
 # Games Hub — Roadmap
 
@@ -8839,7 +8839,109 @@ question can be changed afterwards.
   Kind: feature.
   Source: user-request-2026-08-20.
 
-## 1.5.0 — Five more card games
+## 1.5.0 — Six more games
+
+Asked for on 2026-11-10. The owner chose then to build these
+
+before the five card games, and to have both Mahjongs and both
+
+runner views.
+
+The release may split if one game runs long. A game that is
+
+ready does not wait for a slow one.
+
+- 📋 [GHUB-0236] **Noughts and Crosses, against the computer or another person.**
+  Two opponents, both chosen by the owner on 2026-11-10:
+  - The computer, with an easy level that makes mistakes and a
+    hard level that plays perfectly and never loses.
+  - Two people taking turns at one machine.
+
+  Large marks, and the winning line drawn through clearly. A rules
+  core plus a view, like every game. The self-test can prove the
+  hard level never loses by playing it against every line of play.
+  **Layman:** The three-in-a-row game on a three-by-three grid, against the computer or a friend at the same screen.
+  Kind: feature.
+  Source: user-request-2026-11-10.
+
+- 📋 [GHUB-0237] **An original shoot-the-descending-wave game, scored for a high score.**
+  The genre is free: rows of enemies step sideways and down, the
+  player moves a cannon along the bottom and fires up, and shelters
+  wear away. "Space Invaders" is a protected name and look, and the
+  roadmap's standing rules list it to avoid.
+
+  So this game has its own name, its own enemy shapes and its own
+  sounds, drawn with QPainter and made by tools/make_sounds.py. It
+  copies no sprite, colour scheme or march tune.
+
+  Built for the owner: large, clearly outlined enemies and shots,
+  an unhurried start, a pause key, and a high-score table that is
+  saved. Not legal advice; a short check before a public release
+  is cheap insurance.
+  **Layman:** Rows of attackers march down the screen and you shoot them from a cannon at the bottom, chasing a high score.
+  Kind: feature.
+  Source: user-request-2026-11-10.
+
+- 📋 [GHUB-0238] **Mahjong solitaire: clear the heap by matching free pairs.**
+  A tile is free when nothing lies on it and one long side is
+  open. Remove two free tiles that match. Clear the heap to win.
+
+  The tiles are drawn with QPainter, large, and readable slowly:
+  the owner reads by pattern, so each suit needs a shape that
+  tells it apart without relying on small print or colour alone.
+  Try layouts with a shot before choosing tile size.
+
+  Deals should be solvable, so a game never ends stuck through
+  bad luck alone. A hint and an undo key.
+  **Layman:** Tiles are stacked in a heap; you remove matching pairs that are not covered until the heap is gone.
+  Kind: feature.
+  Source: user-request-2026-11-10.
+
+- 📋 [GHUB-0239] **Four-player Mahjong against three computer players.**
+  The traditional game: draw, discard, claim a discard for a set,
+  and go out with four sets and a pair. Uses the tile art from
+  GHUB-0238, so it comes after it.
+
+  Pick one rule set and name it (there are many regional ones) in
+  a spec before building; scoring alone differs widely. Like
+  Canasta, the computer's pause is long enough to see what it did,
+  and the last discard is written out in words on the table.
+  **Layman:** The traditional table game: draw and discard tiles to build a winning hand before three computer players do.
+  Kind: feature.
+  Source: user-request-2026-11-10.
+  Blocked-by: GHUB-0238.
+
+- 📋 [GHUB-0240] **An endless runner through jungle ruins, seen side-on, scored for a high score.**
+  Side-on: the runner moves left to right, and the player jumps
+  and ducks over gaps, roots and traps. The pace rises the longer
+  the run lasts. Score is distance plus coins, and the best scores
+  are saved.
+
+  The genre is free. It takes no name, character or look from any
+  famous temple runner. Art is drawn with QPainter.
+
+  Built for the owner: obstacles large and high-contrast, seen
+  early enough to react, a gentle starting speed and a pause key.
+  **Layman:** Your runner dashes through ancient jungle ruins; jump and duck to survive as long as you can and beat your best distance.
+  Kind: feature.
+  Source: user-request-2026-11-10.
+
+- 📋 [GHUB-0241] **The endless runner, seen from behind the runner across three lanes.**
+  The owner asked for both views on 2026-11-10. Seen from behind,
+  running into the screen along three lanes; the player switches
+  lane, jumps and slides. Shares the scoring and saved high scores
+  with GHUB-0240.
+
+  Harder than the side-on view: depth is faked with QPainter
+  perspective, and an obstacle must be readable while still far
+  off. Prove the frame cost with --bench and the look with a shot
+  before building the whole course.
+  **Layman:** A second way to play the runner: from behind, running into the screen, switching between three lanes, jumping and sliding.
+  Kind: feature.
+  Source: user-request-2026-11-10.
+  Blocked-by: GHUB-0240.
+
+## 1.6.0 — Five more card games
 
 The five agreed games ship together, in one release. That was the owner's call
 on 2026-09-24.
@@ -8903,7 +9005,7 @@ The in-app rules come first, so every new game ships with its instructions.
   Kind: feature.
   Source: user-request-2026-08-10.
 
-## 1.6.0 — Poker and Bridge
+## 1.7.0 — Poker and Bridge
 
 Two more card tables against computer players, and a sharper Canasta
 
@@ -9024,7 +9126,7 @@ collection past twenty games. Owner's call, 2026-10-20.
 
 - 📋 [GHUB-0108] **How dangerous a throw is does not scale with how big the pack has grown.**
   Suggested to the owner on 2026-08-24; the owner chose on
-  2026-10-20 to plan it, in 1.6.0.
+  2026-10-20 to plan it, in the Poker and Bridge release.
 
   chooseDiscard weighs a card's danger as a fixed judgement.
   But the stake is the pack, and the pack grows all hand: the
@@ -9109,7 +9211,7 @@ collection past twenty games. Owner's call, 2026-10-20.
   Kind: investigate.
   Source: in-session-2026-08-20.
 
-## 1.7.0 — Play against a person
+## 1.8.0 — Play against a person
 
 The largest item on this roadmap gets a release of its own, so it
 
