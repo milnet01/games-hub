@@ -81,7 +81,7 @@ document.
 and view split, which half of `CMakeLists.txt` a file links into, and anything
 else no user and no integrator can observe. **Integrator is the half worth
 holding onto** — global § 2's definition names them, and this project is
-heading for distribution packaging (GHUB-0044, GHUB-0045), so an install
+heading for distribution packaging (GHUB-0044), so an install
 target, an option name, or the configure-time `CMAKE_INSTALL_PREFIX` contract
 is a surface even though no player will ever see it.
 

@@ -8733,43 +8733,10 @@ question can be changed afterwards.
   Flathub included.
   Waiting-on: user (which app-ID: za.co.antsprojectshub.GamesHub or io.github.milnet01.<name>?, 2026-11-04)
   The ID is permanent once a package or Flathub listing carries it, and every file this item writes is named after it (.desktop, metainfo, icon), so nothing is drafted until it is chosen. The siblings differ: finbreak uses io.github.milnet01.finbreak, Ants Terminal za.co.antsprojectshub.AntsTerminal. Recommendation: za.co.antsprojectshub.GamesHub -- the newer sibling's form, and the brand the website carries; the domain already has to stay up for email and the site. The GitHub form is the safer pick only if the domain might ever lapse (the TrueHost zone went missing once). The upload to build.opensuse.org is also yours to approve, as it publishes; the spec, debian/ recipe and metainfo can be written and built locally first.
+  2026-11-10: GHUB-0045 (Flathub) is parked, owner's call, so the
+  app ID now has to suit the OBS packages only. The recommendation above
+  stands.
   **Layman:** Install Games Hub with your distribution's own package manager instead of downloading a file.
-  Kind: package.
-  Source: user-request-2026-08-20.
-
-- 📋 [GHUB-0045] **On Flathub, so the software centre finds it.**
-  The distribution-agnostic half of the item above. OBS reaches users who
-  install by package manager; Flathub reaches everyone else, and it is the
-  one listing that puts the collection in front of somebody who was not
-  looking for it.
-
-  finbreak's manifest (FIBR-0159) is the model, and again this is the easier
-  case. finbreak builds on org.freedesktop.Platform carrying its own pinned
-  PySide6 wheel closure, because a finance app will not take a substituted
-  Qt; a C++ Qt Widgets game hub builds on org.kde.Platform, which ships Qt 6
-  already, so the manifest is a cmake module against a tagged release and
-  little else.
-
-  The sandbox is where the thinking goes, and it points the other way from
-  finbreak's. That app's permission list is deliberately empty of network and
-  filesystem because it holds bank statements; this one needs a display, GPU
-  acceleration and -- unlike finbreak -- sound, and it stores nothing but
-  QSettings. Whether it gets --share=network at all is the real question:
-  without it the auto-update above is unreachable inside Flatpak, which is
-  the correct answer, since Flatpak updates itself and an app that
-  overwrites its own runtime inside a sandbox is fighting the packaging.
-  So the updater must detect a Flatpak the same way it detects a distro
-  package, and stay inert.
-
-  Carries the same app-ID, .desktop and metainfo as the OBS work, which is
-  why that item fixes them and this one reuses them. A screenshot set and a
-  summary that reads well in a software centre are part of the deliverable
-  rather than an afterthought -- this is a shop window.
-  Waits on GHUB-0044's app-ID (Waiting-on: user there, 2026-11-04); this
-  item reuses it. The Flathub submission is itself a pull request from
-  your GitHub account to flathub/flathub, so it needs your go-ahead when
-  it comes.
-  **Layman:** Games Hub appears in GNOME Software, KDE Discover and flathub.org like any other app.
   Kind: package.
   Source: user-request-2026-08-20.
 
@@ -9903,6 +9870,46 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** In Pinball both Shift keys move the left flipper; many players expect right Shift to move the right one.
   Kind: ux.
   Source: in-session-2026-11-04 (split from GHUB-0232).
+
+- 💭 [GHUB-0045] **On Flathub, so the software centre finds it.**
+  The distribution-agnostic half of the item above. OBS reaches users who
+  install by package manager; Flathub reaches everyone else, and it is the
+  one listing that puts the collection in front of somebody who was not
+  looking for it.
+
+  finbreak's manifest (FIBR-0159) is the model, and again this is the easier
+  case. finbreak builds on org.freedesktop.Platform carrying its own pinned
+  PySide6 wheel closure, because a finance app will not take a substituted
+  Qt; a C++ Qt Widgets game hub builds on org.kde.Platform, which ships Qt 6
+  already, so the manifest is a cmake module against a tagged release and
+  little else.
+
+  The sandbox is where the thinking goes, and it points the other way from
+  finbreak's. That app's permission list is deliberately empty of network and
+  filesystem because it holds bank statements; this one needs a display, GPU
+  acceleration and -- unlike finbreak -- sound, and it stores nothing but
+  QSettings. Whether it gets --share=network at all is the real question:
+  without it the auto-update above is unreachable inside Flatpak, which is
+  the correct answer, since Flatpak updates itself and an app that
+  overwrites its own runtime inside a sandbox is fighting the packaging.
+  So the updater must detect a Flatpak the same way it detects a distro
+  package, and stay inert.
+
+  Carries the same app-ID, .desktop and metainfo as the OBS work, which is
+  why that item fixes them and this one reuses them. A screenshot set and a
+  summary that reads well in a software centre are part of the deliverable
+  rather than an afterthought -- this is a shop window.
+  Waits on GHUB-0044's app-ID (Waiting-on: user there, 2026-11-04); this
+  item reuses it. The Flathub submission is itself a pull request from
+  your GitHub account to flathub/flathub, so it needs your go-ahead when
+  it comes.
+  Parked 2026-11-10, owner's call: Flathub is not receptive to
+  AI-assisted apps. The owner tried to list finbreak there and was turned
+  away. Moved out of 1.4.0. Revisit only if Flathub's stance changes.
+  GHUB-0044 (openSUSE Build Service) no longer has a Flathub partner.
+  **Layman:** Games Hub appears in GNOME Software, KDE Discover and flathub.org like any other app.
+  Kind: package.
+  Source: user-request-2026-08-20.
 
 ## P01 — Shipped
 
