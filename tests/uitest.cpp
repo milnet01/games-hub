@@ -7997,7 +7997,7 @@ int main(int argc, char* argv[])
             if (newGame != nullptr) {
                 newGame->trigger();
                 check(v.flightsInTheAir() == 28, "klondike: New Game deals all 28 cards in motion");
-                check(settle(&v, 10000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                check(settle(&v, 20000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
                       "klondike: the deal lands and the timer stops");
                 newGame->trigger();
                 // On empty felt, so the press lands the deal and does nothing else.
@@ -8016,7 +8016,7 @@ int main(int argc, char* argv[])
             if (newGame != nullptr) {
                 newGame->trigger();
                 check(v.flightsInTheAir() == 54, "spider: New Game deals all 54 cards in motion");
-                check(settle(&v, 10000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                check(settle(&v, 20000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
                       "spider: the deal lands and the timer stops");
                 newGame->trigger();
                 clickAt(&v, QPointF(v.width() - 4.0, v.height() - 4.0), Qt::LeftButton);
@@ -8031,7 +8031,7 @@ int main(int argc, char* argv[])
                 twoSuits->trigger();
                 check(v.flightsInTheAir() == 54,
                       "spider: switching suits deals all 54 cards in motion");
-                check(settle(&v, 10000) && v.flightsInTheAir() == 0,
+                check(settle(&v, 20000) && v.flightsInTheAir() == 0,
                       "spider: and that deal lands");
             }
         }
@@ -8049,7 +8049,7 @@ int main(int argc, char* argv[])
             auto* oneSuit = resumed.findChild<QAction*>(QStringLiteral("spider-suits-1"));
             if (oneSuit != nullptr) {
                 oneSuit->trigger();
-                settle(&resumed, 10000);
+                settle(&resumed, 20000);
             }
             check(oneSuit != nullptr && resumed.saveState().isEmpty(),
                   "spider: a fresh deal after switching suits saves nothing");
@@ -8065,7 +8065,7 @@ int main(int argc, char* argv[])
             if (newGame != nullptr) {
                 newGame->trigger();
                 check(v.flightsInTheAir() == 52, "freecell: New Game deals all 52 cards in motion");
-                check(settle(&v, 10000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                check(settle(&v, 20000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
                       "freecell: the deal lands and the timer stops");
                 newGame->trigger();
                 clickAt(&v, QPointF(v.width() - 4.0, v.height() - 4.0), Qt::LeftButton);
@@ -8087,7 +8087,7 @@ int main(int argc, char* argv[])
             if (newGame != nullptr) {
                 newGame->trigger();
                 check(v.flightsInTheAir() == 28, "pyramid: New Game deals all 28 cards in motion");
-                check(settle(&v, 10000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
+                check(settle(&v, 20000) && v.flightsInTheAir() == 0 && activeTimers(&v) == 0,
                       "pyramid: the deal lands and the timer stops");
                 // Down from the bottom row is the stock, and turning a stock
                 // card sends that one card flying, so anything more is the deal.
@@ -8108,7 +8108,7 @@ int main(int argc, char* argv[])
             if (newGame != nullptr) {
                 newGame->trigger();
                 check(v.flightsInTheAir() == 52, "hearts: New Game deals all 52 cards round the table");
-                check(settle(&v, 10000) && v.flightsInTheAir() == 0, "hearts: the deal lands");
+                check(settle(&v, 20000) && v.flightsInTheAir() == 0, "hearts: the deal lands");
                 newGame->trigger();
                 pressKey(&v, Qt::Key_Left);
                 check(v.flightsInTheAir() == 0, "hearts: a press lands the deal at once");

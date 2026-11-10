@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=241 -->
+<!-- ants-roadmap-id-high-water: GHUB=242 -->
 
 # Games Hub — Roadmap
 
@@ -9582,6 +9582,9 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   against the 20 s budget, so neither a deal-specific stall nor plain
   slowness is shown. Next sighting: read the printed line before
   touching the budget.
+  2026-11-10: ten direct gameshub_uitest runs back to back, load 11
+  rising to 37 on 12 cores: all ten read "stock went 56 -> 45 over 3 of
+  your turns". No sighting. Left open, waiting for the printed line.
   **Layman:** One Canasta test failed once while the whole suite ran, then passed twice when run alone.
   Kind: test.
   Source: in-session-2026-10-20.
@@ -9910,6 +9913,27 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** Games Hub appears in GNOME Software, KDE Discover and flathub.org like any other app.
   Kind: package.
   Source: user-request-2026-08-20.
+
+- ✅ [GHUB-0242] **The whole-deal UI checks give a deal 10 s, and a busy machine can stretch one past that.**
+  Seen 2026-11-10, run 10 of ten direct gameshub_uitest runs at a
+  load near 28 on 12 cores: "hearts: the deal lands" failed. In
+  HeartsView hasPendingAnimation() is m_flights non-empty, so settle()
+  ran out its 10 s with cards still flying. Every flight timer advances a
+  fixed 0.016 s per tick, so late or dropped ticks stretch a deal (the
+  GHUB-0204 cause). A Hearts deal is about 3 s of animation (52 cards at
+  kStagger 0.055 apart, plus the flight). Seven checks wait 10 s on a
+  whole deal: Klondike, Spider (twice), the resumed Spider, FreeCell,
+  Pyramid and Hearts. Fix: raise those seven to the 20 s ceiling
+  GHUB-0204 and Canasta's waits use. Not reproduced on demand: one
+  failure in ten runs, so the proof rests on the code, as GHUB-0204's did.
+  Resolved (2026-11-10): the seven whole-deal settle() budgets in
+  tests/uitest.cpp raised from 10000 to 20000 ms. A passing wait returns
+  as soon as the deal lands, so a green run is no slower. One direct
+  uitest run after, at a load near 20: all green.
+  **Layman:** A Hearts test failed once because the computer was very busy and the deal animation ran slow; the game itself is fine.
+  Kind: test.
+  Source: in-session-2026-11-10.
+  Lanes: tests.
 
 ## P01 — Shipped
 
