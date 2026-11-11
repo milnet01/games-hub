@@ -8856,6 +8856,17 @@ ready does not wait for a slow one.
   shelters, a tuneless march thump; P pauses; the five best scores are
   saved under holdline/best_scores. The short legal check before a
   public release is still open.
+  Short name check, 2026-11-11 (web search; not legal advice). Another
+  computer game uses the phrase: "Hold the Line: The American
+  Revolution" on Steam (app 657500), a turn-based wargame from
+  Worthington Publishing's board game. A US mark "HOLD THE LINE"
+  exists on Justia; its goods and owner were not visible. No
+  shoot-the-wave game by that name was found. The look was made
+  original at build time (own species, shelters, sounds).
+  Waiting-on: user (keep the name Hold the Line, or rename before a
+  public release?, 2026-11-11). Recommendation: keep it. It is a common
+  phrase, the other game is a different genre, and Games Hub is free;
+  rename only if the owner wants no overlap at all.
   **Layman:** Rows of attackers march down the screen and you shoot them from a cannon at the bottom, chasing a high score.
   Kind: feature.
   Source: user-request-2026-11-10.
