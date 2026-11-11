@@ -60,8 +60,13 @@ protected:
     QRectF buttonRect(int index) const;
     QRectF handTileRect(int index) const;
     int pickedTile() const { return m_picked; }
-    // The sentence under the centre: the last discard, or what happens next.
+    // The whole sentence: the last discard and what happens next. It is the
+    // status line, and the line under the centre with the legibility switch off.
     QString tableSentence() const;
+    // What is drawn under the centre. With the switch on, the caption plate
+    // carries what happens next, so the centre keeps only what just happened
+    // and the two never say the same thing twice (GHUB-0246).
+    QString centreSentence() const;
     // The end-of-hand panel's lines, one per row.
     QStringList endOfHandLines() const;
     mahjong::RuleSetId ruleSetInForce() const { return m_game.ruleSetId(); }
@@ -92,6 +97,8 @@ private:
     QString seatName(int seat) const;
     QString windName(int wind) const;
     QString handSentence() const;
+    QStringList happenedSentences() const;
+    QString nextSentence() const;
 
     // Geometry.
     double handTileWidth() const;

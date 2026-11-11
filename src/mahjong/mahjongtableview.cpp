@@ -524,8 +524,20 @@ QString MahjongTableView::handSentence() const
         return h->legalMoves(0).empty() ? tr("%1 adds the %2 to a pung.").arg(who, tile)
                                         : tr("%1 adds the %2 to a pung. You may win on it.").arg(who, tile);
     }
-    // Whole sentences, each translated alone, then set side by side.
+    QStringList said = happenedSentences();
+    said << nextSentence();
+    return said.join(QLatin1Char(' '));
+}
+
+// What just happened: the last discard and who took it, in whole sentences,
+// each translated alone. Empty between hands and while a kong is robbed,
+// whose sentences say it all.
+QStringList MahjongTableView::happenedSentences() const
+{
     QStringList said;
+    const mahjong::Hand* h = m_game.hand();
+    if (h == nullptr || m_game.over() || !m_game.handInPlay() || h->phase() == Phase::Robbing)
+        return said;
     if (h->lastDiscard() != 0 && h->lastDiscarder() >= 0) {
         said << (h->lastDiscarder() == 0
                      ? tr("You threw the %1.").arg(mahjong::tileName(h->lastDiscard()))
@@ -538,13 +550,18 @@ QString MahjongTableView::handSentence() const
                                            : tr("%1 took it for %2.").arg(seatName(h->lastClaimer()), set));
         }
     }
+    return said;
+}
+
+// What happens next, during play.
+QString MahjongTableView::nextSentence() const
+{
+    const mahjong::Hand* h = m_game.hand();
     if (h->phase() == Phase::Claims)
-        said << (h->legalMoves(0).empty() ? tr("Waiting for the others.") : tr("You may claim it."));
-    else if (h->toMove() == 0)
-        said << tr("Your turn: pick a tile and throw it.");
-    else
-        said << tr("%1 to play.").arg(seatName(h->toMove()));
-    return said.join(QLatin1Char(' '));
+        return h->legalMoves(0).empty() ? tr("Waiting for the others.") : tr("You may claim it.");
+    if (h->toMove() == 0)
+        return tr("Your turn: pick a tile and throw it.");
+    return tr("%1 to play.").arg(seatName(h->toMove()));
 }
 
 QString MahjongTableView::tableSentence() const
@@ -552,9 +569,17 @@ QString MahjongTableView::tableSentence() const
     return handSentence();
 }
 
+QString MahjongTableView::centreSentence() const
+{
+    if (!Legibility::instance().enabled())
+        return tableSentence();
+    return happenedSentences().join(QLatin1Char(' '));
+}
+
 QString MahjongTableView::captionText() const
 {
-    return tableSentence();
+    const QStringList happened = happenedSentences();
+    return happened.isEmpty() ? tableSentence() : nextSentence();
 }
 
 QStringList MahjongTableView::endOfHandLines() const
@@ -1027,7 +1052,7 @@ void MahjongTableView::paintPools(QPainter& p) const
     f.setPixelSize(std::max(13, int(sentence.height() * (legible ? 0.36 : 0.3))));
     p.setFont(f);
     p.setPen(kInk);
-    p.drawText(sentence, Qt::AlignCenter | Qt::TextWordWrap, tableSentence());
+    p.drawText(sentence, Qt::AlignCenter | Qt::TextWordWrap, centreSentence());
 }
 
 void MahjongTableView::paintHand(QPainter& p) const

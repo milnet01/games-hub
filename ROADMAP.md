@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=245 -->
+<!-- ants-roadmap-id-high-water: GHUB=246 -->
 
 # Games Hub — Roadmap
 
@@ -10025,6 +10025,19 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   pass.
   **Layman:** One Hold the Line test sometimes failed because the computer shot the cannon at the wrong moment; the test now waits properly.
   Kind: test.
+  Source: in-session-2026-11-11.
+
+- ✅ [GHUB-0246] **Mahjong says the same sentence twice, mid-table and in the banner.**
+  Seen in a --shot (seed 7, 30 turns, large play): "You threw the East
+  Wind. Waiting for the others." is written mid-table and again in the
+  banner at the foot of the table. Keep one, or give each its own job
+  (the banner for what you must do next, mid-table for the last
+  discard), as Canasta does.
+  Shipped 2026-11-11: with large play on, the centre says what just
+  happened (the discard, who took it) and the caption plate what happens
+  next; with it off the centre says both. Seen in a seed-7 shot.
+  **Layman:** The four-player Mahjong table shows the same message in two places; one should go or say something else.
+  Kind: ux.
   Source: in-session-2026-11-11.
 
 ## P01 — Shipped

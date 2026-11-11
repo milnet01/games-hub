@@ -159,6 +159,7 @@ public:
     using MahjongTableView::endOfHandLines;
     using MahjongTableView::game;
     using MahjongTableView::ruleSetInForce;
+    using MahjongTableView::centreSentence;
     using MahjongTableView::tableSentence;
 };
 class DraughtsProbe : public DraughtsView
@@ -2707,6 +2708,17 @@ void mahjongTableWaitsAndKeepsItsPlace()
         const mahjong::Face offered = view.game().hand()->offered();
         check(view.tableSentence().contains(mahjong::tileName(offered)),
               "mahjong table: the sentence names the discard in words (INV-13)");
+        // Large play adds the caption plate. It carries what happens next,
+        // and the centre keeps the discard, so nothing is said twice (GHUB-0246).
+        Legibility::instance().setEnabledForSession(true);
+        check(view.centreSentence().contains(mahjong::tileName(offered))
+                  && !view.captionText().isEmpty()
+                  && !view.centreSentence().contains(view.captionText())
+                  && !view.captionText().contains(mahjong::tileName(offered)),
+              "mahjong table: in large play the centre and the caption say different things");
+        Legibility::instance().setEnabledForSession(false);
+        check(view.centreSentence() == view.tableSentence(),
+              "mahjong table: and with large play off the centre says it all");
         pressKey(&view, Qt::Key(Qt::Key_1 + labels.size() - 1));
         check(pumpUntil([&view, before] {
                   return mahjongMoves(view) > before && view.game().hand()->phase() == Phase::Turn;
