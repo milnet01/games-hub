@@ -13,6 +13,7 @@
 #include "minesweeper/minefield.h"
 #include "holdline/holdlinefield.h"
 #include "noughts/noughtsboard.h"
+#include "mahjong/mahjongboard.h"
 #include "pinball/pinballtable.h"
 #include "spider/spidertable.h"
 #include "sudoku/sudokugrid.h"
@@ -1920,6 +1921,227 @@ void noughtsEasyMakesMistakes()
     check(easyLost > 0, "noughts: easy makes mistakes a player can win from");
     check(easyLost < games, "noughts: and it is not throwing every game");
 }
+
+// ---------------------------------------------------------------------------
+// Mahjong solitaire (GHUB-0238)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+void mahjongHoldsTheWholeSet()
+{
+    using namespace mahjong;
+    using mahjong::Board; // the global Board is Reversi's
+    const std::vector<Face> set = fullSet();
+    check(int(set.size()) == kTiles, "mahjong: the set is 144 tiles");
+    check(int(layout().size()) == kTiles, "mahjong: and the heap has a place for each");
+
+    std::map<int, int> groups;
+    for (Face f : set)
+        ++groups[matchGroup(f)];
+    check(std::all_of(groups.begin(), groups.end(), [](const auto& g) { return g.second % 2 == 0; }),
+          "mahjong: every tile has a partner in the set");
+    check(groups[kFlowerFirst] == 4 && groups[kSeasonFirst] == 4,
+          "mahjong: the four flowers match each other, and so do the four seasons");
+    check(matches(kFlowerFirst, kFlowerFirst + 3) && !matches(kFlowerFirst, kSeasonFirst),
+          "mahjong: any flower takes any flower, but never a season");
+    check(!matches(kCirclesFirst, kBambooFirst) && matches(kWindFirst + 2, kWindFirst + 2),
+          "mahjong: a suit tile matches only its twin");
+
+    // No two tiles on one layer overlap, and every upper tile rests on one.
+    bool apart = true;
+    for (std::size_t i = 0; i < layout().size(); ++i)
+        for (std::size_t j = i + 1; j < layout().size(); ++j) {
+            const Slot& a = layout()[i];
+            const Slot& b = layout()[j];
+            if (a.z == b.z && std::abs(a.x - b.x) < 2 && std::abs(a.y - b.y) < 2)
+                apart = false;
+        }
+    check(apart, "mahjong: no two places on one layer overlap");
+}
+
+void mahjongFreeMeansUncoveredWithASideOpen()
+{
+    using namespace mahjong;
+    using mahjong::Board; // the global Board is Reversi's
+    std::mt19937 rng(7);
+    Board board;
+    board.deal(rng);
+    // Slot 0 is the bottom layer's top-left corner; slot 1 is beside it.
+    check(board.isFree(0), "mahjong: a corner tile with nothing on it is free");
+    check(board.uncovered(1) && !board.sideOpen(1) && !board.isFree(1),
+          "mahjong: the tile beside it is held by the tiles either side");
+    const int top = kTiles - 1;
+    int under = -1;
+    for (int i = 0; i < kTiles; ++i) {
+        const Slot& s = layout()[std::size_t(i)];
+        const Slot& t = layout()[std::size_t(top)];
+        if (s.z == t.z - 1 && std::abs(s.x - t.x) < 2 && std::abs(s.y - t.y) < 2)
+            under = i;
+    }
+    check(under >= 0 && !board.uncovered(under), "mahjong: a tile with one lying on it is held");
+
+    // A free pair that does not match is refused, and so is a held tile.
+    const std::vector<Pair> pairs = board.freePairs();
+    check(!pairs.empty(), "mahjong: a fresh heap has a pair to take");
+    const auto [a, b] = pairs.front();
+    check(!board.take(a, 1), "mahjong: a held tile cannot be taken");
+    check(!board.take(a, a), "mahjong: nor one tile twice");
+    int other = -1;
+    for (int i = 0; i < kTiles; ++i)
+        if (board.isFree(i) && !matches(board.at(i), board.at(a)))
+            other = i;
+    check(other >= 0 && !board.take(a, other), "mahjong: two free tiles that differ are refused");
+    check(board.remaining() == kTiles, "mahjong: and a refusal takes nothing");
+    check(board.take(a, b) && board.remaining() == kTiles - 2, "mahjong: a free matching pair goes");
+}
+
+void mahjongEveryDealClears()
+{
+    using namespace mahjong;
+    using mahjong::Board; // the global Board is Reversi's
+    // The promise the roadmap makes: no deal is stuck through bad luck alone.
+    // Each deal's own clearing is played back through take(), the player's
+    // rule, so a solution the rules would refuse fails here.
+    std::vector<Face> expected = fullSet();
+    std::sort(expected.begin(), expected.end());
+    int cleared = 0;
+    int whole = 0;
+    const int deals = 300;
+    for (int seed = 1; seed <= deals; ++seed) {
+        std::mt19937 rng { std::uint32_t(seed) };
+        Board board;
+        board.deal(rng);
+        std::vector<Face> faces(board.faces().begin(), board.faces().end());
+        std::sort(faces.begin(), faces.end());
+        if (faces == expected)
+            ++whole;
+        bool ok = int(board.solution().size()) == kTiles / 2;
+        for (const auto& [a, b] : board.solution())
+            ok = ok && board.take(a, b);
+        if (ok && board.cleared())
+            ++cleared;
+    }
+    check(whole == deals, "mahjong: every deal lays out the whole set");
+    check(cleared == deals, "mahjong: every deal clears, played by the rules");
+
+    std::mt19937 one(42);
+    std::mt19937 two(42);
+    Board first;
+    Board second;
+    first.deal(one);
+    second.deal(two);
+    check(first.faces() == second.faces(), "mahjong: one seed deals one heap");
+}
+
+void mahjongShuffleKeepsTheTilesAndClears()
+{
+    using namespace mahjong;
+    using mahjong::Board; // the global Board is Reversi's
+    int cleared = 0;
+    int kept = 0;
+    const int deals = 100;
+    for (int seed = 1; seed <= deals; ++seed) {
+        std::mt19937 rng { std::uint32_t(seed) };
+        Board board;
+        board.deal(rng);
+        // Part-way through, the way a player would be when they ask for it.
+        const std::vector<Pair> path = board.solution();
+        for (std::size_t i = 0; i < std::size_t(10 + seed % 50); ++i)
+            board.take(path[i].first, path[i].second);
+        const std::array<Face, kTiles> before = board.faces();
+        if (!board.reshuffle(rng))
+            continue;
+        std::vector<Face> was;
+        std::vector<Face> now;
+        bool samePlaces = true;
+        for (int i = 0; i < kTiles; ++i) {
+            samePlaces = samePlaces && (before[std::size_t(i)] != 0) == board.present(i);
+            if (before[std::size_t(i)] != 0)
+                was.push_back(before[std::size_t(i)]);
+            if (board.present(i))
+                now.push_back(board.at(i));
+        }
+        std::sort(was.begin(), was.end());
+        std::sort(now.begin(), now.end());
+        if (samePlaces && was == now)
+            ++kept;
+        bool ok = true;
+        for (const auto& [a, b] : board.solution())
+            ok = ok && board.take(a, b);
+        if (ok && board.cleared())
+            ++cleared;
+    }
+    check(kept == deals, "mahjong: a shuffle keeps the same tiles in the same places");
+    check(cleared == deals, "mahjong: and leaves a heap that clears");
+
+    // Two tiles, one on the other: no shuffle can help, and none is pretended.
+    // Slot 72 is the second layer's first place, lying on slot 13 alone.
+    check(layout()[72].z == 1 && layout()[72].x == layout()[13].x
+              && layout()[72].y == layout()[13].y,
+          "mahjong: slot 72 lies on slot 13, as the check below assumes");
+    Board stuck;
+    std::array<Face, kTiles> stack {};
+    stack[13] = 5;
+    stack[72] = 5;
+    std::mt19937 rng(3);
+    check(stuck.restore(stack) && stuck.freePairs().empty() && !stuck.reshuffle(rng)
+              && stuck.faces() == stack,
+          "mahjong: a stack of two cannot be shuffled free, and the board is left alone");
+    Board pair;
+    std::array<Face, kTiles> two {};
+    two[0] = 5;
+    two[1] = 5;
+    check(pair.restore(two), "mahjong: two tiles side by side restore");
+    check(pair.isFree(0) && pair.isFree(1) && pair.take(0, 1),
+          "mahjong: and with no third tile beside them both are free");
+}
+
+void mahjongRefusesABoardNoGameReaches()
+{
+    using namespace mahjong;
+    using mahjong::Board; // the global Board is Reversi's
+    std::mt19937 rng(11);
+    Board dealt;
+    dealt.deal(rng);
+    Board board;
+    check(board.restore(dealt.faces()), "mahjong: a dealt heap restores");
+
+    std::array<Face, kTiles> bad = dealt.faces();
+    bad[0] = kLastFace + 1;
+    check(!board.restore(bad), "mahjong: a face that is not a tile is refused");
+
+    bad = dealt.faces();
+    bad[0] = 0; // one tile gone, its partner still there
+    check(!board.restore(bad), "mahjong: a tile whose partner is gone is refused");
+
+    // Take a pair out from under the top layer: what lay on it is floating.
+    bad = dealt.faces();
+    const Slot& top = layout()[kTiles - 1];
+    std::vector<int> under;
+    for (int i = 0; i < kTiles; ++i) {
+        const Slot& s = layout()[std::size_t(i)];
+        if (s.z == top.z - 1 && std::abs(s.x - top.x) < 2 && std::abs(s.y - top.y) < 2)
+            under.push_back(i);
+    }
+    // Swap two faces so one matching pair sits under the top tile, then empty it.
+    const Face f = bad[std::size_t(under.front())];
+    int partner = -1;
+    for (int i = 0; i < kTiles; ++i)
+        if (i != under.front() && matches(bad[std::size_t(i)], f))
+            partner = i;
+    bad[std::size_t(under.front())] = 0;
+    bad[std::size_t(partner)] = 0;
+    check(!board.restore(bad), "mahjong: a tile lying on an empty place is refused");
+
+    std::array<Face, kTiles> five {};
+    for (int i = 0; i < 6; ++i)
+        five[std::size_t(i)] = kCirclesFirst;
+    check(!board.restore(five), "mahjong: more of a tile than the set holds is refused");
+    check(board.faces() == dealt.faces(), "mahjong: and a refusal leaves the board alone");
+}
+
+} // namespace
 
 
 // ---------------------------------------------------------------------------
@@ -7187,6 +7409,12 @@ int main()
     noughtsHardTakesAndBlocks();
     noughtsHardNeverLoses();
     noughtsEasyMakesMistakes();
+
+    mahjongHoldsTheWholeSet();
+    mahjongFreeMeansUncoveredWithASideOpen();
+    mahjongEveryDealClears();
+    mahjongShuffleKeepsTheTilesAndClears();
+    mahjongRefusesABoardNoGameReaches();
 
     holdLineStartsReady();
     holdLineMarches();

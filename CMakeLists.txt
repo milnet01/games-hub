@@ -189,6 +189,7 @@ set(GAME_CORE_SOURCES
     src/snake/snakeboard.cpp
     src/twenty48/twenty48board.cpp
     src/noughts/noughtsboard.cpp
+    src/mahjong/mahjongboard.cpp
     src/holdline/holdlinefield.cpp
     src/pyramid/pyramidtable.cpp
     src/freecell/freecelltable.cpp
@@ -222,6 +223,7 @@ set(GAME_VIEW_SOURCES
     src/snake/snakeview.cpp
     src/twenty48/twenty48view.cpp
     src/noughts/noughtsview.cpp
+    src/mahjong/mahjongview.cpp
     src/holdline/holdlineview.cpp
     src/spider/spiderview.cpp
     src/hearts/heartsview.cpp

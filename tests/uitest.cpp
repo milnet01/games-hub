@@ -27,6 +27,7 @@
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
 #include "noughts/noughtsview.h"
+#include "mahjong/mahjongview.h"
 #include "pinball/pinballview.h"
 #include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
@@ -139,6 +140,14 @@ class NoughtsProbe : public NoughtsView
 public:
     using NoughtsView::boardRect;
     using NoughtsView::cursorCell;
+};
+class MahjongProbe : public MahjongView
+{
+public:
+    using MahjongView::board;
+    using MahjongView::cursorSlot;
+    using MahjongView::faceRect;
+    using MahjongView::pickedSlot;
 };
 class DraughtsProbe : public DraughtsView
 {
@@ -1194,6 +1203,7 @@ void idsAndKeysSurviveATranslation()
             QStringLiteral("Chess"),    QStringLiteral("Reversi"),     QStringLiteral("Draughts"),
             QStringLiteral("Noughts and Crosses"), QStringLiteral("Minesweeper"), QStringLiteral("Solitaire"), QStringLiteral("Spider"),
             QStringLiteral("FreeCell"), QStringLiteral("Pyramid"),     QStringLiteral("Sudoku"),
+            QStringLiteral("Mahjong Solitaire"),
             QStringLiteral("Hearts"),   QStringLiteral("Canasta"),     QStringLiteral("Snake"),
             QStringLiteral("2048"),     QStringLiteral("Pinball"),     QStringLiteral("Hold the Line"),
         };
@@ -1469,11 +1479,12 @@ void cursorWaitsForTheKeys()
     HeartsView hearts;
     CanastaView canasta;
     NoughtsView noughts;
+    MahjongView mahjong;
     const std::pair<GameView*, const char*> games[] = {
         { &chess, "chess" },         { &reversi, "reversi" }, { &draughts, "draughts" },
         { &mines, "minesweeper" },   { &klondike, "klondike" }, { &spider, "spider" },
         { &freecell, "freecell" },   { &pyramid, "pyramid" }, { &hearts, "hearts" },
-        { &canasta, "canasta" },     { &noughts, "noughts" },
+        { &canasta, "canasta" },     { &noughts, "noughts" }, { &mahjong, "mahjong" },
     };
     for (const auto& [view, name] : games) {
         const QString game = QString::fromUtf8(name);
@@ -1551,11 +1562,13 @@ void boardsTakeTheKeyboard()
         HeartsView hearts;
         CanastaView canasta;
         NoughtsView noughts;
+        MahjongView mahjong;
         const std::pair<GameView*, const char*> boards[] = {
             { &chess, "chess" },     { &reversi, "reversi" }, { &draughts, "draughts" },
             { &mines, "minesweeper" }, { &sudoku, "sudoku" }, { &klondike, "klondike" },
             { &spider, "spider" },   { &freecell, "freecell" }, { &pyramid, "pyramid" },
             { &hearts, "hearts" },     { &canasta, "canasta" }, { &noughts, "noughts" },
+            { &mahjong, "mahjong" },
         };
         for (const auto& [view, name] : boards)
             check(view->focusPolicy() == Qt::StrongFocus,
@@ -2508,6 +2521,94 @@ void noughtsPlaysAndKeepsItsPlace()
     check(game.saveState().isEmpty(), "noughts: on an empty board");
     game.deactivate();
     QSettings().remove(QStringLiteral("noughts/opponent"));
+}
+
+// ---- mahjongPlaysAndKeepsItsPlace (GHUB-0238) ----
+//
+// The rules are the self-test's. This is the view: a click picks and takes,
+// a held tile says why it will not come, the keys reach the same press, Undo,
+// the save, and the stored shading choice.
+void mahjongPlaysAndKeepsItsPlace()
+{
+    QSettings().remove(QStringLiteral("mahjong/dimHeld"));
+    const auto action = [](GameView& view, const QString& text) -> QAction* {
+        for (QAction* a : view.gameActions())
+            if (a->text() == text)
+                return a;
+        return nullptr;
+    };
+    const auto clickTile = [](MahjongProbe& view, int slot) {
+        clickAt(&view, view.faceRect(slot).center(), Qt::LeftButton);
+    };
+
+    MahjongProbe game;
+    game.resize(1100, 760);
+    game.show();
+    game.activate();
+    pump(20);
+    check(game.saveState().isEmpty(), "mahjong: an untouched heap saves nothing");
+
+    const std::optional<mahjong::Pair> pair = game.board().hint();
+    check(pair.has_value(), "mahjong: a fresh heap offers a pair");
+    if (!pair)
+        return;
+    clickTile(game, pair->first);
+    check(game.pickedSlot() == pair->first, "mahjong: a click picks a free tile");
+    clickTile(game, pair->second);
+    check(game.board().remaining() == mahjong::kTiles - 2 && game.pickedSlot() < 0,
+          "mahjong: a click on its twin takes the pair");
+
+    settle(&game, 5000);
+    const QByteArray saved = game.saveState();
+    check(!saved.isEmpty(), "mahjong: a heap under way is worth saving");
+    MahjongProbe resumed;
+    resumed.resize(game.size());
+    check(resumed.restoreState(saved), "mahjong: and it reads back");
+    check(resumed.board().faces() == game.board().faces(), "mahjong: onto the very same heap");
+    check(renderOf(&resumed) == renderOf(&game), "mahjong: drawn the same");
+    check(!resumed.restoreState(saved.left(saved.size() - 3)), "mahjong: a cut-short save is refused");
+
+    // A tile with nothing on it but a tile either side: held by its sides
+    // alone, and with its face in plain view to be clicked.
+    int held = -1;
+    for (int s = 0; s < mahjong::kTiles && held < 0; ++s)
+        if (game.board().present(s) && game.board().uncovered(s) && !game.board().sideOpen(s))
+            held = s;
+    check(held >= 0, "mahjong: some tile is held by its sides");
+    clickTile(game, held);
+    check(game.board().remaining() == mahjong::kTiles - 2 && game.pickedSlot() < 0
+              && game.lastStatus().contains(QStringLiteral("held")),
+          "mahjong: a held tile is not picked, and the board says why");
+
+    QAction* undo = action(game, QStringLiteral("Undo"));
+    check(undo != nullptr && undo->isEnabled(), "mahjong: Undo is offered after a pair");
+    if (undo != nullptr)
+        undo->trigger();
+    check(game.board().remaining() == mahjong::kTiles && game.saveState().isEmpty(),
+          "mahjong: Undo puts the pair back");
+
+    // The keys: the cursor stands on free tiles, and Space is the click.
+    pressKey(&game, Qt::Key_Right);
+    const int first = game.cursorSlot();
+    check(game.board().isFree(first), "mahjong: the cursor stands on a free tile");
+    pressKey(&game, Qt::Key_Space);
+    check(game.pickedSlot() == first, "mahjong: Space picks the tile under the cursor");
+    pressKey(&game, Qt::Key_Escape);
+    check(game.pickedSlot() < 0, "mahjong: Escape puts it down");
+
+    // The shading choice is stored, and a game built afterwards takes it up.
+    QAction* shade = action(game, QStringLiteral("Shade held tiles"));
+    check(shade != nullptr && shade->isChecked(), "mahjong: held tiles are shaded at first");
+    if (shade != nullptr) {
+        const QImage shaded = renderOf(&game);
+        shade->trigger();
+        check(renderOf(&game) != shaded, "mahjong: turning the shading off changes the picture");
+        MahjongView next;
+        QAction* again = action(next, QStringLiteral("Shade held tiles"));
+        check(again != nullptr && !again->isChecked(), "mahjong: and the choice is remembered");
+    }
+    game.deactivate();
+    QSettings().remove(QStringLiteral("mahjong/dimHeld"));
 }
 
 // ---- holdLinePausesAndKeepsItsTable (GHUB-0237) ----
@@ -8810,6 +8911,7 @@ int main(int argc, char* argv[])
     cardCursorLeavesTheCardAlone();
 
     noughtsPlaysAndKeepsItsPlace();
+    mahjongPlaysAndKeepsItsPlace();
     holdLinePausesAndKeepsItsTable();
 
     turnLightFollowsTheTurn();

@@ -72,6 +72,7 @@ A few things worth knowing before you download:
 | **FreeCell** | Four free cells, everything face up, almost always solvable. |
 | **Pyramid** | Clear the pyramid by taking pairs that add to 13. |
 | **Sudoku** | Generated puzzles at three difficulties, with pencil marks. |
+| **Mahjong Solitaire** | Clear a heap of 144 tiles by taking free pairs that match. Every heap can be cleared. |
 | **Hearts** | Four-handed Hearts against three computer players, to 100. |
 | **Canasta** | Partnership Canasta, two against two, with melds, wild cards, red threes and a freezing discard pile. Classic rules, plus a house set you can edit. |
 | **Snake** | Eat, grow, and don't run into anything. |
@@ -95,13 +96,14 @@ such as Canasta, widens it while it is open and gives your size back after.
 
 **So do the settings you choose.** Minesweeper reopens on the difficulty you
 last played, Canasta on the rule set you last used — Classic or House — and
-Noughts and Crosses on the opponent you last chose. You
+Noughts and Crosses on the opponent you last chose, and Mahjong Solitaire
+remembers whether you shade the tiles you cannot take yet. You
 pick them once rather than every time, and finishing a game no longer forgets
 them.
 
 **Almost every game picks up where you left off.** Close the window in the
 middle of one and it comes back exactly as you left it — Chess, Canasta,
-Draughts, Reversi, Noughts and Crosses, Minesweeper, Sudoku, Hearts, 2048, and all four card games
+Draughts, Reversi, Noughts and Crosses, Minesweeper, Sudoku, Mahjong Solitaire, Hearts, 2048, and all four card games
 (Klondike, Spider, FreeCell and Pyramid). Canasta brings back the whole table:
 every hand, the melds, the pile, the stock, the scores and the rules in force.
 Chess brings back the board *and* the moves that led to it, so Undo still
@@ -355,7 +357,8 @@ The Windows half still only runs there.
 `gameshub_selftest` checks every game's rules with no UI: Chess's move
 generator counted against the published totals for four reference positions,
 Reversi's engine against random play, every line of Noughts and Crosses
-against the hard level (which must never lose), Minesweeper's first-click safety, deck
+against the hard level (which must never lose), hundreds of Mahjong heaps
+cleared by the rules to prove every deal can be, Minesweeper's first-click safety, deck
 integrity, twenty complete AI-versus-AI games of Hearts, eighteen of Canasta
 across all three strengths (with all 108 cards accounted for at every step),
 and a pinball ball flown round the table at every plunger strength. `gameshub_uitest` builds each

@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Qt 6 Widgets game collection — a hub window holding these games: Chess,
 Reversi, Draughts, Noughts and Crosses, Minesweeper, Solitaire, Spider, FreeCell, Pyramid, Sudoku,
-Hearts, Canasta, Snake, 2048, Pinball and Hold the Line. Started 2026-08-10 as a single
+Mahjong Solitaire, Hearts, Canasta, Snake, 2048, Pinball and Hold the Line. Started 2026-08-10 as a single
 Reversi game and expanded the same day. `ROADMAP.md` holds the queue of games
 still to come.
 

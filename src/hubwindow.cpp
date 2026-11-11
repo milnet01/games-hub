@@ -17,6 +17,7 @@
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
 #include "noughts/noughtsview.h"
+#include "mahjong/mahjongview.h"
 #include "pinball/pinballview.h"
 #include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
@@ -351,6 +352,42 @@ void noughtsTile(QPainter& p, const QRectF& r)
     p.setPen(QPen(QColor(0xff, 0xff, 0xff), pen * 0.8, Qt::SolidLine, Qt::RoundCap));
     p.drawLine(r.topLeft() + QPointF(cell * 0.3, cell * 0.3),
                r.bottomRight() - QPointF(cell * 0.3, cell * 0.3));
+}
+
+void mahjongTile(QPainter& p, const QRectF& r)
+{
+    // Three tiles, the top one lying across the two below. All circles: at
+    // this size they read best of the suits.
+    drawFelt(p, r, QColor(0x1c, 0x6b, 0x7e), QColor(0x0d, 0x40, 0x4e));
+    const double w = r.width() * 0.30;
+    const double h = w * 1.3;
+    const double d = w * 0.12;
+    const auto tile = [&](QPointF at, int pips) {
+        const QRectF face(at, QSizeF(w, h));
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0x17, 0x4a, 0x36));
+        p.drawRoundedRect(face.translated(d, d), w * 0.1, w * 0.1);
+        p.setBrush(QColor(0xd6, 0xca, 0xa8));
+        p.drawRoundedRect(face.translated(d * 0.4, d * 0.4), w * 0.1, w * 0.1);
+        p.setBrush(QColor(0xfb, 0xf7, 0xea));
+        p.setPen(QPen(QColor(0x8a, 0x7a, 0x58), 1.0));
+        p.drawRoundedRect(face, w * 0.1, w * 0.1);
+        p.setPen(Qt::NoPen);
+        const double rad = w * (pips == 1 ? 0.26 : 0.15);
+        for (int i = 0; i < pips; ++i) {
+            const QPointF c(face.center().x(),
+                            face.top() + h * (pips == 1 ? 0.5 : 0.25 + 0.5 * i / (pips - 1)));
+            p.setBrush(QColor(0x1d, 0x4f, 0xb0));
+            p.drawEllipse(c, rad, rad);
+            p.setBrush(QColor(0xfb, 0xf7, 0xea));
+            p.drawEllipse(c, rad * 0.55, rad * 0.55);
+        }
+    };
+    const double left = r.center().x() - w - d;
+    const double top = r.center().y() - h * 0.35;
+    tile(QPointF(left, top), 2);
+    tile(QPointF(left + w, top), 3);
+    tile(QPointF(left + w * 0.5 - d, top - h * 0.5 - d), 1);
 }
 
 void draughtsTile(QPainter& p, const QRectF& r)
@@ -730,6 +767,9 @@ void HubWindow::buildEntries()
         { QStringLiteral("Sudoku"), // untranslated: the game's id
           tr("Sudoku"), tr("Fill the grid"), sudokuTile,
           [] { return new SudokuView; }, Category::Puzzle },
+        { QStringLiteral("Mahjong Solitaire"), // untranslated: the game's id
+          tr("Mahjong Solitaire"), tr("Match the free pairs"), mahjongTile,
+          [] { return new MahjongView; }, Category::Puzzle },
         { QStringLiteral("Hearts"), // untranslated: the game's id
           tr("Hearts"), tr("Avoid the tricks"), heartsTile,
           [] { return new HeartsView; }, Category::Cards },

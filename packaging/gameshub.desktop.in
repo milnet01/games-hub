@@ -8,6 +8,6 @@ Exec=@CMAKE_INSTALL_FULL_BINDIR@/gameshub
 Icon=gameshub
 Terminal=false
 Categories=Game;BoardGame;
-Keywords=games;reversi;othello;noughts;crosses;tictactoe;minesweeper;solitaire;klondike;spider;hearts;pinball;shooter;arcade;cards;
+Keywords=games;reversi;othello;noughts;crosses;tictactoe;mahjong;minesweeper;solitaire;klondike;spider;hearts;pinball;shooter;arcade;cards;
 StartupNotify=true
 StartupWMClass=gameshub

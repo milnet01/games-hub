@@ -12,6 +12,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Mahjong Solitaire** (GHUB-0238)
+  Clear a heap of 144 tiles in four layers by taking matching pairs. A
+  tile can be taken when nothing lies on it and one of its sides is open.
+  Every heap is dealt so that it can be cleared. Hint lights up a pair you
+  can take, Undo puts pairs back, and Shuffle deals the tiles left onto the
+  same places when no pair is free. The tiles are large and drawn by
+  pattern rather than small print: circles, bamboo sticks and red diamonds
+  laid out like the pips on a playing card, winds with a letter and an
+  arrow, and a flame, a tree and a frame for the dragons. Tiles you cannot
+  take yet are shaded a little, and that can be turned off.
+
 - **Hold the Line** (GHUB-0237)
   A wave of attackers marches sideways and down towards a city at night.
   Shoot them from a cannon along the ground before they land, from behind

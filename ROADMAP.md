@@ -8860,7 +8860,7 @@ ready does not wait for a slow one.
   Kind: feature.
   Source: user-request-2026-11-10.
 
-- 📋 [GHUB-0238] **Mahjong solitaire: clear the heap by matching free pairs.**
+- ✅ [GHUB-0238] **Mahjong solitaire: clear the heap by matching free pairs.**
   A tile is free when nothing lies on it and one long side is
   open. Remove two free tiles that match. Clear the heap to win.
 
@@ -8871,6 +8871,9 @@ ready does not wait for a slow one.
 
   Deals should be solvable, so a game never ends stuck through
   bad luck alone. A hint and an undo key.
+  Shipped 2026-11-11 as Mahjong Solitaire, src/mahjong/. Deals are built
+  by playing the empty heap forward, so every deal clears; the self-test
+  plays 300 deals and 100 shuffles back through the rules.
   **Layman:** Tiles are stacked in a heap; you remove matching pairs that are not covered until the heap is gone.
   Kind: feature.
   Source: user-request-2026-11-10.

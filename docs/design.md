@@ -130,7 +130,7 @@ words are written fresh: rule text is exactly what a rulebook's author owns.
 **Whose turn it is is a LIGHT, not a sentence** (GHUB-0063). `turnLight()`
 answers whose seat is lit, how far its light has come up, and whose light is
 still going out behind it; the default is "nobody", which is right for the
-nine games with no turns. `TurnLightState` in `src/gameview.h` holds the
+games with no turns. `TurnLightState` in `src/gameview.h` holds the
 cross-fade and steps it — one copy, not five, because the stepping is
 identical everywhere and only the lit seat differs. `Theme::paintTurnLight`
 draws it, shaped to the ellipse inscribed in whatever area the view hands
@@ -262,7 +262,7 @@ the cursor back where it stood when the move was made.
 
 **The mouse and the keyboard go through one function, and the mouse moves the
 cursor.** `ReversiView::playAt`, `ChessView::pressSquare`,
-`DraughtsView::pressSquare`, `NoughtsView::playAt` and `MinesweeperView::digAt` each hold what a press
+`DraughtsView::pressSquare`, `NoughtsView::playAt`, `MahjongView::pressAt` and `MinesweeperView::digAt` each hold what a press
 on one cell does, and both input paths call it. Two copies of that logic is how
 one of them goes stale; a cursor that ignored the mouse is how the two paths
 come to disagree about where you are.
@@ -884,6 +884,39 @@ teeth. **The test that guards this loops over the machine's own font families**
 putting the tuned constant back reddens it here rather than three minutes into
 CI. Reach for that shape whenever a constant is really a property of the
 platform's font, not of this codebase.
+
+### Mahjong Solitaire
+
+Core: `mahjongboard.*`. View: `mahjongview.*`. Both in `src/mahjong/`.
+
+**Every deal can be cleared because it is built by playing it.**
+`Board::fill` starts from the empty places, takes any two that are free, and
+puts the next matching pair there, until the heap is full. Taken in that order,
+the heap clears, and `solution()` keeps the order so the self-test can play it
+back through `take()`. A full heap fills within a few tries; Shuffle runs the
+same fill over the tiles and places left, and gives up honestly when no fill
+exists, such as two tiles left with one on the other.
+
+**The heap is laid out in half-tile units**, so a tile on an upper layer can
+lie across two rows below it. A layer's tiles step up and left by a depth
+step, and a raised tile casts a shadow on the layer below. That shadow is what
+tells the layers apart.
+
+**The tiles are drawn for the owner, who reads by pattern.** The three suits
+are circles, bamboo sticks and red diamonds, each in the pip pattern a playing
+card uses for that count, with the number in the corner as well. Traditional
+sets mark the third suit with Chinese characters, which would be small print
+here and need a font Windows' offscreen runner does not have. Winds carry a
+letter and an arrow pointing that way on a map. The dragons are a flame, a
+tree and an empty frame, so no two honours share a shape. Flowers and
+seasons carry a coloured band round the inside, since any two of one family
+match. Shading the tiles that are held is a stored choice, `mahjong/dimHeld`,
+on by default.
+
+The save is the tiles still in place, not the pairs taken: Shuffle changes
+which tile lies where, so a move list would need the shuffles too. What
+re-checks it is `Board::restore`, which refuses more of a tile than the set
+holds, a group with an odd count left, and a tile lying on an empty place.
 
 ### Hearts
 
