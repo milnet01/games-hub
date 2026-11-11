@@ -7746,8 +7746,14 @@ void holdLineMarches()
         const QPointF now = field.attackers().front().centre;
         if (now.y() > was.y()) {
             dropped = now.y() - was.y() == HoldLineField::kDropStep && now.x() == was.x();
-            field.advance(field.marchInterval() + 0.01);
-            dropped = dropped && field.attackers().front().centre.x() < now.x();
+            // Wait for the next step itself, not for one march interval: a
+            // bomb that hits the cannon here holds the wave still through
+            // the respawn pause, and a fixed wait then sees no step at all.
+            for (int j = 0; j < 6000 && !field.over()
+                            && field.attackers().front().centre == now; ++j)
+                field.advance(0.01);
+            dropped = dropped && field.attackers().front().centre.x() < now.x()
+                      && field.attackers().front().centre.y() == now.y();
             break;
         }
     }

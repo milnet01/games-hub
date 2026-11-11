@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=244 -->
+<!-- ants-roadmap-id-high-water: GHUB=245 -->
 
 # Games Hub — Roadmap
 
@@ -10005,6 +10005,18 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: feature.
   Source: user-request-2026-11-11.
   Blocked-by: GHUB-0243.
+
+- ✅ [GHUB-0245] **Hold the Line's "at the edge it drops a step and turns back" check flaked.**
+  Failed 2 of 6 direct self-test runs while GHUB-0239 was built.
+  Cause, measured over 200 pinned seeds: 18 failed, every one because
+  a bomb hit the idle cannon just after the drop. The respawn pause
+  holds the wave still, so the check's fixed one-interval wait saw no
+  step. The game was right; the test now waits for the next step
+  itself. Shipped 2026-11-11: 200 of 200 seeds pass, six unseeded runs
+  pass.
+  **Layman:** One Hold the Line test sometimes failed because the computer shot the cannon at the wrong moment; the test now waits properly.
+  Kind: test.
+  Source: in-session-2026-11-11.
 
 ## P01 — Shipped
 
