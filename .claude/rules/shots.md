@@ -21,7 +21,7 @@ QT_QPA_PLATFORM=offscreen ./build/gameshub --shot /tmp/hearts.png \
 # Unlike playing, an unknown --game REFUSES rather than falling back to the
 # grid; a malformed --size refuses rather than picking another size; and --turns
 # refuses any game that does not override the hook, which today is all but
-# Canasta. A picture of the wrong thing is the
+# Canasta and Noughts and Crosses. A picture of the wrong thing is the
 # one failure a screenshot cannot survive: it still gets written, and it still
 # looks like an answer.
 ```
@@ -51,7 +51,7 @@ as the flag not working.
 **that default is the refusal**: a game refuses because it has not overridden
 the hook, never because it has no turns. Chess and Hearts have turns and
 computer opponents, and Snake has a clock that moves the game on without you;
-all three refuse today, because Canasta is still the only override. Making a game photographable mid-play IS writing one.
+all three refuse today, because only Canasta and Noughts and Crosses override it. Making a game photographable mid-play IS writing one.
 
 Its contract is **synchronous, unanimated and silent**, which is a rule about
 how the turns are DRIVEN rather than about tidying up afterwards.

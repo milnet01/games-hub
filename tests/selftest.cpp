@@ -11,6 +11,7 @@
 #include "hearts/heartsengine.h"
 #include "draughts/draughtsboard.h"
 #include "minesweeper/minefield.h"
+#include "noughts/noughtsboard.h"
 #include "pinball/pinballtable.h"
 #include "spider/spidertable.h"
 #include "sudoku/sudokugrid.h"
@@ -1751,6 +1752,172 @@ void twenty48PlaysByItsOwnRules()
     check(scoreNeverFalls, "2048: the score never goes down");
     check(deadPushCostsNothing, "2048: a push that moves nothing changes nothing");
     check(endsOnlyWhenStuck, "2048: the game ends only on a board with no empty square left");
+}
+
+// ---------------------------------------------------------------------------
+// Noughts and Crosses
+// ---------------------------------------------------------------------------
+
+noughts::Board noughtsFrom(const char* rows)
+{
+    // Nine characters, row by row: X, O, or anything else for empty.
+    std::array<noughts::Mark, noughts::kCells> cells {};
+    for (int i = 0; i < noughts::kCells; ++i)
+        cells[std::size_t(i)] = rows[i] == 'X' ? noughts::Mark::Cross
+            : rows[i] == 'O'                   ? noughts::Mark::Nought
+                                               : noughts::Mark::Empty;
+    noughts::Board board;
+    const bool ok = board.restore(cells, noughts::Mark::Cross)
+        || board.restore(cells, noughts::Mark::Nought);
+    check(ok, "noughts: a test position is one a game could reach");
+    return board;
+}
+
+void noughtsSeesEveryLine()
+{
+    using noughts::Mark;
+    bool everyLine = true;
+    for (const noughts::Line& line : noughts::kLines) {
+        noughts::Board board;
+        // Crosses on the line, and noughts on two cells off it so the counts
+        // are ones a game could reach.
+        int placed = 0;
+        for (int cell : line)
+            board.play(cell, Mark::Cross);
+        for (int cell = 0; cell < noughts::kCells && placed < 2; ++cell) {
+            if (board.at(cell) == Mark::Empty) {
+                std::array<Mark, noughts::kCells> cells = board.cells();
+                cells[std::size_t(cell)] = Mark::Nought;
+                board.restore(cells, Mark::Cross);
+                ++placed;
+            }
+        }
+        if (board.winner() != Mark::Cross || board.winningLine() != line)
+            everyLine = false;
+    }
+    check(everyLine, "noughts: all eight lines win, and the line drawn is the one that won");
+
+    const noughts::Board drawn = noughtsFrom("XOXXOOOXX");
+    check(drawn.full() && drawn.winner() == Mark::Empty && drawn.over(),
+          "noughts: a full board with no line is a draw");
+    check(!noughtsFrom("XO       ").over(), "noughts: a board with room and no line is not over");
+
+    noughts::Board won = noughtsFrom("XXXOO    ");
+    check(!won.play(5, Mark::Nought), "noughts: nobody moves once a line is made");
+    noughts::Board taken = noughtsFrom("X        ");
+    check(!taken.play(0, Mark::Nought), "noughts: a taken cell refuses a second mark");
+    check(taken.toMove(Mark::Cross) == Mark::Nought
+              && noughtsFrom("XO       ").toMove(Mark::Cross) == Mark::Cross
+              && noughtsFrom("O        ").toMove(Mark::Nought) == Mark::Cross,
+          "noughts: whose turn it is follows from who started");
+}
+
+void noughtsRefusesABoardNoGameReaches()
+{
+    using noughts::Mark;
+    const auto cellsOf = [](const char* rows) {
+        std::array<Mark, noughts::kCells> cells {};
+        for (int i = 0; i < noughts::kCells; ++i)
+            cells[std::size_t(i)] = rows[i] == 'X' ? Mark::Cross
+                : rows[i] == 'O'                   ? Mark::Nought
+                                                   : Mark::Empty;
+        return cells;
+    };
+    noughts::Board board;
+    check(!board.restore(cellsOf("XX       "), Mark::Cross),
+          "noughts: two crosses to no noughts is refused");
+    check(!board.restore(cellsOf("O        "), Mark::Cross),
+          "noughts: the side that did not start cannot be ahead");
+    check(!board.restore(cellsOf("XXXOOO   "), Mark::Cross),
+          "noughts: both sides in a row at once is refused");
+    check(!board.restore(cellsOf("XXXOO O  "), Mark::Cross),
+          "noughts: a move after the winning one is refused");
+    std::array<Mark, noughts::kCells> junk = cellsOf("         ");
+    junk[4] = Mark(7);
+    check(!board.restore(junk, Mark::Cross), "noughts: a mark that is not one is refused");
+    check(board.cells() == cellsOf("         "), "noughts: and a refusal leaves the board alone");
+    check(board.restore(cellsOf("XO X     "), Mark::Cross),
+          "noughts: a position a game reaches is accepted");
+}
+
+void noughtsHardTakesAndBlocks()
+{
+    using noughts::Mark;
+    // A win on the table is taken rather than a block or a slower win.
+    const std::vector<int> win = noughts::bestMoves(noughtsFrom("XX OO    "), Mark::Cross);
+    check(win == std::vector<int> { 2 }, "noughts: hard takes a win that is there");
+    // Nothing to win, so it blocks the one line that would lose, and the
+    // block holds the draw.
+    const std::vector<int> block = noughts::bestMoves(noughtsFrom("OO  X    "), Mark::Cross);
+    check(block == std::vector<int> { 2 }, "noughts: hard blocks a line about to be made");
+    check(noughts::bestMoves(noughtsFrom("XXXOO    "), Mark::Nought).empty(),
+          "noughts: there is no move once the game is over");
+}
+
+// The roadmap's promise, proved rather than sampled: the hard level against
+// every line of play the other side could choose, with it moving first and
+// second, and following EVERY move it counts as best rather than the one a
+// seed would pick.
+void noughtsHardNeverLoses()
+{
+    using noughts::Mark;
+    int finished = 0;
+    int lost = 0;
+    int won = 0;
+    const std::function<void(const noughts::Board&, Mark, Mark)> play =
+        [&](const noughts::Board& board, Mark toMove, Mark hard) {
+            if (board.over()) {
+                ++finished;
+                if (board.winner() == other(hard))
+                    ++lost;
+                else if (board.winner() == hard)
+                    ++won;
+                return;
+            }
+            const std::vector<int> moves =
+                toMove == hard ? noughts::bestMoves(board, hard) : board.emptyCells();
+            for (int cell : moves) {
+                noughts::Board next = board;
+                next.play(cell, toMove);
+                play(next, other(toMove), hard);
+            }
+        };
+    play(noughts::Board(), Mark::Cross, Mark::Cross);   // hard opens
+    play(noughts::Board(), Mark::Cross, Mark::Nought);  // hard replies
+    std::printf("      noughts: hard played %d whole games, won %d, lost %d\n", finished, won,
+                lost);
+    check(finished > 0, "noughts: the search played whole games");
+    check(lost == 0, "noughts: hard never loses, whoever starts and whatever the other side plays");
+    check(won > 0, "noughts: and it wins when the other side slips");
+}
+
+void noughtsEasyMakesMistakes()
+{
+    using noughts::Mark;
+    // Easy against hard, many seeded games, easy opening half of them. Hard
+    // never loses, so the question is whether easy ever loses: a level that
+    // only ever draws is a second hard level.
+    std::mt19937 rng(20261111);
+    int easyLost = 0;
+    int games = 0;
+    for (int game = 0; game < 200; ++game, ++games) {
+        noughts::Board board;
+        const Mark easy = (game % 2 == 0) ? Mark::Cross : Mark::Nought;
+        Mark toMove = Mark::Cross;
+        while (!board.over()) {
+            const noughts::Level level =
+                toMove == easy ? noughts::Level::Easy : noughts::Level::Hard;
+            const int cell = noughts::chooseMove(board, toMove, level, rng);
+            if (!board.play(cell, toMove))
+                break;
+            toMove = other(toMove);
+        }
+        if (board.winner() == other(easy))
+            ++easyLost;
+    }
+    std::printf("      noughts: easy lost %d of %d games against hard\n", easyLost, games);
+    check(easyLost > 0, "noughts: easy makes mistakes a player can win from");
+    check(easyLost < games, "noughts: and it is not throwing every game");
 }
 
 
@@ -6839,6 +7006,12 @@ int main()
     twenty48UndoStepsBack();
     twenty48RefusesABoardItCouldNotReach();
     twenty48PlaysByItsOwnRules();
+
+    noughtsSeesEveryLine();
+    noughtsRefusesABoardNoGameReaches();
+    noughtsHardTakesAndBlocks();
+    noughtsHardNeverLoses();
+    noughtsEasyMakesMistakes();
 
     pyramidDealsAWholePack();
     pyramidRefusesACoveredCard();

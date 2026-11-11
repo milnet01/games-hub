@@ -15,6 +15,7 @@
 #include "hearts/heartsview.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
+#include "noughts/noughtsview.h"
 #include "pinball/pinballview.h"
 #include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
@@ -319,6 +320,38 @@ void chessTile(QPainter& p, const QRectF& r)
                          chess::PieceType::Knight, chess::Colour::Black);
 }
 
+void noughtsTile(QPainter& p, const QRectF& r)
+{
+    // The hash, two crosses and a nought, and the line through three crosses.
+    drawFelt(p, r, QColor(0x23, 0x84, 0x55), QColor(0x14, 0x5b, 0x39));
+    const double cell = r.width() / 3.0;
+    p.setPen(QPen(QColor(0xe8, 0xf0, 0xe0), std::max(2.0, cell * 0.06), Qt::SolidLine, Qt::RoundCap));
+    for (int i = 1; i < 3; ++i) {
+        p.drawLine(QPointF(r.left() + i * cell, r.top() + cell * 0.15),
+                   QPointF(r.left() + i * cell, r.bottom() - cell * 0.15));
+        p.drawLine(QPointF(r.left() + cell * 0.15, r.top() + i * cell),
+                   QPointF(r.right() - cell * 0.15, r.top() + i * cell));
+    }
+    const double pen = std::max(2.5, cell * 0.12);
+    const auto box = [&](int row, int col) {
+        return QRectF(r.left() + col * cell, r.top() + row * cell, cell, cell)
+            .adjusted(cell * 0.24, cell * 0.24, -cell * 0.24, -cell * 0.24);
+    };
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(QColor(0xff, 0x8a, 0x75), pen, Qt::SolidLine, Qt::RoundCap));
+    for (int i = 0; i < 3; ++i) {
+        const QRectF b = box(i, i);
+        p.drawLine(b.topLeft(), b.bottomRight());
+        p.drawLine(b.topRight(), b.bottomLeft());
+    }
+    p.setPen(QPen(QColor(0x8f, 0xd8, 0xff), pen, Qt::SolidLine, Qt::RoundCap));
+    p.drawEllipse(box(0, 2));
+    p.drawEllipse(box(1, 0));
+    p.setPen(QPen(QColor(0xff, 0xff, 0xff), pen * 0.8, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(r.topLeft() + QPointF(cell * 0.3, cell * 0.3),
+               r.bottomRight() - QPointF(cell * 0.3, cell * 0.3));
+}
+
 void draughtsTile(QPainter& p, const QRectF& r)
 {
     // A corner of a chequerboard with two counters on it.
@@ -613,6 +646,9 @@ void HubWindow::buildEntries()
         { QStringLiteral("Draughts"), // untranslated: the game's id
           tr("Draughts"), tr("Checkers, with kings"), draughtsTile,
           [] { return new DraughtsView; }, Category::Board },
+        { QStringLiteral("Noughts and Crosses"), // untranslated: the game's id
+          tr("Noughts and Crosses"), tr("Three in a row"), noughtsTile,
+          [] { return new NoughtsView; }, Category::Board },
         { QStringLiteral("Minesweeper"), // untranslated: the game's id
           tr("Minesweeper"), tr("Clear the field"), minesweeperTile,
           [] { return new MinesweeperView; }, Category::Puzzle },

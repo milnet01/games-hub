@@ -65,6 +65,7 @@ A few things worth knowing before you download:
 | **Chess** | The full game against the computer — castling, en passant, promotion and every draw rule, at three strengths. |
 | **Reversi** | The classic disc-flipping board game, against the computer, with three difficulty levels. |
 | **Draughts** | Checkers against the computer — compulsory captures, multi-jumps and kings. |
+| **Noughts and Crosses** | Three in a row on a 3 by 3 grid, against the computer (Easy, or Hard, which never loses) or another person at the same screen. |
 | **Minesweeper** | Beginner, Intermediate and Expert fields. |
 | **Solitaire** | Klondike, draw one or draw three. |
 | **Spider** | Spider solitaire in one, two or four suits. |
@@ -92,13 +93,14 @@ and opening a game does not move or resize it. A game that needs more room,
 such as Canasta, widens it while it is open and gives your size back after.
 
 **So do the settings you choose.** Minesweeper reopens on the difficulty you
-last played, and Canasta on the rule set you last used — Classic or House. You
+last played, Canasta on the rule set you last used — Classic or House — and
+Noughts and Crosses on the opponent you last chose. You
 pick them once rather than every time, and finishing a game no longer forgets
 them.
 
 **Almost every game picks up where you left off.** Close the window in the
 middle of one and it comes back exactly as you left it — Chess, Canasta,
-Draughts, Reversi, Minesweeper, Sudoku, Hearts, 2048, and all four card games
+Draughts, Reversi, Noughts and Crosses, Minesweeper, Sudoku, Hearts, 2048, and all four card games
 (Klondike, Spider, FreeCell and Pyramid). Canasta brings back the whole table:
 every hand, the melds, the pile, the stock, the scores and the rules in force.
 Chess brings back the board *and* the moves that led to it, so Undo still
@@ -157,6 +159,13 @@ it. Your move must trap a line of the computer's discs between the square you
 click and one of your own, and every disc trapped flips to your colour. If you
 have no legal move your turn is skipped automatically — that is the rule, not a
 bug. Undo rewinds your move *and* the computer's reply.
+
+**Noughts and Crosses.** You are the crosses. Click an empty square to put
+your mark there; the first to get three in a row wins, and a line is drawn
+through them. Who goes first swaps every game. Choose **Easy**, **Hard** or
+**Two players** on the toolbar — Hard never loses, so a draw is a good result.
+When a game ends, click the board for the next one. The status line keeps the
+session's score.
 
 **Minesweeper.** Left click digs, right click plants a flag. A number says how
 many mines touch that square. Clicking a number you have fully flagged clears
@@ -338,7 +347,8 @@ The Windows half still only runs there.
 
 `gameshub_selftest` checks every game's rules with no UI: Chess's move
 generator counted against the published totals for four reference positions,
-Reversi's engine against random play, Minesweeper's first-click safety, deck
+Reversi's engine against random play, every line of Noughts and Crosses
+against the hard level (which must never lose), Minesweeper's first-click safety, deck
 integrity, twenty complete AI-versus-AI games of Hearts, eighteen of Canasta
 across all three strengths (with all 108 cards accounted for at every step),
 and a pinball ball flown round the table at every plunger strength. `gameshub_uitest` builds each

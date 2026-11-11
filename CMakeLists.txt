@@ -188,6 +188,7 @@ set(GAME_CORE_SOURCES
     src/pinball/pinballtable.cpp
     src/snake/snakeboard.cpp
     src/twenty48/twenty48board.cpp
+    src/noughts/noughtsboard.cpp
     src/pyramid/pyramidtable.cpp
     src/freecell/freecelltable.cpp
     src/klondike/klondiketable.cpp
@@ -219,6 +220,7 @@ set(GAME_VIEW_SOURCES
     src/sudoku/sudokuview.cpp
     src/snake/snakeview.cpp
     src/twenty48/twenty48view.cpp
+    src/noughts/noughtsview.cpp
     src/spider/spiderview.cpp
     src/hearts/heartsview.cpp
     src/canasta/canastaview.cpp

@@ -25,6 +25,7 @@
 #include "hubwindow.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
+#include "noughts/noughtsview.h"
 #include "pinball/pinballview.h"
 #include "pyramid/pyramidview.h"
 #include "reversi/reversiview.h"
@@ -131,6 +132,12 @@ class ReversiProbe : public ReversiView
 public:
     using ReversiView::boardRect;
     using ReversiView::cursorCell;
+};
+class NoughtsProbe : public NoughtsView
+{
+public:
+    using NoughtsView::boardRect;
+    using NoughtsView::cursorCell;
 };
 class DraughtsProbe : public DraughtsView
 {
@@ -1184,7 +1191,7 @@ void idsAndKeysSurviveATranslation()
 
         const QStringList ids = {
             QStringLiteral("Chess"),    QStringLiteral("Reversi"),     QStringLiteral("Draughts"),
-            QStringLiteral("Minesweeper"), QStringLiteral("Solitaire"), QStringLiteral("Spider"),
+            QStringLiteral("Noughts and Crosses"), QStringLiteral("Minesweeper"), QStringLiteral("Solitaire"), QStringLiteral("Spider"),
             QStringLiteral("FreeCell"), QStringLiteral("Pyramid"),     QStringLiteral("Sudoku"),
             QStringLiteral("Hearts"),   QStringLiteral("Canasta"),     QStringLiteral("Snake"),
             QStringLiteral("2048"),     QStringLiteral("Pinball"),
@@ -1382,7 +1389,7 @@ void fuzzSavedGames(int rounds)
 
 // ---- the turn light (GHUB-0063) ----
 //
-// The five games with turns, built one way so each block below covers all of
+// The six games with turns, built one way so each block below covers all of
 // them rather than whichever one happened to be convenient.
 struct LitGame {
     QString name;
@@ -1398,6 +1405,7 @@ std::vector<LitGame> litGames()
         { QStringLiteral("chess"), [] { return static_cast<GameView*>(new ChessView); }, true },
         { QStringLiteral("draughts"), [] { return static_cast<GameView*>(new DraughtsView); }, true },
         { QStringLiteral("reversi"), [] { return static_cast<GameView*>(new ReversiView); }, true },
+        { QStringLiteral("noughts"), [] { return static_cast<GameView*>(new NoughtsView); }, true },
         { QStringLiteral("hearts"), [] { return static_cast<GameView*>(new HeartsView); }, true },
         { QStringLiteral("canasta"), [] { return static_cast<GameView*>(new CanastaView); }, false },
     };
@@ -1459,11 +1467,12 @@ void cursorWaitsForTheKeys()
     PyramidView pyramid;
     HeartsView hearts;
     CanastaView canasta;
+    NoughtsView noughts;
     const std::pair<GameView*, const char*> games[] = {
         { &chess, "chess" },         { &reversi, "reversi" }, { &draughts, "draughts" },
         { &mines, "minesweeper" },   { &klondike, "klondike" }, { &spider, "spider" },
         { &freecell, "freecell" },   { &pyramid, "pyramid" }, { &hearts, "hearts" },
-        { &canasta, "canasta" },
+        { &canasta, "canasta" },     { &noughts, "noughts" },
     };
     for (const auto& [view, name] : games) {
         const QString game = QString::fromUtf8(name);
@@ -1540,11 +1549,12 @@ void boardsTakeTheKeyboard()
         PyramidView pyramid;
         HeartsView hearts;
         CanastaView canasta;
+        NoughtsView noughts;
         const std::pair<GameView*, const char*> boards[] = {
             { &chess, "chess" },     { &reversi, "reversi" }, { &draughts, "draughts" },
             { &mines, "minesweeper" }, { &sudoku, "sudoku" }, { &klondike, "klondike" },
             { &spider, "spider" },   { &freecell, "freecell" }, { &pyramid, "pyramid" },
-            { &hearts, "hearts" },     { &canasta, "canasta" },
+            { &hearts, "hearts" },     { &canasta, "canasta" }, { &noughts, "noughts" },
         };
         for (const auto& [view, name] : boards)
             check(view->focusPolicy() == Qt::StrongFocus,
@@ -2414,6 +2424,91 @@ void boardsTakeTheKeyboard()
 
 }
 
+// ---- noughtsPlaysAndKeepsItsPlace (GHUB-0236) ----
+//
+// Played through the view by clicks, read through what the view offers a
+// test: whose light is lit, the save, and the toolbar. The rules themselves,
+// and the promise that Hard never loses, are the self-test's.
+void noughtsPlaysAndKeepsItsPlace()
+{
+    QSettings().remove(QStringLiteral("noughts/opponent"));
+    const auto action = [](GameView& view, const QString& text) -> QAction* {
+        for (QAction* a : view.gameActions())
+            if (a->text() == text)
+                return a;
+        return nullptr;
+    };
+    const auto clickCell = [](NoughtsProbe& view, int cell) {
+        const QRect r = view.boardRect();
+        const double size = r.width() / 3.0;
+        clickAt(&view, QPointF(r.x() + (cell % 3 + 0.5) * size, r.y() + (cell / 3 + 0.5) * size),
+                Qt::LeftButton);
+    };
+
+    NoughtsProbe game;
+    game.resize(520, 560);
+    game.show();
+    game.activate();
+    pump(20);
+    check(game.turnLight().seat == 0, "noughts: you open the first game");
+    check(game.saveState().isEmpty(), "noughts: an untouched board saves nothing");
+    clickCell(game, 4);
+    check(game.turnLight().seat == 1, "noughts: your mark hands the turn to the computer");
+    check(pumpUntil([&game] { return game.turnLight().seat == 0; }, 20000),
+          "noughts: the computer replies and the turn comes back");
+    settle(&game, 5000);
+    // A restored game shows its light at full at once, so wait out the fade
+    // before comparing the two boards.
+    pumpUntil([&game] { return game.turnLight().level >= 1.0 && game.turnLight().leavingSeat < 0; },
+              2000);
+
+    const QByteArray saved = game.saveState();
+    check(!saved.isEmpty(), "noughts: a game under way is worth saving");
+    NoughtsProbe resumed;
+    resumed.resize(game.size());
+    check(resumed.restoreState(saved), "noughts: and it reads back");
+    check(renderOf(&resumed) == renderOf(&game), "noughts: onto the very same board");
+    check(!resumed.restoreState(saved.left(saved.size() - 3)), "noughts: a cut-short save is refused");
+
+    QAction* undo = action(game, QStringLiteral("Undo"));
+    check(undo != nullptr && undo->isEnabled(), "noughts: Undo is offered after a move");
+    if (undo != nullptr)
+        undo->trigger();
+    check(game.saveState().isEmpty() && game.turnLight().seat == 0,
+          "noughts: one Undo takes back your move and the computer's reply together");
+
+    // The opponent is remembered on its own, not only inside a save.
+    QAction* two = action(game, QStringLiteral("Two players"));
+    check(two != nullptr, "noughts: the toolbar offers Two players");
+    if (two == nullptr)
+        return;
+    two->trigger();
+    check(QSettings().value(QStringLiteral("noughts/opponent")).toInt() == 2,
+          "noughts: choosing an opponent writes it to the settings");
+    {
+        NoughtsView next;
+        QAction* ticked = action(next, QStringLiteral("Two players"));
+        check(ticked != nullptr && ticked->isChecked(),
+              "noughts: and a game built afterwards comes up with it chosen");
+    }
+
+    // Two people: every click is a move, no computer between them, and a win
+    // ends the game until a click starts the next, which the other side opens.
+    for (int cell : { 0, 3, 1, 4 })
+        clickCell(game, cell);
+    check(game.turnLight().seat == 0, "noughts: with two players each click passes the turn");
+    clickCell(game, 2);
+    check(game.turnLight().seat == -1 && game.saveState().isEmpty(),
+          "noughts: three in a row ends the game, and a finished game saves nothing");
+    check(game.lastStatus().startsWith(QStringLiteral("Crosses win!")),
+          "noughts: and says who won");
+    clickCell(game, 8);
+    check(game.turnLight().seat == 1, "noughts: a click starts the next game, opened by the noughts");
+    check(game.saveState().isEmpty(), "noughts: on an empty board");
+    game.deactivate();
+    QSettings().remove(QStringLiteral("noughts/opponent"));
+}
+
 // ---- turnLightFollowsTheTurn (INV-1) ----
 //
 // NOT covered here: "a game that is over lights nobody". Reaching a finished
@@ -2437,11 +2532,11 @@ void turnLightFollowsTheTurn()
                   qPrintable(game.name + QStringLiteral(": and it is you, because you open")));
     }
 
-    // The turn moving moves the light. Driven on the three boards that take a
+    // The turn moving moves the light. Driven on the four boards that take a
     // human move by click; Hearts and Canasta wait on a pass or a deal that
     // this driver cannot make.
     for (const QString& name : { QStringLiteral("chess"), QStringLiteral("draughts"),
-                                 QStringLiteral("reversi") }) {
+                                 QStringLiteral("reversi"), QStringLiteral("noughts") }) {
         std::unique_ptr<GameView> view;
         for (const LitGame& game : litGames())
             if (game.name == name)
@@ -8650,6 +8745,8 @@ int main(int argc, char* argv[])
     boardsTakeTheKeyboard();
     cursorWaitsForTheKeys();
     cardCursorLeavesTheCardAlone();
+
+    noughtsPlaysAndKeepsItsPlace();
 
     turnLightFollowsTheTurn();
     turnLightComesUpAndHolds();

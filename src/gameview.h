@@ -23,7 +23,7 @@ struct TurnLight {
 };
 
 // The cross-fade GHUB-0063 § 4.3 describes, held in one place rather than
-// copied into each of the five games that has turns. The stepping is identical
+// copied into each game that has turns. The stepping is identical
 // in all of them; all a view supplies is which seat § 4.2's rules light and
 // how long its own tick was.
 class TurnLightState

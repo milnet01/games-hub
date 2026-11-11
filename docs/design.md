@@ -77,7 +77,7 @@ test catches the omission — `everyGameAnswersTheSwitch` builds every game
 with the switch off, so a game that ignores its initial state looks perfect.
 
 `deactivate()` is not optional for a game with a clock or an animation, and
-`tests/uitest.cpp` asserts it over all fourteen: no game may still be moving
+`tests/uitest.cpp` asserts it over every game: no game may still be moving
 once the hub has left it. Pinball had no override at all and its ball kept
 rolling — and draining — on a table nobody was looking at (GHUB-0073).
 **What that assertion can catch is a game that is actually in motion when the
@@ -162,7 +162,7 @@ Canasta's Space and Return shortcuts were written, correct and unreachable.
 `boardsTakeTheKeyboard` in `tests/uitest.cpp` asserts the policy on every view
 that claims keyboard play, because nothing else fails when it is missing.
 
-**The four board games share one shape, and Sudoku is where it was written
+**The board games share one shape, and Sudoku is where it was written
 first**: a row and column cursor held on the view, arrow keys clamped to the
 board, Space or Return acting on the cell under it. Chess and Draughts add
 Escape, which puts a lifted piece back down — the mouse says "no" by clicking
@@ -262,7 +262,7 @@ the cursor back where it stood when the move was made.
 
 **The mouse and the keyboard go through one function, and the mouse moves the
 cursor.** `ReversiView::playAt`, `ChessView::pressSquare`,
-`DraughtsView::pressSquare` and `MinesweeperView::digAt` each hold what a press
+`DraughtsView::pressSquare`, `NoughtsView::playAt` and `MinesweeperView::digAt` each hold what a press
 on one cell does, and both input paths call it. Two copies of that logic is how
 one of them goes stale; a cursor that ignored the mouse is how the two paths
 come to disagree about where you are.
@@ -410,11 +410,12 @@ forget.
 A singleton like `Sound`, but
 broadcasting: games are built lazily and live for the session, so one built
 before the switch moved would never learn without the signal.
-`docs/specs/GHUB-0017-legibility-switch.md` is the contract. **All fourteen
-per-game passes have shipped** — Canasta (GHUB-0038) and Sudoku (GHUB-0039)
-first, both described in § Canasta and § Sudoku, and the other twelve as GHUB-0071.
-**A pass does not have to be a caption, and three of the fourteen are not.**
-Four shapes, covering all fourteen. **Ten reserve a band and draw a caption.**
+`docs/specs/GHUB-0017-legibility-switch.md` is the contract. **Every
+per-game pass has shipped** — Canasta (GHUB-0038) and Sudoku (GHUB-0039)
+first, both described in § Canasta and § Sudoku, then twelve more as GHUB-0071,
+and each game since with its own code.
+**A pass does not have to be a caption, and three games' are not.**
+Four shapes cover every game. **The rest reserve a band and draw a caption.**
 **Hearts draws a caption but reserves nothing** — it puts the sentence in the
 gap that already exists between the trick and your hand, because its hand is
 anchored to the bottom and a band would take space off the cards instead.
@@ -431,7 +432,7 @@ card width from. Sudoku draws no cards, so it has no such floor.
 
 What holds that true is not the count: `tests/uitest.cpp` walks the games the
 hub can open, renders each at its own smallest size with the switch off and
-on, and asserts the picture changed and then went back. **A fifteenth game
+on, and asserts the picture changed and then went back. **A game
 added without a pass reddens that block**, which is the point of it — it
 lands in `silent` if it holds still, and fails the `deactivate()` assertion
 if it does not. **Sudoku is excluded by name**, because its pass grows pencil
@@ -511,7 +512,7 @@ spec's § 4.3.
 widget, and says what else keeps a file out of the core. This section records
 how that split came to hold, and the edges between the other parts.
 
-**The split now holds for all fourteen.** `GAME_CORE_SOURCES` in `CMakeLists.txt` is
+**The split now holds for every game.** `GAME_CORE_SOURCES` in `CMakeLists.txt` is
 the list of record; `gameshub_core` is built from it and `gameshub_selftest`
 links that — so a rules check for any game can be written straight into the
 self-test. Six games held their rules
@@ -762,6 +763,29 @@ it. Change flow there, not by adding a second path.
 ### Draughts
 
 Core: `draughtsboard.*`. View: `draughtsview.*`. Both in `src/draughts/`.
+
+### Noughts and Crosses
+
+Core: `noughtsboard.*`. View: `noughtsview.*`. Both in `src/noughts/`.
+
+`noughts::bestMoves()` is negamax with alpha-beta over the whole tree. A win
+scores more the sooner it comes, so Hard takes a win at once rather than
+playing on. Hard picks at random among the best moves. Easy plays a random
+cell half the time and a best move otherwise. The self-test follows every best
+move against every reply, with Hard moving first and second, and asserts it
+never loses.
+
+You are always the crosses, and who opens swaps every game. The opponent —
+Easy, Hard or Two players — is stored under `noughts/opponent` when chosen,
+and a save carries the game's own without writing that key.
+
+**The sentence under the board is drawn whatever the legibility switch says.**
+In a game for two people it is what tells them whose go it is. So the caption
+plate carries only the session's score: `captionText()` is overridden, and
+the plate would otherwise repeat the sentence.
+
+A finished game waits on the board. A click or Space starts the next, and no
+dialog opens, because a game lasts seconds.
 
 ### Minesweeper
 

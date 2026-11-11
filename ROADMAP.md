@@ -8818,7 +8818,7 @@ The release may split if one game runs long. A game that is
 
 ready does not wait for a slow one.
 
-- 📋 [GHUB-0236] **Noughts and Crosses, against the computer or another person.**
+- ✅ [GHUB-0236] **Noughts and Crosses, against the computer or another person.**
   Two opponents, both chosen by the owner on 2026-11-10:
   - The computer, with an easy level that makes mistakes and a
     hard level that plays perfectly and never loses.
@@ -8827,6 +8827,12 @@ ready does not wait for a slow one.
   Large marks, and the winning line drawn through clearly. A rules
   core plus a view, like every game. The self-test can prove the
   hard level never loses by playing it against every line of play.
+  Shipped 2026-11-11. src/noughts/: rules core plus view. You are always
+  the crosses and who opens swaps every game. Easy, Hard and Two
+  players, remembered under noughts/opponent. The self-test follows
+  every best Hard move against every reply, whoever starts (16752 games,
+  none lost), and was seen red with the search turned to pick its worst
+  move.
   **Layman:** The three-in-a-row game on a three-by-three grid, against the computer or a friend at the same screen.
   Kind: feature.
   Source: user-request-2026-11-10.

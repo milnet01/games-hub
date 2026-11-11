@@ -12,6 +12,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Noughts and Crosses** (GHUB-0236)
+  Three in a row on a 3 by 3 grid. Play the computer on Easy, which makes
+  mistakes you can win from, or Hard, which never loses. Or choose Two
+  players and take turns with someone at the same screen. The marks are
+  large, a line is drawn through the winning three, and a sentence under
+  the board always says whose turn it is. Who goes first swaps every game,
+  and the opponent you choose is remembered.
+
 - **Every game explains how to play it** (GHUB-0016)
   Help → How to play, or F1, opens the rules of the game on screen:
   what you are aiming for, how it plays here, and which keys and clicks
