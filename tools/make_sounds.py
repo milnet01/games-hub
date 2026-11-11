@@ -170,6 +170,27 @@ def drain(i, n, t):
     return sine(freq, t) * envelope(i, n, 0.01, 0.9, 1.5) * 0.7
 
 
+# --- Hold the Line -----------------------------------------------------------
+
+def zap(i, n, t):
+    """The cannon firing: a quick falling laser chirp."""
+    freq = 1800 * math.exp(-t * 18.0) + 380
+    return (sine(freq, t) * 0.7 + triangle(freq * 0.5, t) * 0.3) * envelope(i, n, 0.002, 0.9, 2.2) * 0.45
+
+
+def pop(i, n, t):
+    """An attacker bursting: a bright crackle over a falling tone."""
+    crackle = noise() * envelope(i, n, 0.0005, 0.35, 3.0)
+    tone = sine(900 * math.exp(-t * 9.0) + 120, t) * envelope(i, n, 0.002, 0.8, 2.0)
+    return crackle * 0.45 + tone * 0.5
+
+
+def march(i, n, t):
+    """One step of the wave: a soft, low, unpitched thump. No tune."""
+    thump = sine(70 + 40 * math.exp(-t * 30.0), t) * envelope(i, n, 0.004, 0.7, 2.5)
+    return thump * 0.35 + noise() * envelope(i, n, 0.0005, 0.08, 4.0) * 0.05
+
+
 # --- Outcomes --------------------------------------------------------------
 
 def fanfare(i, n, t):
@@ -208,6 +229,9 @@ RECIPES = [
     ("drain", 0.55, drain),
     ("win", 0.50, fanfare),
     ("lose", 0.60, lose),
+    ("zap", 0.16, zap),
+    ("pop", 0.24, pop),
+    ("march", 0.12, march),
 ]
 
 if __name__ == "__main__":

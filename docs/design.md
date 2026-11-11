@@ -1023,6 +1023,36 @@ the self-test locks this in across all plunger strengths.
 visible line it reads as a wall sealing the launch lane — that was a reported
 bug, not a theory.
 
+### Hold the Line
+
+Core: `holdlinefield.*`. View: `holdlineview.*`. Both in `src/holdline/`.
+
+`HoldLineField` plays in fixed field units, scaled to the widget like
+Pinball, and steps itself in fixed slices so a slow frame plays the same as
+two quick ones. It reports what happened through `takeEvents()`; the view
+turns those into sounds, particles and banners and never decides a rule.
+
+**The look and the sounds are this game's own** (GHUB-0237). The genre is
+free; one famous game's name, sprites, colours and march tune are not. So
+the attackers are three species drawn here — a jellyfish, a manta and an
+armoured pod — the shelters are rounded mounds rather than arches, and the
+march is one soft thump with no tune. Check a change against that before
+it lands.
+
+**Drawn for slow reading.** Every attacker, bomb and shelter carries a dark
+outline and a glow, the backdrop is held dim behind them, and a bomb is drawn
+larger than the box that hits, which errs the player's way. The backdrop is
+drawn once per size into a pixmap; only the stars move behind the play.
+
+The game waits in Ready until the player moves or fires. `P` pauses, because
+Space fires. There is no save. The five best scores are a list under
+`holdline/best_scores`, whose leaf starts `best_` so `Scores::clear()` forgets
+it too. A finished game waits on the field with the table; a key or click
+starts the next, and no dialog opens.
+
+`advanceForShot` treats a turn as one second flown by a simple pilot, and
+clears every effect before it returns.
+
 ## Cold-eyes loop log
 
 > A design doc is gated (`documentation.md` § 9.1) and is owed no

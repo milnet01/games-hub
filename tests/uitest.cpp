@@ -22,6 +22,7 @@
 #include "draughts/draughtsview.h"
 #include "freecell/freecellview.h"
 #include "hearts/heartsview.h"
+#include "holdline/holdlineview.h"
 #include "hubwindow.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
@@ -1194,7 +1195,7 @@ void idsAndKeysSurviveATranslation()
             QStringLiteral("Noughts and Crosses"), QStringLiteral("Minesweeper"), QStringLiteral("Solitaire"), QStringLiteral("Spider"),
             QStringLiteral("FreeCell"), QStringLiteral("Pyramid"),     QStringLiteral("Sudoku"),
             QStringLiteral("Hearts"),   QStringLiteral("Canasta"),     QStringLiteral("Snake"),
-            QStringLiteral("2048"),     QStringLiteral("Pinball"),
+            QStringLiteral("2048"),     QStringLiteral("Pinball"),     QStringLiteral("Hold the Line"),
         };
         check(hub.gameNames() == ids,
               qPrintable(QStringLiteral("translation: the game ids stay fixed -- got \"%1\"")
@@ -2509,6 +2510,66 @@ void noughtsPlaysAndKeepsItsPlace()
     QSettings().remove(QStringLiteral("noughts/opponent"));
 }
 
+// ---- holdLinePausesAndKeepsItsTable (GHUB-0237) ----
+//
+// The rules are the self-test's. This is the view: its clock, its pause, the
+// keys reaching it, and the saved table of best scores.
+void holdLinePausesAndKeepsItsTable()
+{
+    QSettings().remove(QStringLiteral("holdline/best_scores"));
+    HoldLineView game;
+    game.resize(600, 700);
+    game.show();
+    check(game.focusPolicy() == Qt::StrongFocus, "hold the line: takes the keyboard");
+    game.activate();
+    check(activeTimers(&game) > 0, "hold the line: its clock runs while it is on screen");
+    game.deactivate();
+    check(activeTimers(&game) == 0, "hold the line: and stops when the hub leaves it");
+    game.activate();
+
+    QAction* pause = nullptr;
+    for (QAction* a : game.gameActions())
+        if (a->text() == QStringLiteral("Pause"))
+            pause = a;
+    check(pause != nullptr && pause->shortcut() == QKeySequence(Qt::Key_P),
+          "hold the line: P pauses, as it does in Minesweeper");
+    if (pause != nullptr) {
+        pause->setChecked(true);
+        check(activeTimers(&game) == 0, "hold the line: a paused game stops its clock");
+        game.deactivate();
+        game.activate();
+        check(activeTimers(&game) == 0, "hold the line: and stays paused when you come back");
+        pressKey(&game, Qt::Key_Space);
+        check(game.field().phase() == HoldLineField::Phase::Ready,
+              "hold the line: Space does not fire through the pause");
+        pause->setChecked(false);
+    }
+
+    pressKey(&game, Qt::Key_Space);
+    check(game.field().phase() == HoldLineField::Phase::Playing && game.field().shotInFlight(),
+          "hold the line: Space starts the game and fires");
+    check(Sound::instance().lastRequested() == QLatin1String(Sound::kZap),
+          "hold the line: with the firing sound");
+    check(game.saveState().isEmpty(), "hold the line: keeps no save, like Snake and Pinball");
+
+    // Played to the end by the --shot pilot, a minute at a time.
+    for (int i = 0; i < 30 && !game.field().over(); ++i)
+        game.advanceForShot(60);
+    check(game.field().over(), "hold the line: a game played on comes to an end");
+    const QList<int> table = HoldLineView::highScores();
+    check(game.field().score() == 0
+              || (!table.isEmpty() && table.first() == game.field().score()),
+          "hold the line: its score heads the saved table");
+    check(QSettings().value(QStringLiteral("holdline/best_scores")).isValid()
+              || game.field().score() == 0,
+          "hold the line: the table is written to the settings");
+    pressKey(&game, Qt::Key_Space);
+    check(game.field().phase() == HoldLineField::Phase::Ready && game.field().score() == 0,
+          "hold the line: Space after the end starts a fresh game");
+    game.deactivate();
+    QSettings().remove(QStringLiteral("holdline/best_scores"));
+}
+
 // ---- turnLightFollowsTheTurn (INV-1) ----
 //
 // NOT covered here: "a game that is over lights nobody". Reaching a finished
@@ -2558,8 +2619,9 @@ void turnLightFollowsTheTurn()
     KlondikeView klondike;
     SudokuView sudoku;
     SnakeView snake;
+    HoldLineView holdLine;
     check(klondike.turnLight().seat == -1 && sudoku.turnLight().seat == -1
-              && snake.turnLight().seat == -1,
+              && snake.turnLight().seat == -1 && holdLine.turnLight().seat == -1,
           "a game with no turns lights nobody");
 }
 
@@ -5181,7 +5243,8 @@ int main(int argc, char* argv[])
             QStringLiteral("flag"), QStringLiteral("boom"), QStringLiteral("card_deal"),
             QStringLiteral("card_place"), QStringLiteral("shuffle"), QStringLiteral("bumper"),
             QStringLiteral("slingshot"), QStringLiteral("flipper"), QStringLiteral("launch"),
-            QStringLiteral("drain"), QStringLiteral("win"), QStringLiteral("lose") };
+            QStringLiteral("drain"), QStringLiteral("win"), QStringLiteral("lose"),
+            QStringLiteral("zap"), QStringLiteral("pop"), QStringLiteral("march") };
 
         QStringList missing;
         for (const QString& name : effects) {
@@ -8747,6 +8810,7 @@ int main(int argc, char* argv[])
     cardCursorLeavesTheCardAlone();
 
     noughtsPlaysAndKeepsItsPlace();
+    holdLinePausesAndKeepsItsTable();
 
     turnLightFollowsTheTurn();
     turnLightComesUpAndHolds();

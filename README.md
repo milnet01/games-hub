@@ -77,6 +77,7 @@ A few things worth knowing before you download:
 | **Snake** | Eat, grow, and don't run into anything. |
 | **2048** | Slide the tiles, merge the numbers. |
 | **Pinball** | One table, three balls, two flippers. |
+| **Hold the Line** | Shoot down a marching wave of attackers from a cannon behind wearing shelters, before they land. |
 
 Pick a game from the grid; **← All Games** (or `Esc`) goes back. Each game puts
 its own buttons — New Game, Undo, difficulty — on the toolbar beside it, and
@@ -85,8 +86,8 @@ the **Sound** switch at the right mutes the lot.
 Best scores are kept between sessions: games won at Chess and Draughts, discs
 won at each Reversi level, fastest Minesweeper and Sudoku clears, top Klondike
 score, fewest Spider and FreeCell moves, most Pyramid pairs cleared, lowest
-winning Hearts total, highest winning Canasta score, and the Snake, 2048 and
-Pinball high scores.
+winning Hearts total, highest winning Canasta score, the Snake, 2048 and
+Pinball high scores, and Hold the Line's five best scores.
 
 **The window remembers itself.** It opens at the size and place you left it,
 and opening a game does not move or resize it. A game that needs more room,
@@ -110,11 +111,11 @@ There is nothing to press and no save button — it just happens. Starting a
 fresh game is what New Game is for. Finish a game and nothing is kept, so you
 never come back to a board you have already won.
 
-The two that do not do this yet are Snake and Pinball.
+The three that do not do this yet are Snake, Pinball and Hold the Line.
 
 **Minesweeper and Sudoku can be paused**, which stops the clock and covers the
 board, so walking away costs you nothing. Snake has its own pause on the space
-bar.
+bar, and Hold the Line on `P`.
 
 ## Playing
 
@@ -286,6 +287,12 @@ next hand, since they cannot change under cards already dealt.
 (or the arrow keys) work the flippers; clicking the left or right half of the
 table does the same. Three balls. A launch that falls short rolls back to the
 plunger rather than costing you a ball.
+
+**Hold the Line.** The left and right arrows (or `A` and `D`) move the cannon;
+`Space` fires, and holding it keeps firing. A click on the field fires too.
+Nothing moves until you do. You have one shot in the air at a time and three
+cannons. `P` pauses. When the game ends, your five best scores are shown on
+the field, and `Space` or a click starts the next.
 
 ## For developers
 

@@ -86,8 +86,8 @@ That signature expects a resource name plus a `FILES` list, so handing it a
 `.qrc` gives no error, no warning and no content — every sound lookup then
 fails at runtime. Sounds are embedded by listing `sounds.qrc` as a target
 source with `CMAKE_AUTORCC ON`. **`tests/uitest.cpp` asserting every effect is
-present and non-trivial in size is the check.** `assets/sounds/` is 17 files,
-and the compiled resource object matches it. **No byte figure is kept here.**
+present and non-trivial in size is the check.** The compiled resource object
+matches `assets/sounds/`. **No byte figure is kept here.**
 The binary's own total grows with every game added, so it never said anything
 on its own — and a stale one is worse than none, because the sentence reads as
 a comparison somebody can make: two runs of this gate spent a finding on
@@ -99,7 +99,7 @@ brush turned every dug Minesweeper square red, and only from the first flag
 onward, because painting runs row by row. Set the brush — or `Qt::NoBrush` —
 immediately before a shape call rather than trusting what came before.
 
-**Sounds are generated, never sampled.** `tools/make_sounds.py` synthesises all
-17 effects from a fixed seed, so re-running it is byte-identical. That is a
+**Sounds are generated, never sampled.** `tools/make_sounds.py` synthesises every
+effect from a fixed seed, so re-running it is byte-identical. That is a
 licensing decision rather than a stylistic one — see `ROADMAP.md` § Standing
 rules before adding any asset.

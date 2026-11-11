@@ -11,6 +11,7 @@
 #include "hearts/heartsengine.h"
 #include "draughts/draughtsboard.h"
 #include "minesweeper/minefield.h"
+#include "holdline/holdlinefield.h"
 #include "noughts/noughtsboard.h"
 #include "pinball/pinballtable.h"
 #include "spider/spidertable.h"
@@ -6890,6 +6891,180 @@ void updateOpensOnlyGitHubPages()
 
 } // namespace
 
+namespace {
+
+// ---------------------------------------------------------------------------
+// Hold the Line (GHUB-0237)
+// ---------------------------------------------------------------------------
+
+int holdLineShelterTotal(const HoldLineField& field)
+{
+    int total = 0;
+    for (const HoldLineField::Shelter& s : field.shelters())
+        for (const auto& row : s.blocks)
+            for (int b : row)
+                total += b;
+    return total;
+}
+
+// Plays until the shot in the air has landed somewhere, or a second passes.
+void holdLineLandTheShot(HoldLineField& field)
+{
+    for (int i = 0; i < 120 && field.shotInFlight(); ++i)
+        field.advance(1.0 / 120.0);
+}
+
+void holdLineStartsReady()
+{
+    section("Hold the Line");
+
+    HoldLineField field;
+    check(field.attackersLeft() == HoldLineField::kRows * HoldLineField::kColumns,
+          "hold the line: a game opens with a full wave");
+    check(field.lives() == HoldLineField::kLives && field.score() == 0 && field.wave() == 1,
+          "hold the line: three cannons, no score, wave one");
+    bool everyShelterStands = true;
+    for (const HoldLineField::Shelter& s : field.shelters())
+        for (int b : s.blocks[HoldLineField::kShelterRows - 1])
+            everyShelterStands = everyShelterStands && b == HoldLineField::kBlockStrength;
+    check(everyShelterStands, "hold the line: every shelter stands solid on the ground");
+
+    const QPointF first = field.attackers().front().centre;
+    field.advance(5.0);
+    check(field.phase() == HoldLineField::Phase::Ready && field.attackers().front().centre == first
+              && field.bombs().empty(),
+          "hold the line: nothing moves until the player does");
+}
+
+void holdLineMarches()
+{
+    HoldLineField field;
+    field.setMove(1);
+    field.setMove(0);
+    check(field.phase() == HoldLineField::Phase::Playing, "hold the line: moving starts the game");
+
+    const QPointF before = field.attackers().front().centre;
+    field.advance(field.marchInterval() + 0.01);
+    const QPointF after = field.attackers().front().centre;
+    check(after.x() - before.x() == HoldLineField::kMarchStep && after.y() == before.y(),
+          "hold the line: the wave steps sideways together");
+
+    // Keep marching until it reaches the edge and drops.
+    bool dropped = false;
+    for (int i = 0; i < 6000 && !dropped && !field.over(); ++i) {
+        const QPointF was = field.attackers().front().centre;
+        field.advance(0.01);
+        const QPointF now = field.attackers().front().centre;
+        if (now.y() > was.y()) {
+            dropped = now.y() - was.y() == HoldLineField::kDropStep && now.x() == was.x();
+            field.advance(field.marchInterval() + 0.01);
+            dropped = dropped && field.attackers().front().centre.x() < now.x();
+            break;
+        }
+    }
+    check(dropped, "hold the line: at the edge it drops a step and turns back");
+}
+
+void holdLineShotsScoreAndWear()
+{
+    HoldLineField field;
+    // The cannon starts under the middle column, between two shelters.
+    check(field.fire(), "hold the line: the cannon fires");
+    check(!field.fire(), "hold the line: only one shot of yours is in the air at a time");
+    holdLineLandTheShot(field);
+    check(field.score() == HoldLineField::kRowPoints[HoldLineField::kRows - 1]
+              && field.attackersLeft() == HoldLineField::kRows * HoldLineField::kColumns - 1,
+          "hold the line: a shot fells the lowest attacker over it, for its row's points");
+    bool sawHit = false;
+    for (const HoldLineField::Event& e : field.takeEvents())
+        sawHit = sawHit || (e.kind == HoldLineField::EventKind::AttackerHit
+                            && e.row == HoldLineField::kRows - 1);
+    check(sawHit, "hold the line: and says so, naming the row");
+
+    // Under the first shelter, a shot wears it and scores nothing.
+    const double toShelter = field.cannonX() - field.shelters()[0].topLeft.x()
+                             - HoldLineField::kShelterColumns * HoldLineField::kBlock / 2.0;
+    field.setMove(-1);
+    field.advance(toShelter / HoldLineField::kCannonSpeed);
+    field.setMove(0);
+    const int score = field.score();
+    const int standing = holdLineShelterTotal(field);
+    check(field.fire(), "hold the line: fires again once the first shot is spent");
+    holdLineLandTheShot(field);
+    check(holdLineShelterTotal(field) < standing && field.score() == score,
+          "hold the line: a shot into a shelter wears it away and scores nothing");
+}
+
+void holdLineEndsWhenUndefended()
+{
+    // Nobody at the controls: the bombs or the landing end it, and the
+    // lives never go below zero on the way.
+    HoldLineField field;
+    field.setMove(1);
+    field.setMove(0);
+    bool lostOne = false;
+    bool livesSane = true;
+    for (int i = 0; i < 20000 && !field.over(); ++i) {
+        field.advance(0.05);
+        lostOne = lostOne || field.lives() < HoldLineField::kLives;
+        livesSane = livesSane && field.lives() >= 0;
+    }
+    check(field.over() && field.ending() != HoldLineField::Ending::None,
+          "hold the line: an undefended game ends");
+    check(livesSane, "hold the line: the lives never go below zero");
+    const int score = field.score();
+    field.advance(10.0);
+    check(!field.fire() && field.score() == score, "hold the line: a finished game takes no more shots");
+    check(lostOne || field.ending() == HoldLineField::Ending::Landed,
+          "hold the line: it ended by a cannon lost or by the wave landing");
+}
+
+void holdLineClearsAWave()
+{
+    // A careful pilot: under the lowest attacker nearest it, firing only when
+    // lined up. Bombs can still beat it, so it gets several games.
+    bool cleared = false;
+    bool bonusRight = false;
+    bool lowerNext = false;
+    for (int game = 0; game < 30 && !cleared; ++game) {
+        HoldLineField field;
+        for (int i = 0; i < 60 * 300 && !field.over() && !cleared; ++i) {
+            const HoldLineField::Attacker* aim = nullptr;
+            for (const HoldLineField::Attacker& a : field.attackers()) {
+                if (!a.alive)
+                    continue;
+                if (aim == nullptr || a.centre.y() > aim->centre.y() + 1.0
+                    || (std::abs(a.centre.y() - aim->centre.y()) <= 1.0
+                        && std::abs(a.centre.x() - field.cannonX())
+                               < std::abs(aim->centre.x() - field.cannonX())))
+                    aim = &a;
+            }
+            const double gap = aim == nullptr ? 0.0 : aim->centre.x() - field.cannonX();
+            field.setMove(std::abs(gap) < 3.0 ? 0 : (gap > 0 ? 1 : -1));
+            if (std::abs(gap) < 6.0)
+                field.fire();
+            field.advance(1.0 / 60.0);
+            for (const HoldLineField::Event& e : field.takeEvents())
+                if (e.kind == HoldLineField::EventKind::WaveCleared) {
+                    cleared = true;
+                    bonusRight = e.points == HoldLineField::kWaveBonusPer;
+                }
+        }
+        if (cleared) {
+            field.advance(HoldLineField::kWavePause + 0.1);
+            lowerNext = field.wave() == 2
+                        && field.attackers().front().centre.y()
+                               == HoldLineField::kFirstRowY + HoldLineField::kWaveLowering
+                        && field.attackersLeft() == HoldLineField::kRows * HoldLineField::kColumns;
+        }
+    }
+    check(cleared, "hold the line: a wave can be cleared");
+    check(bonusRight, "hold the line: clearing wave one pays its bonus");
+    check(lowerNext, "hold the line: and the next wave arrives whole, one step lower");
+}
+
+} // namespace
+
 int main()
 {
     section("Reversi");
@@ -7012,6 +7187,12 @@ int main()
     noughtsHardTakesAndBlocks();
     noughtsHardNeverLoses();
     noughtsEasyMakesMistakes();
+
+    holdLineStartsReady();
+    holdLineMarches();
+    holdLineShotsScoreAndWear();
+    holdLineEndsWhenUndefended();
+    holdLineClearsAWave();
 
     pyramidDealsAWholePack();
     pyramidRefusesACoveredCard();

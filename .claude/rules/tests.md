@@ -69,7 +69,7 @@ The corpus is written by `startedSave()`, which is also what the mutation fuzz
 seeds from: most games answer "nothing worth keeping" for a board nobody has
 moved in, so it pokes at the surface until something is worth saving, and
 freezes the clock first because Minesweeper and Sudoku save a running elapsed
-figure. Snake and Pinball offer no save and are absent by design.
+figure. Snake, Pinball and Hold the Line offer no save and are absent by design.
 
 **A test that builds a position with a WILD or a red three as the up-card gets
 one fewer card in the stock than it looks.** `Engine::dealFrom` covers such a

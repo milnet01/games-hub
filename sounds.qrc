@@ -12,10 +12,13 @@
     <file alias="flipper.wav">assets/sounds/flipper.wav</file>
     <file alias="launch.wav">assets/sounds/launch.wav</file>
     <file alias="lose.wav">assets/sounds/lose.wav</file>
+    <file alias="march.wav">assets/sounds/march.wav</file>
+    <file alias="pop.wav">assets/sounds/pop.wav</file>
     <file alias="shuffle.wav">assets/sounds/shuffle.wav</file>
     <file alias="slingshot.wav">assets/sounds/slingshot.wav</file>
     <file alias="ui_back.wav">assets/sounds/ui_back.wav</file>
     <file alias="ui_click.wav">assets/sounds/ui_click.wav</file>
     <file alias="win.wav">assets/sounds/win.wav</file>
+    <file alias="zap.wav">assets/sounds/zap.wav</file>
 </qresource>
 </RCC>

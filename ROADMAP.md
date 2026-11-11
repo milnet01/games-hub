@@ -8837,7 +8837,7 @@ ready does not wait for a slow one.
   Kind: feature.
   Source: user-request-2026-11-10.
 
-- 📋 [GHUB-0237] **An original shoot-the-descending-wave game, scored for a high score.**
+- ✅ [GHUB-0237] **An original shoot-the-descending-wave game, scored for a high score.**
   The genre is free: rows of enemies step sideways and down, the
   player moves a cannon along the bottom and fires up, and shelters
   wear away. "Space Invaders" is a protected name and look, and the
@@ -8851,6 +8851,11 @@ ready does not wait for a slow one.
   an unhurried start, a pause key, and a high-score table that is
   saved. Not legal advice; a short check before a public release
   is cheap insurance.
+  Shipped 2026-11-11 as Hold the Line (name chosen by the owner), in
+  src/holdline/. Original species (jellyfish, manta, pod), mound
+  shelters, a tuneless march thump; P pauses; the five best scores are
+  saved under holdline/best_scores. The short legal check before a
+  public release is still open.
   **Layman:** Rows of attackers march down the screen and you shoot them from a cannon at the bottom, chasing a high score.
   Kind: feature.
   Source: user-request-2026-11-10.

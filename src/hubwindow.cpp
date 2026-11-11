@@ -13,6 +13,7 @@
 #include "freecell/freecellview.h"
 #include "canasta/canastaview.h"
 #include "hearts/heartsview.h"
+#include "holdline/holdlineview.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
 #include "noughts/noughtsview.h"
@@ -595,6 +596,68 @@ void pinballTile(QPainter& p, const QRectF& r)
     p.drawEllipse(QPointF(r.left() + r.width() * 0.5, r.top() + r.height() * 0.62), r.width() * 0.09, r.width() * 0.09);
 }
 
+void holdLineTile(QPainter& p, const QRectF& r)
+{
+    // Night sky, two attackers, and the cannon firing up at them.
+    QPainterPath path;
+    path.addRoundedRect(r, 8, 8);
+    QLinearGradient g(r.topLeft(), r.bottomLeft());
+    g.setColorAt(0, QColor(0x08, 0x08, 0x1c));
+    g.setColorAt(0.7, QColor(0x1c, 0x10, 0x3a));
+    g.setColorAt(1, QColor(0x36, 0x16, 0x3c));
+    p.fillPath(path, g);
+
+    const double w = r.width();
+    const auto at = [&](double x, double y) { return QPointF(r.left() + w * x, r.top() + r.height() * y); };
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(255, 255, 255, 170));
+    for (const QPointF& s : { at(0.12, 0.15), at(0.82, 0.10), at(0.68, 0.30), at(0.25, 0.48), at(0.90, 0.55) })
+        p.drawEllipse(s, w * 0.012, w * 0.012);
+
+    // A manta, wings spread.
+    QPainterPath manta;
+    const QPointF m = at(0.32, 0.30);
+    const double u = w * 0.016;
+    manta.moveTo(m + QPointF(0, -10 * u));
+    manta.cubicTo(m + QPointF(6 * u, -8 * u), m + QPointF(10 * u, -3 * u), m + QPointF(15 * u, -4 * u));
+    manta.cubicTo(m + QPointF(10 * u, 3 * u), m + QPointF(5 * u, 5 * u), m + QPointF(0, 7 * u));
+    manta.cubicTo(m + QPointF(-5 * u, 5 * u), m + QPointF(-10 * u, 3 * u), m + QPointF(-15 * u, -4 * u));
+    manta.cubicTo(m + QPointF(-10 * u, -3 * u), m + QPointF(-6 * u, -8 * u), m + QPointF(0, -10 * u));
+    p.setPen(QPen(QColor(0x0a, 0x0c, 0x1c), std::max(1.0, u * 1.2)));
+    p.setBrush(QColor(0x3c, 0xe0, 0xe8));
+    p.drawPath(manta);
+
+    // A pod, its eye looking down at the cannon.
+    const QPointF pod = at(0.70, 0.40);
+    p.setBrush(QColor(0xff, 0xb0, 0x30));
+    p.drawEllipse(pod, 12 * u, 10 * u);
+    p.setBrush(QColor(0xfa, 0xf6, 0xf0));
+    p.drawEllipse(pod, 5.4 * u, 4.6 * u);
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(0xe0, 0x20, 0x30));
+    p.drawEllipse(pod + QPointF(-1.5 * u, 1.2 * u), 2.8 * u, 2.8 * u);
+
+    // The shot.
+    p.setPen(QPen(QColor(0x9c, 0xf6, 0xff, 110), std::max(3.0, w * 0.05), Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(at(0.5, 0.52), at(0.5, 0.64));
+    p.setPen(QPen(QColor(0xf0, 0xff, 0xff), std::max(1.5, w * 0.02), Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(at(0.5, 0.52), at(0.5, 0.64));
+
+    // The cannon on the ground.
+    p.setPen(QPen(QColor(0x6a, 0xd8, 0xff), std::max(1.0, w * 0.015)));
+    p.drawLine(at(0.04, 0.88), at(0.96, 0.88));
+    p.setPen(QPen(QColor(0x0a, 0x0c, 0x1c), std::max(1.0, u)));
+    p.setBrush(QColor(0xc0, 0xcc, 0xdc));
+    p.drawRect(QRectF(at(0.5, 0.70) - QPointF(2.5 * u, 0), QSizeF(5 * u, 8 * u)));
+    QPainterPath hull;
+    hull.moveTo(at(0.34, 0.87));
+    hull.lineTo(at(0.40, 0.78));
+    hull.lineTo(at(0.60, 0.78));
+    hull.lineTo(at(0.66, 0.87));
+    hull.closeSubpath();
+    p.drawPath(hull);
+}
+
 } // namespace
 
 // The title bar carries the version, because it is the one place a player can
@@ -682,6 +745,9 @@ void HubWindow::buildEntries()
         { QStringLiteral("Pinball"), // untranslated: the game's id
           tr("Pinball"), tr("Keep it alive"), pinballTile,
           [] { return new PinballView; }, Category::Arcade },
+        { QStringLiteral("Hold the Line"), // untranslated: the game's id
+          tr("Hold the Line"), tr("Stop the wave"), holdLineTile,
+          [] { return new HoldLineView; }, Category::Arcade },
     };
 }
 

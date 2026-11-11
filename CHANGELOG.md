@@ -12,6 +12,16 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Hold the Line** (GHUB-0237)
+  A wave of attackers marches sideways and down towards a city at night.
+  Shoot them from a cannon along the ground before they land, from behind
+  four shelters that wear away under fire. Three kinds of attacker, each
+  worth its own points, a bonus for every wave cleared, and each wave a
+  little lower and faster than the last. It starts slowly and waits for
+  you to move, `P` pauses, and your five best scores are kept and shown
+  when a game ends. Everything is large and clearly outlined, and its look
+  and sounds are its own.
+
 - **Noughts and Crosses** (GHUB-0236)
   Three in a row on a 3 by 3 grid. Play the computer on Easy, which makes
   mistakes you can win from, or Hard, which never loses. Or choose Two
