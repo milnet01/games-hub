@@ -4399,6 +4399,26 @@ int main(int argc, char* argv[])
               "canasta: and it can be reached without setting anything up first");
     }
 
+    // ---- canastaHouseGoingOutConcealedIsOrdinary (GHUB-0233) ----
+    //
+    // The owner's family gives no bonus for going out concealed: it is an
+    // ordinary going out (2026-11-11). A profile that has never saved House
+    // rules must start that way, and Classic must keep its bonus.
+    {
+        const QString group = QStringLiteral("canasta/house");
+        QSettings().remove(group);
+        const canasta::Rules fresh = loadHouse();
+        check(fresh.concealedGoingOutBonus == fresh.goingOutBonus,
+              "canasta: a fresh House set scores going out concealed as an ordinary going out");
+        check(canasta::Rules::classic().concealedGoingOutBonus
+                  > canasta::Rules::classic().goingOutBonus,
+              "canasta: and Classic keeps its concealed bonus");
+        QSettings().setValue(group + QStringLiteral("/concealed"), 300);
+        check(loadHouse().concealedGoingOutBonus == 300,
+              "canasta: a stored House value still wins over that default");
+        QSettings().remove(group);
+    }
+
     // ---- announcementsStopAtThePageYouLeft (GHUB-0179) ----
     //
     // A game that ends on a clock -- Pinball draining, Snake hitting a wall --

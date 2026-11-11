@@ -14,6 +14,11 @@
 
 class QTimer;
 
+// The House rule set as stored, or as it comes on a profile that has never
+// saved one. Out here, rather than private, so the UI test can check what a
+// fresh profile gets.
+canasta::Rules loadHouse();
+
 // Canasta's table. Presentation and timing only — every rule lives in
 // canasta::Engine, and every computer decision in canasta::Ai.
 class CanastaView : public GameView

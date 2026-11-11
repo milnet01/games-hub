@@ -9894,7 +9894,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0233] **Canasta judges going out concealed per player, not per team.**
+- ✅ [GHUB-0233] **Canasta judges going out concealed per player, not per team.**
   Found while writing GHUB-0016's rules: concealed going out is judged
   by m_hasMelded[seat], per player, and still has to meet the opening
   minimum. The rules text describes it as coded.
@@ -9907,6 +9907,10 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   concealed; it is an ordinary going out, worth the normal 100. The
   Waiting-on above is closed. Next: a House rules field that scores a
   concealed going-out as an ordinary one; Classic keeps its bonus.
+  Shipped 2026-11-11: loadHouse() now defaults the House concealed
+  bonus to the going-out bonus; Classic keeps 200; a stored House value
+  still wins. The owner's own profile already held 100. How to Play's
+  House list says so.
   **Layman:** Canasta's bonus for going out in one go checks only your own melds, not your partner's; the family may score it differently.
   Kind: investigate.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).

@@ -86,6 +86,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   Left Shift works the left flipper and right Shift the right one.
   Before, both Shift keys worked the left flipper.
 
+- **Canasta's House rules give no bonus for going out concealed** (GHUB-0233)
+  A House set that has never been edited now scores going out concealed
+  as an ordinary going out, as the family plays it. Classic keeps its
+  bonus, and a House value you have set yourself is kept.
+
 ### Fixed
 
 - **Solitaire's score can no longer be raised by moving cards back and forth** (GHUB-0228)

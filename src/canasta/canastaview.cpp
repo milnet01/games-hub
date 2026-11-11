@@ -257,6 +257,8 @@ void storeHouse(const ca::Rules& r)
     put("stackCanastas", r.canastasStackOnRedThrees ? 1 : 0); // untranslated: settings key
 }
 
+} // namespace
+
 ca::Rules loadHouse()
 {
     ca::Rules r = ca::Rules::classic();
@@ -284,7 +286,9 @@ ca::Rules loadHouse()
     r.redThreeValue = clamped("redThree", r.redThreeValue, 0, 500); // untranslated: settings key
     r.allRedThreesValue = clamped("allRedThrees", r.allRedThreesValue, 0, 2000); // untranslated: settings key
     r.goingOutBonus = clamped("goingOut", r.goingOutBonus, 0, 1000); // untranslated: settings key
-    r.concealedGoingOutBonus = clamped("concealed", r.concealedGoingOutBonus, 0, 1000); // untranslated: settings key
+    // The family gives no bonus for going out concealed: it is an ordinary
+    // going out (GHUB-0233). Classic keeps its bonus.
+    r.concealedGoingOutBonus = clamped("concealed", r.goingOutBonus, 0, 1000); // untranslated: settings key
     r.requireCanastaToGoOut = get("requireCanasta", 1) != 0; // untranslated: settings key
     r.blackThreeBlocksPile = get("blackThreeBlocks", 1) != 0; // untranslated: settings key
     r.unfrozenPileTakeableWithWild = get("wildTake", 1) != 0; // untranslated: settings key
@@ -320,6 +324,8 @@ ca::Rules loadHouse()
     r.canastasStackOnRedThrees = get("stackCanastas", 1) != 0; // untranslated: settings key
     return r;
 }
+
+namespace {
 
 // A modal dialog runs its own event loop, so a QTimer left running keeps
 // driving the computer seats behind it -- a slow read of the House rules form
@@ -3619,6 +3625,7 @@ QString CanastaView::rulesText() const
         "unless you finish by laying down all four black threes together.</li>"
         "<li>A team with no canasta when the hand ends catches a minus: "
         "its melds and its red threes count against it instead of for it.</li>"
+        "<li>Going out concealed earns no extra. It is worth the same as any going out.</li>"
         "<li>If the stock runs out and nobody has gone out, the hand is void. "
         "Neither team scores anything for it.</li>"
         "<li>If both teams reach the target in the same hand, the game is a draw, "
