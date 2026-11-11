@@ -2920,6 +2920,23 @@ void turnLightFollowsTheTurn()
     check(klondike.turnLight().seat == -1 && sudoku.turnLight().seat == -1
               && snake.turnLight().seat == -1 && holdLine.turnLight().seat == -1,
           "a game with no turns lights nobody");
+
+    // P pauses in every game that pauses (GHUB-0226, owner 2026-11-11), so
+    // Sudoku's Pencil moved from P to N.
+    {
+        QAction* pause = nullptr;
+        QAction* pencil = nullptr;
+        for (QAction* a : sudoku.gameActions()) {
+            if (a->text() == QStringLiteral("Pause"))
+                pause = a;
+            if (a->text() == QStringLiteral("Pencil"))
+                pencil = a;
+        }
+        check(pause != nullptr && pause->shortcut() == QKeySequence(Qt::Key_P),
+              "sudoku: P pauses, as it does in Minesweeper and Hold the Line");
+        check(pencil != nullptr && pencil->shortcut() == QKeySequence(Qt::Key_N),
+              "sudoku: and N, for Notes, turns pencil mode on or off");
+    }
 }
 
 // ---- turnLightComesUpAndHolds (INV-2) ----

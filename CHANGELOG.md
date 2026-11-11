@@ -91,6 +91,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
   as an ordinary going out, as the family plays it. Classic keeps its
   bonus, and a House value you have set yourself is kept.
 
+- **P pauses Sudoku; pencil marks move to N** (GHUB-0226)
+  P now pauses in every game that pauses: Minesweeper, Sudoku and Hold
+  the Line. Sudoku's pause had no key before. Pencil mode, which was P,
+  is now N, for Notes. If your fingers reach for P to write a pencil
+  mark, use N instead: this is the one change in this release that stops
+  something you did before from working.
+
 ### Fixed
 
 - **Solitaire's score can no longer be raised by moving cards back and forth** (GHUB-0228)

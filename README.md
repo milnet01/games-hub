@@ -118,8 +118,9 @@ never come back to a board you have already won.
 The three that do not do this yet are Snake, Pinball and Hold the Line.
 
 **Minesweeper and Sudoku can be paused**, which stops the clock and covers the
-board, so walking away costs you nothing. Snake has its own pause on the space
-bar, and Hold the Line on `P`.
+board, so walking away costs you nothing. `P` pauses both, and Hold the Line
+too. Snake has its own pause on the space bar. Sudoku's pencil mode is `N`, for
+Notes.
 
 ## Playing
 

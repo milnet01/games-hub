@@ -9794,7 +9794,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: fix.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
 
-- 📋 [GHUB-0226] **P means Pause in Minesweeper and Pencil in Sudoku, whose Pause has no key.**
+- ✅ [GHUB-0226] **P means Pause in Minesweeper and Pencil in Sudoku, whose Pause has no key.**
   A consistency question, not a fault. Found while writing the
   controls half of GHUB-0016's rules texts. Changing a shortcut is a
   breaking surface under docs/standards/versioning-overrides.md, so
@@ -9802,6 +9802,11 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Answered 2026-11-11: P pauses in every game; Sudoku's pencil marks
   move to N (Notes). A breaking shortcut change under
   docs/standards/versioning-overrides.md, so the CHANGELOG says so.
+  Shipped 2026-11-11: Sudoku's Pause takes P and Pencil takes N; How
+  to Play, README and CHANGELOG say so. A uitest check pins both keys.
+  A keyboard shortcut is a breaking surface (versioning-overrides § 1),
+  so the next release is 2.0.0, not 1.5.0. The owner chose to ship it
+  that way, 2026-11-11.
   **Layman:** The same key does different things in two games, and Sudoku's pause has no key at all.
   Kind: ux.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).

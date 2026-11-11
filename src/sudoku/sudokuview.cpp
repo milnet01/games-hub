@@ -147,6 +147,8 @@ void SudokuView::buildActions()
 
     m_pauseAction = new QAction(tr("Pause"), this);
     m_pauseAction->setCheckable(true);
+    // P pauses in every game that pauses (GHUB-0226), so Pencil is N, for Notes.
+    m_pauseAction->setShortcut(QKeySequence(Qt::Key_P));
     connect(m_pauseAction, &QAction::toggled, this, [this](bool on) {
         if (on == m_paused)
             return;
@@ -162,7 +164,7 @@ void SudokuView::buildActions()
 
     m_pencilAction = new QAction(tr("Pencil"), this);
     m_pencilAction->setCheckable(true);
-    m_pencilAction->setShortcut(QKeySequence(Qt::Key_P));
+    m_pencilAction->setShortcut(QKeySequence(Qt::Key_N));
     connect(m_pencilAction, &QAction::toggled, this, [this](bool on) {
         m_pencil = on;
         refresh();
@@ -259,9 +261,9 @@ QString SudokuView::rulesText() const
         "level.</li>"
         "<li><b>Restart</b> clears everything you wrote, notes too, and sets the "
         "clock back to zero. The puzzle stays the same.</li>"
-        "<li><b>Pause</b> stops the clock and covers the grid. Press it again to "
+        "<li><b>Pause</b> (P) stops the clock and covers the grid. Press it again to "
         "carry on.</li>"
-        "<li><b>Pencil</b> (P) turns pencil mode on or off.</li>"
+        "<li><b>Pencil</b> (N, for Notes) turns pencil mode on or off.</li>"
         "<li><b>Show Errors</b> turns the repeat warning on or off.</li>"
         "<li><b>Easy</b>, <b>Medium</b> and <b>Hard</b> choose the level. Choosing "
         "one makes a new puzzle straight away.</li>"
