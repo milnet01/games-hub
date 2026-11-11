@@ -887,7 +887,10 @@ platform's font, not of this codebase.
 
 ### Mahjong Solitaire
 
-Core: `mahjongboard.*`. View: `mahjongview.*`. Both in `src/mahjong/`.
+Core: `mahjongboard.*`, with the tiles themselves in `mahjongtiles.*`. View:
+`mahjongview.*`, which draws each tile's markings with `mahjongart.*`. All in
+`src/mahjong/`. The tiles and their art are shared with four-player Mahjong;
+a change to either shows in both games.
 
 **Every deal can be cleared because it is built by playing it.**
 `Board::fill` starts from the empty places, takes any two that are free, and
@@ -1026,6 +1029,58 @@ by `canasta::sortsBefore` inside the engine. That is not a layering slip: the
 flights index into `Meld::cards` and into the hand to work out where a card is
 flying, so a display order held only in the painter would put the animation in
 one place and the card in another. Sort before the flights are built.
+
+### Mahjong
+
+Four players, Hong Kong rules. Core: `mahjongtable.*`, `mahjongrules.*`,
+`mahjongplayer.*`. View: `mahjongtableview.*`. All in `src/mahjong/`, beside
+Mahjong Solitaire, whose tiles and art it shares. The contract is
+`docs/specs/GHUB-0239-four-player-mahjong.md`.
+
+**A rule set is a `RuleSet`, and the table never asks which one it has.**
+`Hand` deals, draws and settles claims; the rule set says whether chows and
+bonus tiles are in play, what a hand needs to win, how it scores and who
+pays. Chinese Official (GHUB-0243) and Japanese Riichi (GHUB-0244) arrive as
+new rule sets, not as branches in `Hand`. **Every Hong Kong number lives in
+`HongKongRules`**: `fanValue`, `pointsFor`, `kMinimum` and `kLimit`. The rules
+text reads the values through `fanList()` rather than keeping its own copy.
+
+**The core names a scoring pattern by `Fan`; the view owns its words.**
+`MahjongTableView::fanName` is the one place a pattern becomes a sentence, for
+the end of a hand and the rules text alike. A new `Fan` with no words fails
+the UI test.
+
+**A win is read every way the tiles allow, and the best reading scores.**
+`bestWin` splits the hand into a pair and sets in each possible way and asks
+the rule set to score each. The same call answers "may this seat win?" — at
+or above `minimumToWin()` — so the button offered and the score shown cannot
+disagree.
+
+**The save is the moves, as Chess's is.** A hand is its seed and the moves the
+players chose; draws are not moves, since the wall decides them. A game is its
+hands. `Game::replay` plays every move back through `Hand::play`, which
+refuses anything not in `legalMoves()`, so a save no game could reach is
+refused whole. The totals, the dealer and the wind are never stored: they are
+what the replay gives.
+
+**A claim waits for you, with no clock.** The computers answer a discard at
+once, but their answers stay hidden until every seat has answered, so
+answering first decides nothing. Win beats a pung or kong, which beats a
+chow; two wins go to the first seat after the discarder. Only a turn waits out
+the computer's pause, `kAiPauseMs`, the same 0.95 seconds as Canasta's.
+
+**The computer plays toward the 3-fan minimum.** `chooseMove` reckons how many
+tiles each discard leaves the hand from ready, and keeps tiles that score:
+one suit with honours, all pungs, dragons and its own winds. It claims a chow
+only when building one suit, since a chow costs the concealed hand's fan. It
+has one strength. The self-test prints how many hands the computers win
+across six seeded East rounds; it requires one in five.
+
+**Everything that matters is said on the table.** The last discard is drawn
+large and spelled out under the centre, with who took it for a set. Each
+seat's plate carries its wind, the dealer and its running total. The end of a
+hand lists every scoring pattern with its fan. The buttons beside your hand
+carry their number key.
 
 ### Snake
 

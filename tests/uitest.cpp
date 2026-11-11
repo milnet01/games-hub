@@ -27,6 +27,9 @@
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
 #include "noughts/noughtsview.h"
+#include "mahjong/mahjongart.h"
+#include "mahjong/mahjongplayer.h"
+#include "mahjong/mahjongtableview.h"
 #include "mahjong/mahjongview.h"
 #include "pinball/pinballview.h"
 #include "pyramid/pyramidview.h"
@@ -148,6 +151,15 @@ public:
     using MahjongView::cursorSlot;
     using MahjongView::faceRect;
     using MahjongView::pickedSlot;
+};
+class MahjongTableProbe : public MahjongTableView
+{
+public:
+    using MahjongTableView::buttonLabels;
+    using MahjongTableView::endOfHandLines;
+    using MahjongTableView::game;
+    using MahjongTableView::ruleSetInForce;
+    using MahjongTableView::tableSentence;
 };
 class DraughtsProbe : public DraughtsView
 {
@@ -1204,7 +1216,8 @@ void idsAndKeysSurviveATranslation()
             QStringLiteral("Noughts and Crosses"), QStringLiteral("Minesweeper"), QStringLiteral("Solitaire"), QStringLiteral("Spider"),
             QStringLiteral("FreeCell"), QStringLiteral("Pyramid"),     QStringLiteral("Sudoku"),
             QStringLiteral("Mahjong Solitaire"),
-            QStringLiteral("Hearts"),   QStringLiteral("Canasta"),     QStringLiteral("Snake"),
+            QStringLiteral("Hearts"),   QStringLiteral("Canasta"),     QStringLiteral("Mahjong"),
+            QStringLiteral("Snake"),
             QStringLiteral("2048"),     QStringLiteral("Pinball"),     QStringLiteral("Hold the Line"),
         };
         check(hub.gameNames() == ids,
@@ -1400,7 +1413,7 @@ void fuzzSavedGames(int rounds)
 
 // ---- the turn light (GHUB-0063) ----
 //
-// The six games with turns, built one way so each block below covers all of
+// The games with turns, built one way so each block below covers all of
 // them rather than whichever one happened to be convenient.
 struct LitGame {
     QString name;
@@ -1419,6 +1432,7 @@ std::vector<LitGame> litGames()
         { QStringLiteral("noughts"), [] { return static_cast<GameView*>(new NoughtsView); }, true },
         { QStringLiteral("hearts"), [] { return static_cast<GameView*>(new HeartsView); }, true },
         { QStringLiteral("canasta"), [] { return static_cast<GameView*>(new CanastaView); }, false },
+        { QStringLiteral("mahjong"), [] { return static_cast<GameView*>(new MahjongTableView); }, true },
     };
 }
 
@@ -2609,6 +2623,188 @@ void mahjongPlaysAndKeepsItsPlace()
     }
     game.deactivate();
     QSettings().remove(QStringLiteral("mahjong/dimHeld"));
+}
+
+// ---- mahjongTableWaitsAndKeepsItsPlace (GHUB-0239) ----
+//
+// The rules are the self-test's. This is the table: a save that replays, the
+// rule set remembered, the words on the table, the turn light, and a claim
+// that waits for you.
+
+// A save of a four-computer game, stopped at the first moment `stop` holds.
+// Empty if no seed reaches one.
+QByteArray mahjongSaveWhere(const std::function<bool(const mahjong::Hand&)>& stop)
+{
+    for (std::uint32_t seed = 1; seed < 60; ++seed) {
+        mahjong::Game g(mahjong::RuleSetId::HongKong, mahjong::Length::FullGame);
+        for (int hand = 0; hand < 6 && !g.over(); ++hand) {
+            g.startHand(seed * 100u + std::uint32_t(hand));
+            for (int step = 0; step < 2000; ++step) {
+                if (stop(*g.hand()))
+                    return MahjongTableView::encodeSave(g.ruleSetId(), g.length(), g.firstDealer(), g.records());
+                if (!g.handInPlay())
+                    break;
+                const mahjong::Hand& h = *g.hand();
+                const int seat = h.phase() == mahjong::Phase::Turn ? h.toMove() : h.waitingOn().front();
+                g.play(mahjong::chooseMove(h, seat));
+            }
+        }
+    }
+    return {};
+}
+
+int mahjongMoves(const MahjongTableProbe& view)
+{
+    int n = 0;
+    for (const mahjong::HandRecord& r : view.game().records())
+        n += int(r.moves.size());
+    return n;
+}
+
+void mahjongTableWaitsAndKeepsItsPlace()
+{
+    using mahjong::Action;
+    using mahjong::Phase;
+    QSettings().remove(QStringLiteral("mahjong4/ruleSet"));
+    QSettings().remove(QStringLiteral("mahjong4/length"));
+
+    // The hub tells the two Mahjong games apart.
+    {
+        HubWindow hub;
+        hub.openGameNamed(QStringLiteral("Mahjong"));
+        HubWindow solitaire;
+        solitaire.openGameNamed(QStringLiteral("Mahjong Solitaire"));
+        check(hub.findChild<MahjongTableView*>() != nullptr && solitaire.findChild<MahjongTableView*>() == nullptr
+                  && solitaire.findChild<MahjongView*>() != nullptr,
+              "mahjong table: --game Mahjong opens the table, and Mahjong Solitaire still the heap");
+    }
+
+    // INV-16 and INV-14: a discard you can pung waits for you, with nobody lit.
+    const QByteArray claimable = mahjongSaveWhere([](const mahjong::Hand& h) {
+        if (h.phase() != Phase::Claims)
+            return false;
+        for (const mahjong::Move& m : h.legalMoves(0))
+            if (m.action == Action::Pung)
+                return true;
+        return false;
+    });
+    check(!claimable.isEmpty(), "mahjong table: some seeded game offers you a pung");
+    {
+        MahjongTableProbe view;
+        view.resize(1200, 820);
+        view.show();
+        view.activate();
+        check(view.restoreState(claimable), "mahjong table: a save waiting on your claim restores (INV-10)");
+        const QStringList labels = view.buttonLabels();
+        check(labels.contains(QStringLiteral("Pung")) && labels.last() == QStringLiteral("Pass"),
+              "mahjong table: and shows a button for the claim, and Pass (INV-16)");
+        check(view.turnLight().seat == -1, "mahjong table: nobody is lit while a claim waits (INV-14)");
+        const int before = mahjongMoves(view);
+        pump(2500);
+        check(mahjongMoves(view) == before && view.game().hand()->phase() == Phase::Claims,
+              "mahjong table: however long the timers run, nothing moves (INV-16)");
+        // The sentence names the tile in words (INV-13).
+        const mahjong::Face offered = view.game().hand()->offered();
+        check(view.tableSentence().contains(mahjong::tileName(offered)),
+              "mahjong table: the sentence names the discard in words (INV-13)");
+        pressKey(&view, Qt::Key(Qt::Key_1 + labels.size() - 1));
+        check(pumpUntil([&view, before] {
+                  return mahjongMoves(view) > before && view.game().hand()->phase() == Phase::Turn;
+              }, 20000),
+              "mahjong table: Pass, and play goes on to the next turn (INV-16)");
+        view.deactivate();
+    }
+
+    // A table where it is a computer's turn moves on by itself.
+    const QByteArray theirs = mahjongSaveWhere([](const mahjong::Hand& h) {
+        return h.phase() == Phase::Turn && h.toMove() == 2 && h.moves().size() > 8;
+    });
+    {
+        MahjongTableProbe view;
+        view.resize(1200, 820);
+        view.show();
+        view.activate();
+        check(view.restoreState(theirs), "mahjong table: a save on a computer's turn restores");
+        check(view.turnLight().seat == 2, "mahjong table: the seat to move is lit (INV-14)");
+        const int before = mahjongMoves(view);
+        check(pumpUntil([&view, before] { return mahjongMoves(view) > before; }, 20000),
+              "mahjong table: and it plays without being asked (INV-16)");
+        view.deactivate();
+
+        // INV-10: saved mid-hand, restored into a fresh view, the same save.
+        const QByteArray saved = view.saveState();
+        MahjongTableProbe resumed;
+        check(resumed.restoreState(saved) && resumed.saveState() == saved,
+              "mahjong table: a save restores to the same table (INV-10)");
+        resumed.deactivate();
+        std::vector<mahjong::HandRecord> records = view.game().records();
+        bool changed = false;
+        for (mahjong::Move& m : records.back().moves) {
+            if (m.action == Action::Discard) {
+                m.tile = mahjong::kFlowerFirst; // never held: a flower is set aside at once
+                changed = true;
+                break;
+            }
+        }
+        MahjongTableProbe refused;
+        const QByteArray before2 = refused.saveState();
+        check(changed
+                  && !refused.restoreState(MahjongTableView::encodeSave(view.game().ruleSetId(), view.game().length(),
+                                                                       view.game().firstDealer(), records))
+                  && refused.saveState() == before2,
+              "mahjong table: a save holding a discard the seat does not hold is refused (INV-10)");
+        refused.deactivate();
+    }
+
+    // INV-13 and INV-14: a hand just won.
+    const QByteArray won = mahjongSaveWhere(
+        [](const mahjong::Hand& h) { return h.phase() == Phase::Over && !h.result().drawn; });
+    {
+        MahjongTableProbe view;
+        check(view.restoreState(won), "mahjong table: a save between hands restores");
+        const mahjong::HandResult& r = view.game().results().back();
+        const QString lines = view.endOfHandLines().join(QLatin1Char('\n'));
+        bool named = !r.score.items.empty();
+        for (const mahjong::ScoreItem& item : r.score.items)
+            named = named && !MahjongTableView::fanName(item.fan).isEmpty()
+                && lines.contains(MahjongTableView::fanName(item.fan));
+        check(named, "mahjong table: every scoring line of the win is on the table in words (INV-13)");
+        check(view.turnLight().seat == -1 && view.buttonLabels() == QStringList { QStringLiteral("Next hand") },
+              "mahjong table: between hands nobody is lit, and Next hand carries on (INV-14)");
+        view.deactivate();
+    }
+    bool everyWord = true;
+    for (int f = 0; f < mahjong::kFanCount; ++f)
+        everyWord = everyWord && !MahjongTableView::fanName(mahjong::Fan(f)).isEmpty();
+    check(everyWord, "mahjong table: every Fan has its words (INV-13)");
+
+    // INV-11: an unknown stored rule set falls back, and the menu lists only
+    // the rule sets this build has.
+    QSettings().setValue(QStringLiteral("mahjong4/ruleSet"), 99);
+    {
+        MahjongTableProbe view;
+        int ruleEntries = 0;
+        QAction* east = nullptr;
+        for (QAction* a : view.gameActions()) {
+            if (a->objectName().startsWith(QStringLiteral("mahjong4-rules-")))
+                ++ruleEntries;
+            if (a->objectName() == QStringLiteral("mahjong4-length-east"))
+                east = a;
+        }
+        check(view.ruleSetInForce() == mahjong::RuleSetId::HongKong && ruleEntries == 1,
+              "mahjong table: an unknown stored rule set falls back to Hong Kong, one entry in the menu (INV-11)");
+        check(view.game().length() == mahjong::Length::FullGame, "mahjong table: a full game by default");
+        if (east != nullptr)
+            east->trigger();
+        check(view.game().length() == mahjong::Length::FullGame,
+              "mahjong table: a length chosen mid-game waits for the next game");
+        view.deactivate();
+        MahjongTableProbe next;
+        check(next.game().length() == mahjong::Length::EastRound, "mahjong table: and the choice is remembered");
+        next.deactivate();
+    }
+    QSettings().remove(QStringLiteral("mahjong4/ruleSet"));
+    QSettings().remove(QStringLiteral("mahjong4/length"));
 }
 
 // ---- holdLinePausesAndKeepsItsTable (GHUB-0237) ----
@@ -8912,6 +9108,7 @@ int main(int argc, char* argv[])
 
     noughtsPlaysAndKeepsItsPlace();
     mahjongPlaysAndKeepsItsPlace();
+    mahjongTableWaitsAndKeepsItsPlace();
     holdLinePausesAndKeepsItsTable();
 
     turnLightFollowsTheTurn();

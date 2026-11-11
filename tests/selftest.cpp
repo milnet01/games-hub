@@ -14,6 +14,8 @@
 #include "holdline/holdlinefield.h"
 #include "noughts/noughtsboard.h"
 #include "mahjong/mahjongboard.h"
+#include "mahjong/mahjongplayer.h"
+#include "mahjong/mahjongtable.h"
 #include "pinball/pinballtable.h"
 #include "spider/spidertable.h"
 #include "sudoku/sudokugrid.h"
@@ -2139,6 +2141,571 @@ void mahjongRefusesABoardNoGameReaches()
         five[std::size_t(i)] = kCirclesFirst;
     check(!board.restore(five), "mahjong: more of a tile than the set holds is refused");
     check(board.faces() == dealt.faces(), "mahjong: and a refusal leaves the board alone");
+}
+
+// ---------------------------------------------------------------------------
+// Four-player Mahjong (GHUB-0239)
+//
+// The rules the spec's § 5 puts here. Each set-up hand is built tile by tile
+// with Hand::arranged, so a check isolates the one rule it names.
+// ---------------------------------------------------------------------------
+
+namespace mj {
+
+using mahjong::Face;
+
+Face C(int n) { return Face(mahjong::kCirclesFirst + n - 1); }
+Face B(int n) { return Face(mahjong::kBambooFirst + n - 1); }
+Face D(int n) { return Face(mahjong::kCharactersFirst + n - 1); }
+Face W(int n) { return Face(mahjong::kWindFirst + n - 1); }
+Face Dr(int n) { return Face(mahjong::kDragonFirst + n - 1); }
+Face F(int n) { return Face(mahjong::kFlowerFirst + n - 1); }
+Face S(int n) { return Face(mahjong::kSeasonFirst + n - 1); }
+
+std::vector<Face> tiles(std::initializer_list<std::pair<Face, int>> runs)
+{
+    std::vector<Face> out;
+    for (const auto& [face, count] : runs)
+        out.insert(out.end(), std::size_t(count), face);
+    return out;
+}
+
+const mahjong::RuleSet& hk()
+{
+    return mahjong::ruleSet(mahjong::RuleSetId::HongKong);
+}
+
+bool offers(const mahjong::Hand& h, int seat, mahjong::Action action)
+{
+    for (const mahjong::Move& m : h.legalMoves(seat))
+        if (m.action == action)
+            return true;
+    return false;
+}
+
+// Every seat still to answer a claim says Pass.
+void passAll(mahjong::Hand& h)
+{
+    for (int s : h.waitingOn())
+        h.play({ std::uint8_t(s), mahjong::Action::Pass, 0, 0 });
+}
+
+bool holdsTheWholeSet(const mahjong::Hand& h)
+{
+    std::vector<Face> all = h.everyTile();
+    std::vector<Face> set = mahjong::fullSet();
+    std::sort(all.begin(), all.end());
+    std::sort(set.begin(), set.end());
+    return all == set;
+}
+
+// Plays one move for whoever is to act, as the computer would. Returns false
+// when there is nobody to ask.
+bool playOne(mahjong::Game& g)
+{
+    const mahjong::Hand* h = g.hand();
+    if (h->phase() == mahjong::Phase::Turn)
+        return g.play(mahjong::chooseMove(*h, h->toMove()));
+    const std::vector<int> waiting = h->waitingOn();
+    if (waiting.empty())
+        return false;
+    return g.play(mahjong::chooseMove(*h, waiting.front()));
+}
+
+struct GameRun {
+    bool ended = false;
+    bool tilesHeld = true;
+    bool zeroSum = true;
+    bool dealMoved = true;
+    bool minimumKept = true;
+    int hands = 0;
+    int won = 0;
+};
+
+// A whole game, four computer seats, checking INV-1, INV-6 and INV-9 as it
+// goes.
+GameRun playGame(mahjong::Length length, std::uint32_t seed)
+{
+    GameRun run;
+    mahjong::Game g(mahjong::RuleSetId::HongKong, length);
+    for (int hand = 0; hand < 200 && !g.over(); ++hand) {
+        const int dealer = g.dealer();
+        const int passed = g.dealsPassed();
+        g.startHand(seed * 1000u + std::uint32_t(hand));
+        run.tilesHeld = run.tilesHeld && holdsTheWholeSet(*g.hand());
+        for (int step = 0; step < 2000 && g.handInPlay(); ++step) {
+            if (!playOne(g))
+                break;
+            if (!holdsTheWholeSet(*g.hand()))
+                run.tilesHeld = false;
+        }
+        if (g.handInPlay())
+            return run; // a hand that never ends
+        ++run.hands;
+        const mahjong::HandResult& r = g.results().back();
+        int sum = 0;
+        for (int p : r.payments)
+            sum += p;
+        run.zeroSum = run.zeroSum && sum == 0;
+        if (!r.drawn) {
+            ++run.won;
+            run.minimumKept = run.minimumKept && r.score.total >= hk().minimumToWin();
+        }
+        const bool keeps = r.drawn || r.win.winner == dealer;
+        run.dealMoved = run.dealMoved
+            && (keeps ? g.dealer() == dealer && g.dealsPassed() == passed
+                      : g.dealer() == (dealer + 1) % 4 && g.dealsPassed() == passed + 1)
+            && g.prevailingWind() == std::min(4, g.dealsPassed() / 4 + 1);
+    }
+    run.ended = g.over();
+    return run;
+}
+
+} // namespace mj
+
+// INV-1, INV-6, INV-9 and INV-15: whole games between four computer seats.
+void mahjongTableGamesEnd()
+{
+    using namespace mj;
+    int hands = 0;
+    int won = 0;
+    bool ended = true;
+    bool held = true;
+    bool zero = true;
+    bool dealt = true;
+    bool minimum = true;
+    for (std::uint32_t seed = 1; seed <= 6; ++seed) {
+        const GameRun r = playGame(mahjong::Length::EastRound, seed);
+        hands += r.hands;
+        won += r.won;
+        ended = ended && r.ended;
+        held = held && r.tilesHeld;
+        zero = zero && r.zeroSum;
+        dealt = dealt && r.dealMoved;
+        minimum = minimum && r.minimumKept;
+    }
+    std::printf("      mahjong: %d of %d hands won across six East rounds\n", won, hands);
+    check(ended, "mahjong table: every East round between computers ends (INV-15)");
+    check(minimum, "mahjong table: and every win in them is worth at least 3 fan (INV-15)");
+    check(hands > 0 && won * 5 >= hands, "mahjong table: at least one hand in five is won (INV-15)");
+    check(held, "mahjong table: every tile is somewhere, once, after every move (INV-1)");
+    check(zero, "mahjong table: every hand's payments sum to zero (INV-6)");
+    check(dealt, "mahjong table: the deal passes only when the dealer does not win (INV-9)");
+
+    bool fullEnded = true;
+    bool fullDealt = true;
+    int fullHands = 0;
+    for (std::uint32_t seed = 11; seed <= 12; ++seed) {
+        const GameRun r = playGame(mahjong::Length::FullGame, seed);
+        fullEnded = fullEnded && r.ended;
+        fullDealt = fullDealt && r.dealMoved && r.tilesHeld && r.zeroSum;
+        fullHands += r.hands;
+    }
+    check(fullEnded && fullHands >= 32,
+          "mahjong table: a full game of four winds ends, after sixteen hands or more (INV-9)");
+    check(fullDealt, "mahjong table: and the wind moves on every fourth pass of the deal (INV-9)");
+}
+
+// INV-2: Win, then Kong or Pung, then Chow; two wins go to the first seat
+// after the discarder.
+void mahjongTableClaimsInOrder()
+{
+    using namespace mj;
+    using mahjong::Action;
+    {
+        // Seat 1 can chow the Five of Circles, seat 3 can pung it.
+        const std::array<std::vector<Face>, 4> hands { {
+            tiles({ { C(5), 1 }, { B(1), 3 }, { B(4), 3 }, { D(1), 3 }, { D(4), 3 }, { W(4), 1 } }),
+            tiles({ { C(4), 1 }, { C(6), 1 }, { B(2), 1 }, { B(8), 1 }, { D(2), 1 }, { D(8), 1 },
+                    { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { Dr(1), 1 }, { Dr(2), 1 }, { Dr(3), 1 },
+                    { B(5), 1 } }),
+            tiles({ { B(7), 1 }, { D(7), 1 }, { B(3), 1 }, { D(3), 1 }, { D(5), 1 }, { B(9), 1 },
+                    { D(9), 1 }, { C(1), 1 }, { C(9), 1 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 },
+                    { Dr(1), 1 } }),
+            tiles({ { C(5), 2 }, { B(6), 1 }, { D(6), 1 }, { C(2), 1 }, { C(8), 1 }, { B(9), 1 },
+                    { D(9), 1 }, { C(1), 1 }, { C(9), 1 }, { Dr(2), 1 }, { Dr(3), 1 }, { W(4), 1 } }),
+        } };
+        mahjong::Hand h = mahjong::Hand::arranged(hk(), hands, tiles({ { C(3), 10 } }), 0, 0, 1);
+        check(h.play({ 0, Action::Discard, C(5), 0 }), "mahjong table: the set-up discard is played");
+        check(offers(h, 1, Action::Chow) && offers(h, 3, Action::Pung),
+              "mahjong table: seat 1 may chow it and seat 3 may pung it, each alone");
+        h.play({ 1, Action::Chow, C(5), std::uint8_t(C(4)) });
+        h.play({ 3, Action::Pung, C(5), 0 });
+        check(h.toMove() == 3 && !h.seat(3).melds.empty() && h.seat(3).melds.back().kind == mahjong::SetKind::Pung,
+              "mahjong table: the pung beats the chow (INV-2)");
+        check(h.seat(1).melds.empty(), "mahjong table: and the chow is not made");
+    }
+    {
+        // Seats 2 and 3 both win on the Five of Diamonds.
+        const std::array<std::vector<Face>, 4> hands { {
+            tiles({ { D(5), 1 }, { B(1), 3 }, { B(4), 3 }, { C(1), 3 }, { C(4), 3 }, { W(4), 1 } }),
+            tiles({ { B(7), 1 }, { C(8), 1 }, { B(2), 1 }, { B(8), 1 }, { C(2), 1 }, { C(6), 1 },
+                    { W(4), 1 }, { W(2), 1 }, { W(3), 1 }, { Dr(3), 1 }, { B(5), 1 },
+                    { C(9), 1 }, { B(9), 1 } }),
+            tiles({ { D(1), 2 }, { D(2), 2 }, { D(3), 2 }, { D(7), 1 }, { D(8), 1 }, { D(9), 4 },
+                    { D(5), 1 } }),
+            tiles({ { W(1), 3 }, { W(2), 3 }, { Dr(1), 3 }, { Dr(2), 3 }, { D(5), 1 } }),
+        } };
+        mahjong::Hand h = mahjong::Hand::arranged(hk(), hands, tiles({ { C(3), 10 } }), 0, 0, 1);
+        h.play({ 0, Action::Discard, D(5), 0 });
+        check(offers(h, 2, Action::Win) && offers(h, 3, Action::Win),
+              "mahjong table: seats 2 and 3 may each win on the discard");
+        // Seat 3 answers first; the order of answering decides nothing.
+        h.play({ 3, Action::Win, D(5), 0 });
+        h.play({ 2, Action::Win, D(5), 0 });
+        check(h.phase() == mahjong::Phase::Over && h.result().win.winner == 2,
+              "mahjong table: two wins go to the first seat after the discarder (INV-2)");
+    }
+}
+
+// INV-3: only the seat after the discarder may chow.
+void mahjongTableOnlyTheNextSeatChows()
+{
+    using namespace mj;
+    using mahjong::Action;
+    const auto table = [](int chower) {
+        std::array<std::vector<Face>, 4> hands { {
+            tiles({ { C(5), 1 }, { B(1), 3 }, { B(4), 3 }, { D(1), 3 }, { D(4), 3 }, { W(4), 1 } }),
+            tiles({ { B(7), 1 }, { D(7), 1 }, { B(3), 1 }, { D(3), 1 }, { D(5), 1 }, { B(9), 1 },
+                    { D(9), 1 }, { C(1), 1 }, { C(9), 1 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 },
+                    { Dr(1), 1 } }),
+            {},
+            tiles({ { B(6), 1 }, { D(6), 1 }, { C(2), 1 }, { C(8), 1 }, { B(9), 1 }, { D(8), 1 },
+                    { C(1), 1 }, { C(9), 1 }, { Dr(2), 1 }, { Dr(3), 1 }, { W(4), 1 }, { B(2), 1 },
+                    { D(2), 1 } }),
+        } };
+        // The chower holds the Four and Six of Circles beside the same junk.
+        hands[2] = hands[std::size_t(chower)];
+        hands[std::size_t(chower)] =
+            tiles({ { C(4), 1 }, { C(6), 1 }, { B(2), 1 }, { B(8), 1 }, { D(2), 1 }, { D(8), 1 },
+                    { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { Dr(1), 1 }, { Dr(2), 1 }, { Dr(3), 1 },
+                    { B(5), 1 } });
+        mahjong::Hand h = mahjong::Hand::arranged(hk(), hands, tiles({ { C(3), 10 } }), 0, 0, 1);
+        h.play({ 0, Action::Discard, C(5), 0 });
+        return h;
+    };
+    check(offers(table(1), 1, Action::Chow), "mahjong table: the next seat is offered the chow");
+    check(!offers(table(2), 2, Action::Chow), "mahjong table: the seat across is not (INV-3)");
+}
+
+// INV-4: a complete hand below the minimum cannot win.
+void mahjongTableMinimumToWin()
+{
+    using namespace mj;
+    using mahjong::Action;
+    // Seat 1, South, all chows on a pair that scores nothing, waiting on the
+    // Five or Eight of Circles.
+    const std::vector<Face> waiting = tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                                              { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 },
+                                              { C(6), 1 }, { C(7), 1 }, { B(2), 2 } });
+    const std::vector<Face> junk = tiles({ { D(1), 3 }, { B(9), 3 }, { W(3), 1 }, { Dr(3), 1 }, { D(4), 1 },
+                                           { W(2), 1 }, { C(5), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 } });
+    {
+        // A flower not its own: won on the discard it is 2 fan.
+        std::vector<Face> withFlower = waiting;
+        withFlower.push_back(F(3));
+        std::array<std::vector<Face>, 4> hands { { junk, withFlower, {}, {} } };
+        mahjong::Hand h = mahjong::Hand::arranged(hk(), hands, tiles({ { C(3), 10 } }), 0, 0, 1);
+        const auto w = h.winOn(1, C(5), 0, false);
+        check(w && w->second.total == 2,
+              "mahjong table: complete on the Five of Circles, with a flower not its own it is 2 fan");
+        h.play({ 0, Action::Discard, C(5), 0 });
+        check(!offers(h, 1, Action::Win), "mahjong table: so Win is not offered for it (INV-4)");
+        check(!h.play({ 1, Action::Win, C(5), 0 }), "mahjong table: and a Win played anyway is refused");
+    }
+    {
+        // No flower, self-drawn: 3 fan, and it may win.
+        std::array<std::vector<Face>, 4> hands { { junk, waiting, {}, {} } };
+        mahjong::Hand h = mahjong::Hand::arranged(hk(), hands, tiles({ { C(5), 1 }, { C(3), 10 } }), 0, 0, 1);
+        h.play({ 0, Action::Discard, W(4), 0 });
+        passAll(h);
+        const auto w = h.winFor(1);
+        check(h.toMove() == 1 && w && w->second.total == 3 && offers(h, 1, Action::Win),
+              "mahjong table: self-drawn with no flower it is worth 3 and may win (INV-4)");
+    }
+}
+
+// INV-5: the fan list, one hand per line.
+void mahjongTableFanList()
+{
+    using namespace mj;
+    using mahjong::Fan;
+    using mahjong::Meld;
+    using mahjong::SetKind;
+    struct Fixture {
+        const char* name;
+        Fan fan;
+        int value;
+        std::vector<Face> concealed;
+        std::vector<Meld> melds;
+        std::function<void(mahjong::WinContext&)> how;
+    };
+    // South's hand in an East round, won on a discard from seat 0, holding a
+    // flower not its own -- unless a fixture says otherwise.
+    const auto plain = [](mahjong::WinContext&) {};
+    const std::vector<Face> chows = tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                                            { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 },
+                                            { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { B(2), 2 } });
+    const std::vector<Fixture> fixtures {
+        { "Self-drawn", Fan::SelfDrawn, 1, chows, {}, [](auto& w) { w.selfDrawn = true; w.payer = -1; } },
+        { "Concealed hand", Fan::ConcealedHand, 1, chows, {}, plain },
+        { "No flowers or seasons", Fan::NoBonusTiles, 1, chows, {}, [](auto& w) { w.bonus.clear(); } },
+        { "Own flower", Fan::OwnFlower, 1, chows, {}, [](auto& w) { w.bonus = { F(2) }; } },
+        { "Own season", Fan::OwnSeason, 1, chows, {}, [](auto& w) { w.bonus = { S(2) }; } },
+        { "All four flowers", Fan::AllFourFlowers, 2, chows, {},
+          [](auto& w) { w.bonus = { F(1), F(2), F(3), F(4) }; } },
+        { "All four seasons", Fan::AllFourSeasons, 2, chows, {},
+          [](auto& w) { w.bonus = { S(1), S(2), S(3), S(4) }; } },
+        { "All chows", Fan::AllChows, 1, chows, {}, plain },
+        { "Pung of a dragon", Fan::DragonPung, 1,
+          tiles({ { Dr(1), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                  { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 } }),
+          {}, plain },
+        { "Pung of your seat wind", Fan::SeatWindPung, 1,
+          tiles({ { W(2), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                  { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 } }),
+          {}, plain },
+        { "Pung of the prevailing wind", Fan::PrevailingWindPung, 1,
+          tiles({ { W(1), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                  { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 } }),
+          {}, plain },
+        { "Last tile of the wall", Fan::LastTile, 1, chows, {}, [](auto& w) { w.lastTile = true; } },
+        { "Kong replacement", Fan::KongReplacement, 1, chows, {},
+          [](auto& w) { w.kongReplacement = true; w.selfDrawn = true; w.payer = -1; } },
+        { "Robbing a kong", Fan::RobbingAKong, 1, chows, {}, [](auto& w) { w.robbedKong = true; } },
+        { "All pungs", Fan::AllPungs, 3,
+          tiles({ { C(2), 3 }, { B(3), 3 }, { D(4), 3 }, { B(8), 2 } }),
+          { { SetKind::Pung, C(7), false } }, plain },
+        { "Mixed one suit", Fan::MixedOneSuit, 3,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 },
+                  { C(7), 1 }, { C(8), 1 }, { C(9), 1 }, { W(3), 3 }, { C(5), 2 } }),
+          {}, plain },
+        { "Small three dragons", Fan::SmallThreeDragons, 5,
+          tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { Dr(3), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 },
+                  { B(4), 1 }, { B(5), 1 }, { B(6), 1 } }),
+          {}, plain },
+        { "Pure one suit", Fan::PureOneSuit, 7,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 },
+                  { C(7), 1 }, { C(8), 1 }, { C(9), 1 }, { C(2), 3 }, { C(5), 2 } }),
+          {}, plain },
+        { "Big three dragons", Fan::BigThreeDragons, 8,
+          tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { Dr(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 },
+                  { B(5), 2 } }),
+          {}, plain },
+        { "Small four winds", Fan::SmallFourWinds, 10,
+          tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { W(4), 2 }, { C(1), 1 }, { C(2), 1 },
+                  { C(3), 1 } }),
+          {}, plain },
+        { "Big four winds", Fan::BigFourWinds, 10,
+          tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { W(4), 3 }, { C(1), 2 } }), {}, plain },
+        { "All honours", Fan::AllHonours, 10,
+          tiles({ { W(1), 3 }, { W(2), 3 }, { Dr(1), 3 }, { Dr(2), 3 }, { W(3), 2 } }), {}, plain },
+        { "All terminals", Fan::AllTerminals, 10,
+          tiles({ { C(1), 3 }, { C(9), 3 }, { B(1), 3 }, { B(9), 3 }, { D(1), 2 } }), {}, plain },
+        { "Thirteen orphans", Fan::ThirteenOrphans, 10,
+          tiles({ { C(1), 2 }, { C(9), 1 }, { B(1), 1 }, { B(9), 1 }, { D(1), 1 }, { D(9), 1 },
+                  { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 },
+                  { Dr(3), 1 } }),
+          {}, plain },
+        { "Nine gates", Fan::NineGates, 10,
+          tiles({ { C(1), 3 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 2 }, { C(6), 1 },
+                  { C(7), 1 }, { C(8), 1 }, { C(9), 3 } }),
+          {}, plain },
+        { "Four concealed pungs", Fan::FourConcealedPungs, 10,
+          tiles({ { C(2), 3 }, { B(3), 3 }, { D(4), 3 }, { C(7), 3 }, { B(8), 2 } }), {},
+          [](auto& w) { w.selfDrawn = true; w.payer = -1; } },
+        { "Four kongs", Fan::FourKongs, 10, tiles({ { B(8), 2 } }),
+          { { SetKind::Kong, C(2), false }, { SetKind::Kong, B(3), false }, { SetKind::Kong, D(4), true },
+            { SetKind::Kong, C(7), false } },
+          plain },
+        { "Heavenly hand", Fan::HeavenlyHand, 10, chows, {},
+          [](auto& w) { w.heavenly = true; w.selfDrawn = true; w.payer = -1; } },
+        { "Earthly hand", Fan::EarthlyHand, 10, chows, {}, [](auto& w) { w.earthly = true; } },
+    };
+    std::set<int> covered;
+    bool all = true;
+    for (const Fixture& f : fixtures) {
+        mahjong::WinContext how;
+        how.seatWind = 2;
+        how.prevailingWind = 1;
+        how.bonus = { F(3) };
+        how.winner = 1;
+        how.payer = 0;
+        how.winningTile = f.concealed.empty() ? f.melds.front().tile : f.concealed.back();
+        f.how(how);
+        const auto w = mahjong::bestWin(hk(), f.concealed, f.melds, how);
+        bool found = false;
+        if (w)
+            for (const mahjong::ScoreItem& item : w->second.items)
+                found = found || (item.fan == f.fan && item.value == f.value);
+        if (!found) {
+            std::printf("      mahjong fan list: %s not scored %d\n", f.name, f.value);
+            all = false;
+        }
+        covered.insert(int(f.fan));
+    }
+    check(all, "mahjong table: every § 4.4 pattern and limit hand scores its listed fan (INV-5)");
+    check(int(covered.size()) == mahjong::kFanCount, "mahjong table: and the fixtures cover every Fan");
+
+    // The includes: Small three dragons does not add its two dragon pungs.
+    mahjong::WinContext how;
+    how.seatWind = 2;
+    how.prevailingWind = 1;
+    how.bonus = { F(3) };
+    how.payer = 0;
+    how.winner = 1;
+    const auto small = mahjong::bestWin(
+        hk(),
+        tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { Dr(3), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 },
+                { B(5), 1 }, { B(6), 1 } }),
+        {}, how);
+    bool pungItems = false;
+    for (const mahjong::ScoreItem& item : small->second.items)
+        pungItems = pungItems || item.fan == Fan::DragonPung;
+    check(!pungItems && small->second.total == 6,
+          "mahjong table: Small three dragons includes its dragon pungs: 5 and a concealed hand, 6 (INV-5)");
+
+    // The limit: Pure one suit, All pungs and Self-drawn are 11, scored 10.
+    how.selfDrawn = true;
+    how.payer = -1;
+    const auto capped = mahjong::bestWin(hk(), tiles({ { C(3), 3 }, { C(5), 3 }, { C(7), 3 }, { C(9), 2 } }),
+                                         { { SetKind::Pung, C(1), false } }, how);
+    int sum = 0;
+    for (const mahjong::ScoreItem& item : capped->second.items)
+        sum += item.value;
+    check(sum == 11 && capped->second.total == 10 && !capped->second.limit,
+          "mahjong table: a hand of 11 fan is scored 10 (INV-5)");
+}
+
+// INV-6: who pays.
+void mahjongTablePayments()
+{
+    using namespace mj;
+    mahjong::HandScore four;
+    four.total = 4;
+    four.points = mahjong::HongKongRules::pointsFor(4);
+    mahjong::WinContext onDiscard;
+    onDiscard.winner = 2;
+    onDiscard.payer = 0;
+    const std::array<int, 4> a = hk().settle(onDiscard, four);
+    check(four.points == 16 && a == std::array<int, 4> { -16, 0, 16, 0 },
+          "mahjong table: a 4-fan win on a discard moves 16 from the discarder only (INV-6)");
+    mahjong::WinContext drawn;
+    drawn.winner = 2;
+    drawn.payer = -1;
+    drawn.selfDrawn = true;
+    const std::array<int, 4> b = hk().settle(drawn, four);
+    check(b == std::array<int, 4> { -16, -16, 48, -16 },
+          "mahjong table: self-drawn, it moves 16 from each other seat (INV-6)");
+    check(mahjong::HongKongRules::pointsFor(3) == 8 && mahjong::HongKongRules::pointsFor(10) == 128
+              && mahjong::HongKongRules::pointsFor(2) == 0,
+          "mahjong table: § 4.5's table runs 8 at 3 fan to 128 at the limit, nothing below 3");
+}
+
+// INV-7: robbing a kong.
+void mahjongTableRobbingAKong()
+{
+    using namespace mj;
+    using mahjong::Action;
+    const std::array<std::vector<Face>, 4> hands { {
+        tiles({ { C(5), 1 }, { B(1), 3 }, { B(4), 3 }, { D(1), 3 }, { D(4), 3 }, { W(4), 1 } }),
+        tiles({ { C(5), 2 }, { B(8), 1 }, { D(8), 1 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { B(2), 1 },
+                { D(2), 1 }, { C(2), 1 }, { B(6), 1 }, { D(6), 1 }, { Dr(3), 1 } }),
+        tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 },
+                { C(9), 1 }, { Dr(1), 3 }, { Dr(2), 2 } }),
+        tiles({ { B(9), 1 }, { D(9), 1 }, { B(7), 1 }, { D(7), 1 }, { C(9), 1 }, { B(3), 1 }, { D(3), 1 },
+                { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { Dr(3), 1 }, { B(5), 1 }, { D(5), 1 } }),
+    } };
+    // Seat 2 draws the North Wind, seat 3 the Five of Bamboo, seat 0 the One
+    // of Bamboo, and seat 1 the last Five of Circles.
+    mahjong::Hand h = mahjong::Hand::arranged(
+        hk(), hands, tiles({ { W(4), 1 }, { B(5), 1 }, { B(1), 1 }, { C(5), 1 }, { C(3), 6 } }), 0, 0, 1);
+    h.play({ 0, Action::Discard, C(5), 0 });
+    // Seat 2 could win on it; the fixture declines, so seat 1 pungs.
+    for (int s : h.waitingOn())
+        h.play({ std::uint8_t(s), s == 1 ? Action::Pung : Action::Pass, s == 1 ? C(5) : Face(0), 0 });
+    const bool punged = h.toMove() == 1;
+    h.play({ 1, Action::Discard, Dr(3), 0 });
+    passAll(h);
+    for (int seat : { 2, 3, 0 }) {
+        if (h.toMove() != seat)
+            break;
+        h.play({ std::uint8_t(seat), Action::Discard, h.seat(seat).drawn, 0 });
+        passAll(h);
+    }
+    check(punged && h.toMove() == 1 && h.seat(1).drawn == C(5) && offers(h, 1, Action::AddedKong),
+          "mahjong table: seat 1 draws the fourth Five of Circles to its pung");
+    h.play({ 1, Action::AddedKong, C(5), 0 });
+    const std::vector<mahjong::Move> rob = h.legalMoves(2);
+    check(h.phase() == mahjong::Phase::Robbing && rob.size() == 2 && rob[0].action == Action::Win
+              && rob[1].action == Action::Pass,
+          "mahjong table: the seat waiting on it may win and nothing else (INV-7)");
+    h.play({ 2, Action::Win, C(5), 0 });
+    bool robbed = false;
+    for (const mahjong::ScoreItem& item : h.result().score.items)
+        robbed = robbed || item.fan == mahjong::Fan::RobbingAKong;
+    check(h.phase() == mahjong::Phase::Over && h.result().win.winner == 2 && h.result().win.payer == 1 && robbed,
+          "mahjong table: and the win carries Robbing a kong, paid by the one who added it (INV-7)");
+}
+
+// INV-8: an empty wall with no win draws the hand.
+void mahjongTableDrawnHand()
+{
+    using namespace mj;
+    using mahjong::Action;
+    mahjong::Game g(mahjong::RuleSetId::HongKong, mahjong::Length::EastRound);
+    g.startHand(4242);
+    const int dealer = g.dealer();
+    for (int step = 0; step < 2000 && g.handInPlay(); ++step) {
+        const mahjong::Hand& h = *g.hand();
+        const int seat = h.phase() == mahjong::Phase::Turn ? h.toMove() : h.waitingOn().front();
+        mahjong::Move m = mahjong::chooseMove(h, seat);
+        // Every win declined.
+        if (m.action == Action::Win) {
+            m = { std::uint8_t(seat), Action::Pass, 0, 0 };
+            if (h.phase() == mahjong::Phase::Turn)
+                for (const mahjong::Move& d : h.legalMoves(seat))
+                    if (d.action == Action::Discard)
+                        m = d;
+        }
+        g.play(m);
+    }
+    const mahjong::HandResult& r = g.results().back();
+    check(!g.handInPlay() && r.drawn && g.hand()->wallLeft() == 0,
+          "mahjong table: with every win declined the wall runs out and the hand is drawn");
+    check(r.payments == std::array<int, 4> {} && g.totals() == std::array<int, 4> {},
+          "mahjong table: no points move on a drawn hand (INV-8)");
+    check(g.dealer() == dealer && g.dealsPassed() == 0, "mahjong table: and the dealer keeps the deal (INV-8)");
+}
+
+// The save's replay: the same game back, and a move that is not legal refused.
+void mahjongTableReplays()
+{
+    using namespace mj;
+    mahjong::Game g(mahjong::RuleSetId::HongKong, mahjong::Length::EastRound);
+    for (int hand = 0; hand < 3 && !g.over(); ++hand) {
+        g.startHand(77u + std::uint32_t(hand));
+        for (int step = 0; step < 2000 && g.handInPlay(); ++step)
+            playOne(g);
+    }
+    g.startHand(99);
+    for (int step = 0; step < 30 && g.handInPlay(); ++step)
+        playOne(g);
+    const std::vector<mahjong::HandRecord> records = g.records();
+    const auto back = mahjong::Game::replay(g.ruleSetId(), g.length(), g.firstDealer(), records);
+    check(back && back->totals() == g.totals() && back->dealer() == g.dealer()
+              && back->hand()->everyTile() == g.hand()->everyTile() && back->records().size() == records.size(),
+          "mahjong table: a game replays from its seeds and moves to the same table");
+    std::vector<mahjong::HandRecord> bad = records;
+    for (mahjong::Move& m : bad.back().moves) {
+        if (m.action == mahjong::Action::Discard) {
+            // A tile nobody could hold five of.
+            m.tile = mahjong::Face(mahjong::kFlowerFirst);
+            break;
+        }
+    }
+    check(!mahjong::Game::replay(g.ruleSetId(), g.length(), g.firstDealer(), bad),
+          "mahjong table: a replay meeting a move that is not legal is refused");
 }
 
 } // namespace
@@ -7415,6 +7982,16 @@ int main()
     mahjongEveryDealClears();
     mahjongShuffleKeepsTheTilesAndClears();
     mahjongRefusesABoardNoGameReaches();
+
+    mahjongTableClaimsInOrder();
+    mahjongTableOnlyTheNextSeatChows();
+    mahjongTableMinimumToWin();
+    mahjongTableFanList();
+    mahjongTablePayments();
+    mahjongTableRobbingAKong();
+    mahjongTableDrawnHand();
+    mahjongTableReplays();
+    mahjongTableGamesEnd();
 
     holdLineStartsReady();
     holdLineMarches();

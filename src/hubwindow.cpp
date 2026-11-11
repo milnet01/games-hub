@@ -17,6 +17,8 @@
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
 #include "noughts/noughtsview.h"
+#include "mahjong/mahjongart.h"
+#include "mahjong/mahjongtableview.h"
 #include "mahjong/mahjongview.h"
 #include "pinball/pinballview.h"
 #include "pyramid/pyramidview.h"
@@ -388,6 +390,29 @@ void mahjongTile(QPainter& p, const QRectF& r)
     tile(QPointF(left, top), 2);
     tile(QPointF(left + w, top), 3);
     tile(QPointF(left + w * 0.5 - d, top - h * 0.5 - d), 1);
+}
+
+void mahjongTableTile(QPainter& p, const QRectF& r)
+{
+    // Four upright tiles from the shared art, a winning set and a wind: what
+    // a hand at the table looks like.
+    drawFelt(p, r, QColor(0x23, 0x84, 0x55), QColor(0x14, 0x5b, 0x39));
+    const double w = r.width() * 0.2;
+    const double h = w * 1.3;
+    const double left = r.center().x() - w * 2.0;
+    const double top = r.center().y() - h * 0.5;
+    const mahjong::Face faces[] = { mahjong::Face(mahjong::kCirclesFirst + 4), mahjong::Face(mahjong::kCirclesFirst + 4),
+                                    mahjong::Face(mahjong::kCirclesFirst + 4), mahjong::kWindFirst };
+    for (int i = 0; i < 4; ++i) {
+        const QRectF face(left + i * w, top, w - 2.0, h);
+        p.setPen(Qt::NoPen);
+        p.setBrush(mahjong::kTileBackDark);
+        p.drawRoundedRect(face.translated(w * 0.08, w * 0.08), w * 0.1, w * 0.1);
+        p.setBrush(mahjong::kFaceTop);
+        p.setPen(QPen(QColor(0x8a, 0x7a, 0x58), 1.0));
+        p.drawRoundedRect(face, w * 0.1, w * 0.1);
+        mahjong::paintTileFace(p, face, faces[i], false, QFont());
+    }
 }
 
 void draughtsTile(QPainter& p, const QRectF& r)
@@ -776,6 +801,9 @@ void HubWindow::buildEntries()
         { QStringLiteral("Canasta"), // untranslated: the game's id
           tr("Canasta"), tr("Melds and partners"), canastaTile,
           [] { return new CanastaView; }, Category::Cards },
+        { QStringLiteral("Mahjong"), // untranslated: the game's id
+          tr("Mahjong"), tr("Four players, Hong Kong rules"), mahjongTableTile,
+          [] { return new MahjongTableView; }, Category::Cards },
         { QStringLiteral("Snake"), // untranslated: the game's id
           tr("Snake"), tr("Eat and grow"), snakeTile,
           [] { return new SnakeView; }, Category::Arcade },

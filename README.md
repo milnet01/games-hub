@@ -75,6 +75,7 @@ A few things worth knowing before you download:
 | **Mahjong Solitaire** | Clear a heap of 144 tiles by taking free pairs that match. Every heap can be cleared. |
 | **Hearts** | Four-handed Hearts against three computer players, to 100. |
 | **Canasta** | Partnership Canasta, two against two, with melds, wild cards, red threes and a freezing discard pile. Classic rules, plus a house set you can edit. |
+| **Mahjong** | The four-player table game against three computer players, by Hong Kong rules. Every scoring feature of a win is written out in words. |
 | **Snake** | Eat, grow, and don't run into anything. |
 | **2048** | Slide the tiles, merge the numbers. |
 | **Pinball** | One table, three balls, two flippers. |
@@ -96,14 +97,15 @@ such as Canasta, widens it while it is open and gives your size back after.
 
 **So do the settings you choose.** Minesweeper reopens on the difficulty you
 last played, Canasta on the rule set you last used — Classic or House — and
-Noughts and Crosses on the opponent you last chose, and Mahjong Solitaire
-remembers whether you shade the tiles you cannot take yet. You
+Noughts and Crosses on the opponent you last chose, Mahjong Solitaire
+remembers whether you shade the tiles you cannot take yet, and Mahjong
+remembers its rule set and whether you play a full game or an East round. You
 pick them once rather than every time, and finishing a game no longer forgets
 them.
 
 **Almost every game picks up where you left off.** Close the window in the
 middle of one and it comes back exactly as you left it — Chess, Canasta,
-Draughts, Reversi, Noughts and Crosses, Minesweeper, Sudoku, Mahjong Solitaire, Hearts, 2048, and all four card games
+Draughts, Reversi, Noughts and Crosses, Minesweeper, Sudoku, Mahjong Solitaire, Mahjong, Hearts, 2048, and all four card games
 (Klondike, Spider, FreeCell and Pyramid). Canasta brings back the whole table:
 every hand, the melds, the pile, the stock, the scores and the rules in force.
 Chess brings back the board *and* the moves that led to it, so Undo still

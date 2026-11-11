@@ -1,47 +1,17 @@
 #pragma once
 
+#include "mahjongtiles.h"
+
 #include <array>
-#include <cstdint>
 #include <optional>
 #include <random>
 #include <utility>
 #include <vector>
 
-// Mahjong solitaire: the heap, the tiles and the rule that says which may be
-// taken (GHUB-0238). No Qt at all, so the self-test can clear whole heaps
-// without a display.
+// Mahjong solitaire: the heap and the rule that says which tile may be taken
+// (GHUB-0238). The tiles themselves are in mahjongtiles.h. No Qt at all, so
+// the self-test can clear whole heaps without a display.
 namespace mahjong {
-
-// A tile's face. 0 is no tile. The three numbered suits run 1-9 each; then
-// the four winds, the three dragons, the four flowers and the four seasons.
-using Face = std::uint8_t;
-
-enum class Suit : std::uint8_t { None, Circles, Bamboo, Characters, Wind, Dragon, Flower, Season };
-
-constexpr Face kCirclesFirst = 1;
-constexpr Face kBambooFirst = 10;
-constexpr Face kCharactersFirst = 19;
-constexpr Face kWindFirst = 28;   // east, south, west, north
-constexpr Face kDragonFirst = 32; // red, green, white
-constexpr Face kFlowerFirst = 35;
-constexpr Face kSeasonFirst = 39; // spring, summer, autumn, winter
-constexpr Face kLastFace = 42;
-
-Suit suitOf(Face face);
-// 1-9 in a numbered suit, 1-4 for a wind, flower or season, 1-3 for a dragon.
-int rankOf(Face face);
-// Two tiles match when they share a group. Every face is its own group,
-// except that any flower matches any flower and any season any season.
-int matchGroup(Face face);
-inline bool matches(Face a, Face b)
-{
-    return a != 0 && b != 0 && matchGroup(a) == matchGroup(b);
-}
-
-// The full set: four of every suit tile, wind and dragon, and one of each
-// flower and season.
-constexpr int kTiles = 144;
-std::vector<Face> fullSet();
 
 // Where a tile lies, in HALF-tile units, so a tile on an upper layer can sit
 // across two below it. A tile covers x..x+1 and y..y+1 on its layer z.

@@ -12,6 +12,19 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Mahjong, four players** (GHUB-0239)
+  The traditional table game against three computer players, by Hong
+  Kong rules. Draw and throw tiles, claim a thrown tile for a set, and go
+  out with four sets and a pair. A hand needs 3 fan to win. Every scoring
+  feature of a win is written out in words with its value, and each
+  player's running total is on the table. The last tile thrown is drawn
+  large and said in words, with who took it. When you can claim a tile
+  the game waits for you, however long you take. Every button shows its
+  number key. A full game goes round four winds; an East round is the
+  shorter choice. The rule set and the length are remembered. Rule sets
+  for Chinese Official and Japanese Riichi are planned to join the same
+  menu. The tiles are Mahjong Solitaire's.
+
 - **Mahjong Solitaire** (GHUB-0238)
   Clear a heap of 144 tiles in four layers by taking matching pairs. A
   tile can be taken when nothing lies on it and one of its sides is open.

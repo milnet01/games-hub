@@ -8897,7 +8897,7 @@ ready does not wait for a slow one.
   Kind: feature.
   Source: user-request-2026-11-10.
 
-- 📋 [GHUB-0239] **Four-player Mahjong against three computer players.**
+- ✅ [GHUB-0239] **Four-player Mahjong against three computer players.**
   The traditional game: draw, discard, claim a discard for a set,
   and go out with four sets and a pair. Uses the tile art from
   GHUB-0238, so it comes after it.
@@ -8914,6 +8914,10 @@ ready does not wait for a slow one.
   Spec: docs/specs/GHUB-0239-four-player-mahjong.md (accepted
   2026-11-11; the owner kept the Hong Kong numbers, chose a
       full four-wind game by default and the Cards tab).
+  Shipped 2026-11-11: Hong Kong rules, the rule-set chooser (one entry
+  until GHUB-0243), full game by default with an East round in the menu,
+  full scoring in words. Tiles and art shared with Mahjong Solitaire
+  through mahjongtiles.* and mahjongart.*.
   **Layman:** The traditional table game: draw and discard tiles to build a winning hand before three computer players do.
   Kind: feature.
   Source: user-request-2026-11-10.

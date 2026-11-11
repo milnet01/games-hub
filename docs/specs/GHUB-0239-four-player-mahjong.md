@@ -71,17 +71,16 @@ GHUB-0244 add their rule sets later. The tiles look like Mahjong Solitaire's.
 
 ### 4.1 Where the parts live
 
-All in `src/mahjong/`, beside Mahjong Solitaire. New files are named here by
-their role; their final names are settled at the build.
+All in `src/mahjong/`, beside Mahjong Solitaire.
 
-| Part | Half | Holds |
-|------|------|-------|
-| tile identity | core | `Face`, `Suit`, the `k…First` constants, `suitOf`, `rankOf`, `matchGroup`, `matches`, `fullSet`, moved out of `mahjongboard.h`, which then includes it |
-| table engine | core | the wall, the deal, turns, claims, kongs, bonus tiles, the move list, hand and game state |
-| rule sets | core | the `RuleSet` interface and `HongKongRules` |
-| computer player | core | discard and claim choices |
-| tile art | view | the face drawing, moved out of `mahjongview.cpp` |
-| table view | view | `MahjongTableView`, a `GameView` |
+| Part | Files | Half | Holds |
+|------|-------|------|-------|
+| tile identity | `mahjongtiles.*` | core | `Face`, `Suit`, the `k…First` constants, `suitOf`, `rankOf`, `matchGroup`, `matches`, `copiesOf`, `fullSet` and the seeded shuffle, moved out of `mahjongboard.*`, which then includes it |
+| table engine | `mahjongtable.*` | core | `Hand`: the wall, the deal, turns, claims, kongs, bonus tiles and the move list; `Game`: the hands, the totals and the deal |
+| rule sets | `mahjongrules.*` | core | the `RuleSet` interface, `HongKongRules`, and `bestWin`, which reads a hand as a win |
+| computer player | `mahjongplayer.*` | core | discard and claim choices |
+| tile art | `mahjongart.*` | view | the face drawing, moved out of `mahjongview.cpp` |
+| table view | `mahjongtableview.*` | view | `MahjongTableView`, a `GameView` |
 
 The engine names everything inside `namespace mahjong`, as Solitaire's
 board does. `CMakeLists.txt` adds the four core parts to `GAME_CORE_SOURCES`
@@ -93,16 +92,21 @@ in the tile art, not in the core.
 
 ```cpp
 namespace mahjong {
-// Draws one tile's face — the ivory face and its markings — into `face`.
-// The body, edge, shadow and any highlight stay with the caller.
-void paintTileFace(QPainter& p, const QRectF& face, Face tile, bool legible);
+// Draws one tile's markings on the face `face`. The ivory face, the body,
+// edge, shadow and any highlight stay with the caller. `base` is the
+// caller's widget font, for the numeral and the wind letter.
+void paintTileFace(QPainter& p, const QRectF& face, Face tile, bool legible, const QFont& base);
 // The tile in words, for the table's sentences ("Five of Bamboo").
 QString tileName(Face tile);
 }
 ```
 
-`MahjongView::paintTile` keeps its body, shadow and picked highlight, and calls
-`paintTileFace` for the face. **Mahjong Solitaire must look exactly as it does
+`MahjongView::paintTile` keeps its body, shadow, ivory face and picked
+highlight, and calls `paintTileFace` for the markings. The face stays with
+the caller because Solitaire colours a picked tile's face, and the font is
+passed because the markings were drawn in the widget's font.
+*(Amended at the build, 2026-11-11: the draft had `paintTileFace` draw the
+ivory face too, and take no font.)* **Mahjong Solitaire must look exactly as it does
 today** (INV-12). The move is a cut and paste, not a redraw.
 
 ### 4.3 The table engine
@@ -114,7 +118,7 @@ replays every move through the engine and refuses one that is not legal there.
 ```cpp
 namespace mahjong {
 enum class Action : std::uint8_t {
-    Draw, Discard, Chow, Pung, Kong /* claimed */, ConcealedKong,
+    Discard, Chow, Pung, Kong /* claimed */, ConcealedKong,
     AddedKong, Win, Pass
 };
 struct Move {
@@ -125,6 +129,10 @@ struct Move {
 };
 }
 ```
+
+**Draws are not moves.** The wall decides them, so the move list holds only
+what a player chose, and replaying it makes every draw again.
+*(Amended at the build, 2026-11-11: the draft listed `Draw` as an action.)*
 
 **The turn.** The player to move draws from the front of the wall. A flower or
 season drawn is set aside face up and replaced from the back of the wall, at
@@ -235,11 +243,16 @@ public:
     virtual bool bonusTilesInPlay() const = 0;
     virtual int minimumToWin() const = 0;
     virtual HandScore score(const WinContext& win) const = 0;
+    // Every pattern with its value, for the rules text.
+    virtual std::vector<ScoreItem> fanList() const = 0;
     virtual std::array<int, 4> settle(const WinContext& win, const HandScore& s) const = 0;
 };
 const RuleSet& ruleSet(RuleSetId id);
 }
 ```
+
+`fanList()` was added at the build, 2026-11-11, so the rules text lists the
+values from the rule set rather than from a second copy of § 4.4 in the view.
 
 **The core names a pattern by `Fan`; the view owns its words.** The view maps
 each `Fan` to a `tr()` sentence, so the core carries no display text. The
@@ -298,9 +311,10 @@ is -1 while a claim is being waited on, between hands and once the game is
 over.
 
 **Keyboard.** The view sets `Qt::StrongFocus` (`docs/design.md` § The game
-contract). Left and right move along your hand, Return discards, and each
-claim button has a key. The keys are chosen at the build. They leave out P,
-which waits on a separate owner decision.
+contract). Left and right move along your hand, Return or Space discards the
+tile picked out, and the number keys press the buttons beside your hand, each
+button showing its number. No letter key is used, so P stays free for its
+separate owner decision.
 
 **Words.** Every word a player reads goes through `tr()`, per
 `GHUB-0161-translatable-text.md`. The game's id `Mahjong` is fixed; its tile

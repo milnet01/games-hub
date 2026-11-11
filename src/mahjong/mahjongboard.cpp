@@ -5,74 +5,7 @@
 
 namespace mahjong {
 
-Suit suitOf(Face face)
-{
-    if (face == 0 || face > kLastFace)
-        return Suit::None;
-    if (face < kBambooFirst)
-        return Suit::Circles;
-    if (face < kCharactersFirst)
-        return Suit::Bamboo;
-    if (face < kWindFirst)
-        return Suit::Characters;
-    if (face < kDragonFirst)
-        return Suit::Wind;
-    if (face < kFlowerFirst)
-        return Suit::Dragon;
-    if (face < kSeasonFirst)
-        return Suit::Flower;
-    return Suit::Season;
-}
-
-int rankOf(Face face)
-{
-    switch (suitOf(face)) {
-    case Suit::Circles: return face - kCirclesFirst + 1;
-    case Suit::Bamboo: return face - kBambooFirst + 1;
-    case Suit::Characters: return face - kCharactersFirst + 1;
-    case Suit::Wind: return face - kWindFirst + 1;
-    case Suit::Dragon: return face - kDragonFirst + 1;
-    case Suit::Flower: return face - kFlowerFirst + 1;
-    case Suit::Season: return face - kSeasonFirst + 1;
-    case Suit::None: break;
-    }
-    return 0;
-}
-
-int matchGroup(Face face)
-{
-    switch (suitOf(face)) {
-    case Suit::Flower: return kFlowerFirst;
-    case Suit::Season: return kSeasonFirst;
-    case Suit::None: return 0;
-    default: return face;
-    }
-}
-
 namespace {
-
-// How many of one face the set holds.
-int copiesOf(Face face)
-{
-    const Suit s = suitOf(face);
-    if (s == Suit::None)
-        return 0;
-    return s == Suit::Flower || s == Suit::Season ? 1 : 4;
-}
-
-// An index from rng() directly, never a std distribution, so a seed deals the
-// same heap on every compiler (see shuffleCards in src/cards/card.cpp).
-int pick(std::mt19937& rng, std::size_t n)
-{
-    return int(rng() % n);
-}
-
-template <typename T>
-void shuffle(std::vector<T>& items, std::mt19937& rng)
-{
-    for (std::size_t i = items.size(); i > 1; --i)
-        std::swap(items[i - 1], items[std::size_t(pick(rng, i))]);
-}
 
 // The heap: four layers, each centred on the one below. The third layer sits
 // half a tile down, across two rows of the second, which is what the
@@ -155,15 +88,6 @@ Occupied occupiedBy(const std::array<Face, kTiles>& faces)
 
 } // namespace
 
-std::vector<Face> fullSet()
-{
-    std::vector<Face> set;
-    set.reserve(kTiles);
-    for (Face f = 1; f <= kLastFace; ++f)
-        for (int i = 0; i < copiesOf(f); ++i)
-            set.push_back(f);
-    return set;
-}
 
 const std::vector<Slot>& layout()
 {
@@ -282,11 +206,11 @@ bool Board::fill(const std::vector<int>& slots, const std::vector<Face>& tiles,
     for (std::vector<Face>& group : groups) {
         if (group.size() % 2 != 0)
             return false;
-        shuffle(group, rng);
+        shuffleInPlace(group, rng);
         for (std::size_t i = 0; i < group.size(); i += 2)
             pairs.emplace_back(group[i], group[i + 1]);
     }
-    shuffle(pairs, rng);
+    shuffleInPlace(pairs, rng);
 
     // Then play the empty places forward: take any two that are free, and the
     // next pair is what lies there. Taken in the same order, the heap clears.
@@ -302,8 +226,8 @@ bool Board::fill(const std::vector<int>& slots, const std::vector<Face>& tiles,
                 open.push_back(s);
         if (open.size() < 2)
             return false;
-        const int i = pick(rng, open.size());
-        int j = pick(rng, open.size() - 1);
+        const int i = pickIndex(rng, open.size());
+        int j = pickIndex(rng, open.size() - 1);
         if (j >= i)
             ++j;
         const int a = open[std::size_t(i)];
