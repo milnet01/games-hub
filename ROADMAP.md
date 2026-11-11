@@ -8731,11 +8731,14 @@ question can be changed afterwards.
 
   The app-ID is fixed at this step and every later packaging step inherits it,
   Flathub included.
-  Waiting-on: user (which app-ID: za.co.antsprojectshub.GamesHub or io.github.milnet01.<name>?, 2026-11-04)
+  Answered (was waiting on the owner): (which app-ID: za.co.antsprojectshub.GamesHub or io.github.milnet01.<name>?, 2026-11-04)
   The ID is permanent once a package or Flathub listing carries it, and every file this item writes is named after it (.desktop, metainfo, icon), so nothing is drafted until it is chosen. The siblings differ: finbreak uses io.github.milnet01.finbreak, Ants Terminal za.co.antsprojectshub.AntsTerminal. Recommendation: za.co.antsprojectshub.GamesHub -- the newer sibling's form, and the brand the website carries; the domain already has to stay up for email and the site. The GitHub form is the safer pick only if the domain might ever lapse (the TrueHost zone went missing once). The upload to build.opensuse.org is also yours to approve, as it publishes; the spec, debian/ recipe and metainfo can be written and built locally first.
   2026-11-10: GHUB-0045 (Flathub) is parked, owner's call, so the
   app ID now has to suit the OBS packages only. The recommendation above
   stands.
+  Answered 2026-11-11: app ID za.co.antsprojectshub.GamesHub. The
+  Waiting-on above is closed. The upload to build.opensuse.org still
+  needs the owner's go-ahead, as it publishes.
   **Layman:** Install Games Hub with your distribution's own package manager instead of downloading a file.
   Kind: package.
   Source: user-request-2026-08-20.
@@ -8785,12 +8788,12 @@ question can be changed afterwards.
   from where, on whose consent, and how the download is verified. GHUB-0054
   extends this item's signing key to the artifacts a person downloads by hand,
   which is the other half of the same story.
-  Waiting-on: user (who generates and holds the Ed25519 release-signing key, and may it be added to the repo as a GitHub Actions secret?, 2026-11-04)
+  Answered (was waiting on the owner): (who generates and holds the Ed25519 release-signing key, and may it be added to the repo as a GitHub Actions secret?, 2026-11-04)
   Recommendation: you generate it on this machine with one command a session gives you, keep the private half offline (a password manager or a USB stick), and add it as a repository secret yourself, so no session ever holds it. Everything else -- the check, the release-notes offer, the in-tree verifier and the swap -- can be specced and built without the key, against a test key that is thrown away. The item is network-facing and replaces its own executable, so it gets a spec and its review before code.
   Spec docs/specs/GHUB-0043-self-update.md accepted 2026-11-04 after
   review-contract's two loops (14 verified findings, all fixed; loop log
   in docs/reviews/GHUB-0043-self-update-loop-log.md). Ready to build
-  against a throwaway test key; key custody is still Waiting-on: user
+  against a throwaway test key; key custody was then still waiting on the owner
   (above).
   Built 2026-11-04 against throwaway test keys only (RFC 8032's published
   test vectors, and a scratch key deleted after the release.yml dry run).
@@ -8802,6 +8805,9 @@ question can be changed afterwards.
   and no player sees any of it. Shipping it is then two steps: fill in
   updatekey.h and set the UPDATE_SIGNING_KEY secret, in one commit; then
   run INV-5's manual check on the second keyed release.
+  Answered 2026-11-11: the owner generates and holds the key and sets
+  the UPDATE_SIGNING_KEY secret; the private half never passes
+  through a session. The owner sends the 32 public bytes for updatekey.h.
   **Layman:** Games Hub checks GitHub for a newer release, shows the changelog for every version you have missed, and updates itself when you say yes.
   Kind: feature.
   Source: user-request-2026-08-20.
@@ -8863,10 +8869,12 @@ ready does not wait for a slow one.
   exists on Justia; its goods and owner were not visible. No
   shoot-the-wave game by that name was found. The look was made
   original at build time (own species, shelters, sounds).
-  Waiting-on: user (keep the name Hold the Line, or rename before a
+  Answered (was waiting on the owner): (keep the name Hold the Line, or rename before a
   public release?, 2026-11-11). Recommendation: keep it. It is a common
   phrase, the other game is a different genre, and Games Hub is free;
   rename only if the owner wants no overlap at all.
+  Answered 2026-11-11: the owner keeps the name Hold the Line. The
+  Waiting-on above is closed.
   **Layman:** Rows of attackers march down the screen and you shoot them from a cannon at the bottom, chasing a high score.
   Kind: feature.
   Source: user-request-2026-11-10.
@@ -9787,6 +9795,9 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   controls half of GHUB-0016's rules texts. Changing a shortcut is a
   breaking surface under docs/standards/versioning-overrides.md, so
   this is a decision before it is a change.
+  Answered 2026-11-11: P pauses in every game; Sudoku's pencil marks
+  move to N (Notes). A breaking shortcut change under
+  docs/standards/versioning-overrides.md, so the CHANGELOG says so.
   **Layman:** The same key does different things in two games, and Sudoku's pause has no key at all.
   Kind: ux.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
@@ -9883,11 +9894,15 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Found while writing GHUB-0016's rules: concealed going out is judged
   by m_hasMelded[seat], per player, and still has to meet the opening
   minimum. The rules text describes it as coded.
-  Waiting-on: user (does the family count a concealed going-out per
+  Answered (was waiting on the owner): (does the family count a concealed going-out per
   player, as now, or only when neither partner has laid anything down
   that hand?, 2026-11-04). Recommendation: keep per player for Classic,
   which matches the common printed rule, and add a House flag only if
   the family plays it per team.
+  Answered 2026-11-11: the family gives NO bonus for going out
+  concealed; it is an ordinary going out, worth the normal 100. The
+  Waiting-on above is closed. Next: a House rules field that scores a
+  concealed going-out as an ordinary one; Classic keeps its bonus.
   **Layman:** Canasta's bonus for going out in one go checks only your own melds, not your partner's; the family may score it differently.
   Kind: investigate.
   Source: in-session-2026-11-04 (found while writing GHUB-0016's rules; unverified).
@@ -9935,7 +9950,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   why that item fixes them and this one reuses them. A screenshot set and a
   summary that reads well in a software centre are part of the deliverable
   rather than an afterthought -- this is a shop window.
-  Waits on GHUB-0044's app-ID (Waiting-on: user there, 2026-11-04); this
+  Waits on GHUB-0044's app-ID (answered 2026-11-11: za.co.antsprojectshub.GamesHub); this
   item reuses it. The Flathub submission is itself a pull request from
   your GitHub account to flathub/flathub, so it needs your go-ahead when
   it comes.
