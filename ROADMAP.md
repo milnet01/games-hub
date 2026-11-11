@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=242 -->
+<!-- ants-roadmap-id-high-water: GHUB=244 -->
 
 # Games Hub — Roadmap
 
@@ -8883,8 +8883,13 @@ ready does not wait for a slow one.
   and go out with four sets and a pair. Uses the tile art from
   GHUB-0238, so it comes after it.
 
-  Pick one rule set and name it (there are many regional ones) in
-  a spec before building; scoring alone differs widely. Like
+  Owner's call, 2026-11-11: every rule set, chosen by the player,
+    built in stages. This item ships Hong Kong rules and the rule-set
+    chooser; Chinese Official and Japanese Riichi follow as their own
+    items. American (NMJL) is left out: its hands come from a card the
+    league reprints yearly and holds the copyright to. Full scoring:
+    each win lists its features in words on the table and keeps
+    running totals across hands. Like
   Canasta, the computer's pause is long enough to see what it did,
   and the last discard is written out in words on the table.
   **Layman:** The traditional table game: draw and discard tiles to build a winning hand before three computer players do.
@@ -9948,6 +9953,25 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: test.
   Source: in-session-2026-11-10.
   Lanes: tests.
+
+- 📋 [GHUB-0243] **Mahjong: Chinese Official rules as a second rule set.**
+  The tournament rule set: a hand needs at least 8 points, from
+  the official list of scoring patterns. Added to the rule-set
+  chooser GHUB-0239 builds; the table, drawing and claiming are
+  shared. Each scoring pattern is named in words on the table.
+  **Layman:** Adds the tournament rules to four-player Mahjong, chosen from the same menu as the other rule sets.
+  Kind: feature.
+  Source: user-request-2026-11-11.
+  Blocked-by: GHUB-0239.
+
+- 📋 [GHUB-0244] **Mahjong: Japanese Riichi rules as a third rule set.**
+  Adds calling riichi, dora bonus tiles and furiten to the shared
+  table from GHUB-0239, with Riichi scoring. Comes after the Chinese
+  Official rule set (GHUB-0243).
+  **Layman:** Adds the Japanese rules to four-player Mahjong, chosen from the same menu as the other rule sets.
+  Kind: feature.
+  Source: user-request-2026-11-11.
+  Blocked-by: GHUB-0243.
 
 ## P01 — Shipped
 
