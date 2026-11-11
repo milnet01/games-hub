@@ -8892,6 +8892,9 @@ ready does not wait for a slow one.
     running totals across hands. Like
   Canasta, the computer's pause is long enough to see what it did,
   and the last discard is written out in words on the table.
+  Spec: docs/specs/GHUB-0239-four-player-mahjong.md (accepted
+  2026-11-11; the owner kept the Hong Kong numbers, chose a
+      full four-wind game by default and the Cards tab).
   **Layman:** The traditional table game: draw and discard tiles to build a winning hand before three computer players do.
   Kind: feature.
   Source: user-request-2026-11-10.
