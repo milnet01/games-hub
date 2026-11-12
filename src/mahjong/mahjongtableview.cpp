@@ -236,7 +236,7 @@ QString MahjongTableView::rulesText() const
               "make a chow. A claimed set is laid face up. A win beats a pung or kong, which "
               "beats a chow. Two wins go to the first player after the one who threw.</p>"
               "<p>Holding four of a tile, you may lay it down as a kong on your turn and draw "
-              "another tile. You may also add a drawn tile to a pung you laid down. Another "
+              "another tile. You may also add the tile you just drew to a pung you laid down. Another "
               "player waiting on that tile may then win on it: that is <b>robbing a kong</b>.</p>"
               "<p>A hand needs at least %2 fan to win. If the wall runs out with nobody out, "
               "the hand is drawn and no points move.</p>"
@@ -246,9 +246,9 @@ QString MahjongTableView::rulesText() const
               "%3 fan is the most a hand can score.</p>"
               "<ul>%4</ul>"
               "<p>A win on a thrown tile is paid by the player who threw it. A win on a tile you "
-              "drew is paid by all three others. 3 fan is worth 8 points, 4 is 16, 5 is 24, "
+              "drew is paid by all three others. A robbed kong is paid by the player who added the tile. 3 fan is worth 8 points, 4 is 16, 5 is 24, "
               "6 is 32, 7 is 48, 8 is 64, 9 is 96 and 10 is 128.</p>"
-              "<p>The dealer is East. The dealer keeps the deal after a win or a drawn hand; "
+              "<p>The dealer is East. The dealer keeps the deal after winning, or after a drawn hand; "
               "otherwise it passes to the next player. A <b>full game</b> ends when the deal has "
               "gone round the table four times, with the wind of the round moving from East to "
               "South, West and North. An <b>East round</b> ends after it has gone round once.</p>"
@@ -296,7 +296,7 @@ QString MahjongTableView::fanName(mahjong::Fan fan)
     case Fan::DragonPung: return tr("Pung of dragons");
     case Fan::SeatWindPung: return tr("Pung of your own wind");
     case Fan::PrevailingWindPung: return tr("Pung of the round's wind");
-    case Fan::LastTile: return tr("Won on the last tile of the wall");
+    case Fan::LastTile: return tr("Drew the last tile of the wall to win");
     case Fan::KongReplacement: return tr("Won on a kong's replacement tile");
     case Fan::RobbingAKong: return tr("Robbing a kong");
     case Fan::AllPungs: return tr("All pungs");

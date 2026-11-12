@@ -2648,6 +2648,85 @@ void mahjongTableRobbingAKong()
           "mahjong table: and the win carries Robbing a kong, paid by the one who added it (INV-7)");
 }
 
+// GHUB-0247: only the tile just drawn may be added to a pung. Seat 1 pungs
+// with a third Five of Circles still in its hand, and may not add it.
+void mahjongTableAddedKongNeedsTheDrawnTile()
+{
+    using namespace mj;
+    using mahjong::Action;
+    const std::array<std::vector<Face>, 4> hands { {
+        tiles({ { C(5), 1 }, { B(1), 3 }, { B(4), 3 }, { D(1), 3 }, { D(4), 3 }, { W(4), 1 } }),
+        tiles({ { C(5), 3 }, { B(8), 1 }, { D(8), 1 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { B(2), 1 },
+                { D(2), 1 }, { C(2), 1 }, { B(6), 1 }, { D(6), 1 } }),
+        tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 },
+                { C(9), 1 }, { Dr(1), 3 }, { Dr(2), 2 } }),
+        tiles({ { B(9), 1 }, { D(9), 1 }, { B(7), 1 }, { D(7), 1 }, { C(9), 1 }, { B(3), 1 }, { D(3), 1 },
+                { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { Dr(3), 1 }, { B(5), 1 }, { D(5), 1 } }),
+    } };
+    mahjong::Hand h = mahjong::Hand::arranged(hk(), hands, tiles({ { C(3), 6 } }), 0, 0, 1);
+    h.play({ 0, Action::Discard, C(5), 0 });
+    for (int s : h.waitingOn())
+        h.play({ std::uint8_t(s), s == 1 ? Action::Pung : Action::Pass, s == 1 ? C(5) : Face(0), 0 });
+    check(h.toMove() == 1 && h.seat(1).drawn == 0 && !offers(h, 1, Action::AddedKong),
+          "mahjong table: a held copy cannot be added to a pung, only the drawn tile (GHUB-0247)");
+}
+
+// GHUB-0247: the last-tile fan is for drawing the wall's last tile. A win on
+// a discard once the wall is empty does not score it.
+void mahjongTableLastTileNeedsASelfDraw()
+{
+    using namespace mj;
+    using mahjong::Action;
+    const std::array<std::vector<Face>, 4> hands { {
+        tiles({ { C(5), 1 }, { B(1), 3 }, { B(4), 3 }, { D(1), 3 }, { D(4), 3 }, { W(4), 1 } }),
+        tiles({ { C(5), 2 }, { B(8), 1 }, { D(8), 1 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { B(2), 1 },
+                { D(2), 1 }, { C(2), 1 }, { B(6), 1 }, { D(6), 1 }, { Dr(3), 1 } }),
+        tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 },
+                { C(9), 1 }, { Dr(1), 3 }, { Dr(2), 2 } }),
+        tiles({ { B(9), 1 }, { D(9), 1 }, { B(7), 1 }, { D(7), 1 }, { C(9), 1 }, { B(3), 1 }, { D(3), 1 },
+                { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { Dr(3), 1 }, { B(5), 1 }, { D(5), 1 } }),
+    } };
+    // An empty wall: seat 0's discard is the hand's last chance.
+    mahjong::Hand h = mahjong::Hand::arranged(hk(), hands, {}, 0, 0, 1);
+    h.play({ 0, Action::Discard, C(5), 0 });
+    const bool canWin = offers(h, 2, Action::Win);
+    if (canWin)
+        h.play({ 2, Action::Win, C(5), 0 });
+    bool lastTile = false;
+    if (h.phase() == mahjong::Phase::Over)
+        for (const mahjong::ScoreItem& item : h.result().score.items)
+            lastTile = lastTile || item.fan == mahjong::Fan::LastTile;
+    check(canWin && h.phase() == mahjong::Phase::Over && h.result().win.winner == 2 && !lastTile,
+          "mahjong table: a win on a discard after the wall is empty scores no last-tile fan (GHUB-0247)");
+}
+
+// GHUB-0247: a concealed kong clears the drawn tile, so an empty wall after
+// it leaves no phantom tile named as drawn.
+void mahjongTableConcealedKongClearsTheDrawnTile()
+{
+    using namespace mj;
+    using mahjong::Action;
+    const std::array<std::vector<Face>, 4> hands { {
+        tiles({ { C(5), 3 }, { B(1), 3 }, { B(4), 3 }, { D(4), 3 }, { W(4), 1 } }),
+        tiles({ { B(8), 1 }, { D(8), 1 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { B(2), 1 }, { D(2), 1 },
+                { C(2), 1 }, { B(6), 1 }, { D(6), 1 }, { Dr(3), 1 }, { C(9), 2 } }),
+        tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 },
+                { C(9), 1 }, { Dr(1), 3 }, { Dr(2), 2 } }),
+        tiles({ { B(9), 1 }, { D(9), 1 }, { B(7), 1 }, { D(7), 1 }, { C(9), 1 }, { B(3), 1 }, { D(3), 1 },
+                { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { Dr(3), 1 }, { B(5), 1 }, { D(5), 1 }, { W(4), 1 } }),
+    } };
+    // Seat 0 draws the fourth Five of Circles from the front. The kong's
+    // replacement from the back is a flower, whose own replacement finds the
+    // wall empty, so the hand is drawn with seat 0's tiles left as they are.
+    mahjong::Hand h = mahjong::Hand::arranged(hk(), hands, { C(5), mahjong::kFlowerFirst }, 3, 0, 1);
+    h.play({ 3, Action::Discard, W(4), 0 });
+    passAll(h);
+    const bool drewIt = h.toMove() == 0 && h.seat(0).drawn == C(5) && offers(h, 0, Action::ConcealedKong);
+    h.play({ 0, Action::ConcealedKong, C(5), 0 });
+    check(drewIt && h.phase() == mahjong::Phase::Over && h.seat(0).drawn == 0,
+          "mahjong table: after a concealed kong no drawn tile is left naming a tile in the kong (GHUB-0247)");
+}
+
 // INV-8: an empty wall with no win draws the hand.
 void mahjongTableDrawnHand()
 {
@@ -7995,6 +8074,9 @@ int main()
     mahjongTableFanList();
     mahjongTablePayments();
     mahjongTableRobbingAKong();
+    mahjongTableAddedKongNeedsTheDrawnTile();
+    mahjongTableLastTileNeedsASelfDraw();
+    mahjongTableConcealedKongClearsTheDrawnTile();
     mahjongTableDrawnHand();
     mahjongTableReplays();
     mahjongTableGamesEnd();

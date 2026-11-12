@@ -125,7 +125,7 @@ struct Move {
     std::uint8_t seat;
     Action action;
     Face tile;            // the tile discarded, claimed, konged or won on
-    std::uint8_t chowLow; // the lowest rank of a chow, else 0
+    std::uint8_t chowLow; // the lowest tile of a chow, else 0
 };
 }
 ```
@@ -153,8 +153,9 @@ the first seat after the discarder in turn order. After a Pung or Kong claim
 the turn jumps to the claimer, skipping any seat between. A claimed set is
 laid face up and is no longer concealed.
 
-**Robbing a kong.** When a player adds a drawn tile to their pung, any other
-seat whose hand that tile completes may win on it. Only Win may be claimed.
+**Robbing a kong.** A player may add only the tile just drawn to their pung,
+never a copy already held. Any other seat whose hand that tile completes may
+win on it. Only Win may be claimed.
 
 **A winning hand** is four sets (chow, pung or kong) and a pair, or Thirteen
 Orphans (§ 4.4). Seven pairs is not a winning hand in Hong Kong rules.
@@ -163,8 +164,8 @@ Orphans (§ 4.4). Seven pairs is not a winning hand in Hong Kong rules.
 discard is not claimed for a win, the hand is drawn. No points move.
 
 **The deal and the dealer.** East deals. Each player starts with thirteen
-tiles, and East draws first. The dealer keeps the deal after a win or a drawn
-hand. Otherwise the deal passes to the next seat. When all four have dealt and
+tiles, and East draws first. The dealer keeps the deal after the dealer wins,
+or after a drawn hand. Otherwise the deal passes to the next seat. When all four have dealt and
 lost the deal, the prevailing wind moves on, East to South to West to North.
 
 **The game's end.** The game ends after the East round, or after all four
@@ -190,7 +191,7 @@ scores more.
 | Pung or kong of a dragon, each | 1 |
 | Pung or kong of your seat wind | 1 |
 | Pung or kong of the prevailing wind | 1 |
-| Won on the last tile of the wall | 1 |
+| Won on the last tile of the wall, drawn yourself | 1 |
 | Won on a kong's replacement tile | 1 |
 | Robbing a kong | 1 |
 | All pungs — four pungs or kongs | 3 |
@@ -204,7 +205,8 @@ Big four winds (four wind pungs), All honours, All terminals (only ones and
 nines), Thirteen orphans (one of each one, nine, wind and dragon, and one more
 of any of them), Nine gates (1112345678999 in one suit, concealed, plus any
 tile of that suit), Four concealed pungs, Four kongs, Heavenly hand (East wins
-on the deal) and Earthly hand (a player wins on East's first discard).
+on the deal) and Earthly hand (a player wins on East's first discard). A kong
+made before either win rules both out.
 
 Source for the patterns and their usual values:
 <https://en.wikipedia.org/wiki/Hong_Kong_mahjong_scoring_rules>.
@@ -216,7 +218,8 @@ Source for the patterns and their usual values:
 | Points | 8 | 16 | 24 | 32 | 48 | 64 | 96 | 128 |
 
 **Won on a discard: the discarder pays the points**, and nobody else pays.
-**Self-drawn: each of the other three pays the points.** Every hand's payments
+**Self-drawn: each of the other three pays the points.** **Robbing a kong: the
+player whose kong was robbed pays**, as a discarder would. Every hand's payments
 sum to zero. Running totals start at 0 and may go below it.
 
 ### 4.6 The rule-set interface, and the settings
@@ -280,7 +283,8 @@ lists only rule sets this build has.**
   backs. Each seat's claimed sets and bonus tiles lie face up in front of it.
 - **The discards** lie in the centre in one pool per seat, in the order played.
   **The last discard is drawn larger and spelled out in words under the
-  centre** — "West discarded the Five of Bamboo." — as Canasta does.
+  centre** — "Right threw the Five of Bamboo." — as Canasta does. Seats are
+  named by where they sit (You, Right, Across, Left), not by wind.
 - **The seat wind of each player, the prevailing wind, the dealer and the tiles
   left in the wall** are written on the table, not only in the status bar.
 - **A claim waits for you, with no timeout.** When you can claim a discard, the
@@ -322,12 +326,14 @@ label is translated.
 
 ### 4.8 The computer player
 
-One strength in this item. It works out how many tiles each candidate discard
-leaves the hand from ready, and throws the one that leaves it closest,
-breaking ties by keeping tiles that score — dragons, its own and the
-prevailing wind, and the suit it holds most of. It claims a pung or kong of a
-scoring tile, or one that brings it closer to ready. It claims a chow only
-when it is not chasing All pungs. **It plays toward the 3-fan minimum**: a
+One strength in this item. It picks a plan from its hand: one suit, all
+pungs, or neither. It throws a tile off its plan first; among the rest it
+throws the one that leaves the hand closest to ready, breaking ties by keeping
+tiles that score — dragons, its own and the prevailing wind, and its plan's
+suit. It always declares a kong. It claims a pung or kong of a scoring honour,
+or one that both fits its plan and brings it closer to ready. It claims a
+chow only when building one suit, not chasing All pungs, and the chow brings
+it closer to ready. **It plays toward the 3-fan minimum**: a
 hand that would complete below 3 fan keeps drawing rather than declaring. It
 always wins when it can.
 
@@ -558,8 +564,9 @@ Rows live in `../reviews/GHUB-0239-four-player-mahjong-loop-log.md`.
 
 ## 13. Resource cost
 
-The engine holds one hand's moves and the score sheet's rows, both bounded by a
-game's length. No new dependency.
+The engine keeps every hand's moves and results for the whole game, for the
+save and the score sheet. A game's length is not bounded: a dealer who keeps
+winning or drawing keeps the deal. No new dependency.
 
 ## 14. Open questions
 

@@ -133,7 +133,6 @@ WinContext Hand::contextFor(int who) const
     how.bonus = seat(who).bonus;
     how.seatWind = seatWind(who);
     how.prevailingWind = m_prevailing;
-    how.lastTile = wallLeft() == 0;
     how.winner = who;
     return how;
 }
@@ -145,6 +144,9 @@ std::optional<std::pair<WinContext, HandScore>> Hand::winFor(int seat) const
         return std::nullopt;
     WinContext how = contextFor(seat);
     how.selfDrawn = true;
+    // Only a tile drawn from the wall can be its last tile; a win on a discard
+    // after the wall runs out does not score it (owner's ruling, 2026-11-12).
+    how.lastTile = wallLeft() == 0;
     how.winningTile = s.drawn;
     how.kongReplacement = m_afterKong;
     how.heavenly = seat == m_dealer && m_discards == 0 && m_claims == 0 && m_kongs == 0;
@@ -180,7 +182,8 @@ std::vector<Move> Hand::turnMoves(int seat) const
             const bool pung = std::any_of(s.melds.begin(), s.melds.end(), [t](const Meld& m) {
                 return m.kind == SetKind::Pung && m.tile == t;
             });
-            if (pung && countOf(s.concealed, t) > 0)
+            // Only the tile just drawn may be added to a pung (spec § 4.3).
+            if (pung && s.drawn == t)
                 moves.push_back({ st, Action::AddedKong, t, 0 });
         }
     }
@@ -240,6 +243,7 @@ bool Hand::play(const Move& move)
             return true;
         case Action::ConcealedKong:
             takeFrom(who, move.tile, 4);
+            s.drawn = 0;
             s.melds.push_back({ SetKind::Kong, move.tile, true });
             ++m_kongs;
             finishKong(who);

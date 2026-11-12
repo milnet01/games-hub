@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=246 -->
+<!-- ants-roadmap-id-high-water: GHUB=251 -->
 
 # Games Hub — Roadmap
 
@@ -10039,6 +10039,56 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** The four-player Mahjong table shows the same message in two places; one should go or say something else.
   Kind: ux.
   Source: in-session-2026-11-11.
+
+- ✅ [GHUB-0247] **Mahjong rules: the last-tile fan needs a self-drawn win, and only the drawn tile may be added to a pung.**
+  From the GHUB-0239 code review. Owner rulings 2026-11-12: the
+  last-tile fan is for drawing the last wall tile yourself; an added
+  kong (the one that can be robbed) uses only the tile just drawn.
+  Also: a concealed kong clears the drawn tile. Spec corrections:
+  chowLow is a tile; the engine keeps every hand; seats are named
+  by position; robbing a kong charges the robbed player; the dealer
+  keeps the deal only when the dealer wins or the hand is drawn;
+  the computer's discard and claim plan as built.
+  Shipped 2026-11-12. Three self-test checks, each red against the old
+  engine.
+  **Layman:** Two Mahjong scoring rules now work the way the written rules say, and the spec's wording is corrected in five places.
+  Kind: review-fix.
+  Source: review-code-2026-11-11.
+
+- 🚧 [GHUB-0248] **Mahjong table: the claim buttons wrap instead of running off the table, and large print sets a floor on tile and text size.**
+  From the GHUB-0239 code review. The claim row had no width limit;
+  the sets row wrapped into the hand row; the plate and end-of-hand
+  fonts floored at 12 px with large print on or off. Owner ruling
+  2026-11-12: with legibility on, Mahjong tiles get a minimum
+  readable width.
+  **Layman:** On the four-player Mahjong table the claim buttons and your laid sets stay inside your corner, and large print keeps tiles readable in a small window.
+  Kind: review-fix.
+  Source: review-code-2026-11-11.
+
+- 🚧 [GHUB-0249] **Mahjong table: a refused computer move cannot freeze the table, and the two next-game notes no longer wipe each other.**
+  From the GHUB-0239 code review. A refused computer move was
+  dropped silently; one note held both the pending rule set and
+  the pending length; the rules text kept its own copy of the
+  points table and limit, against design.md.
+  **Layman:** The four-player Mahjong table can no longer get stuck waiting on a computer player, and its rules text reads its numbers from the rule set.
+  Kind: review-fix.
+  Source: review-code-2026-11-11.
+
+- 🚧 [GHUB-0250] **Mahjong: text a translator can handle, in the table and the tile art.**
+  From the GHUB-0239 code review. A chow label cut the suit out
+  of a translated tile name; leaders were joined with " and "; a
+  note was appended with +; a lambda named tr hid four strings
+  from lupdate; the wind letters kept the MahjongView context.
+  **Layman:** Mahjong's sentences are written whole so a future translation can read naturally.
+  Kind: review-fix.
+  Source: review-code-2026-11-11.
+
+- 🚧 [GHUB-0251] **Mahjong Solitaire: a resumed game no longer tells you to undo when there is nothing to undo.**
+  From the GHUB-0239 code review. Restoring a save clears the undo
+  history, but two messages still advised undo.
+  **Layman:** After reopening a saved Mahjong Solitaire game that is stuck, the board says to start a new game instead of suggesting an Undo that does nothing.
+  Kind: review-fix.
+  Source: review-code-2026-11-11.
 
 ## P01 — Shipped
 
