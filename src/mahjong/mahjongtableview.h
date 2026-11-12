@@ -36,6 +36,9 @@ public:
     // For --shot: every seat played by the computer through the rules core,
     // at once and silently, carrying on into the next hand when one ends.
     bool advanceForShot(int turns) override;
+    // The narrowest face-up tile on the table: the discards and your sets.
+    // Large play holds it to mahjong::kTileMinWidth (GHUB-0248).
+    double smallestTileWidth() const;
 
     // A scoring pattern in words, as the end of a hand and the rules list it.
     static QString fanName(mahjong::Fan fan);
@@ -51,13 +54,16 @@ protected:
     // picked out, and the number keys press the buttons beside your hand.
     void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 1200, 820 }; }
-    QSize minimumSizeHint() const override { return { 900, 640 }; }
+    // Sized so large play's tiles clear mahjong::kTileMinWidth.
+    QSize minimumSizeHint() const override;
 
     // Protected so a test can read the table and press its buttons without a
     // copy of the geometry (the reason ReversiView gives).
     const mahjong::Game& game() const { return m_game; }
     QStringList buttonLabels() const;
     QRectF buttonRect(int index) const;
+    // Your plate: seat wind, dealer and score. No button may cover it.
+    QRectF plateRect() const;
     QRectF handTileRect(int index) const;
     int pickedTile() const { return m_picked; }
     // The whole sentence: the last discard and what happens next. It is the
@@ -108,6 +114,22 @@ private:
     QRectF centreRect() const;
     QRectF sentenceRect() const;
     QRectF turnArea(int seat) const;
+    // Your row above the hand, where the plate, your sets and the buttons sit.
+    double baseRowTop() const;
+    // The buttons, laid out right to left and wrapping upward a row at a time,
+    // never over your plate or your sets. Positions are relative to the row's
+    // top when `rows` is asked for alone.
+    std::vector<QRectF> layOutButtons(int* rows) const;
+    double buttonHeight() const;
+    // Your sets and bonus tiles, measured in tile widths.
+    double setsSpan(const mahjong::SeatTiles& s) const;
+    // How narrow a set or discard may be drawn: the floor under large play.
+    double minimumFaceWidth() const;
+    QRectF poolsRect() const;
+    QFont poolLabelFont() const;
+    double poolLabelWidth() const;
+    double poolTileWidth() const;
+    double yourSetWidth() const;
 
     // Painting.
     void paintTile(QPainter& p, const QRectF& r, mahjong::Face face, bool raised = false) const;

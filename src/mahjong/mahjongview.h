@@ -37,6 +37,11 @@ public:
     // For --shot: takes `turns` pairs, the hint's choice each time, at once
     // and silently, so a picture can show a heap part-cleared.
     bool advanceForShot(int turns) override;
+    // Every tile in the heap is this wide. Large play holds it to
+    // mahjong::kTileMinWidth (GHUB-0248).
+    double smallestTileWidth() const { return tileWidth(); }
+    // Sized so large play's tiles clear mahjong::kTileMinWidth.
+    QSize minimumSizeHint() const override;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -45,7 +50,6 @@ protected:
     // the cursor; Escape puts a picked tile down; H hints; S shuffles.
     void keyPressEvent(QKeyEvent* event) override;
     QSize sizeHint() const override { return { 1100, 760 }; }
-    QSize minimumSizeHint() const override { return { 640, 460 }; }
 
     // Protected so a test can click a tile and read the cursor without its
     // own copy of the geometry (the reason ReversiView gives).

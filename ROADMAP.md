@@ -10055,12 +10055,16 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: review-fix.
   Source: review-code-2026-11-11.
 
-- 🚧 [GHUB-0248] **Mahjong table: the claim buttons wrap instead of running off the table, and large print sets a floor on tile and text size.**
+- ✅ [GHUB-0248] **Mahjong table: the claim buttons wrap instead of running off the table, and large print sets a floor on tile and text size.**
   From the GHUB-0239 code review. The claim row had no width limit;
   the sets row wrapped into the hand row; the plate and end-of-hand
   fonts floored at 12 px with large print on or off. Owner ruling
   2026-11-12: with legibility on, Mahjong tiles get a minimum
   readable width.
+  Shipped 2026-11-12. mahjong::kTileMinWidth is 40 px. One minimum
+  window for both modes (table 900x760, Solitaire 660x500), inside the
+  960x1000 bar. A discard row too long at the floor shows its latest
+  tiles behind a "+N" count.
   **Layman:** On the four-player Mahjong table the claim buttons and your laid sets stay inside your corner, and large print keeps tiles readable in a small window.
   Kind: review-fix.
   Source: review-code-2026-11-11.

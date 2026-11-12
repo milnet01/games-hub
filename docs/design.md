@@ -1082,6 +1082,16 @@ seat's plate carries its wind, the dealer and its running total. The end of a
 hand lists every scoring pattern with its fan. The buttons beside your hand
 carry their number key.
 
+**Large play holds every face-up tile to `mahjong::kTileMinWidth`** (GHUB-0248,
+the owner's ruling of 2026-11-12), in both Mahjong games. Each game's
+`minimumSizeHint()` is sized so its tiles clear the floor with the switch on,
+and is the same with it off, so turning the switch on never grows the window.
+A discard row too long for its line at the floor shows its latest tiles, and
+its first slot counts the earlier ones ("+2"). The claim buttons wrap upward a
+row at a time rather than cover your plate or your sets, and the extra row
+comes out of the centre. `smallestTileWidth()` is what `tests/uitest.cpp`
+measures.
+
 ### Snake
 
 Core: `snakeboard.*`. View: `snakeview.*`. Both in `src/snake/`.

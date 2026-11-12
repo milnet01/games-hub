@@ -427,6 +427,13 @@ int sentenceHeight(int room)
 constexpr double kMargin = 12.0;
 } // namespace
 
+QSize MahjongView::minimumSizeHint() const
+{
+    // Tall enough that large play's tiles clear mahjong::kTileMinWidth, and the
+    // same with the switch off, so turning it on never grows the window.
+    return { 660, 500 };
+}
+
 double MahjongView::tileWidth() const
 {
     const int room = height() - int(captionBand(QRectF(rect())));

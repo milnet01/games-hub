@@ -156,6 +156,9 @@ class MahjongTableProbe : public MahjongTableView
 {
 public:
     using MahjongTableView::buttonLabels;
+    using MahjongTableView::buttonRect;
+    using MahjongTableView::handTileRect;
+    using MahjongTableView::plateRect;
     using MahjongTableView::endOfHandLines;
     using MahjongTableView::game;
     using MahjongTableView::ruleSetInForce;
@@ -2817,6 +2820,75 @@ void mahjongTableWaitsAndKeepsItsPlace()
     }
     QSettings().remove(QStringLiteral("mahjong4/ruleSet"));
     QSettings().remove(QStringLiteral("mahjong4/length"));
+}
+
+// ---- mahjongTableKeepsItsCorner (GHUB-0248) ----
+//
+// The claim buttons wrap rather than run off the table or over your plate,
+// and large play holds both Mahjong games' tiles to mahjong::kTileMinWidth at
+// the smallest window each allows.
+void mahjongTableKeepsItsCorner()
+{
+    using mahjong::Action;
+    using mahjong::Phase;
+    // A discard you could chow three ways: the most buttons a claim gets.
+    const QByteArray manyWays = mahjongSaveWhere([](const mahjong::Hand& h) {
+        if (h.phase() != Phase::Claims)
+            return false;
+        int chows = 0;
+        for (const mahjong::Move& m : h.legalMoves(0))
+            chows += m.action == Action::Chow ? 1 : 0;
+        return chows >= 3;
+    });
+    check(!manyWays.isEmpty(), "mahjong table: some seeded game offers you three chows at once");
+    {
+        MahjongTableProbe view;
+        view.resize(900, 640);   // the table's smallest window
+        view.show();
+        view.activate();
+        check(view.restoreState(manyWays), "mahjong table: that save restores");
+        const QRectF plate = view.plateRect();
+        const QRectF hand = view.handTileRect(0);
+        bool inside = true;
+        const int count = int(view.buttonLabels().size());
+        for (int i = 0; i < count; ++i) {
+            const QRectF r = view.buttonRect(i);
+            inside = inside && r.left() >= plate.right() && r.right() <= view.width() && r.bottom() <= hand.top();
+            for (int j = 0; j < i; ++j)
+                inside = inside && !r.intersects(view.buttonRect(j));
+        }
+        check(count >= 3 && inside,
+              "mahjong table: at the smallest window every claim button clears your plate, your hand, the "
+              "edge and each other");
+        view.deactivate();
+    }
+
+    Legibility::instance().setEnabledForSession(true);
+    {
+        HubWindow hub;
+        hub.openGameNamed(QStringLiteral("Mahjong"));
+        hub.show();
+        pump(20);
+        hub.resize(hub.minimumSizeHint());
+        pump(20);
+        auto* table = hub.findChild<MahjongTableView*>();
+        const double w = table != nullptr ? table->smallestTileWidth() : 0.0;
+        std::printf("      Mahjong smallest tile %.1f px against a %.0f px floor\n", w, mahjong::kTileMinWidth);
+        check(w >= mahjong::kTileMinWidth, "mahjong table: large play keeps every tile at the floor or wider");
+    }
+    {
+        HubWindow hub;
+        hub.openGameNamed(QStringLiteral("Mahjong Solitaire"));
+        hub.show();
+        pump(20);
+        hub.resize(hub.minimumSizeHint());
+        pump(20);
+        auto* heap = hub.findChild<MahjongView*>();
+        const double w = heap != nullptr ? heap->smallestTileWidth() : 0.0;
+        std::printf("      Mahjong Solitaire tile %.1f px against a %.0f px floor\n", w, mahjong::kTileMinWidth);
+        check(w >= mahjong::kTileMinWidth, "mahjong solitaire: large play keeps every tile at the floor or wider");
+    }
+    Legibility::instance().setEnabledForSession(false);
 }
 
 // ---- holdLinePausesAndKeepsItsTable (GHUB-0237) ----
@@ -9158,6 +9230,7 @@ int main(int argc, char* argv[])
     noughtsPlaysAndKeepsItsPlace();
     mahjongPlaysAndKeepsItsPlace();
     mahjongTableWaitsAndKeepsItsPlace();
+    mahjongTableKeepsItsCorner();
     holdLinePausesAndKeepsItsTable();
 
     turnLightFollowsTheTurn();

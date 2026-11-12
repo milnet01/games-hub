@@ -33,6 +33,11 @@ inline constexpr QColor kTileEdge { 0xd6, 0xca, 0xa8 };
 // widget font, which the numeral and the wind letter are drawn in.
 void paintTileFace(QPainter& p, const QRectF& face, Face tile, bool legible, const QFont& base);
 
+// With large play on, no face-up tile in either Mahjong game is drawn
+// narrower than this (GHUB-0248, the owner's ruling of 2026-11-12). Each game
+// raises its smallest window under the switch until its tiles clear it.
+inline constexpr double kTileMinWidth = 40.0;
+
 // The tile in words, for the table's sentences ("Five of Bamboo").
 QString tileName(Face tile);
 

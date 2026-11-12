@@ -268,6 +268,8 @@ QString MahjongTableView::rulesText() const
               "button shows its number.</li>"
               "</ul>"
               "<p>When you can claim a tile the game waits for you, however long you take.</p>"
+              "<p>With large play on, a long row of thrown tiles shows the latest ones. The "
+              "number before them, such as +2, counts the earlier tiles not drawn.</p>"
               "<p><b>On the toolbar:</b></p>"
               "<ul>"
               "<li><b>New Game</b> (Ctrl+N) starts again from the first hand.</li>"
@@ -750,17 +752,20 @@ double MahjongTableView::handTileWidth() const
 
 double MahjongTableView::smallTileWidth() const
 {
-    return handTileWidth() * 0.6;
+    // Your sets, the others' sets and the discards' starting size. Large play
+    // keeps them at the floor where the window allows (GHUB-0248).
+    const double tw = handTileWidth();
+    return Legibility::instance().enabled() ? std::max(tw * 0.6, std::min(mahjong::kTileMinWidth, tw)) : tw * 0.6;
 }
 
 QRectF MahjongTableView::seatArea(int seat) const
 {
     const QRectF room = roomRect();
-    const double tw = handTileWidth();
     const double sw = smallTileWidth();
-    const double setRow = sw * kTileAspect + 8.0;
-    const double handTop = room.bottom() - kMargin - tw * kTileAspect;
-    const double bottomTop = handTop - setRow - 6.0;
+    int rows = 1;
+    layOutButtons(&rows);
+    // A second row of buttons takes its height from the centre, not from you.
+    const double bottomTop = baseRowTop() - std::max(0, rows - 1) * (buttonHeight() + 6.0);
     const double side = std::max(150.0, room.width() * 0.17);
     const double plate = std::max(34.0, room.height() * 0.055);
     const double topHeight = std::max(plate, sw * kTileAspect) + sw * kTileAspect + 14.0;
@@ -810,28 +815,164 @@ QRectF MahjongTableView::handTileRect(int index) const
     return { left + index * tw + (apart ? gap : 0.0), top, tw - 2.0, tw * kTileAspect };
 }
 
-QRectF MahjongTableView::buttonRect(int index) const
+double MahjongTableView::baseRowTop() const
 {
+    const QRectF room = roomRect();
+    const double handTop = room.bottom() - kMargin - handTileWidth() * kTileAspect;
+    return handTop - (smallTileWidth() * kTileAspect + 8.0) - 6.0;
+}
+
+QRectF MahjongTableView::plateRect() const
+{
+    const QRectF room = roomRect();
+    return { kMargin, baseRowTop(), std::min(230.0, (room.width() - 2 * kMargin) * 0.22),
+             std::max(34.0, room.height() * 0.055) };
+}
+
+double MahjongTableView::buttonHeight() const
+{
+    return std::max(24.0, smallTileWidth() * kTileAspect - 2.0);
+}
+
+double MahjongTableView::setsSpan(const mahjong::SeatTiles& s) const
+{
+    double span = 0.0;
+    for (const mahjong::Meld& m : s.melds)
+        span += (m.kind == mahjong::SetKind::Kong ? 4 : 3) + 0.3;
+    return span + double(s.bonus.size());
+}
+
+double MahjongTableView::minimumFaceWidth() const
+{
+    const double sw = smallTileWidth();
+    return Legibility::instance().enabled() ? std::min(mahjong::kTileMinWidth, sw) : sw * 0.6;
+}
+
+std::vector<QRectF> MahjongTableView::layOutButtons(int* rows) const
+{
+    // Right to left along the row above your hand, the first button leftmost.
+    // Your plate and your sets keep their room: a button that would reach them
+    // starts a new row above instead (GHUB-0248).
     const std::vector<Button> all = buttons();
-    if (index < 0 || index >= int(all.size()))
-        return {};
-    // Right-aligned along the row above your hand, the first button leftmost.
-    const QRectF row = seatArea(0);
-    const double h = smallTileWidth() * kTileAspect + 4.0;
+    std::vector<QRectF> out(all.size());
+    const QRectF room = roomRect();
+    const double h = buttonHeight();
     QFont f = font();
     f.setBold(true);
-    f.setPixelSize(std::max(13, int(h * (Legibility::instance().enabled() ? 0.46 : 0.4))));
+    f.setPixelSize(std::max(13, int((h + 6.0) * (Legibility::instance().enabled() ? 0.46 : 0.4))));
     const QFontMetricsF fm(f);
-    double right = row.right();
+    const double right = room.width() - kMargin;
+    const double plateRight = plateRect().right() + 10.0;
+    double left = plateRight;
+    if (const mahjong::Hand* hand = m_game.hand()) {
+        const double span = setsSpan(hand->seat(0));
+        if (span > 0.0)
+            left += span * minimumFaceWidth() + 10.0;
+    }
+    // Whatever your sets need, the buttons keep half the row.
+    left = std::min(left, plateRight + (right - plateRight) * 0.5);
+    double x = right;
+    double top = baseRowTop() + 2.0;
+    int count = all.empty() ? 0 : 1;
     for (int i = int(all.size()) - 1; i >= 0; --i) {
         const QString text = QStringLiteral("%1  %2").arg(i + 1).arg(all[std::size_t(i)].label);
-        const double w = fm.horizontalAdvance(text) + h * 0.8;
-        const QRectF r(right - w, row.top() + 2.0, w, std::max(24.0, h - 6.0));
-        if (i == index)
-            return r;
-        right -= w + 8.0;
+        const double w = std::min(fm.horizontalAdvance(text) + (h + 6.0) * 0.8, right - left);
+        if (x - w < left - 0.5 && x < right) {
+            x = right;
+            top -= h + 6.0;
+            ++count;
+        }
+        out[std::size_t(i)] = QRectF(x - w, top, w, h);
+        x -= w + 8.0;
     }
-    return {};
+    if (rows != nullptr)
+        *rows = count;
+    return out;
+}
+
+QRectF MahjongTableView::buttonRect(int index) const
+{
+    const std::vector<QRectF> all = layOutButtons(nullptr);
+    return index >= 0 && index < int(all.size()) ? all[std::size_t(index)] : QRectF();
+}
+
+double MahjongTableView::yourSetWidth() const
+{
+    const double sw = smallTileWidth();
+    const mahjong::Hand* h = m_game.hand();
+    const double span = h != nullptr ? setsSpan(h->seat(0)) : 0.0;
+    if (span <= 0.0)
+        return sw;
+    // From your plate to the first button on your row, on one line.
+    double right = roomRect().width() - kMargin;
+    for (const QRectF& r : layOutButtons(nullptr))
+        if (r.top() > baseRowTop() - 1.0)
+            right = std::min(right, r.left());
+    const double room = right - 10.0 - (plateRect().right() + 10.0);
+    return std::clamp(room / span, std::min(minimumFaceWidth(), sw), sw);
+}
+
+QRectF MahjongTableView::poolsRect() const
+{
+    const QRectF c = centreRect();
+    const double infoH = std::clamp(c.height() * 0.08, 20.0, 34.0);
+    return { c.left(), c.top() + infoH + 4.0, c.width() * 0.66, sentenceRect().top() - c.top() - infoH - 8.0 };
+}
+
+QFont MahjongTableView::poolLabelFont() const
+{
+    // Sized from the hand's tiles, not the pool's, so the label and the pool
+    // width do not depend on each other.
+    QFont f = font();
+    f.setBold(true);
+    f.setPixelSize(std::max(11, int(std::min(handTileWidth() * 0.7 * kTileAspect * 0.45, 20.0))));
+    return f;
+}
+
+double MahjongTableView::poolLabelWidth() const
+{
+    const QFontMetricsF fm(poolLabelFont());
+    double widest = 0.0;
+    for (int seat = 0; seat < mahjong::kSeats; ++seat)
+        widest = std::max(widest, fm.horizontalAdvance(seatName(seat)));
+    return std::max(std::min(90.0, poolsRect().width() * 0.16), widest + 10.0);
+}
+
+double MahjongTableView::poolTileWidth() const
+{
+    // As large as lets the longest pool -- or a dozen tiles, so the size does
+    // not jump about early in a hand -- fit its strip, every tile shown. Large
+    // play never goes below the floor; a pool too long for its strip at the
+    // floor shows its latest tiles and counts the rest (paintPools).
+    const mahjong::Hand* h = m_game.hand();
+    const QRectF pools = poolsRect();
+    const double label = poolLabelWidth();
+    const double stripH = pools.height() / mahjong::kSeats;
+    std::size_t longest = 12;
+    if (h != nullptr)
+        for (int seat = 0; seat < mahjong::kSeats; ++seat)
+            longest = std::max(longest, h->seat(seat).pool.size());
+    const double floor = Legibility::instance().enabled() ? mahjong::kTileMinWidth : 10.0;
+    double pw = handTileWidth() * 0.7;
+    for (; pw > floor; pw -= 1.0) {
+        const int perLine = std::max(1, int((pools.width() - label) / pw));
+        const int lines = int((longest + std::size_t(perLine) - 1) / std::size_t(perLine));
+        if (lines * (pw * kTileAspect + 3.0) <= stripH - 4.0)
+            break;
+    }
+    return std::max(pw, floor);
+}
+
+double MahjongTableView::smallestTileWidth() const
+{
+    return std::min({ poolTileWidth(), yourSetWidth(), smallTileWidth() });
+}
+
+QSize MahjongTableView::minimumSizeHint() const
+{
+    // Tall enough that large play's tiles clear mahjong::kTileMinWidth, and the
+    // same with the switch off, so turning it on never grows the window.
+    return { 900, 760 };
 }
 
 // ---------------------------------------------------------------------------
@@ -881,10 +1022,13 @@ void MahjongTableView::paintPlate(QPainter& p, const QRectF& r, const QString& t
     const bool legible = Legibility::instance().enabled();
     QFont f = font();
     f.setBold(true);
-    f.setPixelSize(std::max(12, int(r.height() * (legible ? 0.36 : 0.32))));
+    f.setPixelSize(std::max(legible ? 16 : 12, int(r.height() * (legible ? 0.36 : 0.32))));
+    const QRectF inner = r.adjusted(8, 2, -8, -2);
+    // Smaller rather than cut short: "Right — East, dealer" must read whole.
+    while (f.pixelSize() > 11 && QFontMetricsF(f).horizontalAdvance(title) > inner.width())
+        f.setPixelSize(f.pixelSize() - 1);
     p.setFont(f);
     p.setPen(kInk);
-    const QRectF inner = r.adjusted(8, 2, -8, -2);
     p.drawText(QRectF(inner.left(), inner.top(), inner.width(), inner.height() / 2), Qt::AlignLeft | Qt::AlignVCenter,
                title);
     f.setBold(false);
@@ -947,9 +1091,13 @@ void MahjongTableView::paintSeat(QPainter& p, int seat) const
     const mahjong::SeatTiles& s = h->seat(seat);
 
     if (seat == 0) {
-        const QRectF plate(area.left(), area.top(), std::min(230.0, area.width() * 0.22), plateH);
+        // Your sets on one line between the plate and the buttons, never
+        // wrapping down into your hand (GHUB-0248).
+        const QRectF plate = plateRect();
         paintPlate(p, plate, title, line, toMove);
-        paintSets(p, s, QRectF(plate.right() + 10.0, area.top(), area.width() * 0.45, sw * kTileAspect), sw);
+        const double w = yourSetWidth();
+        const double span = setsSpan(s);
+        paintSets(p, s, QRectF(plate.right() + 10.0, plate.top(), span * w + 1.0, w * kTileAspect), w);
         return;
     }
     QRectF plate;
@@ -975,6 +1123,15 @@ void MahjongTableView::paintSeat(QPainter& p, int seat) const
         }
         paintBack(p, QRectF(x, y, bw - 1.5, bh));
         x += bw;
+    }
+    if (seat == 2) {
+        // Across has one row for its sets: the whole width under the plate,
+        // narrower tiles before a second line that would reach the centre.
+        const double span = setsSpan(s);
+        const double w = span > 0.0 ? std::clamp(area.width() / span, std::min(minimumFaceWidth(), sw), sw) : sw;
+        const double top = std::max(plate.bottom(), y + bh) + 8.0;
+        paintSets(p, s, QRectF(area.left(), top, area.width(), area.bottom() - top), w);
+        return;
     }
     paintSets(p, s, QRectF(rest.left(), y + bh + 8.0, rest.width(), rest.bottom() - y - bh - 8.0), sw);
 }
@@ -1005,35 +1162,32 @@ void MahjongTableView::paintPools(QPainter& p) const
 
     // One strip per seat, in turn order from you, each labelled; the last
     // discard drawn larger to the right.
-    const QRectF pools(c.left(), c.top() + infoH + 4.0, c.width() * 0.66, sentence.top() - c.top() - infoH - 8.0);
-    const double label = std::min(90.0, pools.width() * 0.16);
+    const QRectF pools = poolsRect();
+    const double label = poolLabelWidth();
     const double stripH = pools.height() / mahjong::kSeats;
-    // As large as lets the longest pool -- or a dozen tiles, so the size does
-    // not jump about early in a hand -- fit its strip, every tile shown.
-    std::size_t longest = 12;
-    for (int seat = 0; seat < mahjong::kSeats; ++seat)
-        longest = std::max(longest, h->seat(seat).pool.size());
-    double pw = handTileWidth() * 0.7;
-    for (; pw > 10.0; pw -= 1.0) {
-        const int perLine = std::max(1, int((pools.width() - label) / pw));
-        const int lines = int((longest + std::size_t(perLine) - 1) / std::size_t(perLine));
-        if (lines * (pw * kTileAspect + 3.0) <= stripH - 4.0)
-            break;
-    }
+    const double pw = poolTileWidth();
     const double ph = pw * kTileAspect;
     for (int i = 0; i < mahjong::kSeats; ++i) {
         const int seat = i;
         const QRectF strip(pools.left(), pools.top() + i * stripH, pools.width(), stripH);
-        f.setPixelSize(std::max(11, int(std::min(ph * 0.45, 20.0))));
-        p.setFont(f);
+        p.setFont(poolLabelFont());
         p.setPen(kInkDim);
         p.drawText(QRectF(strip.left(), strip.top(), label - 6.0, ph), Qt::AlignLeft | Qt::AlignVCenter,
                    seatName(seat));
         const std::vector<Face>& pool = h->seat(seat).pool;
         const int perLine = std::max(1, int((strip.width() - label) / pw));
-        for (std::size_t k = 0; k < pool.size(); ++k) {
-            const int line = int(k) / perLine;
-            const int col = int(k) % perLine;
+        const int lines = std::max(1, int((stripH - 1.0) / (ph + 3.0)));
+        const std::size_t room = std::size_t(perLine * lines);
+        // Too many to show at this size: the first slot says how many earlier
+        // tiles are not drawn, and the latest fill the rest.
+        const std::size_t hidden = pool.size() > room ? pool.size() - room + 1 : 0;
+        if (hidden > 0)
+            p.drawText(QRectF(strip.left() + label, strip.top(), pw, ph), Qt::AlignCenter,
+                       tr("+%1").arg(hidden));
+        for (std::size_t k = hidden; k < pool.size(); ++k) {
+            const std::size_t slot = hidden > 0 ? k - hidden + 1 : k;
+            const int line = int(slot) / perLine;
+            const int col = int(slot) % perLine;
             paintTile(p, QRectF(strip.left() + label + col * pw, strip.top() + line * (ph + 3.0), pw - 1.5, ph),
                       pool[k]);
         }
@@ -1120,9 +1274,10 @@ void MahjongTableView::paintEndOfHand(QPainter& p) const
         paintSets(p, s, QRectF(x + w * 0.5, y, inner.right() - x - w * 0.5, w * kTileAspect), w);
         y += w * kTileAspect + 10.0;
     }
-    const double lineH = std::clamp((inner.bottom() - y) / std::max(4, int(lines.size())), 14.0, 40.0);
+    const bool legible = Legibility::instance().enabled();
+    const double lineH = std::clamp((inner.bottom() - y) / std::max(4, int(lines.size())), legible ? 22.0 : 14.0, 40.0);
     QFont f = font();
-    f.setPixelSize(std::max(12, int(lineH * (Legibility::instance().enabled() ? 0.72 : 0.62))));
+    f.setPixelSize(std::max(legible ? 16 : 12, int(lineH * (legible ? 0.72 : 0.62))));
     for (int i = 0; i < int(lines.size()); ++i) {
         f.setBold(i == 0 || i >= int(lines.size()) - 2);
         p.setFont(f);

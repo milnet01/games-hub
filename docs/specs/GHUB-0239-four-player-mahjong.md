@@ -546,7 +546,7 @@ proved there, as Hearts' and Canasta's are.
 | INV-14 | `tests/uitest.cpp`, the turn-light block |
 | INV-15 | `tests/selftest.cpp`, the four-computer games |
 | INV-16 | `tests/uitest.cpp`, the claim-window block |
-| § 4.7 legibility | **nothing** — whether a tile reads is judged by eye; the owner's own look is the check |
+| § 4.7 legibility | `tests/uitest.cpp`, `mahjongTableKeepsItsCorner`: large play holds every face-up tile to `mahjong::kTileMinWidth` at the smallest window (GHUB-0248). Whether a tile reads is still judged by eye |
 | § 4.8 how well the computer plays | **nothing** — INV-15 checks it wins, not that it plays well |
 
 ## 11. Cross-doc impact
