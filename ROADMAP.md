@@ -10069,11 +10069,13 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: review-fix.
   Source: review-code-2026-11-11.
 
-- 🚧 [GHUB-0249] **Mahjong table: a refused computer move cannot freeze the table, and the two next-game notes no longer wipe each other.**
+- ✅ [GHUB-0249] **Mahjong table: a refused computer move cannot freeze the table, and the two next-game notes no longer wipe each other.**
   From the GHUB-0239 code review. A refused computer move was
   dropped silently; one note held both the pending rule set and
   the pending length; the rules text kept its own copy of the
   points table and limit, against design.md.
+  Shipped 2026-11-12. The rule set gained limit() and points(); the
+  next-game note is worked out from both pending settings.
   **Layman:** The four-player Mahjong table can no longer get stuck waiting on a computer player, and its rules text reads its numbers from the rule set.
   Kind: review-fix.
   Source: review-code-2026-11-11.

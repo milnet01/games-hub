@@ -76,6 +76,8 @@ protected:
     // The end-of-hand panel's lines, one per row.
     QStringList endOfHandLines() const;
     mahjong::RuleSetId ruleSetInForce() const { return m_game.ruleSetId(); }
+    // A setting changed mid-game, said on the table until the next game.
+    QString pendingNote() const;
 
 private:
     struct Button {
@@ -89,7 +91,8 @@ private:
     void advance();
     void playComputers();
     void playHuman(const mahjong::Move& move);
-    void apply(const mahjong::Move& move, bool loud = true);
+    bool apply(const mahjong::Move& move, bool loud = true);
+    void playComputer(int seat);
     void abandonThinking();
     void refresh();
     void step();
@@ -153,8 +156,6 @@ private:
     mahjong::RuleSetId m_nextRules = mahjong::RuleSetId::HongKong;
     mahjong::Length m_nextLength = mahjong::Length::FullGame;
     std::mt19937 m_rng;
-    // A change to a setting, said on the table until the next game.
-    QString m_note;
     bool m_resumed = false;
 
     // Your hand: the tile picked out to throw, as an index into it.

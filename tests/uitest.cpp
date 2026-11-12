@@ -162,6 +162,7 @@ public:
     using MahjongTableView::endOfHandLines;
     using MahjongTableView::game;
     using MahjongTableView::ruleSetInForce;
+    using MahjongTableView::pendingNote;
     using MahjongTableView::centreSentence;
     using MahjongTableView::tableSentence;
 };
@@ -2813,6 +2814,14 @@ void mahjongTableWaitsAndKeepsItsPlace()
             east->trigger();
         check(view.game().length() == mahjong::Length::FullGame,
               "mahjong table: a length chosen mid-game waits for the next game");
+        // Choosing the rule set already in force must not wipe the length's
+        // note (GHUB-0249).
+        const QString lengthNote = view.pendingNote();
+        for (QAction* a : view.gameActions())
+            if (a->objectName().startsWith(QStringLiteral("mahjong4-rules-")))
+                a->trigger();
+        check(!lengthNote.isEmpty() && view.pendingNote() == lengthNote,
+              "mahjong table: the length's note survives choosing a rule set (GHUB-0249)");
         view.deactivate();
         MahjongTableProbe next;
         check(next.game().length() == mahjong::Length::EastRound, "mahjong table: and the choice is remembered");

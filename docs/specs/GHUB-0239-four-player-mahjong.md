@@ -245,6 +245,9 @@ public:
     virtual bool chowAllowed() const = 0;
     virtual bool bonusTilesInPlay() const = 0;
     virtual int minimumToWin() const = 0;
+    // The most a hand can score, and § 4.5's points for a total.
+    virtual int limit() const = 0;
+    virtual int points(int fan) const = 0;
     virtual HandScore score(const WinContext& win) const = 0;
     // Every pattern with its value, for the rules text.
     virtual std::vector<ScoreItem> fanList() const = 0;
@@ -256,6 +259,8 @@ const RuleSet& ruleSet(RuleSetId id);
 
 `fanList()` was added at the build, 2026-11-11, so the rules text lists the
 values from the rule set rather than from a second copy of § 4.4 in the view.
+`limit()` and `points()` followed with GHUB-0249, so the limit and the
+points table come from there too.
 
 **The core names a pattern by `Fan`; the view owns its words.** The view maps
 each `Fan` to a `tr()` sentence, so the core carries no display text. The

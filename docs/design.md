@@ -1043,7 +1043,8 @@ bonus tiles are in play, what a hand needs to win, how it scores and who
 pays. Chinese Official (GHUB-0243) and Japanese Riichi (GHUB-0244) arrive as
 new rule sets, not as branches in `Hand`. **Every Hong Kong number lives in
 `HongKongRules`**: `fanValue`, `pointsFor`, `kMinimum` and `kLimit`. The rules
-text reads the values through `fanList()` rather than keeping its own copy.
+text reads the values through `fanList()`, `limit()` and `points()` rather
+than keeping its own copy.
 
 **The core names a scoring pattern by `Fan`; the view owns its words.**
 `MahjongTableView::fanName` is the one place a pattern becomes a sentence, for

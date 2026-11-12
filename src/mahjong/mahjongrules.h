@@ -112,6 +112,10 @@ public:
     virtual bool chowAllowed() const = 0;
     virtual bool bonusTilesInPlay() const = 0;
     virtual int minimumToWin() const = 0;
+    // The most a hand can score, and the points a total of `fan` is worth (0
+    // below the minimum). The rules text reads both from here.
+    virtual int limit() const = 0;
+    virtual int points(int fan) const = 0;
     virtual HandScore score(const WinContext& win) const = 0;
     // Every pattern this rule set scores, with its value, in the order the
     // rules text lists them.
@@ -131,6 +135,8 @@ public:
     bool chowAllowed() const override { return true; }
     bool bonusTilesInPlay() const override { return true; }
     int minimumToWin() const override { return kMinimum; }
+    int limit() const override { return kLimit; }
+    int points(int fan) const override { return pointsFor(fan); }
     HandScore score(const WinContext& win) const override;
     std::vector<ScoreItem> fanList() const override;
     std::array<int, 4> settle(const WinContext& win, const HandScore& s) const override;

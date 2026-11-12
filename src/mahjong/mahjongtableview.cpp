@@ -185,19 +185,26 @@ void MahjongTableView::setRuleSet(mahjong::RuleSetId id)
     QSettings().setValue(ruleSetKey(), int(id));
     m_nextRules = id;
     // The game in progress keeps its rule set: its totals were scored by it.
-    m_note = id == m_game.ruleSetId() ? QString() : tr("%1 from the next game.").arg(ruleSetLabel(id));
     refresh();
+}
+
+QString MahjongTableView::pendingNote() const
+{
+    // Both settings, each said while it differs from the game in progress, so
+    // changing one never hides the other (GHUB-0249).
+    QStringList notes;
+    if (m_nextRules != m_game.ruleSetId())
+        notes << tr("%1 from the next game.").arg(ruleSetLabel(m_nextRules));
+    if (m_nextLength != m_game.length())
+        notes << (m_nextLength == mahjong::Length::FullGame ? tr("A full game from the next game.")
+                                                            : tr("An East round from the next game."));
+    return notes.join(QLatin1Char(' '));
 }
 
 void MahjongTableView::setLength(mahjong::Length length)
 {
     QSettings().setValue(lengthKey(), lengthWord(length));
     m_nextLength = length;
-    if (length == m_game.length())
-        m_note.clear();
-    else
-        m_note = length == mahjong::Length::FullGame ? tr("A full game from the next game.")
-                                                     : tr("An East round from the next game.");
     refresh();
 }
 
@@ -211,6 +218,11 @@ QString MahjongTableView::rulesText() const
     const mahjong::RuleSet& rules = mahjong::ruleSet(m_game.ruleSetId());
     for (const mahjong::ScoreItem& item : rules.fanList())
         fans.append(tr("<li>%1: %n fan</li>", nullptr, item.value).arg(fanName(item.fan)));
+    // The points table from the rule set, one whole sentence a line, so the
+    // text cannot keep a copy that drifts from the scoring (GHUB-0249).
+    QString points;
+    for (int fan = rules.minimumToWin(); fan <= rules.limit(); ++fan)
+        points.append(tr("<li>%n fan is worth %1 points.</li>", nullptr, fan).arg(rules.points(fan)));
 
     return tr("<h3>The aim</h3>"
               "<p>Make a winning hand before the three computer players do: four sets and a pair, "
@@ -246,8 +258,8 @@ QString MahjongTableView::rulesText() const
               "%3 fan is the most a hand can score.</p>"
               "<ul>%4</ul>"
               "<p>A win on a thrown tile is paid by the player who threw it. A win on a tile you "
-              "drew is paid by all three others. A robbed kong is paid by the player who added the tile. 3 fan is worth 8 points, 4 is 16, 5 is 24, "
-              "6 is 32, 7 is 48, 8 is 64, 9 is 96 and 10 is 128.</p>"
+              "drew is paid by all three others. A robbed kong is paid by the player who added the tile.</p>"
+              "<ul>%5</ul>"
               "<p>The dealer is East. The dealer keeps the deal after winning, or after a drawn hand; "
               "otherwise it passes to the next player. A <b>full game</b> ends when the deal has "
               "gone round the table four times, with the wind of the round moving from East to "
@@ -279,8 +291,9 @@ QString MahjongTableView::rulesText() const
               "</ul>")
         .arg(ruleSetLabel(m_game.ruleSetId()))
         .arg(rules.minimumToWin())
-        .arg(mahjong::HongKongRules::kLimit)
-        .arg(fans);
+        .arg(rules.limit())
+        .arg(fans)
+        .arg(points);
 }
 
 QString MahjongTableView::fanName(mahjong::Fan fan)
@@ -352,7 +365,6 @@ void MahjongTableView::newGame()
 {
     abandonThinking();
     m_game = mahjong::Game(m_nextRules, m_nextLength);
-    m_note.clear();
     m_resumed = false;
     m_game.startHand(std::uint32_t(m_rng()));
     m_picked = -1;
@@ -391,7 +403,7 @@ void MahjongTableView::advance()
                 computer = s;
         if (computer < 0)
             break;
-        apply(mahjong::chooseMove(h, computer));
+        playComputer(computer);
     }
     if (m_game.handInPlay()) {
         const mahjong::Hand& h = *m_game.hand();
@@ -420,7 +432,7 @@ void MahjongTableView::playComputers()
         return;
     const mahjong::Hand& h = *m_game.hand();
     if (h.phase() == Phase::Turn && h.toMove() != 0)
-        apply(mahjong::chooseMove(h, h.toMove()));
+        playComputer(h.toMove());
     advance();
 }
 
@@ -433,14 +445,28 @@ void MahjongTableView::playHuman(const Move& move)
     advance();
 }
 
-void MahjongTableView::apply(const Move& move, bool loud)
+void MahjongTableView::playComputer(int seat)
+{
+    // Should the rules ever refuse what chooseMove picked, the seat makes its
+    // last legal move instead -- Pass on a claim, a discard on a turn -- so a
+    // mistake there costs a move rather than freezing the table (GHUB-0249).
+    const mahjong::Hand& h = *m_game.hand();
+    if (apply(mahjong::chooseMove(h, seat)))
+        return;
+    qWarning("Mahjong: the rules refused seat %d's chosen move", seat);
+    const std::vector<Move> legal = h.legalMoves(seat);
+    if (!legal.empty())
+        apply(legal.back());
+}
+
+bool MahjongTableView::apply(const Move& move, bool loud)
 {
     if (!m_game.play(move))
-        return;
+        return false;
     if (move.seat == 0 && move.action == Action::Discard)
         m_picked = -1;
     if (!loud)
-        return;
+        return true;
     switch (move.action) {
     case Action::Discard: Sound::instance().play(Sound::kDiscPlace); break;
     case Action::Pass: break;
@@ -451,6 +477,7 @@ void MahjongTableView::apply(const Move& move, bool loud)
         if (!r.drawn)
             Sound::instance().play(r.win.winner == 0 ? Sound::kWin : Sound::kLose);
     }
+    return true;
 }
 
 bool MahjongTableView::advanceForShot(int turns)
@@ -1156,8 +1183,9 @@ void MahjongTableView::paintPools(QPainter& p) const
                        .arg(windName(h->prevailingWind()))
                        .arg(int(m_game.results().size()) + (m_game.handInPlay() ? 1 : 0))
                        .arg(h->wallLeft());
-    if (!m_note.isEmpty())
-        info += QStringLiteral("  ") + m_note;
+    const QString note = pendingNote();
+    if (!note.isEmpty())
+        info = tr("%1  %2", "the round and the wall, then a setting waiting for the next game").arg(info, note);
     p.drawText(QRectF(c.left(), c.top(), c.width(), infoH), Qt::AlignLeft | Qt::AlignVCenter, info);
 
     // One strip per seat, in turn order from you, each labelled; the last
@@ -1468,7 +1496,6 @@ bool MahjongTableView::restoreState(const QByteArray& blob)
     m_game = std::move(*game);
     m_resumed = true;
     m_picked = -1;
-    m_note.clear();
     advance();
     return true;
 }
