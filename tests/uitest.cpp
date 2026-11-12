@@ -2606,6 +2606,55 @@ void mahjongPlaysAndKeepsItsPlace()
     check(game.board().remaining() == mahjong::kTiles && game.saveState().isEmpty(),
           "mahjong: Undo puts the pair back");
 
+    // GHUB-0251: a resumed heap has no history, so a stuck one says New Game
+    // rather than Undo. Two like tiles, one on the other: nothing is free and
+    // no shuffle can clear them.
+    {
+        int below = -1;
+        int above = -1;
+        for (int a = 0; a < mahjong::kTiles && below < 0; ++a) {
+            for (int b = 0; b < mahjong::kTiles; ++b) {
+                if (a == b)
+                    continue;
+                std::array<mahjong::Face, mahjong::kTiles> two {};
+                two[std::size_t(a)] = 1;
+                two[std::size_t(b)] = 1;
+                mahjong::Board probe;
+                if (probe.restore(two) && probe.freePairs().empty() && probe.isFree(b)) {
+                    below = a;
+                    above = b;
+                    break;
+                }
+            }
+        }
+        MahjongProbe source;
+        const auto pair = source.board().hint();
+        if (pair) {
+            clickTile(source, pair->first);
+            clickTile(source, pair->second);
+        }
+        QByteArray blob = source.saveState();
+        bool built = below >= 0 && blob.size() == 4 + mahjong::kTiles + 2;
+        if (built) {
+            for (int s = 0; s < mahjong::kTiles; ++s)
+                blob[4 + s] = char(s == below || s == above ? 1 : 0);
+            blob[4 + mahjong::kTiles] = 0;
+            blob[4 + mahjong::kTiles + 1] = char(above);
+        }
+        MahjongProbe stuck;
+        built = built && stuck.restoreState(blob) && stuck.board().remaining() == 2;
+        QAction* stuckUndo = action(stuck, QStringLiteral("Undo"));
+        const QString said = stuck.lastStatus();
+        check(built && stuckUndo != nullptr && !stuckUndo->isEnabled() && !said.contains(QStringLiteral("undo"))
+                  && said.contains(QStringLiteral("Ctrl+N")),
+              "mahjong: a resumed heap with no free pair offers a new heap, not Undo (GHUB-0251)");
+        pressKey(&stuck, Qt::Key_S);
+        check(!stuck.lastStatus().contains(QStringLiteral("Undo")) && stuck.lastStatus().contains(QStringLiteral("Ctrl+N")),
+              "mahjong: and a shuffle that cannot help says the same (GHUB-0251)");
+        stuck.deactivate();
+        source.deactivate();
+    }
+
     // The keys: the cursor stands on free tiles, and Space is the click.
     pressKey(&game, Qt::Key_Right);
     const int first = game.cursorSlot();

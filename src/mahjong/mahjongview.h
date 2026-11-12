@@ -75,6 +75,7 @@ private:
 
     // The sentence under the heap: what to do next, or why a press did nothing.
     QString boardSentence() const;
+    QString noPairSentence() const;
     double tileWidth() const;
     double depth() const { return tileWidth() * 0.11; }
     QPointF origin() const;

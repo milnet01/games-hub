@@ -10092,9 +10092,11 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: review-fix.
   Source: review-code-2026-11-11.
 
-- 🚧 [GHUB-0251] **Mahjong Solitaire: a resumed game no longer tells you to undo when there is nothing to undo.**
+- ✅ [GHUB-0251] **Mahjong Solitaire: a resumed game no longer tells you to undo when there is nothing to undo.**
   From the GHUB-0239 code review. Restoring a save clears the undo
   history, but two messages still advised undo.
+  Shipped 2026-11-12. Two uitest checks, both red against the previous
+  Solitaire view.
   **Layman:** After reopening a saved Mahjong Solitaire game that is stuck, the board says to start a new game instead of suggesting an Undo that does nothing.
   Kind: review-fix.
   Source: review-code-2026-11-11.

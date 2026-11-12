@@ -204,7 +204,7 @@ void MahjongView::showHint()
         return;
     m_hint = m_board.hint();
     if (!m_hint) {
-        m_message = tr("No pair is free. Press S to shuffle, or undo.");
+        m_message = noPairSentence();
         refresh();
         return;
     }
@@ -220,8 +220,11 @@ void MahjongView::shuffle()
         return;
     const std::array<Face, mahjong::kTiles> before = m_board.faces();
     if (!m_board.reshuffle(m_rng)) {
-        m_message = tr("These tiles cannot be dealt so the heap clears. Undo and try "
-                       "another way.");
+        // A resumed heap has no history, so Undo is only offered when it can
+        // do something (GHUB-0251).
+        m_message = m_history.empty()
+            ? tr("These tiles cannot be dealt so the heap clears. Press Ctrl+N for a new heap.")
+            : tr("These tiles cannot be dealt so the heap clears. Undo and try another way.");
         refresh();
         return;
     }
@@ -313,6 +316,12 @@ bool MahjongView::advanceForShot(int turns)
     return true;
 }
 
+QString MahjongView::noPairSentence() const
+{
+    return m_history.empty() ? tr("No pair is free. Press S to shuffle, or Ctrl+N for a new heap.")
+                             : tr("No pair is free. Press S to shuffle, or undo.");
+}
+
 QString MahjongView::boardSentence() const
 {
     if (m_won)
@@ -320,7 +329,7 @@ QString MahjongView::boardSentence() const
     if (!m_message.isEmpty())
         return m_message;
     if (m_board.freePairs().empty())
-        return tr("No pair is free. Press S to shuffle, or undo.");
+        return noPairSentence();
     if (m_picked >= 0)
         return tr("Now pick its twin, or click it again to put it down.");
     return tr("Pick two free tiles that match.");
