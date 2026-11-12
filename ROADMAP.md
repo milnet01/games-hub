@@ -10080,11 +10080,14 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: review-fix.
   Source: review-code-2026-11-11.
 
-- 🚧 [GHUB-0250] **Mahjong: text a translator can handle, in the table and the tile art.**
+- ✅ [GHUB-0250] **Mahjong: text a translator can handle, in the table and the tile art.**
   From the GHUB-0239 code review. A chow label cut the suit out
   of a translated tile name; leaders were joined with " and "; a
   note was appended with +; a lambda named tr hid four strings
   from lupdate; the wind letters kept the MahjongView context.
+  Shipped 2026-11-12. The note's + join went with GHUB-0249. The English
+  text is unchanged except a three-way tie, which now reads "You, Right
+  and Left".
   **Layman:** Mahjong's sentences are written whole so a future translation can read naturally.
   Kind: review-fix.
   Source: review-code-2026-11-11.

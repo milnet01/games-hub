@@ -291,8 +291,8 @@ void paintTileFace(QPainter& p, const QRectF& r, Face face, bool legible, const 
     }
     case Suit::Wind: {
         static const char* const letters[] = {
-            QT_TRANSLATE_NOOP("MahjongView", "E"), QT_TRANSLATE_NOOP("MahjongView", "S"),
-            QT_TRANSLATE_NOOP("MahjongView", "W"), QT_TRANSLATE_NOOP("MahjongView", "N")
+            QT_TRANSLATE_NOOP("MahjongArt", "E"), QT_TRANSLATE_NOOP("MahjongArt", "S"),
+            QT_TRANSLATE_NOOP("MahjongArt", "W"), QT_TRANSLATE_NOOP("MahjongArt", "N")
         };
         // East points right, south down, west left and north up, as on a map.
         static const double angles[] = { 0.0, 90.0, 180.0, 270.0 };
@@ -302,7 +302,7 @@ void paintTileFace(QPainter& p, const QRectF& r, Face face, bool legible, const 
         p.setFont(f);
         p.setPen(kWindInk);
         const QRectF top(art.left(), art.top(), art.width(), art.height() * 0.55);
-        p.drawText(top, Qt::AlignCenter, QCoreApplication::translate("MahjongView", letters[rank - 1]));
+        p.drawText(top, Qt::AlignCenter, QCoreApplication::translate("MahjongArt", letters[rank - 1]));
         paintArrow(p, QPointF(art.center().x(), art.top() + art.height() * 0.77),
                    std::min(art.width(), art.height() * 0.40) * 0.85, angles[rank - 1],
                    kDiamondInk);
@@ -361,16 +361,19 @@ QString tileName(Face tile)
         QT_TRANSLATE_NOOP("MahjongArt", "Spring"), QT_TRANSLATE_NOOP("MahjongArt", "Summer"),
         QT_TRANSLATE_NOOP("MahjongArt", "Autumn"), QT_TRANSLATE_NOOP("MahjongArt", "Winter"),
     };
-    const auto tr = [](const char* text) { return QCoreApplication::translate("MahjongArt", text); };
+    // The literals are spelled out in full so lupdate files them under
+    // "MahjongArt"; a helper named tr would hide them (GHUB-0250).
+    const auto word = [](const char* text) { return QCoreApplication::translate("MahjongArt", text); };
     const int rank = rankOf(tile);
     switch (suitOf(tile)) {
-    case Suit::Circles: return tr("%1 of Circles").arg(tr(numbers[rank - 1]));
-    case Suit::Bamboo: return tr("%1 of Bamboo").arg(tr(numbers[rank - 1]));
-    case Suit::Characters: return tr("%1 of Diamonds").arg(tr(numbers[rank - 1]));
-    case Suit::Wind: return tr(winds[rank - 1]);
-    case Suit::Dragon: return tr(dragons[rank - 1]);
-    case Suit::Flower: return tr("Flower %1").arg(rank);
-    case Suit::Season: return tr(seasons[rank - 1]);
+    case Suit::Circles: return QCoreApplication::translate("MahjongArt", "%1 of Circles").arg(word(numbers[rank - 1]));
+    case Suit::Bamboo: return QCoreApplication::translate("MahjongArt", "%1 of Bamboo").arg(word(numbers[rank - 1]));
+    case Suit::Characters:
+        return QCoreApplication::translate("MahjongArt", "%1 of Diamonds").arg(word(numbers[rank - 1]));
+    case Suit::Wind: return word(winds[rank - 1]);
+    case Suit::Dragon: return word(dragons[rank - 1]);
+    case Suit::Flower: return QCoreApplication::translate("MahjongArt", "Flower %1").arg(rank);
+    case Suit::Season: return word(seasons[rank - 1]);
     case Suit::None: break;
     }
     return {};

@@ -90,16 +90,19 @@ std::vector<Face> displayHand(const mahjong::SeatTiles& s)
     return hand;
 }
 
-QString runName(Face low)
+QString chowLabel(Face low)
 {
     // "Three, Four and Five of Bamboo" reads long; the numbers and the suit
-    // read the same on a button.
-    const QString suit = mahjong::tileName(low).section(QLatin1Char(' '), 1);
-    return QCoreApplication::translate("MahjongTableView", "%1-%2-%3 %4")
-        .arg(mahjong::rankOf(low))
-        .arg(mahjong::rankOf(low) + 1)
-        .arg(mahjong::rankOf(low) + 2)
-        .arg(suit);
+    // read the same on a button. One whole string per suit, so a translation
+    // can put the words in its own order (GHUB-0250).
+    const int r = mahjong::rankOf(low);
+    QString text;
+    switch (mahjong::suitOf(low)) {
+    case mahjong::Suit::Circles: text = QCoreApplication::translate("MahjongTableView", "Chow %1-%2-%3 of Circles"); break;
+    case mahjong::Suit::Bamboo: text = QCoreApplication::translate("MahjongTableView", "Chow %1-%2-%3 of Bamboo"); break;
+    default: text = QCoreApplication::translate("MahjongTableView", "Chow %1-%2-%3 of Diamonds"); break;
+    }
+    return text.arg(r).arg(r + 1).arg(r + 2);
 }
 
 } // namespace
@@ -535,8 +538,16 @@ QString MahjongTableView::handSentence() const
         for (int s : top)
             names << seatName(s);
         const int score = m_game.totals()[std::size_t(top.front())];
-        if (top.size() > 1)
-            return tr("Game over. %1 share the top score, %2.").arg(names.join(tr(" and "))).arg(score);
+        // A whole sentence for each size of tie, so a translation never has
+        // to join names with a word of its own (GHUB-0250).
+        if (top.size() == 2)
+            return tr("Game over. %1 and %2 share the top score, %3.").arg(names[0], names[1]).arg(score);
+        if (top.size() == 3)
+            return tr("Game over. %1, %2 and %3 share the top score, %4.")
+                .arg(names[0], names[1], names[2])
+                .arg(score);
+        if (top.size() > 3)
+            return tr("Game over. All four share the top score, %1.").arg(score);
         return top.front() == 0 ? tr("Game over. You win, with %1.").arg(score)
                                 : tr("Game over. %1 wins, with %2.").arg(names.front()).arg(score);
     }
@@ -662,7 +673,7 @@ std::vector<MahjongTableView::Button> MahjongTableView::buttons() const
         case Action::Win: label = tr("Win"); break;
         case Action::Kong: label = tr("Kong"); break;
         case Action::Pung: label = tr("Pung"); break;
-        case Action::Chow: label = tr("Chow %1").arg(runName(Face(m.chowLow))); break;
+        case Action::Chow: label = chowLabel(Face(m.chowLow)); break;
         case Action::ConcealedKong:
         case Action::AddedKong: label = tr("Kong of %1").arg(mahjong::tileName(m.tile)); break;
         case Action::Pass: label = tr("Pass"); break;
