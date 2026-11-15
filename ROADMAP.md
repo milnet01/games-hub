@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=251 -->
+<!-- ants-roadmap-id-high-water: GHUB=252 -->
 
 # Games Hub — Roadmap
 
@@ -10100,6 +10100,18 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** After reopening a saved Mahjong Solitaire game that is stuck, the board says to start a new game instead of suggesting an Undo that does nothing.
   Kind: review-fix.
   Source: review-code-2026-11-11.
+
+- 📋 [GHUB-0252] **The updater's install check failed once, probably because it waits a fixed 200 ms.**
+  One sighting, 2026-11-15, on this machine, the run straight after a
+  build: "update: a download that verifies replaces the AppImage,
+  executable" and "update: then hands over to the relaunch" both FAILED.
+  The rerun was fully green. The test in tests/uitest.cpp runs
+  checkNow() then pump(200) and reads the result, so a slow download,
+  verify or file swap misses the window. Likely fix: pump until
+  `relaunched` is set or a generous timeout passes. Not yet proven red.
+  **Layman:** A test of the self-updater failed once and passed on the rerun; it likely gives the work too little time when the machine is busy.
+  Kind: test.
+  Source: in-session-2026-11-15.
 
 ## P01 — Shipped
 
