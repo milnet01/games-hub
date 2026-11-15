@@ -2628,10 +2628,10 @@ void mahjongPlaysAndKeepsItsPlace()
             }
         }
         MahjongProbe source;
-        const auto pair = source.board().hint();
-        if (pair) {
-            clickTile(source, pair->first);
-            clickTile(source, pair->second);
+        const auto opening = source.board().hint();
+        if (opening) {
+            clickTile(source, opening->first);
+            clickTile(source, opening->second);
         }
         QByteArray blob = source.saveState();
         bool built = below >= 0 && blob.size() == 4 + mahjong::kTiles + 2;
