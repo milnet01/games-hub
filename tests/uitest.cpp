@@ -23,6 +23,7 @@
 #include "freecell/freecellview.h"
 #include "hearts/heartsview.h"
 #include "holdline/holdlineview.h"
+#include "runner/laneview.h"
 #include "runner/runnerview.h"
 #include "hubwindow.h"
 #include "klondike/klondikeview.h"
@@ -475,6 +476,25 @@ void frameCost()
     pump(30);
     std::printf("        freecell, all 52 face up      %6.2f\n",
                 msPerFrame(&freecell, frames));
+
+    // The two runners mid-run, side by side: the view from behind fakes its
+    // depth with QPainter, and this is what says whether that costs more
+    // than the side-on view it is played beside (GHUB-0241).
+    RunnerView sideOn;
+    sideOn.resize(1000, 740);
+    sideOn.show();
+    sideOn.advanceForShot(40);
+    pump(30);
+    std::printf("        ruin runner, side-on          %6.2f\n",
+                msPerFrame(&sideOn, frames));
+
+    LaneView lanes;
+    lanes.resize(1000, 740);
+    lanes.show();
+    lanes.advanceForShot(40);
+    pump(30);
+    std::printf("        ruin runner, three lanes      %6.2f\n",
+                msPerFrame(&lanes, frames));
 
     HubWindow hub;
     hub.resize(1000, 740);
@@ -1225,7 +1245,7 @@ void idsAndKeysSurviveATranslation()
             QStringLiteral("Hearts"),   QStringLiteral("Canasta"),     QStringLiteral("Mahjong"),
             QStringLiteral("Snake"),
             QStringLiteral("2048"),     QStringLiteral("Pinball"),     QStringLiteral("Hold the Line"),
-            QStringLiteral("Ruin Runner"),
+            QStringLiteral("Ruin Runner"), QStringLiteral("Ruin Runner Lanes"),
         };
         check(hub.gameNames() == ids,
               qPrintable(QStringLiteral("translation: the game ids stay fixed -- got \"%1\"")
@@ -3066,6 +3086,98 @@ void runnerPausesAndKeepsItsTable()
     pressKey(&game, Qt::Key_Space);
     check(game.course().phase() == RunnerCourse::Phase::Ready && game.course().score() == 0,
           "ruin runner: Space after the end starts a fresh run");
+    game.deactivate();
+    QSettings().remove(QStringLiteral("runner/best_scores"));
+}
+
+// ---- laneRunnerSteersAndSharesTheTable (GHUB-0241) ----
+//
+// The view from behind takes the same keys as the side-on game plus Left and
+// Right, signs the next row under its lanes, and writes into the side-on
+// game's table rather than one of its own.
+void laneRunnerSteersAndSharesTheTable()
+{
+    QSettings().remove(QStringLiteral("runner/best_scores"));
+    RunnerView::recordScore(40);   // a side-on score already in the table
+
+    LaneView game;
+    game.resize(900, 560);
+    game.show();
+    check(game.focusPolicy() == Qt::StrongFocus, "lane runner: takes the keyboard");
+    game.activate();
+    check(activeTimers(&game) > 0, "lane runner: its clock runs while it is on screen");
+    game.deactivate();
+    check(activeTimers(&game) == 0, "lane runner: and stops when the hub leaves it");
+    game.activate();
+
+    QAction* pause = nullptr;
+    for (QAction* a : game.gameActions())
+        if (a->text() == QStringLiteral("Pause"))
+            pause = a;
+    check(pause != nullptr && pause->shortcut() == QKeySequence(Qt::Key_P),
+          "lane runner: P pauses, as in every game that pauses");
+    if (pause != nullptr) {
+        pause->setChecked(true);
+        check(activeTimers(&game) == 0, "lane runner: a paused run stops its clock");
+        pressKey(&game, Qt::Key_Left);
+        check(game.course().phase() == LaneCourse::Phase::Ready, "lane runner: a paused run ignores the keys");
+        pause->setChecked(false);
+    }
+
+    pressKey(&game, Qt::Key_Space);
+    check(game.course().phase() == LaneCourse::Phase::Running, "lane runner: Space starts the run");
+    pressKey(&game, Qt::Key_Left);
+    check(game.course().targetLane() == 0, "lane runner: Left heads for the left lane");
+    pressKey(&game, Qt::Key_D);
+    check(game.course().targetLane() == 1, "lane runner: and D back to the middle");
+    pressKey(&game, Qt::Key_Up);
+    check(game.course().airborne() && Sound::instance().lastRequested() == QLatin1String(Sound::kJump),
+          "lane runner: Up jumps, with the jump sound");
+    check(game.saveState().isEmpty(), "lane runner: keeps no save, like Ruin Runner");
+
+    // Play on with the pilot until a row is near: then every lane it fills
+    // carries the sign for what is in it, and an empty lane none.
+    LaneView signed_;
+    signed_.resize(900, 560);
+    bool sawSign = false;
+    bool signsMatch = true;
+    for (int second = 1; second <= 30 && !sawSign; ++second) {
+        signed_.advanceForShot(1);
+        const auto now = signed_.signs();
+        if (std::all_of(now.begin(), now.end(), [](LaneView::Sign s) { return s == LaneView::Sign::None; }))
+            continue;
+        sawSign = true;
+        const auto& obstacles = signed_.course().obstacles();
+        const auto next = std::find_if(obstacles.begin(), obstacles.end(), [](const LaneCourse::Obstacle& o) {
+            return o.far() > -LaneCourse::kRunnerDepth / 2.0;
+        });
+        for (int lane = 0; lane < LaneCourse::kLanes; ++lane) {
+            const auto in = std::find_if(obstacles.begin(), obstacles.end(), [&](const LaneCourse::Obstacle& o) {
+                return o.row == next->row && o.lane == lane;
+            });
+            LaneView::Sign want = LaneView::Sign::None;
+            if (in != obstacles.end())
+                want = in->kind == LaneCourse::Kind::Block    ? LaneView::Sign::GoRound
+                       : in->kind == LaneCourse::Kind::Lintel ? LaneView::Sign::Slide
+                                                              : LaneView::Sign::Jump;
+            signsMatch = signsMatch && now[size_t(lane)] == want;
+        }
+    }
+    check(sawSign, "lane runner: a row coming up is signed under the lanes");
+    check(signsMatch, "lane runner: each sign says what is in its lane, and an empty lane has none");
+    QPixmap signedShot(signed_.size());
+    signed_.render(&signedShot);
+
+    game.runUnattendedForTest(300.0);
+    check(game.course().over(), "lane runner: a run nobody plays comes to an end");
+    const QList<int> table = RunnerView::highScores();
+    check(table.contains(40) && table.contains(game.course().score()),
+          "lane runner: its score goes into Ruin Runner's table, beside the side-on score");
+    QPixmap shot(game.size());
+    game.render(&shot);
+    pressKey(&game, Qt::Key_Space);
+    check(game.course().phase() == LaneCourse::Phase::Ready && game.course().score() == 0,
+          "lane runner: Space after the end starts a fresh run");
     game.deactivate();
     QSettings().remove(QStringLiteral("runner/best_scores"));
 }
@@ -9355,6 +9467,7 @@ int main(int argc, char* argv[])
     mahjongTableKeepsItsCorner();
     holdLinePausesAndKeepsItsTable();
     runnerPausesAndKeepsItsTable();
+    laneRunnerSteersAndSharesTheTable();
 
     turnLightFollowsTheTurn();
     turnLightComesUpAndHolds();

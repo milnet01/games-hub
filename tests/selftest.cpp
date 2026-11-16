@@ -21,6 +21,7 @@
 #include "sudoku/sudokugrid.h"
 #include "reversi/ai.h"
 #include "reversi/board.h"
+#include "runner/lanecourse.h"
 #include "runner/runnercourse.h"
 #include "snake/snakeboard.h"
 #include "freecell/freecelltable.h"
@@ -8117,6 +8118,172 @@ void runnerHitsCostHearts()
     check(climbedOut, "ruin runner: and the runner climbs out and runs on");
 }
 
+// ----------------------------------------------------------------------------
+// Ruin Runner, three lanes (GHUB-0241)
+// ----------------------------------------------------------------------------
+
+void laneFrame(LaneCourse& course, LaneCourse::Input in)
+{
+    if (in.steer != 0)
+        course.steer(in.steer);
+    if (in.jump)
+        course.jump();
+    course.setSlide(in.slide);
+    course.advance(1.0 / 60.0);
+}
+
+bool laneSaw(const std::vector<LaneCourse::Event>& events, LaneCourse::EventKind kind)
+{
+    return std::any_of(events.begin(), events.end(),
+                       [kind](const LaneCourse::Event& e) { return e.kind == kind; });
+}
+
+void laneStartsReadyAndMoves()
+{
+    section("Ruin Runner, three lanes");
+
+    LaneCourse course;
+    check(course.phase() == LaneCourse::Phase::Ready && course.hearts() == LaneCourse::kHearts
+              && course.score() == 0 && course.targetLane() == 1,
+          "lane runner: a run opens Ready, in the middle lane, with three hearts");
+    check(!course.obstacles().empty() && course.obstacles().front().z > 20.0,
+          "lane runner: the first row is laid, well ahead");
+    course.advance(1.0);
+    check(course.distance() == 0.0, "lane runner: nothing moves until the player does");
+    check(!course.steer(-1) && course.phase() == LaneCourse::Phase::Running && course.targetLane() == 1,
+          "lane runner: the first press starts the run rather than steering");
+
+    check(course.steer(-1) && course.targetLane() == 0, "lane runner: left heads for the left lane");
+    check(!course.steer(-1) && course.targetLane() == 0, "lane runner: and there is no lane past it");
+    course.advance(LaneCourse::kSwitchSeconds / 2.0);
+    check(course.lane() > 0.0 && course.lane() < 1.0, "lane runner: a switch passes between the lanes");
+    course.advance(LaneCourse::kSwitchSeconds);
+    check(course.lane() == 0.0, "lane runner: and settles in the new lane");
+
+    check(course.jump() && course.airborne() && !course.jump(), "lane runner: one jump, none in the air");
+    course.advance(LaneCourse::kAirTime / 2.0);
+    check(std::abs(course.height() - LaneCourse::kJumpHeight) < 0.05,
+          "lane runner: the jump tops out at its fixed height");
+    course.advance(LaneCourse::kAirTime / 2.0 + 0.02);
+    check(!course.airborne() && laneSaw(course.takeEvents(), LaneCourse::EventKind::Landed),
+          "lane runner: and comes down after its fixed time");
+    check(LaneCourse::kSlideHeight < LaneCourse::kLintelClearance
+              && LaneCourse::kStandHeight > LaneCourse::kLintelClearance,
+          "lane runner: a slide fits under a lintel, standing does not");
+    check(LaneCourse::kJumpHeight > LaneCourse::kRootHeight && LaneCourse::kJumpHeight < LaneCourse::kBlockHeight,
+          "lane runner: a jump clears a root and never a block");
+}
+
+void lanePilotIsNeverHit()
+{
+    bool clean = true;
+    bool everyKind = true;
+    bool wideRows = true;
+    bool topPace = true;
+    bool scoreAddsUp = true;
+    bool wayThrough = true;
+    for (unsigned seed = 1; seed <= 6; ++seed) {
+        pinDealSeed(seed);
+        LaneCourse course;
+        course.start();
+        std::set<int> kinds;
+        std::set<int> widths;
+        for (int f = 0; f < 240 * 60 && !course.over(); ++f) {
+            laneFrame(course, course.pilot());
+            std::map<int, std::vector<const LaneCourse::Obstacle*>> rows;
+            for (const LaneCourse::Obstacle& o : course.obstacles()) {
+                kinds.insert(int(o.kind));
+                rows[o.row].push_back(&o);
+            }
+            for (const auto& row : rows) {
+                const auto& members = row.second;
+                widths.insert(int(members.size()));
+                const bool full = int(members.size()) == LaneCourse::kLanes;
+                const bool anyBlock = std::any_of(members.begin(), members.end(), [](const auto* o) {
+                    return o->kind == LaneCourse::Kind::Block;
+                });
+                wayThrough = wayThrough && !(full && anyBlock);
+            }
+            course.takeEvents();
+        }
+        std::printf("      seed %u: %d m, %d coins, %d hits, pace %.1f\n", seed, course.metres(),
+                    course.coinsTaken(), course.hits(), course.speed());
+        clean = clean && course.hits() == 0 && !course.over();
+        everyKind = everyKind && kinds.size() == 4;
+        wideRows = wideRows && widths.count(2) == 1 && widths.count(3) == 1;
+        topPace = topPace && course.speed() == LaneCourse::kMaxSpeed;
+        scoreAddsUp = scoreAddsUp && course.coinsTaken() > 0
+                      && course.score() == course.metres() + course.coinsTaken() * RunnerCourse::kCoinPoints;
+    }
+    unpinDealSeed();
+    check(clean, "lane runner: a perfect runner is never hit, on any seed, for four minutes");
+    check(everyKind, "lane runner: and meets roots, lintels, blocks and pits on the way");
+    check(wideRows, "lane runner: rows come one, two and three lanes wide");
+    check(wayThrough, "lane runner: and a full row never holds a block, so there is always a way through");
+    check(topPace, "lane runner: the pace rises to its cap and stops there");
+    check(scoreAddsUp, "lane runner: the score is the metres plus five a coin, as side-on");
+
+    bool pitsJumpable = true;
+    for (double v = LaneCourse::kStartSpeed; v <= LaneCourse::kMaxSpeed; v += 0.5)
+        pitsJumpable = pitsJumpable && LaneCourse::pitDepth(v) < 0.6 * v * LaneCourse::kAirTime;
+    check(pitsJumpable, "lane runner: every pit is well short of one jump long");
+}
+
+void laneHitsCostHearts()
+{
+    // Nobody at the keys: the first block costs a heart, and the run goes on
+    // until the third.
+    pinDealSeed(2);
+    LaneCourse course;
+    unpinDealSeed();
+    course.start();
+    bool firstHitRight = false;
+    bool safeAfterHit = true;
+    while (!course.over() && course.runSeconds() < 300.0) {
+        course.advance(1.0 / 60.0);
+        if (laneSaw(course.takeEvents(), LaneCourse::EventKind::Hit) && course.hits() == 1) {
+            firstHitRight = course.hearts() == LaneCourse::kHearts - 1
+                            && course.hurtLeft() > LaneCourse::kHurtSeconds - 1.0 / 60.0
+                            && course.phase() == LaneCourse::Phase::Running;
+            const int hits = course.hits();
+            course.advance(LaneCourse::kHurtSeconds - 0.05);
+            safeAfterHit = course.hits() == hits;
+            course.takeEvents();
+        }
+    }
+    check(firstHitRight, "lane runner: a hit costs one heart and the run goes on");
+    check(safeAfterHit, "lane runner: with a moment's safety after it");
+    check(course.over() && course.hearts() == 0 && course.hits() == LaneCourse::kHearts,
+          "lane runner: the third hit ends the run");
+    const int score = course.score();
+    course.advance(2.0);
+    check(!course.jump() && !course.steer(1) && course.score() == score,
+          "lane runner: a finished run stays finished");
+
+    // The pilot, but never jumping a pit: the first pit swallows the runner,
+    // who scrambles out a heart down and runs on.
+    pinDealSeed(4);
+    LaneCourse pits;
+    unpinDealSeed();
+    pits.start();
+    bool fell = false;
+    bool ranOn = false;
+    while (!pits.over() && pits.runSeconds() < 200.0 && !ranOn) {
+        LaneCourse::Input in = pits.pilot();
+        for (const LaneCourse::Obstacle& o : pits.obstacles())
+            if (o.kind == LaneCourse::Kind::Pit && o.lane == pits.targetLane() && o.far() > 0.0
+                && o.z < 8.0)
+                in.jump = false;
+        laneFrame(pits, in);
+        if (!fell && laneSaw(pits.takeEvents(), LaneCourse::EventKind::Fell))
+            fell = pits.hearts() == LaneCourse::kHearts - 1;
+        if (fell && !pits.airborne())
+            ranOn = pits.phase() == LaneCourse::Phase::Running && pits.height() == 0.0;
+    }
+    check(fell, "lane runner: a pit not jumped costs a heart");
+    check(ranOn, "lane runner: and the runner scrambles out and runs on");
+}
+
 } // namespace
 
 int main()
@@ -8271,6 +8438,10 @@ int main()
     runnerJumpsAndDucks();
     runnerPilotIsNeverHit();
     runnerHitsCostHearts();
+
+    laneStartsReadyAndMoves();
+    lanePilotIsNeverHit();
+    laneHitsCostHearts();
 
     pyramidDealsAWholePack();
     pyramidRefusesACoveredCard();

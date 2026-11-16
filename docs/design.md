@@ -1177,7 +1177,8 @@ first appears further into a run, so the run teaches them one at a time.
 The play is clipped to the course, and the scenery beyond its edges is
 dimmed, so a wide window shows nothing early.
 
-**GHUB-0241, the view from behind, shares this game's score and table.**
+**Ruin Runner Lanes, the view from behind, shares this game's score and
+table** (`RunnerView::recordScore`).
 Three hearts end a run; a hit leaves a moment of safety. A pit that has cost
 a heart is bridged, and the runner climbs out onto it. There is no save. The
 five best scores are a list under `runner/best_scores`, whose leaf starts
@@ -1186,6 +1187,39 @@ the UI test reach the end of a run, since the pilot never would.
 
 `advanceForShot` treats a turn as one second run by `pilot()`, and clears
 every effect before it returns.
+
+### Ruin Runner Lanes
+
+Core: `lanecourse.*`. View: `laneview.*`, with its painted art in
+`laneart.*`. All in `src/runner/`.
+
+`LaneCourse` works in metres: a lane is 0 to 2, and `z` is how far ahead of
+the runner something is. Obstacles come in rows. **Every row leaves a way
+through**: a row filling all three lanes never holds a block. Rows are spaced
+so a runner who has just got past one can cross two lanes before the next.
+`pilot()` steers to the cheapest lane of the next row, then jumps or slides.
+The self-test runs it as Ruin Runner's is run, and fails on a single hit.
+
+**Depth is faked with one projection**, `LaneView::project()`: a camera
+behind and above the runner, onto a fixed 640 by 360 canvas. Scenery,
+obstacles, coins and the runner are drawn in one list sorted far to near, so
+a near tree hides a far block. An obstacle the runner has reached is drawn
+after the runner.
+
+**The art is painted once, not every frame.** `LaneArt::art()` paints the
+trees, ruins, plants and the carved faces of obstacles on first use, each at
+three sizes so a far copy is scaled from a small picture. The sky and the
+leaves framing the top are painted once per window size. Scenery carries no
+outline and is hazed with distance; obstacles carry a dark outline and full
+colour, so they stand out from the jungle.
+
+**The lane signs are the side-on badge's counterpart.** `signs()` reads the
+next row, the one `pilot()` reads, and shows a sign under each lane it fills
+for the last `kSignSeconds` before it arrives. A clear lane has no sign.
+
+`--bench` times both runners mid-run. On 2026-11-16 the view from behind took
+about three times the side-on view's frame, well inside one frame at 60 a
+second.
 
 ## Cold-eyes loop log
 

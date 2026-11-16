@@ -17,6 +17,7 @@
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
 #include "noughts/noughtsview.h"
+#include "runner/laneview.h"
 #include "runner/runnerview.h"
 #include "mahjong/mahjongart.h"
 #include "mahjong/mahjongtableview.h"
@@ -794,6 +795,87 @@ void runnerTile(QPainter& p, const QRectF& r)
     p.restore();
 }
 
+void laneTile(QPainter& p, const QRectF& r)
+{
+    // The same dawn as Ruin Runner, seen from behind the runner: three lanes
+    // running into the ruins, a carved block in one and coins in another.
+    QPainterPath frame;
+    frame.addRoundedRect(r, 8, 8);
+    QLinearGradient sky(r.topLeft(), r.bottomLeft());
+    sky.setColorAt(0, QColor(0x1d, 0x2c, 0x4a));
+    sky.setColorAt(0.38, QColor(0xc9, 0x9c, 0x7a));
+    sky.setColorAt(0.39, QColor(0x2c, 0x4c, 0x2a));
+    sky.setColorAt(1.0, QColor(0x16, 0x2a, 0x14));
+    p.fillPath(frame, sky);
+    p.save();
+    p.setClipPath(frame);
+
+    const double w = r.width();
+    const double h = r.height();
+    const auto at = [&](double x, double y) { return QPointF(r.left() + w * x, r.top() + h * y); };
+    const double u = w * 0.026;
+    const QColor ink(0x14, 0x0c, 0x06);
+    // Across -1..1 at the near edge, `depth` 0 near to 1 at the horizon.
+    const auto onPath = [&](double across, double depth) {
+        const double narrow = 1.0 - 0.9 * depth;
+        return at(0.5 + across * 0.46 * narrow, 0.98 - 0.6 * depth);
+    };
+
+    // The temple ahead.
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(0x6a, 0x6a, 0x72));
+    for (int i = 0; i < 3; ++i)
+        p.drawRect(QRectF(at(0.40 + 0.03 * i, 0.38 - 0.05 * (i + 1)), QSizeF(w * (0.20 - 0.06 * i), h * 0.05)));
+
+    // The path and its lanes.
+    p.setBrush(QColor(0xc9, 0xa8, 0x6a));
+    p.drawPolygon(QPolygonF({ onPath(-1, 0), onPath(1, 0), onPath(1, 1), onPath(-1, 1) }));
+    p.setPen(QPen(QColor(0x6a, 0x50, 0x30), std::max(1.0, u * 0.5)));
+    p.drawLine(onPath(-1.0 / 3.0, 0), onPath(-1.0 / 3.0, 1));
+    p.drawLine(onPath(1.0 / 3.0, 0), onPath(1.0 / 3.0, 1));
+
+    // A carved block in the right lane.
+    const QPointF b0 = onPath(0.42, 0.45);
+    const QPointF b1 = onPath(0.9, 0.45);
+    const double bh = (b1.x() - b0.x()) * 1.4;
+    p.setPen(QPen(ink, std::max(1.0, u * 0.5)));
+    p.setBrush(QColor(0xa6, 0xb4, 0xbe));
+    p.drawRect(QRectF(b0.x(), b0.y() - bh, b1.x() - b0.x(), bh));
+    p.setBrush(QColor(0x5c, 0xa0, 0x3a));
+    p.drawRect(QRectF(b0.x(), b0.y() - bh - u, b1.x() - b0.x(), u));
+
+    // Coins down the left lane.
+    p.setBrush(QColor(0xff, 0xd0, 0x3a));
+    for (int i = 0; i < 4; ++i) {
+        const double depth = 0.15 + 0.15 * i;
+        const double size = u * 1.3 * (1.0 - 0.8 * depth);
+        p.drawEllipse(onPath(-2.0 / 3.0, depth) - QPointF(0, size * 2), size, size);
+    }
+
+    // The runner from behind, in the middle lane: legs, orange tunic, teal
+    // scarf, dark hair.
+    const QPointF feet = onPath(0, 0.06);
+    const auto limb = [&](QPointF a, QPointF b, double width, const QColor& c) {
+        p.setPen(QPen(ink, width + 2.0 * std::max(1.0, u * 0.5), Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(a, b);
+        p.setPen(QPen(c, width, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(a, b);
+    };
+    const QColor trousers(0x3c, 0x4c, 0x70);
+    const QPointF hip = feet - QPointF(0, 8 * u);
+    limb(hip + QPointF(-1.2 * u, 0), feet + QPointF(-1.6 * u, 0), 1.8 * u, trousers);
+    limb(hip + QPointF(1.2 * u, 0), feet + QPointF(1.6 * u, -3 * u), 1.8 * u, trousers);
+    const QPointF shoulder = hip - QPointF(0, 6 * u);
+    limb(shoulder + QPointF(-2.4 * u, 0), hip + QPointF(-3.4 * u, -1 * u), 1.2 * u, QColor(0xf2, 0xc4, 0x90));
+    limb(shoulder + QPointF(2.4 * u, 0), hip + QPointF(3.4 * u, -2 * u), 1.2 * u, QColor(0xf2, 0xc4, 0x90));
+    limb(hip, shoulder, 4.6 * u, QColor(0xf2, 0x8a, 0x22));
+    limb(shoulder + QPointF(-2 * u, 0), shoulder + QPointF(2 * u, 0), 1.2 * u, QColor(0x1c, 0xc8, 0xb4));
+    p.setPen(QPen(ink, std::max(1.0, u * 0.5)));
+    p.setBrush(QColor(0x3a, 0x24, 0x18));
+    p.drawEllipse(shoulder - QPointF(0, 2.4 * u), 1.9 * u, 2.0 * u);
+    p.restore();
+}
+
 } // namespace
 
 // The title bar carries the version, because it is the one place a player can
@@ -893,6 +975,9 @@ void HubWindow::buildEntries()
         { QStringLiteral("Ruin Runner"), // untranslated: the game's id
           tr("Ruin Runner"), tr("Jump and duck"), runnerTile,
           [] { return new RunnerView; }, Category::Arcade },
+        { QStringLiteral("Ruin Runner Lanes"), // untranslated: the game's id
+          tr("Ruin Runner Lanes"), tr("Switch, jump and slide"), laneTile,
+          [] { return new LaneView; }, Category::Arcade },
     };
 }
 

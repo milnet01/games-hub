@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=253 -->
+<!-- ants-roadmap-id-high-water: GHUB=254 -->
 
 # Games Hub — Roadmap
 
@@ -8948,7 +8948,7 @@ ready does not wait for a slow one.
   Kind: feature.
   Source: user-request-2026-11-10.
 
-- 📋 [GHUB-0241] **The endless runner, seen from behind the runner across three lanes.**
+- ✅ [GHUB-0241] **The endless runner, seen from behind the runner across three lanes.**
   The owner asked for both views on 2026-11-10. Seen from behind,
   running into the screen along three lanes; the player switches
   lane, jumps and slides. Shares the scoring and saved high scores
@@ -8958,6 +8958,16 @@ ready does not wait for a slow one.
   perspective, and an obstacle must be readable while still far
   off. Prove the frame cost with --bench and the look with a shot
   before building the whole course.
+  Shipped 2026-11-16 as Ruin Runner Lanes, its own Arcade tile (owner's
+  choice of tile and name), in src/runner/lanecourse.*, laneview.* and
+  laneart.*. Rows of one, two or three obstacles; a full row never holds a
+  block, so every row leaves a way through. Blocks to go round, trunks and
+  pits to jump, gateways to slide under. A sign under each lane shows what
+  the next row holds (owner asked for these). Painted art after the owner
+  asked for shop-ready graphics. Scores go into Ruin Runner's table through
+  RunnerView::recordScore. The self-test's pilot runs four minutes on six
+  seeds with no hit. --bench, 2026-11-16: about 6.4 ms a frame at
+  1000x740, against about 1.6 to 2.1 for the side-on view.
   **Layman:** A second way to play the runner: from behind, running into the screen, switching between three lanes, jumping and sliding.
   Kind: feature.
   Source: user-request-2026-11-10.
@@ -10149,6 +10159,19 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** A test of the self-updater failed once and passed on the rerun; it likely gives the work too little time when the machine is busy.
   Kind: test.
   Source: in-session-2026-11-15.
+
+- 📋 [GHUB-0254] **The two Ruin Runner views share their score display, panels, hearts and particles.**
+  LaneView (GHUB-0241) copied RunnerView's heartPath, paintPanel,
+  paintOverlay's game-over table, burst() and the Particle and Popup
+  structs, then changed a few of them (plaques behind the score, a
+  second rim on the panel). Only the score table itself is shared, via
+  RunnerView::recordScore. Move the common parts into one helper in
+  src/runner/ and let both views call it. Check with a seeded --shot of
+  each view before and after: the side-on view should come out
+  pixel-identical unless its look is meant to change.
+  **Layman:** Tidy-up: the two runner games draw their score boxes and end-of-run panel with copied code; share one copy so a fix reaches both.
+  Kind: refactor.
+  Source: self-review-2026-11-16.
 
 ## P01 — Shipped
 

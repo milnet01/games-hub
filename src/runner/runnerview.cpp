@@ -185,29 +185,32 @@ QList<int> RunnerView::highScores()
     return table;
 }
 
+int RunnerView::recordScore(int score)
+{
+    if (score <= 0)
+        return -1;
+    QList<int> table = highScores();
+    int at = 0;
+    while (at < table.size() && table[at] >= score)
+        ++at;
+    if (at >= kTableSize)
+        return -1;
+    table.insert(at, score);
+    while (table.size() > kTableSize)
+        table.removeLast();
+    QVariantList stored;
+    for (int v : table)
+        stored.append(v);
+    QSettings().setValue(tableKey(), stored);
+    return at;
+}
+
 void RunnerView::gameOver()
 {
     if (m_recorded)
         return;
     m_recorded = true;
-    QList<int> table = highScores();
-    const int score = m_course.score();
-    m_rank = -1;
-    if (score > 0) {
-        int at = 0;
-        while (at < table.size() && table[at] >= score)
-            ++at;
-        if (at < kTableSize) {
-            table.insert(at, score);
-            while (table.size() > kTableSize)
-                table.removeLast();
-            m_rank = at;
-            QVariantList stored;
-            for (int v : table)
-                stored.append(v);
-            QSettings().setValue(tableKey(), stored);
-        }
-    }
+    m_rank = recordScore(m_course.score());
     m_table = highScores();
 }
 

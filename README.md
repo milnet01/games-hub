@@ -81,6 +81,7 @@ A few things worth knowing before you download:
 | **Pinball** | One table, three balls, two flippers. |
 | **Hold the Line** | Shoot down a marching wave of attackers from a cannon behind wearing shelters, before they land. |
 | **Ruin Runner** | Run through jungle ruins, jumping and ducking, for as long as you can. |
+| **Ruin Runner Lanes** | The same run seen from behind: change lane, jump and slide along three lanes into the ruins. |
 
 Pick a game from the grid; **← All Games** (or `Esc`) goes back. Each game puts
 its own buttons — New Game, Undo, difficulty — on the toolbar beside it, and
@@ -90,7 +91,7 @@ Best scores are kept between sessions: games won at Chess and Draughts, discs
 won at each Reversi level, fastest Minesweeper and Sudoku clears, top Klondike
 score, fewest Spider and FreeCell moves, most Pyramid pairs cleared, lowest
 winning Hearts total, highest winning Canasta score, the Snake, 2048 and
-Pinball high scores, and the five best scores of Hold the Line and of Ruin Runner.
+Pinball high scores, and the five best scores of Hold the Line and of Ruin Runner, a table both Ruin Runners share.
 
 **The window remembers itself.** It opens at the size and place you left it,
 and opening a game does not move or resize it. A game that needs more room,
@@ -116,10 +117,10 @@ There is nothing to press and no save button — it just happens. Starting a
 fresh game is what New Game is for. Finish a game and nothing is kept, so you
 never come back to a board you have already won.
 
-Snake, Pinball, Hold the Line and Ruin Runner do not do this yet.
+Snake, Pinball, Hold the Line and both Ruin Runners do not do this yet.
 
 **Minesweeper and Sudoku can be paused**, which stops the clock and covers the
-board, so walking away costs you nothing. `P` pauses both, and Hold the Line and Ruin Runner
+board, so walking away costs you nothing. `P` pauses both, and Hold the Line and both Ruin Runners
 too. Snake has its own pause on the space bar. Sudoku's pencil mode is `N`, for
 Notes.
 
@@ -307,6 +308,16 @@ gold band along their lower edge. A gold badge at the right edge warns of what
 is coming: an arrow up to jump, down to duck. You have three hearts. `P`
 pauses. When the run ends, your five best scores are shown, and `Space` or a
 click starts the next.
+
+**Ruin Runner Lanes.** `Left` or `A` and `Right` or `D` change lane, one lane a
+press; `Space`, `Up` or `W` jumps; hold `Down` or `S` to slide. A left click on
+the left or right third of the play changes lane, and in the middle it jumps;
+holding the right mouse button slides. Go round the tall carved blocks, jump
+fallen trunks and pits, and slide under the gateways with a gold band along
+their lower edge. Every row leaves a way through. A couple of seconds before a
+row arrives, a sign under each lane says what is in it: an arrow up to jump,
+down to slide, a red cross to go round. Three hearts, `P` pauses, and the best
+scores are Ruin Runner's.
 
 ## For developers
 

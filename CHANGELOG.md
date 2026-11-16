@@ -12,6 +12,16 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Ruin Runner Lanes** (GHUB-0241)
+  Ruin Runner seen from behind the runner, heading into the ruins along
+  three lanes. Change lane round tall carved blocks, jump fallen trunks
+  and pits, and slide under gateways. Every row leaves a way through, and
+  a sign under each lane says what the next row holds before it arrives.
+  The path, the jungle, the ruins and the obstacles are painted with
+  shading and texture, with sun rays and drifting leaves. Scored like Ruin
+  Runner and kept in the same table of five best scores. Every course can
+  be cleared: a perfect runner is tested and never hit.
+
 - **Ruin Runner** (GHUB-0240)
   An endless runner through jungle ruins, seen from the side. Jump roots,
   carved stones and pits, and duck under walls that come down from above.

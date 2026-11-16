@@ -40,8 +40,12 @@ public:
     // clock takes, so a test can reach the end of a run without waiting.
     void runUnattendedForTest(double seconds);
 
-    // The saved table, best first, at most kTableSize long.
+    // The saved table, best first, at most kTableSize long. The view from
+    // behind (LaneView) shares it.
     static QList<int> highScores();
+    // Enters a finished run's score in the table. Returns where it landed,
+    // or -1 when it did not make the table.
+    static int recordScore(int score);
     static constexpr int kTableSize = 5;
 
     const RunnerCourse& course() const { return m_course; }
