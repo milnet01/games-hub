@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=252 -->
+<!-- ants-roadmap-id-high-water: GHUB=253 -->
 
 # Games Hub — Roadmap
 
@@ -8952,6 +8952,23 @@ ready does not wait for a slow one.
   Kind: feature.
   Source: user-request-2026-11-10.
   Blocked-by: GHUB-0240.
+
+- 📋 [GHUB-0253] **A 3×3 twisty cube puzzle: scramble it, then turn the faces until each side is one colour.**
+  The twisty-cube mechanism is free to use; its patents expired
+  long ago. "Rubik's" is a registered trademark, so the game takes
+  another name ("Twisty Cube" is a working title) and no logo.
+  Art is drawn with QPainter.
+
+  The cube is drawn in 3D and the view can be turned. Faces turn
+  by keyboard and by dragging. A scramble, a move count, a timer,
+  undo, and best times saved.
+
+  Built for the owner: each colour also carries a shape or letter,
+  so a face can be told apart without judging colour alone, and the
+  stickers are large.
+  **Layman:** A colour cube puzzle like the famous one: it gets mixed up, and you twist its sides until every face is a single colour again.
+  Kind: feature.
+  Source: user-request-2026-11-16.
 
 ## 1.6.0 — Five more card games
 
