@@ -23,6 +23,7 @@
 #include "freecell/freecellview.h"
 #include "hearts/heartsview.h"
 #include "holdline/holdlineview.h"
+#include "runner/runnerview.h"
 #include "hubwindow.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
@@ -1224,6 +1225,7 @@ void idsAndKeysSurviveATranslation()
             QStringLiteral("Hearts"),   QStringLiteral("Canasta"),     QStringLiteral("Mahjong"),
             QStringLiteral("Snake"),
             QStringLiteral("2048"),     QStringLiteral("Pinball"),     QStringLiteral("Hold the Line"),
+            QStringLiteral("Ruin Runner"),
         };
         check(hub.gameNames() == ids,
               qPrintable(QStringLiteral("translation: the game ids stay fixed -- got \"%1\"")
@@ -3009,6 +3011,65 @@ void holdLinePausesAndKeepsItsTable()
     QSettings().remove(QStringLiteral("holdline/best_scores"));
 }
 
+// ---- runnerPausesAndKeepsItsTable (GHUB-0240) ----
+//
+// The rules are the self-test's. This is the view: its clock, its pause, the
+// keys reaching it, and the saved table of best scores.
+void runnerPausesAndKeepsItsTable()
+{
+    QSettings().remove(QStringLiteral("runner/best_scores"));
+    RunnerView game;
+    game.resize(900, 560);
+    game.show();
+    check(game.focusPolicy() == Qt::StrongFocus, "ruin runner: takes the keyboard");
+    game.activate();
+    check(activeTimers(&game) > 0, "ruin runner: its clock runs while it is on screen");
+    game.deactivate();
+    check(activeTimers(&game) == 0, "ruin runner: and stops when the hub leaves it");
+    game.activate();
+
+    QAction* pause = nullptr;
+    for (QAction* a : game.gameActions())
+        if (a->text() == QStringLiteral("Pause"))
+            pause = a;
+    check(pause != nullptr && pause->shortcut() == QKeySequence(Qt::Key_P),
+          "ruin runner: P pauses, as in every game that pauses");
+    if (pause != nullptr) {
+        pause->setChecked(true);
+        check(activeTimers(&game) == 0, "ruin runner: a paused run stops its clock");
+        game.deactivate();
+        game.activate();
+        check(activeTimers(&game) == 0, "ruin runner: and stays paused when you come back");
+        pressKey(&game, Qt::Key_Space);
+        check(game.course().phase() == RunnerCourse::Phase::Ready,
+              "ruin runner: Space does not start a paused run");
+        pause->setChecked(false);
+    }
+
+    pressKey(&game, Qt::Key_Space);
+    check(game.course().phase() == RunnerCourse::Phase::Running && !game.course().airborne(),
+          "ruin runner: Space starts the run");
+    pressKey(&game, Qt::Key_Up);
+    check(game.course().airborne() && Sound::instance().lastRequested() == QLatin1String(Sound::kJump),
+          "ruin runner: Up jumps, with the jump sound");
+    check(game.saveState().isEmpty(), "ruin runner: keeps no save, like Snake and Hold the Line");
+
+    // With nobody at the keys the run ends; the course's own pilot never would.
+    game.runUnattendedForTest(300.0);
+    check(game.course().over(), "ruin runner: a run nobody plays comes to an end");
+    const QList<int> table = RunnerView::highScores();
+    check(game.course().score() > 0 && !table.isEmpty() && table.first() == game.course().score(),
+          "ruin runner: its score heads the saved table");
+    // The game-over panel and its table, painted end to end.
+    QPixmap shot(game.size());
+    game.render(&shot);
+    pressKey(&game, Qt::Key_Space);
+    check(game.course().phase() == RunnerCourse::Phase::Ready && game.course().score() == 0,
+          "ruin runner: Space after the end starts a fresh run");
+    game.deactivate();
+    QSettings().remove(QStringLiteral("runner/best_scores"));
+}
+
 // ---- turnLightFollowsTheTurn (INV-1) ----
 //
 // NOT covered here: "a game that is over lights nobody". Reaching a finished
@@ -3059,8 +3120,10 @@ void turnLightFollowsTheTurn()
     SudokuView sudoku;
     SnakeView snake;
     HoldLineView holdLine;
+    RunnerView runner;
     check(klondike.turnLight().seat == -1 && sudoku.turnLight().seat == -1
-              && snake.turnLight().seat == -1 && holdLine.turnLight().seat == -1,
+              && snake.turnLight().seat == -1 && holdLine.turnLight().seat == -1
+              && runner.turnLight().seat == -1,
           "a game with no turns lights nobody");
 
     // P pauses in every game that pauses (GHUB-0226, owner 2026-11-11), so
@@ -5720,7 +5783,8 @@ int main(int argc, char* argv[])
             QStringLiteral("card_place"), QStringLiteral("shuffle"), QStringLiteral("bumper"),
             QStringLiteral("slingshot"), QStringLiteral("flipper"), QStringLiteral("launch"),
             QStringLiteral("drain"), QStringLiteral("win"), QStringLiteral("lose"),
-            QStringLiteral("zap"), QStringLiteral("pop"), QStringLiteral("march") };
+            QStringLiteral("zap"), QStringLiteral("pop"), QStringLiteral("march"),
+            QStringLiteral("jump"), QStringLiteral("coin"), QStringLiteral("thud") };
 
         QStringList missing;
         for (const QString& name : effects) {
@@ -9290,6 +9354,7 @@ int main(int argc, char* argv[])
     mahjongTableWaitsAndKeepsItsPlace();
     mahjongTableKeepsItsCorner();
     holdLinePausesAndKeepsItsTable();
+    runnerPausesAndKeepsItsTable();
 
     turnLightFollowsTheTurn();
     turnLightComesUpAndHolds();

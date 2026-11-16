@@ -191,6 +191,27 @@ def march(i, n, t):
     return thump * 0.35 + noise() * envelope(i, n, 0.0005, 0.08, 4.0) * 0.05
 
 
+# --- Ruin Runner -------------------------------------------------------------
+
+def jump(i, n, t):
+    """Leaving the ground: a short soft rising whoop."""
+    freq = 260 + 520 * (t / 0.16)
+    return (sine(freq, t) * 0.75 + triangle(freq, t) * 0.25) * envelope(i, n, 0.01, 0.85, 2.0) * 0.4
+
+
+def coin(i, n, t):
+    """A coin picked up: two bright notes, a step apart."""
+    freq = 1318.5 if t < 0.05 else 1760.0
+    return (sine(freq, t) + 0.3 * sine(freq * 2, t)) * envelope(i, n, 0.003, 0.9, 1.8) * 0.4
+
+
+def thud(i, n, t):
+    """Running into something: a dull low knock with a scuff of noise."""
+    knock = sine(95 * math.exp(-t * 6.0) + 45, t) * envelope(i, n, 0.002, 0.8, 2.2)
+    scuff = noise() * envelope(i, n, 0.0005, 0.25, 3.0)
+    return knock * 0.7 + scuff * 0.3
+
+
 # --- Outcomes --------------------------------------------------------------
 
 def fanfare(i, n, t):
@@ -232,6 +253,9 @@ RECIPES = [
     ("zap", 0.16, zap),
     ("pop", 0.24, pop),
     ("march", 0.12, march),
+    ("jump", 0.18, jump),
+    ("coin", 0.20, coin),
+    ("thud", 0.35, thud),
 ]
 
 if __name__ == "__main__":

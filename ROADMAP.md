@@ -8923,7 +8923,7 @@ ready does not wait for a slow one.
   Source: user-request-2026-11-10.
   Blocked-by: GHUB-0238.
 
-- 📋 [GHUB-0240] **An endless runner through jungle ruins, seen side-on, scored for a high score.**
+- ✅ [GHUB-0240] **An endless runner through jungle ruins, seen side-on, scored for a high score.**
   Side-on: the runner moves left to right, and the player jumps
   and ducks over gaps, roots and traps. The pace rises the longer
   the run lasts. Score is distance plus coins, and the best scores
@@ -8934,6 +8934,16 @@ ready does not wait for a slow one.
 
   Built for the owner: obstacles large and high-contrast, seen
   early enough to react, a gentle starting speed and a pause key.
+  Shipped 2026-11-16 as Ruin Runner (name chosen by the owner; a web
+  search found only small hobby projects of that name), in src/runner/.
+  Roots, carved stones, pits and walls to duck under, each unlocked a
+  little further into a run. Three hearts (owner's choice) with a
+  moment's safety after a hit. Score is metres plus 5 a coin; five best
+  scores under runner/best_scores. A badge at the right edge says jump
+  or duck before an obstacle comes into view. The self-test runs a
+  perfect pilot for four minutes on six seeds and fails on any hit,
+  which is the proof every course can be cleared. New sounds: jump,
+  coin, thud.
   **Layman:** Your runner dashes through ancient jungle ruins; jump and duck to survive as long as you can and beat your best distance.
   Kind: feature.
   Source: user-request-2026-11-10.

@@ -20,5 +20,8 @@
     <file alias="ui_click.wav">assets/sounds/ui_click.wav</file>
     <file alias="win.wav">assets/sounds/win.wav</file>
     <file alias="zap.wav">assets/sounds/zap.wav</file>
+    <file alias="jump.wav">assets/sounds/jump.wav</file>
+    <file alias="coin.wav">assets/sounds/coin.wav</file>
+    <file alias="thud.wav">assets/sounds/thud.wav</file>
 </qresource>
 </RCC>

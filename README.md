@@ -80,6 +80,7 @@ A few things worth knowing before you download:
 | **2048** | Slide the tiles, merge the numbers. |
 | **Pinball** | One table, three balls, two flippers. |
 | **Hold the Line** | Shoot down a marching wave of attackers from a cannon behind wearing shelters, before they land. |
+| **Ruin Runner** | Run through jungle ruins, jumping and ducking, for as long as you can. |
 
 Pick a game from the grid; **← All Games** (or `Esc`) goes back. Each game puts
 its own buttons — New Game, Undo, difficulty — on the toolbar beside it, and
@@ -89,7 +90,7 @@ Best scores are kept between sessions: games won at Chess and Draughts, discs
 won at each Reversi level, fastest Minesweeper and Sudoku clears, top Klondike
 score, fewest Spider and FreeCell moves, most Pyramid pairs cleared, lowest
 winning Hearts total, highest winning Canasta score, the Snake, 2048 and
-Pinball high scores, and Hold the Line's five best scores.
+Pinball high scores, and the five best scores of Hold the Line and of Ruin Runner.
 
 **The window remembers itself.** It opens at the size and place you left it,
 and opening a game does not move or resize it. A game that needs more room,
@@ -115,10 +116,10 @@ There is nothing to press and no save button — it just happens. Starting a
 fresh game is what New Game is for. Finish a game and nothing is kept, so you
 never come back to a board you have already won.
 
-The three that do not do this yet are Snake, Pinball and Hold the Line.
+Snake, Pinball, Hold the Line and Ruin Runner do not do this yet.
 
 **Minesweeper and Sudoku can be paused**, which stops the clock and covers the
-board, so walking away costs you nothing. `P` pauses both, and Hold the Line
+board, so walking away costs you nothing. `P` pauses both, and Hold the Line and Ruin Runner
 too. Snake has its own pause on the space bar. Sudoku's pencil mode is `N`, for
 Notes.
 
@@ -298,6 +299,14 @@ plunger rather than costing you a ball.
 Nothing moves until you do. You have one shot in the air at a time and three
 cannons. `P` pauses. When the game ends, your five best scores are shown on
 the field, and `Space` or a click starts the next.
+
+**Ruin Runner.** `Space`, `Up` or `W` jumps; hold `Down` or `S` to duck. A
+left click jumps and holding the right mouse button ducks. Nothing moves until
+you press `Space`. Jump roots, stones and pits, and duck under the walls with a
+gold band along their lower edge. A gold badge at the right edge warns of what
+is coming: an arrow up to jump, down to duck. You have three hearts. `P`
+pauses. When the run ends, your five best scores are shown, and `Space` or a
+click starts the next.
 
 ## For developers
 

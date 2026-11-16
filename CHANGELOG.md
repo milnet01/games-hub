@@ -12,6 +12,18 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Ruin Runner** (GHUB-0240)
+  An endless runner through jungle ruins, seen from the side. Jump roots,
+  carved stones and pits, and duck under walls that come down from above.
+  The pace starts gently and rises the longer you last. A gold badge at
+  the right edge says whether the next obstacle needs a jump or a duck,
+  before it comes into view, and some coins follow the curve of a good
+  jump. Three hearts, with a moment's safety after each hit. The score is
+  the metres run plus five for every coin, and your five best scores are
+  kept. `P` pauses. Every obstacle is large and outlined, and every
+  course can be cleared: the game is tested by a perfect runner that is
+  never hit.
+
 - **Mahjong, four players** (GHUB-0239)
   The traditional table game against three computer players, by Hong
   Kong rules. Draw and throw tiles, claim a thrown tile for a set, and go

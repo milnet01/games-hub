@@ -1152,6 +1152,41 @@ starts the next, and no dialog opens.
 `advanceForShot` treats a turn as one second flown by a simple pilot, and
 clears every effect before it returns.
 
+### Ruin Runner
+
+Core: `runnercourse.*`. View: `runnerview.*`. Both in `src/runner/`.
+
+`RunnerCourse` plays in fixed course units, scaled to the widget like Hold
+the Line, and steps itself in fixed slices. The runner stays put and the
+course scrolls past. It reports what happened through `takeEvents()`.
+
+**Every course is fair by construction, and `pilot()` is the proof.** Every
+jump is the same height, so its timing can be learned. Obstacles are spaced
+so a runner who has just landed has time to act on the next, at the pace it
+will be met. A pit is never wider than about half of one jump at that pace.
+`pilot()` jumps so the top of the jump comes over an obstacle's middle, and
+ducks under a wall. The self-test runs it for minutes on several seeds, past
+the top pace, and fails on a single hit. Change a size, the spacing or the
+jump, and that check is what says whether the game is still fair.
+
+**Built for slow reading.** Every obstacle carries a dark outline and a
+colour none of the scenery uses, and its hit box is smaller than its drawing.
+A wall's underside has a gold band. Before an obstacle comes into view, a
+badge at the right edge shows an arrow: up to jump, down to duck. Each kind
+first appears further into a run, so the run teaches them one at a time.
+The play is clipped to the course, and the scenery beyond its edges is
+dimmed, so a wide window shows nothing early.
+
+**GHUB-0241, the view from behind, shares this game's score and table.**
+Three hearts end a run; a hit leaves a moment of safety. A pit that has cost
+a heart is bridged, and the runner climbs out onto it. There is no save. The
+five best scores are a list under `runner/best_scores`, whose leaf starts
+`best_` so `Scores::clear()` forgets it too. `runUnattendedForTest()` lets
+the UI test reach the end of a run, since the pilot never would.
+
+`advanceForShot` treats a turn as one second run by `pilot()`, and clears
+every effect before it returns.
+
 ## Cold-eyes loop log
 
 > A design doc is gated (`documentation.md` § 9.1) and is owed no

@@ -35,6 +35,9 @@ public:
     static constexpr const char* kZap = "zap";                // untranslated: a sound name
     static constexpr const char* kPop = "pop";                // untranslated: a sound name
     static constexpr const char* kMarch = "march";            // untranslated: a sound name
+    static constexpr const char* kJump = "jump";              // untranslated: a sound name
+    static constexpr const char* kCoin = "coin";              // untranslated: a sound name
+    static constexpr const char* kThud = "thud";              // untranslated: a sound name
 
     static Sound& instance();
 

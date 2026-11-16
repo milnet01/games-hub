@@ -17,6 +17,7 @@
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
 #include "noughts/noughtsview.h"
+#include "runner/runnerview.h"
 #include "mahjong/mahjongart.h"
 #include "mahjong/mahjongtableview.h"
 #include "mahjong/mahjongview.h"
@@ -720,6 +721,79 @@ void holdLineTile(QPainter& p, const QRectF& r)
     p.drawPath(hull);
 }
 
+void runnerTile(QPainter& p, const QRectF& r)
+{
+    // Dawn over the ruins, a carved stone on the path, and the runner leaping
+    // it along a line of coins.
+    QPainterPath frame;
+    frame.addRoundedRect(r, 8, 8);
+    QLinearGradient sky(r.topLeft(), r.bottomLeft());
+    sky.setColorAt(0, QColor(0x1d, 0x2c, 0x4a));
+    sky.setColorAt(0.6, QColor(0xb0, 0x86, 0x70));
+    sky.setColorAt(0.75, QColor(0xd8, 0xa0, 0x6e));
+    p.fillPath(frame, sky);
+    p.save();
+    p.setClipPath(frame);
+
+    const double w = r.width();
+    const auto at = [&](double x, double y) { return QPointF(r.left() + w * x, r.top() + r.height() * y); };
+    const double u = w * 0.026;
+    const QColor ink(0x14, 0x0c, 0x06);
+
+    // A stepped temple on the skyline, and the tree line.
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(0x40, 0x52, 0x50));
+    for (int i = 0; i < 4; ++i)
+        p.drawRect(QRectF(at(0.62 + 0.035 * i, 0.62 - 0.06 * (i + 1)), QSizeF(w * (0.28 - 0.07 * i), r.height() * 0.065)));
+    p.setBrush(QColor(0x24, 0x44, 0x2c));
+    p.drawRect(QRectF(at(0.0, 0.64), QSizeF(w, r.height() * 0.12)));
+    for (int i = 0; i < 7; ++i)
+        p.drawEllipse(at(0.07 + 0.15 * i, 0.64), w * 0.09, w * 0.06);
+
+    // The path.
+    p.setBrush(QColor(0xc9, 0xa8, 0x6a));
+    p.drawRect(QRectF(at(0.0, 0.76), QSizeF(w, r.height() * 0.08)));
+    p.setBrush(QColor(0x4a, 0x30, 0x1a));
+    p.drawRect(QRectF(at(0.0, 0.84), QSizeF(w, r.height() * 0.16)));
+    p.setPen(QPen(ink, std::max(1.0, u * 0.6)));
+    p.drawLine(at(0.0, 0.76), at(1.0, 0.76));
+
+    // The stone.
+    p.setBrush(QColor(0xa6, 0xb4, 0xbe));
+    p.drawRoundedRect(QRectF(at(0.50, 0.62), QSizeF(w * 0.14, r.height() * 0.14)), u * 0.6, u * 0.6);
+
+    // Coins along the jump.
+    p.setBrush(QColor(0xff, 0xd0, 0x3a));
+    for (int i = 0; i < 4; ++i) {
+        const double x = 0.70 + 0.09 * i;
+        const double y = 0.40 + 0.06 * i;
+        p.drawEllipse(at(x, y), u * 1.1, u * 1.1);
+    }
+
+    // The runner, mid-leap: orange tunic, teal scarf.
+    // Over the stone, at the top of the jump.
+    const QPointF hip = at(0.57, 0.36);
+    const auto limb = [&](QPointF a, QPointF b, double width, const QColor& c) {
+        p.setPen(QPen(ink, width + 2.0 * std::max(1.0, u * 0.5), Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(a, b);
+        p.setPen(QPen(c, width, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(a, b);
+    };
+    const QColor trousers(0x3c, 0x4c, 0x70);
+    limb(hip, hip + QPointF(-3 * u, 4 * u), 1.6 * u, trousers);
+    limb(hip + QPointF(-3 * u, 4 * u), hip + QPointF(-8 * u, 3 * u), 1.4 * u, trousers);
+    limb(hip, hip + QPointF(4 * u, 2 * u), 1.6 * u, trousers);
+    limb(hip + QPointF(4 * u, 2 * u), hip + QPointF(4 * u, 7 * u), 1.4 * u, trousers);
+    const QPointF shoulder = hip + QPointF(1.5 * u, -6 * u);
+    limb(shoulder, shoulder + QPointF(-8 * u, -1 * u), 1.4 * u, QColor(0x1c, 0xc8, 0xb4));
+    limb(hip, shoulder, 3.4 * u, QColor(0xf2, 0x8a, 0x22));
+    limb(shoulder, shoulder + QPointF(4 * u, -5 * u), 1.2 * u, QColor(0xf2, 0xc4, 0x90));
+    p.setPen(QPen(ink, std::max(1.0, u * 0.5)));
+    p.setBrush(QColor(0xf2, 0xc4, 0x90));
+    p.drawEllipse(shoulder + QPointF(0.8 * u, -2.6 * u), 2.0 * u, 2.0 * u);
+    p.restore();
+}
+
 } // namespace
 
 // The title bar carries the version, because it is the one place a player can
@@ -816,6 +890,9 @@ void HubWindow::buildEntries()
         { QStringLiteral("Hold the Line"), // untranslated: the game's id
           tr("Hold the Line"), tr("Stop the wave"), holdLineTile,
           [] { return new HoldLineView; }, Category::Arcade },
+        { QStringLiteral("Ruin Runner"), // untranslated: the game's id
+          tr("Ruin Runner"), tr("Jump and duck"), runnerTile,
+          [] { return new RunnerView; }, Category::Arcade },
     };
 }
 

@@ -21,6 +21,7 @@
 #include "sudoku/sudokugrid.h"
 #include "reversi/ai.h"
 #include "reversi/board.h"
+#include "runner/runnercourse.h"
 #include "snake/snakeboard.h"
 #include "freecell/freecelltable.h"
 #include "klondike/klondiketable.h"
@@ -7937,6 +7938,185 @@ void holdLineClearsAWave()
     check(lowerNext, "hold the line: and the next wave arrives whole, one step lower");
 }
 
+// ----------------------------------------------------------------------------
+// Ruin Runner (GHUB-0240)
+// ----------------------------------------------------------------------------
+
+// One sixtieth of a second of a player's input, then of play.
+void runnerFrame(RunnerCourse& course, RunnerCourse::Input in)
+{
+    if (in.jump)
+        course.jump();
+    course.setDuck(in.duck);
+    course.advance(1.0 / 60.0);
+}
+
+bool runnerSaw(const std::vector<RunnerCourse::Event>& events, RunnerCourse::EventKind kind)
+{
+    return std::any_of(events.begin(), events.end(),
+                       [kind](const RunnerCourse::Event& e) { return e.kind == kind; });
+}
+
+void runnerStartsReady()
+{
+    section("Ruin Runner");
+
+    RunnerCourse course;
+    check(course.phase() == RunnerCourse::Phase::Ready && course.hearts() == RunnerCourse::kHearts
+              && course.score() == 0,
+          "ruin runner: a run opens Ready, with three hearts and no score");
+    check(!course.obstacles().empty() && course.obstacles().front().x > RunnerCourse::kWidth,
+          "ruin runner: the first obstacle is already laid, out of sight");
+    if (course.obstacles().empty())
+        return;
+    const double firstAt = course.obstacles().front().x;
+    course.advance(2.0);
+    check(course.distance() == 0.0 && course.obstacles().front().x == firstAt,
+          "ruin runner: nothing moves until the player does");
+    check(!course.jump() && course.phase() == RunnerCourse::Phase::Running && !course.airborne(),
+          "ruin runner: the first press starts the run rather than jumping");
+    course.advance(1.0);
+    check(course.distance() > 0.0 && course.obstacles().front().x < firstAt,
+          "ruin runner: and then the course comes past");
+}
+
+void runnerJumpsAndDucks()
+{
+    RunnerCourse course;
+    course.start();
+    course.takeEvents();
+    check(course.jump() && course.airborne(), "ruin runner: a jump leaves the ground");
+    check(!course.jump(), "ruin runner: and there is no second jump in the air");
+    course.advance(RunnerCourse::kAirTime / 2.0);
+    const double apex = RunnerCourse::kJumpSpeed * RunnerCourse::kJumpSpeed / (2.0 * RunnerCourse::kGravity);
+    check(std::abs(RunnerCourse::kGroundY - course.feetY() - apex) < 3.0,
+          "ruin runner: the jump tops out at its fixed height");
+    course.advance(RunnerCourse::kAirTime / 2.0 - 0.06);
+    course.jump();   // pressed a moment before landing
+    course.advance(0.1);
+    const std::vector<RunnerCourse::Event> events = course.takeEvents();
+    check(runnerSaw(events, RunnerCourse::EventKind::Landed) && course.airborne(),
+          "ruin runner: a press just before landing jumps again on landing");
+    course.advance(RunnerCourse::kAirTime);
+
+    check(!course.airborne() && course.runnerBox().height() == RunnerCourse::kStandHeight,
+          "ruin runner: back on the ground, standing");
+    course.setDuck(true);
+    check(course.runnerBox().height() == RunnerCourse::kDuckHeight
+              && course.runnerBox().bottom() == RunnerCourse::kGroundY,
+          "ruin runner: ducking lowers the runner, feet still on the ground");
+    check(course.runnerBox().top() > RunnerCourse::kGroundY - RunnerCourse::kArchClearance
+              && RunnerCourse::kGroundY - RunnerCourse::kStandHeight
+                     < RunnerCourse::kGroundY - RunnerCourse::kArchClearance,
+          "ruin runner: under a lintel's clearance when ducking, and not when standing");
+    course.setDuck(false);
+}
+
+// Every course is fair: a player who follows the rules exactly is never hit,
+// through the whole rise in pace, on any seed, and meets every kind of
+// obstacle on the way.
+void runnerPilotIsNeverHit()
+{
+    bool clean = true;
+    bool everyKind = true;
+    bool topPace = true;
+    bool scoreAddsUp = true;
+    bool milestones = true;
+    for (unsigned seed = 1; seed <= 6; ++seed) {
+        pinDealSeed(seed);
+        RunnerCourse course;
+        course.start();
+        std::set<int> kinds;
+        bool sawMilestone = false;
+        for (int f = 0; f < 240 * 60 && !course.over(); ++f) {
+            runnerFrame(course, course.pilot());
+            for (const RunnerCourse::Obstacle& o : course.obstacles())
+                kinds.insert(int(o.kind));
+            for (const RunnerCourse::Event& e : course.takeEvents())
+                sawMilestone = sawMilestone
+                               || (e.kind == RunnerCourse::EventKind::Milestone
+                                   && e.value == RunnerCourse::kMilestoneMetres);
+        }
+        std::printf("      seed %u: %d m, %d coins, %d hits, pace %.0f\n", seed, course.metres(),
+                    course.coinsTaken(), course.hits(), course.speed());
+        clean = clean && course.hits() == 0 && !course.over();
+        everyKind = everyKind && kinds.size() == 4;
+        topPace = topPace && course.speed() == RunnerCourse::kMaxSpeed;
+        scoreAddsUp = scoreAddsUp && course.coinsTaken() > 0
+                      && course.score() == course.metres() + course.coinsTaken() * RunnerCourse::kCoinPoints;
+        milestones = milestones && sawMilestone;
+    }
+    unpinDealSeed();
+    check(clean, "ruin runner: a perfect runner is never hit, on any seed, for four minutes");
+    check(everyKind, "ruin runner: and meets roots, stones, pits and lintels on the way");
+    check(topPace, "ruin runner: the pace rises to its cap and stops there");
+    check(scoreAddsUp, "ruin runner: the score is the metres plus five a coin");
+    check(milestones, "ruin runner: every hundred metres is announced");
+
+    // The sizes that make that true at every pace, not just the ones a seed
+    // happened to reach.
+    bool gapsJumpable = true;
+    for (double v = RunnerCourse::kStartSpeed; v <= RunnerCourse::kMaxSpeed; v += 5.0)
+        gapsJumpable = gapsJumpable && RunnerCourse::gapWidth(v) < 0.6 * v * RunnerCourse::kAirTime;
+    check(gapsJumpable, "ruin runner: every pit is well short of one jump wide");
+}
+
+void runnerHitsCostHearts()
+{
+    // Nobody at the keys: the first root costs a heart, and the run goes on.
+    RunnerCourse course;
+    course.start();
+    bool firstHitRight = false;
+    bool safeAfterHit = true;
+    while (!course.over() && course.runSeconds() < 120.0) {
+        course.advance(1.0 / 60.0);
+        const std::vector<RunnerCourse::Event> events = course.takeEvents();
+        if (runnerSaw(events, RunnerCourse::EventKind::Hit) && course.hits() == 1) {
+            firstHitRight = course.hearts() == RunnerCourse::kHearts - 1
+                            // less at most the rest of the frame it landed in
+                            && course.hurtLeft() > RunnerCourse::kHurtSeconds - 1.0 / 60.0
+                            && course.phase() == RunnerCourse::Phase::Running;
+            // Inside the safe spell nothing else can hurt.
+            const int hits = course.hits();
+            course.advance(RunnerCourse::kHurtSeconds - 0.05);
+            safeAfterHit = course.hits() == hits;
+            course.takeEvents();
+        }
+    }
+    check(firstHitRight, "ruin runner: a hit costs one heart and the run goes on");
+    check(safeAfterHit, "ruin runner: with a moment's safety after it");
+    check(course.over() && course.hearts() == 0 && course.hits() == RunnerCourse::kHearts,
+          "ruin runner: the third hit ends the run");
+    const int score = course.score();
+    course.advance(2.0);
+    check(!course.jump() && course.score() == score, "ruin runner: a finished run stays finished");
+
+    // Jumping everything but pits: the first pit swallows the runner, who
+    // climbs out a heart down and runs on.
+    pinDealSeed(3);
+    RunnerCourse pits;
+    unpinDealSeed();
+    pits.start();
+    bool fell = false;
+    bool climbedOut = false;
+    while (!pits.over() && pits.runSeconds() < 200.0 && !climbedOut) {
+        RunnerCourse::Input in = pits.pilot();
+        const auto next = std::find_if(pits.obstacles().begin(), pits.obstacles().end(),
+                                       [](const RunnerCourse::Obstacle& o) {
+                                           return !o.spent && o.right() > RunnerCourse::kRunnerX - RunnerCourse::kRunnerHalfWidth;
+                                       });
+        if (next != pits.obstacles().end() && next->kind == RunnerCourse::Kind::Gap)
+            in.jump = false;
+        runnerFrame(pits, in);
+        if (!fell && runnerSaw(pits.takeEvents(), RunnerCourse::EventKind::Fell))
+            fell = pits.hearts() == RunnerCourse::kHearts - 1;
+        if (fell && !pits.airborne() && pits.feetY() == RunnerCourse::kGroundY)
+            climbedOut = pits.phase() == RunnerCourse::Phase::Running;
+    }
+    check(fell, "ruin runner: a pit not jumped costs a heart");
+    check(climbedOut, "ruin runner: and the runner climbs out and runs on");
+}
+
 } // namespace
 
 int main()
@@ -8086,6 +8266,11 @@ int main()
     holdLineShotsScoreAndWear();
     holdLineEndsWhenUndefended();
     holdLineClearsAWave();
+
+    runnerStartsReady();
+    runnerJumpsAndDucks();
+    runnerPilotIsNeverHit();
+    runnerHitsCostHearts();
 
     pyramidDealsAWholePack();
     pyramidRefusesACoveredCard();
