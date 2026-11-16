@@ -8956,7 +8956,9 @@ ready does not wait for a slow one.
 - 📋 [GHUB-0253] **A 3×3 twisty cube puzzle: scramble it, then turn the faces until each side is one colour.**
   The twisty-cube mechanism is free to use; its patents expired
   long ago. "Rubik's" is a registered trademark, so the game takes
-  another name ("Twisty Cube" is a working title) and no logo.
+  the name Twisty Cube (owner's choice, 2026-11-16) and no logo.
+  Built after both runners (GHUB-0240, GHUB-0241) and before the
+  Mahjong rule sets (owner, 2026-11-16).
   Art is drawn with QPainter.
 
   The cube is drawn in 3D and the view can be turned. Faces turn
