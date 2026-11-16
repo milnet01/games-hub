@@ -8953,7 +8953,7 @@ ready does not wait for a slow one.
   Source: user-request-2026-11-10.
   Blocked-by: GHUB-0240.
 
-- 📋 [GHUB-0253] **A 3×3 twisty cube puzzle: scramble it, then turn the faces until each side is one colour.**
+- 📋 [GHUB-0253] **Twisty Cube: twisty puzzles in six shapes, scrambled, then turned until each side is one colour.**
   The twisty-cube mechanism is free to use; its patents expired
   long ago. "Rubik's" is a registered trademark, so the game takes
   the name Twisty Cube (owner's choice, 2026-11-16) and no logo.
@@ -8968,6 +8968,14 @@ ready does not wait for a slow one.
   Built for the owner: each colour also carries a shape or letter,
   so a face can be told apart without judging colour alone, and the
   stickers are large.
+  More shapes (owner, 2026-11-16): a 2×2, 4×4 and 5×5 cube, a
+  tetrahedron and a dodecahedron, beside the 3×3. Every one must be
+  solvable. So a scramble is only ever real turns applied to a
+  solved puzzle, never stickers recoloured, and the self-test plays
+  each scramble's turns back in reverse to prove it solves. Shape
+  names stay generic: "Pyraminx" and "Megaminx" are trademarks. On
+  the 5×5 and the dodecahedron the stickers are small; check they
+  can be read slowly before building the rest.
   **Layman:** A colour cube puzzle like the famous one: it gets mixed up, and you twist its sides until every face is a single colour again.
   Kind: feature.
   Source: user-request-2026-11-16.
