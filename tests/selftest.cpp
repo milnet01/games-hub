@@ -15,6 +15,7 @@
 #include "noughts/noughtsboard.h"
 #include "mahjong/mahjongboard.h"
 #include "mahjong/mahjongofficial.h"
+#include "mahjong/mahjongriichi.h"
 #include "mahjong/mahjongplayer.h"
 #include "mahjong/mahjongtable.h"
 #include "pinball/pinballtable.h"
@@ -2199,6 +2200,9 @@ bool holdsTheWholeSet(const mahjong::Hand& h)
 {
     std::vector<Face> all = h.everyTile();
     std::vector<Face> set = mahjong::fullSet();
+    if (!h.rules().bonusTilesInPlay())
+        set.erase(std::remove_if(set.begin(), set.end(), [](Face t) { return t >= mahjong::kFlowerFirst; }),
+                  set.end());
     std::sort(all.begin(), all.end());
     std::sort(set.begin(), set.end());
     return all == set;
@@ -2225,7 +2229,29 @@ struct GameRun {
     bool minimumKept = true;
     int hands = 0;
     int won = 0;
+    // GHUB-0244: the dead wall left at each drawn hand, the totals and the
+    // sticks kept whole, the riichi declared, and where the game ended.
+    bool deadWallKept = true;
+    bool pointsKept = true;
+    bool sticksShared = true;
+    bool wentBelowZero = false;
+    int riichi = 0;
+    int dealsPassed = 0;
+    int lastWind = 0;
 };
+
+// The tiles still in the wall, the dead wall among them.
+int undrawn(const mahjong::Hand& h)
+{
+    std::size_t held = 0;
+    for (int s = 0; s < mahjong::kSeats; ++s) {
+        const mahjong::SeatTiles& t = h.seat(s);
+        held += t.concealed.size() + t.bonus.size() + t.pool.size();
+        for (const mahjong::Meld& m : t.melds)
+            held += m.kind == mahjong::SetKind::Kong ? 4 : 3;
+    }
+    return int(h.everyTile().size() - held) - (h.offered() != 0 ? 1 : 0);
+}
 
 // A whole game, four computer seats, checking INV-1, INV-6 and INV-9 as it
 // goes -- and GHUB-0243's INV-8, INV-9 and INV-11 under Chinese Official.
@@ -2253,18 +2279,46 @@ GameRun playGame(mahjong::Length length, std::uint32_t seed,
         int sum = 0;
         for (int p : r.payments)
             sum += p;
-        run.zeroSum = run.zeroSum && sum == 0;
+        // A riichi stake leaves the seats for the table, and sticks taken
+        // come back: the payments sum to what the table lost.
+        run.zeroSum = run.zeroSum && sum + r.sticksAfter - g.hand()->start().sticks == 0;
+        bool dealerWon = false;
         if (!r.drawn) {
             ++run.won;
             run.minimumKept = run.minimumKept && r.score.qualifying >= set.minimumToWin();
+            dealerWon = r.win.winner == dealer;
+            for (const auto& other : r.alsoWon) {
+                run.minimumKept = run.minimumKept && other.second.qualifying >= set.minimumToWin();
+                dealerWon = dealerWon || other.first.winner == dealer;
+            }
+        } else {
+            run.deadWallKept = run.deadWallKept && undrawn(*g.hand()) == set.table().deadWall;
         }
-        const bool keeps = set.dealerRepeats() && (r.drawn || r.win.winner == dealer);
+        for (const mahjong::Move& m : g.hand()->moves())
+            run.riichi += m.action == mahjong::Action::Riichi ? 1 : 0;
+        int points = g.sticks();
+        for (int t : g.totals()) {
+            points += t;
+            run.wentBelowZero = run.wentBelowZero || t < 0;
+        }
+        const int whole = set.table().startingPoints * mahjong::kSeats;
+        if (!g.over())
+            run.pointsKept = run.pointsKept && points == whole;
+        else // the sticks left are shared out, a tie rounding down
+            run.sticksShared = g.sticks() == 0 && points <= whole && points > whole - 1000;
+        run.lastWind = g.hand()->prevailingWind();
+        mahjong::HandEnd end;
+        end.drawn = r.drawn;
+        end.dealerWon = dealerWon;
+        end.dealerReady = r.drawn && r.ready[std::size_t(dealer)];
+        const bool keeps = set.dealerKeepsDeal(end);
         run.dealMoved = run.dealMoved
             && (keeps ? g.dealer() == dealer && g.dealsPassed() == passed
                       : g.dealer() == (dealer + 1) % 4 && g.dealsPassed() == passed + 1)
             && g.prevailingWind() == std::min(4, g.dealsPassed() / 4 + 1);
     }
     run.ended = g.over();
+    run.dealsPassed = g.dealsPassed();
     return run;
 }
 
@@ -3589,6 +3643,1177 @@ void officialLastTiles()
         check(flowered && countOf(flowered, Fan::KongReplacement) == 0 && countOf(flowered, Fan::FullyConcealed) == 1,
               "chinese official: a flower's replacement after a kong is self-drawn instead (INV-10)");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Japanese Riichi rules (GHUB-0244)
+//
+// The spec's § 5. A hand read through bestWin is South's in an East round, won
+// on a discard from East, its winning tile listed last, unless it says
+// otherwise. A table hand is built with Hand::arranged on a wall ending in the
+// fourteen-tile dead wall riichiWall() lays out; East deals.
+// ---------------------------------------------------------------------------
+
+namespace mj {
+
+const mahjong::RuleSet& jr()
+{
+    return mahjong::ruleSet(mahjong::RuleSetId::JapaneseRiichi);
+}
+
+using Win = std::optional<std::pair<mahjong::WinContext, mahjong::HandScore>>;
+
+Win jrWin(const std::vector<Face>& concealed, const std::vector<mahjong::Meld>& melds = {}, const How& how = {})
+{
+    return coWin(concealed, melds, how, &jr());
+}
+
+// The value of the win's first item of `fan`, or 0.
+int valueIn(const Win& w, mahjong::Fan fan)
+{
+    if (!w)
+        return 0;
+    for (const mahjong::ScoreItem& i : w->second.items)
+        if (i.fan == fan)
+            return i.value;
+    return 0;
+}
+
+mahjong::Meld claimed(mahjong::SetKind kind, Face t)
+{
+    return { kind, t, false };
+}
+
+mahjong::Meld hidden(mahjong::SetKind kind, Face t)
+{
+    return { kind, t, true };
+}
+
+How both(How a, How b)
+{
+    return [a, b](mahjong::WinContext& w) {
+        a(w);
+        b(w);
+    };
+}
+
+const How riichiOn = [](mahjong::WinContext& w) { w.riichi = true; };
+
+// A live wall, then the dead wall as Hand reads it. Counted from the last
+// tile: the 1st to 4th are the kongs' replacements, the 5th the dora
+// indicator and the 6th its ura, then each kan dora indicator and its ura.
+// Every place not given holds a North wind.
+std::vector<Face> riichiWall(std::vector<Face> live, Face dora, std::vector<Face> replacements = {},
+                             std::vector<Face> kanDora = {}, Face ura = W(4))
+{
+    std::array<Face, 14> dead {};
+    dead.fill(W(4));
+    const auto fromLast = [&dead](int k) -> Face& { return dead[std::size_t(14 - k)]; };
+    for (std::size_t i = 0; i < replacements.size(); ++i)
+        fromLast(int(i) + 1) = replacements[i];
+    fromLast(5) = dora;
+    fromLast(6) = ura;
+    for (std::size_t j = 0; j < kanDora.size(); ++j)
+        fromLast(7 + 2 * int(j)) = kanDora[j];
+    live.insert(live.end(), dead.begin(), dead.end());
+    return live;
+}
+
+// Thirteen tiles that wait on nothing and pair nothing.
+std::vector<Face> junk()
+{
+    return { C(1), C(4), C(7), B(2), B(5), B(8), D(3), D(6), D(9), W(1), W(2), W(4), Dr(1) };
+}
+
+std::vector<mahjong::Meld> withMeld(std::vector<mahjong::Meld> melds, mahjong::Meld more)
+{
+    melds.push_back(more);
+    return melds;
+}
+
+std::vector<Face> plus(std::vector<Face> tiles, std::initializer_list<Face> more)
+{
+    tiles.insert(tiles.end(), more);
+    return tiles;
+}
+
+// The seat to move throws the tile it drew, or its first tile when it drew
+// none.
+void throwDrawn(mahjong::Hand& h)
+{
+    const int s = h.toMove();
+    if (s < 0)
+        return;
+    for (const mahjong::Move& m : h.legalMoves(s))
+        if (m.action == mahjong::Action::Discard && (h.seat(s).drawn == 0 || m.tile == h.seat(s).drawn)) {
+            h.play(m);
+            return;
+        }
+}
+
+// Plays on, passing every claim and throwing every drawn tile, until `seat`
+// is to move or the hand is over.
+void playUntil(mahjong::Hand& h, int seat)
+{
+    for (int step = 0; step < 400 && h.phase() != mahjong::Phase::Over; ++step) {
+        if (h.phase() == mahjong::Phase::Turn) {
+            if (h.toMove() == seat)
+                return;
+            throwDrawn(h);
+        } else {
+            passAll(h);
+        }
+    }
+}
+
+std::vector<Face> discardsOf(const mahjong::Hand& h, int seat, mahjong::Action action = mahjong::Action::Discard)
+{
+    std::vector<Face> out;
+    for (const mahjong::Move& m : h.legalMoves(seat))
+        if (m.action == action)
+            out.push_back(m.tile);
+    return out;
+}
+
+} // namespace mj
+
+// INV-1: the yaku list and its open values, against § 4.7 written out again.
+void riichiYakuList()
+{
+    using namespace mj;
+    using mahjong::Fan;
+    using mahjong::RiichiRules;
+    constexpr int Y = RiichiRules::kYakuman;
+    struct Row {
+        Fan fan;
+        int concealed;
+        int open;
+    };
+    const std::vector<Row> book {
+        { Fan::Riichi, 1, 0 },          { Fan::Ippatsu, 1, 0 },
+        { Fan::FullyConcealed, 1, 0 },  { Fan::Pinfu, 1, 0 },
+        { Fan::PureDoubleChow, 1, 0 },  { Fan::AllSimples, 1, 1 },
+        { Fan::DragonPung, 1, 1 },      { Fan::SeatWindPung, 1, 1 },
+        { Fan::PrevailingWindPung, 1, 1 }, { Fan::KongReplacement, 1, 1 },
+        { Fan::RobbingAKong, 1, 1 },    { Fan::LastTile, 1, 1 },
+        { Fan::LastTileClaim, 1, 1 },   { Fan::DoubleRiichi, 2, 0 },
+        { Fan::SevenDifferentPairs, 2, 0 }, { Fan::MixedTripleChow, 2, 1 },
+        { Fan::PureStraight, 2, 1 },    { Fan::HalfOutsideHand, 2, 1 },
+        { Fan::TriplePung, 2, 2 },      { Fan::ThreeConcealedPungs, 2, 2 },
+        { Fan::ThreeKongs, 2, 2 },      { Fan::AllPungs, 2, 2 },
+        { Fan::SmallThreeDragons, 2, 2 }, { Fan::AllTerminalsAndHonours, 2, 2 },
+        { Fan::TwicePureDoubleChow, 3, 0 }, { Fan::MixedOneSuit, 3, 2 },
+        { Fan::FullOutsideHand, 3, 2 }, { Fan::BlessingOfMan, 5, 0 },
+        { Fan::PureOneSuit, 6, 5 },     { Fan::ThirteenOrphans, Y, 0 },
+        { Fan::NineGates, Y, 0 },       { Fan::HeavenlyHand, Y, 0 },
+        { Fan::BlessingOfEarth, Y, 0 }, { Fan::FourConcealedPungs, Y, 0 },
+        { Fan::FourKongs, Y, Y },       { Fan::AllGreen, Y, Y },
+        { Fan::AllTerminals, Y, Y },    { Fan::AllHonours, Y, Y },
+        { Fan::BigThreeDragons, Y, Y }, { Fan::SmallFourWinds, Y, Y },
+        { Fan::BigFourWinds, Y, Y },
+    };
+    const std::vector<mahjong::ScoreItem> list = jr().fanList();
+    bool same = list.size() == book.size();
+    for (std::size_t i = 0; same && i < book.size(); ++i)
+        same = list[i].fan == book[i].fan && list[i].value == book[i].concealed
+            && RiichiRules::openValue(book[i].fan) == book[i].open;
+    check(same, "riichi: the yaku list holds § 4.7's rows and yakuman, each with its han and open value (INV-1)");
+}
+
+// INV-2: each yaku on a hand holding it, and not on a near miss; a
+// concealed-only row loses the item with a set claimed, an open row scores
+// its open value.
+void riichiEveryYaku()
+{
+    using namespace mj;
+    using mahjong::Fan;
+    using mahjong::RiichiRules;
+    using K = mahjong::SetKind;
+    struct Case {
+        Fan fan;
+        Win hit;
+        Win miss;
+        std::optional<Win> withAClaim; // none where the shape cannot hold a claimed set
+    };
+    const How draw = selfDraw;
+    const How man = [](mahjong::WinContext& w) { w.firstGoRound = true; };
+
+    // Pinfu: four chows, a pair of no value, won at either end of 5-6-7.
+    const std::vector<Face> p = tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                                        { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 },
+                                        { C(5), 1 }, { C(6), 1 }, { C(7), 1 } });
+    // The same with 1-2-3 of circles claimed.
+    const std::vector<Face> po(p.begin() + 3, p.end());
+    const std::vector<mahjong::Meld> pm { claimed(K::Chow, C(1)) };
+    const auto honourPung = [&](Fan fan, Face h) {
+        const auto hand = [](Face pung) {
+            return tiles({ { pung, 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                           { B(6), 1 }, { B(2), 2 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 } });
+        };
+        const std::vector<Face> whole = hand(h);
+        const std::vector<Face> rest(whole.begin() + 3, whole.end());
+        return Case { fan, jrWin(whole), jrWin(hand(W(3))), jrWin(rest, { claimed(K::Pung, h) }) };
+    };
+    const std::vector<mahjong::Meld> kongs { hidden(K::Kong, C(2)), hidden(K::Kong, B(7)), hidden(K::Kong, D(4)) };
+    const std::vector<mahjong::Meld> openKongs { claimed(K::Kong, C(2)), claimed(K::Kong, B(7)),
+                                                 claimed(K::Kong, D(4)) };
+
+    const std::vector<Case> cases {
+        { Fan::Riichi, jrWin(p, {}, riichiOn), jrWin(p), jrWin(po, pm, riichiOn) },
+        { Fan::Ippatsu, jrWin(p, {}, both(riichiOn, [](mahjong::WinContext& w) { w.ippatsu = true; })),
+          jrWin(p, {}, riichiOn),
+          jrWin(po, pm, both(riichiOn, [](mahjong::WinContext& w) { w.ippatsu = true; })) },
+        { Fan::FullyConcealed, jrWin(p, {}, draw), jrWin(p), jrWin(po, pm, draw) },
+        { Fan::Pinfu, jrWin(p),
+          jrWin(tiles({ { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(7), 1 },
+                        { D(8), 1 }, { D(9), 1 }, { B(2), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 } }),
+                {}, riichiOn),
+          jrWin(po, pm, riichiOn) },
+        { Fan::PureDoubleChow,
+          jrWin(tiles({ { C(1), 2 }, { C(2), 2 }, { C(3), 2 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { B(8), 2 },
+                        { D(2), 1 }, { D(3), 1 }, { D(4), 1 } })),
+          jrWin(tiles({ { C(1), 1 }, { C(2), 2 }, { C(3), 2 }, { C(4), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                        { B(8), 2 }, { D(2), 1 }, { D(3), 1 }, { D(4), 1 } })),
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { B(8), 2 },
+                        { D(2), 1 }, { D(3), 1 }, { D(4), 1 } }),
+                { claimed(K::Chow, C(1)) }) },
+        { Fan::AllSimples,
+          jrWin(tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(5), 1 },
+                        { D(6), 1 }, { D(7), 1 }, { C(6), 1 }, { C(7), 1 }, { B(3), 2 }, { C(8), 1 } })),
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(5), 1 },
+                        { D(6), 1 }, { D(7), 1 }, { C(6), 1 }, { C(7), 1 }, { B(3), 2 }, { C(8), 1 } })),
+          jrWin(tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(5), 1 }, { D(6), 1 }, { D(7), 1 }, { C(6), 1 },
+                        { C(7), 1 }, { B(3), 2 }, { C(8), 1 } }),
+                { claimed(K::Chow, C(2)) }) },
+        honourPung(Fan::DragonPung, Dr(1)),
+        honourPung(Fan::SeatWindPung, W(2)),
+        honourPung(Fan::PrevailingWindPung, W(1)),
+        { Fan::KongReplacement,
+          jrWin(po, { hidden(K::Kong, B(5)) },
+                both(draw, [](mahjong::WinContext& w) { w.kongReplacement = true; })),
+          jrWin(po, { hidden(K::Kong, B(5)) }, draw),
+          jrWin(po, { claimed(K::Kong, B(5)) },
+                both(draw, [](mahjong::WinContext& w) { w.kongReplacement = true; })) },
+        { Fan::RobbingAKong, jrWin(p, {}, [](mahjong::WinContext& w) { w.robbedKong = true; }), jrWin(p),
+          jrWin(po, pm, [](mahjong::WinContext& w) { w.robbedKong = true; }) },
+        { Fan::LastTile, jrWin(p, {}, both(draw, [](mahjong::WinContext& w) { w.lastTile = true; })),
+          jrWin(p, {}, draw), jrWin(po, pm, both(draw, [](mahjong::WinContext& w) { w.lastTile = true; })) },
+        { Fan::LastTileClaim, jrWin(p, {}, [](mahjong::WinContext& w) { w.lastTileClaim = true; }), jrWin(p),
+          jrWin(po, pm, [](mahjong::WinContext& w) { w.lastTileClaim = true; }) },
+        { Fan::DoubleRiichi, jrWin(p, {}, [](mahjong::WinContext& w) { w.doubleRiichi = true; }),
+          jrWin(p, {}, riichiOn), jrWin(po, pm, [](mahjong::WinContext& w) { w.doubleRiichi = true; }) },
+        { Fan::SevenDifferentPairs,
+          jrWin(tiles({ { C(1), 2 }, { C(4), 2 }, { B(2), 2 }, { B(7), 2 }, { D(3), 2 }, { W(1), 2 }, { Dr(2), 2 } })),
+          jrWin(tiles({ { C(1), 4 }, { C(4), 2 }, { B(2), 2 }, { B(7), 2 }, { D(3), 2 }, { Dr(2), 2 } })),
+          std::nullopt },
+        { Fan::MixedTripleChow,
+          jrWin(tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(2), 1 }, { B(3), 1 }, { B(4), 1 }, { D(2), 1 },
+                        { D(3), 1 }, { D(4), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 }, { B(9), 2 } })),
+          jrWin(tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(2), 1 }, { B(3), 1 }, { B(4), 1 }, { D(3), 1 },
+                        { D(4), 1 }, { D(5), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 }, { B(9), 2 } })),
+          jrWin(tiles({ { B(2), 1 }, { B(3), 1 }, { B(4), 1 }, { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { C(6), 1 },
+                        { C(7), 1 }, { C(8), 1 }, { B(9), 2 } }),
+                { claimed(K::Chow, C(2)) }) },
+        { Fan::PureStraight,
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                        { C(8), 1 }, { C(9), 1 }, { B(2), 1 }, { B(3), 1 }, { B(4), 1 }, { D(5), 2 } })),
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 2 }, { C(7), 1 },
+                        { C(8), 1 }, { B(2), 1 }, { B(3), 1 }, { B(4), 1 }, { D(5), 2 } })),
+          jrWin(tiles({ { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 }, { C(9), 1 }, { B(2), 1 },
+                        { B(3), 1 }, { B(4), 1 }, { D(5), 2 } }),
+                { claimed(K::Chow, C(1)) }) },
+        { Fan::HalfOutsideHand,
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { W(3), 3 },
+                        { D(1), 1 }, { D(2), 1 }, { D(3), 1 }, { Dr(1), 2 } })),
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { W(3), 3 },
+                        { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { Dr(1), 2 } })),
+          jrWin(tiles({ { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { W(3), 3 }, { D(1), 1 }, { D(2), 1 }, { D(3), 1 },
+                        { Dr(1), 2 } }),
+                { claimed(K::Chow, C(1)) }) },
+        { Fan::FullOutsideHand,
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(1), 3 },
+                        { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { C(9), 2 } })),
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(1), 3 },
+                        { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { C(9), 2 } })),
+          jrWin(tiles({ { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(1), 3 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 },
+                        { C(9), 2 } }),
+                { claimed(K::Chow, C(1)) }) },
+        { Fan::TriplePung,
+          jrWin(tiles({ { C(5), 3 }, { B(5), 3 }, { D(5), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { W(3), 2 } })),
+          jrWin(tiles({ { C(5), 3 }, { B(5), 3 }, { D(6), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { W(3), 2 } })),
+          jrWin(tiles({ { B(5), 3 }, { D(5), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { W(3), 2 } }),
+                { claimed(K::Pung, C(5)) }) },
+        { Fan::ThreeConcealedPungs,
+          jrWin(tiles({ { C(2), 3 }, { B(7), 3 }, { D(4), 3 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { W(3), 2 } })),
+          // Won on the discard that finishes the Four of Diamonds: that pung
+          // was not held concealed.
+          jrWin(tiles({ { C(2), 3 }, { B(7), 3 }, { D(4), 2 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { W(3), 2 },
+                        { D(4), 1 } })),
+          jrWin(tiles({ { C(2), 3 }, { B(7), 3 }, { D(4), 3 }, { W(3), 2 } }), { claimed(K::Chow, C(5)) }) },
+        { Fan::ThreeKongs, jrWin(tiles({ { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { W(3), 2 } }), kongs),
+          jrWin(tiles({ { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { W(3), 2 } }),
+                { hidden(K::Kong, C(2)), hidden(K::Kong, B(7)), hidden(K::Pung, D(4)) }),
+          jrWin(tiles({ { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { W(3), 2 } }), openKongs) },
+        { Fan::AllPungs,
+          jrWin(tiles({ { C(2), 3 }, { B(7), 3 }, { D(4), 3 }, { C(9), 2 }, { W(3), 3 } })),
+          jrWin(tiles({ { C(2), 3 }, { B(7), 3 }, { D(4), 1 }, { D(5), 1 }, { D(6), 1 }, { C(9), 2 }, { W(3), 3 } })),
+          jrWin(tiles({ { B(7), 3 }, { D(4), 3 }, { C(9), 2 }, { W(3), 3 } }), { claimed(K::Pung, C(2)) }) },
+        { Fan::SmallThreeDragons,
+          jrWin(tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { Dr(3), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 },
+                        { B(5), 1 }, { B(6), 1 } })),
+          jrWin(tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { W(3), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 },
+                        { B(5), 1 }, { B(6), 1 } })),
+          jrWin(tiles({ { Dr(2), 3 }, { Dr(3), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                        { B(6), 1 } }),
+                { claimed(K::Pung, Dr(1)) }) },
+        { Fan::AllTerminalsAndHonours,
+          jrWin(tiles({ { C(1), 3 }, { C(9), 3 }, { W(3), 3 }, { B(1), 2 }, { Dr(1), 3 } })),
+          jrWin(tiles({ { C(1), 3 }, { C(8), 3 }, { W(3), 3 }, { B(1), 2 }, { Dr(1), 3 } })),
+          jrWin(tiles({ { C(9), 3 }, { W(3), 3 }, { B(1), 2 }, { Dr(1), 3 } }), { claimed(K::Pung, C(1)) }) },
+        { Fan::TwicePureDoubleChow,
+          jrWin(tiles({ { C(1), 2 }, { C(2), 2 }, { C(3), 2 }, { B(4), 2 }, { B(5), 2 }, { B(6), 2 }, { D(9), 2 } })),
+          jrWin(tiles({ { C(1), 2 }, { C(2), 2 }, { C(3), 2 }, { B(4), 1 }, { B(5), 2 }, { B(6), 2 }, { B(7), 1 },
+                        { D(9), 2 } })),
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 2 }, { B(5), 2 }, { B(6), 2 }, { D(9), 2 } }),
+                { claimed(K::Chow, C(1)) }) },
+        { Fan::MixedOneSuit,
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 3 },
+                        { W(3), 3 }, { C(9), 2 } })),
+          jrWin(tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 3 },
+                        { B(3), 3 }, { C(9), 2 } })),
+          jrWin(tiles({ { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 3 }, { W(3), 3 }, { C(9), 2 } }),
+                { claimed(K::Chow, C(1)) }) },
+        { Fan::BlessingOfMan, jrWin(p, {}, man), jrWin(p), jrWin(po, pm, man) },
+        { Fan::PureOneSuit,
+          jrWin(tiles({ { C(1), 2 }, { C(2), 1 }, { C(3), 2 }, { C(4), 2 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                        { C(8), 1 }, { C(9), 3 } })),
+          jrWin(tiles({ { C(1), 2 }, { C(2), 1 }, { C(3), 2 }, { C(4), 2 }, { C(5), 1 }, { B(6), 1 }, { B(7), 1 },
+                        { B(8), 1 }, { C(9), 3 } })),
+          jrWin(tiles({ { C(1), 2 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 },
+                        { C(9), 3 } }),
+                { claimed(K::Chow, C(2)) }) },
+
+        // The yakuman.
+        { Fan::ThirteenOrphans,
+          jrWin(tiles({ { C(9), 1 }, { B(1), 1 }, { B(9), 1 }, { D(1), 1 }, { D(9), 1 }, { W(1), 1 }, { W(2), 1 },
+                        { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 }, { Dr(3), 1 }, { C(1), 2 } })),
+          jrWin(tiles({ { C(9), 1 }, { B(1), 1 }, { B(9), 1 }, { D(1), 1 }, { D(9), 1 }, { W(1), 1 }, { W(2), 1 },
+                        { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 }, { C(2), 1 }, { C(1), 2 } })),
+          std::nullopt },
+        { Fan::NineGates,
+          jrWin(tiles({ { C(1), 3 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                        { C(8), 1 }, { C(9), 3 }, { C(5), 1 } })),
+          jrWin(tiles({ { C(1), 3 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 }, { C(9), 3 }, { C(5), 1 } }),
+                { claimed(K::Chow, C(2)) }),
+          jrWin(tiles({ { C(1), 3 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 }, { C(9), 3 }, { C(5), 1 } }),
+                { claimed(K::Chow, C(2)) }) },
+        { Fan::HeavenlyHand,
+          jrWin(p, {}, both(both(draw, man), [](mahjong::WinContext& w) { w.seatWind = 1; })),
+          jrWin(p, {}, both(draw, man)), jrWin(po, pm, both(both(draw, man), [](mahjong::WinContext& w) {
+                                             w.seatWind = 1;
+                                         })) },
+        { Fan::BlessingOfEarth, jrWin(p, {}, both(draw, man)), jrWin(p, {}, draw),
+          jrWin(po, pm, both(draw, man)) },
+        { Fan::FourConcealedPungs,
+          jrWin(tiles({ { C(2), 3 }, { B(7), 3 }, { D(4), 3 }, { W(3), 3 }, { C(9), 2 } })),
+          jrWin(tiles({ { C(2), 3 }, { B(7), 3 }, { D(4), 3 }, { C(9), 2 }, { W(3), 3 } })),
+          jrWin(tiles({ { B(7), 3 }, { D(4), 3 }, { W(3), 3 }, { C(9), 2 } }), { claimed(K::Pung, C(2)) }) },
+        { Fan::FourKongs,
+          jrWin(tiles({ { C(9), 2 } }), withMeld(kongs, hidden(K::Kong, W(3)))),
+          jrWin(tiles({ { C(9), 2 } }), withMeld(kongs, hidden(K::Pung, W(3)))),
+          jrWin(tiles({ { C(9), 2 } }), withMeld(openKongs, claimed(K::Kong, W(3)))) },
+        { Fan::AllGreen,
+          jrWin(tiles({ { B(2), 2 }, { B(3), 2 }, { B(4), 2 }, { B(6), 3 }, { Dr(2), 3 }, { B(8), 2 } })),
+          jrWin(tiles({ { B(2), 2 }, { B(3), 2 }, { B(4), 2 }, { B(6), 3 }, { Dr(1), 3 }, { B(8), 2 } })),
+          jrWin(tiles({ { B(2), 2 }, { B(3), 2 }, { B(4), 2 }, { B(6), 3 }, { B(8), 2 } }),
+                { claimed(K::Pung, Dr(2)) }) },
+        { Fan::AllTerminals,
+          jrWin(tiles({ { C(1), 3 }, { C(9), 3 }, { B(1), 3 }, { D(9), 3 }, { B(9), 2 } })),
+          jrWin(tiles({ { C(1), 3 }, { C(9), 3 }, { W(3), 3 }, { D(9), 3 }, { B(9), 2 } })),
+          jrWin(tiles({ { C(9), 3 }, { B(1), 3 }, { D(9), 3 }, { B(9), 2 } }), { claimed(K::Pung, C(1)) }) },
+        { Fan::AllHonours,
+          jrWin(tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { Dr(1), 3 }, { Dr(2), 2 } })),
+          jrWin(tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { C(1), 3 }, { Dr(2), 2 } })),
+          jrWin(tiles({ { W(2), 3 }, { W(3), 3 }, { Dr(1), 3 }, { Dr(2), 2 } }), { claimed(K::Pung, W(1)) }) },
+        { Fan::BigThreeDragons,
+          jrWin(tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { Dr(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(5), 2 } })),
+          jrWin(tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { Dr(3), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 },
+                        { B(5), 1 }, { B(6), 1 } })),
+          jrWin(tiles({ { Dr(2), 3 }, { Dr(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(5), 2 } }),
+                { claimed(K::Pung, Dr(1)) }) },
+        { Fan::SmallFourWinds,
+          jrWin(tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { W(4), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 } })),
+          jrWin(tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { B(5), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 } })),
+          jrWin(tiles({ { W(2), 3 }, { W(3), 3 }, { W(4), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 } }),
+                { claimed(K::Pung, W(1)) }) },
+        { Fan::BigFourWinds,
+          jrWin(tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { W(4), 3 }, { C(5), 2 } })),
+          jrWin(tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(5), 2 } })),
+          jrWin(tiles({ { W(2), 3 }, { W(3), 3 }, { W(4), 3 }, { C(5), 2 } }), { claimed(K::Pung, W(1)) }) },
+    };
+
+    const std::vector<mahjong::ScoreItem> list = jr().fanList();
+    check(cases.size() == list.size(), "riichi: one fixture for every row of the yaku list (INV-2)");
+    for (const Case& c : cases) {
+        const auto row = std::find_if(list.begin(), list.end(), [&c](const mahjong::ScoreItem& i) { return i.fan == c.fan; });
+        const int concealedValue = row == list.end() ? -1 : row->value;
+        const int openValue = RiichiRules::openValue(c.fan);
+        bool ok = valueIn(c.hit, c.fan) == concealedValue && countOf(c.miss, c.fan) == 0;
+        if (c.withAClaim)
+            ok = ok && (openValue == 0 ? countOf(*c.withAClaim, c.fan) == 0 : valueIn(*c.withAClaim, c.fan) == openValue);
+        const std::string what = "riichi: yaku " + std::to_string(int(c.fan)) + " scores on its hand, not on a near "
+            "miss, and claimed as § 4.7 says (INV-2) -- hit: " + itemsOf(c.hit) + "/ miss: " + itemsOf(c.miss);
+        check(ok, what.c_str());
+    }
+}
+
+// INV-3: the struck pairs, and two yakuman paying as one.
+void riichiStrikes()
+{
+    using namespace mj;
+    using mahjong::Fan;
+    using K = mahjong::SetKind;
+    const std::vector<Face> p = tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                                        { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 },
+                                        { C(5), 1 }, { C(6), 1 }, { C(7), 1 } });
+    const Win doubled = jrWin(p, {}, [](mahjong::WinContext& w) {
+        w.riichi = true;
+        w.doubleRiichi = true;
+    });
+    check(countOf(doubled, Fan::DoubleRiichi) == 1 && countOf(doubled, Fan::Riichi) == 0,
+          "riichi: double riichi scores no Riichi beside it (INV-3)");
+    const std::vector<Face> po(p.begin() + 3, p.end());
+    const Win lastKong = jrWin(po, { { K::Kong, B(5), true } }, [](mahjong::WinContext& w) {
+        w.selfDrawn = true;
+        w.payer = -1;
+        w.kongReplacement = true;
+        w.lastTile = true;
+    });
+    check(countOf(lastKong, Fan::KongReplacement) == 1 && countOf(lastKong, Fan::LastTile) == 0,
+          "riichi: a kong's replacement drawn as the wall's last tile scores no Last tile (INV-3)");
+    const Win twice =
+        jrWin(tiles({ { C(1), 2 }, { C(2), 2 }, { C(3), 2 }, { B(4), 2 }, { B(5), 2 }, { B(6), 2 }, { D(9), 2 } }));
+    check(countOf(twice, Fan::TwicePureDoubleChow) == 1 && countOf(twice, Fan::PureDoubleChow) == 0
+              && countOf(twice, Fan::SevenDifferentPairs) == 0,
+          "riichi: Twice pure double chow scores no Pure double chow, nor Seven different pairs (INV-3)");
+    const How man = [](mahjong::WinContext& w) { w.firstGoRound = true; };
+    const Win alone = jrWin(p, {}, man);
+    check(alone && alone->second.items.size() == 1 && countOf(alone, Fan::BlessingOfMan) == 1,
+          "riichi: Blessing of man stands alone, no other yaku (INV-3)");
+    const Win six = jrWin(tiles({ { C(1), 2 }, { C(2), 1 }, { C(3), 2 }, { C(4), 2 }, { C(5), 1 }, { C(6), 1 },
+                                  { C(7), 1 }, { C(8), 1 }, { C(9), 3 } }),
+                          {}, man);
+    check(countOf(six, Fan::BlessingOfMan) == 0 && countOf(six, Fan::PureOneSuit) == 1 && six->second.total >= 6,
+          "riichi: a hand worth 6 han of other yaku keeps them rather than Blessing of man (INV-3)");
+    const Win two = jrWin(tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { Dr(3), 3 }, { W(1), 3 }, { W(2), 2 } }));
+    check(countOf(two, Fan::AllHonours) == 1 && countOf(two, Fan::BigThreeDragons) == 1
+              && two->second.points == 8000,
+          "riichi: All honours with Big three dragons pays 8,000 basic points, as one yakuman (INV-3)");
+}
+
+// INV-4: minipoints.
+void riichiMinipoints()
+{
+    using namespace mj;
+    using K = mahjong::SetKind;
+    const auto fuOf = [](const Win& w) { return w ? w->second.fu : -1; };
+    // Pinfu and all simples.
+    const std::vector<Face> s = tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                                        { D(5), 1 }, { D(6), 1 }, { D(7), 1 }, { C(6), 1 }, { C(7), 1 }, { B(3), 2 },
+                                        { C(8), 1 } });
+    check(fuOf(jrWin(s, {}, selfDraw)) == 20, "riichi: pinfu self-drawn is 20 fu (INV-4)");
+    check(fuOf(jrWin(s)) == 30, "riichi: pinfu on a discard is 30 fu (INV-4)");
+    const std::vector<Face> open(s.begin() + 3, s.end());
+    check(fuOf(jrWin(open, { { K::Chow, C(2), false } })) == 30,
+          "riichi: the same with a chow claimed is 22, rounded to 30 (INV-4)");
+    check(fuOf(jrWin(tiles({ { C(1), 2 }, { C(4), 2 }, { B(2), 2 }, { B(7), 2 }, { D(3), 2 }, { W(1), 2 },
+                             { Dr(2), 2 } }))) == 25,
+          "riichi: seven different pairs is 25 fu, not rounded (INV-4)");
+    check(fuOf(jrWin(tiles({ { C(9), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { D(2), 1 }, { D(3), 1 },
+                             { D(4), 1 }, { W(3), 2 }, { B(4), 1 }, { B(6), 1 }, { B(5), 1 } }),
+                      {}, riichiOn)) == 40,
+          "riichi: concealed on a discard, a closed wait and a concealed pung of nines: 20 + 10 + 2 + 8 = 40 (INV-4)");
+    check(fuOf(jrWin(tiles({ { C(4), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { D(2), 1 }, { D(3), 1 },
+                             { D(4), 1 }, { W(1), 2 }, { B(4), 1 }, { B(6), 1 }, { B(5), 1 } }),
+                      {}, both(selfDraw, [](mahjong::WinContext& w) { w.seatWind = 1; }))) == 30,
+          "riichi: a pair of East held by the dealer in the East round adds 2, not 4 (INV-4)");
+}
+
+// INV-5: basic points and who pays them.
+void riichiPayments()
+{
+    using mahjong::RiichiRules;
+    const auto basic = &RiichiRules::basicPoints;
+    check(basic(1, 30) == 240 && basic(4, 30) == 2000 && basic(3, 60) == 2000 && basic(3, 30) == 960
+              && basic(5, 30) == 2000 && basic(6, 30) == 3000 && basic(8, 30) == 4000 && basic(11, 30) == 6000
+              && basic(13, 30) == 6000 && basic(RiichiRules::kYakuman, 0) == 8000,
+          "riichi: basic points follow the table, 1,920 raised to 2,000 and 13 han a sanbaiman (INV-5)");
+    check(RiichiRules::tierFor(13, 30) == mahjong::Limit::Sanbaiman,
+          "riichi: 13 han is no yakuman (INV-5)");
+    const mahjong::RuleSet& rules = mahjong::ruleSet(mahjong::RuleSetId::JapaneseRiichi);
+    const auto pay = [&rules](int winner, int payer, int basicPoints) {
+        mahjong::WinContext w;
+        w.winner = winner;
+        w.seatWind = winner + 1; // seat 0 deals
+        w.payer = payer;
+        mahjong::HandScore s;
+        s.points = basicPoints;
+        const std::array<int, 4> p = rules.settle(w, s);
+        return std::make_pair(p, p[0] + p[1] + p[2] + p[3]);
+    };
+    bool sums = true;
+    const auto paid = [&](int winner, int payer, int b) {
+        const auto r = pay(winner, payer, b);
+        sums = sums && r.second == 0;
+        return r.first;
+    };
+    check(paid(1, 0, 240)[1] == 1000 && paid(0, 1, 240)[0] == 1500,
+          "riichi: 1 han 30 fu on a discard pays 1,000, or 1,500 to the dealer (INV-5)");
+    const std::array<int, 4> drawn = paid(1, -1, 240);
+    const std::array<int, 4> dealerDrawn = paid(0, -1, 240);
+    check(drawn == std::array<int, 4> { -500, 1100, -300, -300 }
+              && dealerDrawn == std::array<int, 4> { 1500, -500, -500, -500 },
+          "riichi: self-drawn, 300 from each and 500 from the dealer; the dealer takes 500 from each (INV-5)");
+    check(paid(1, 0, 2000)[1] == 8000 && paid(1, 0, 6000)[1] == 24000 && paid(1, 0, 8000)[1] == 32000
+              && paid(0, 1, 8000)[0] == 48000,
+          "riichi: a mangan pays 8,000, a sanbaiman 24,000, a yakuman 32,000 or 48,000 to the dealer (INV-5)");
+    check(sums, "riichi: every payment sums to zero (INV-5)");
+}
+
+// INV-6: dora alone never win.
+void riichiNeedsAYaku()
+{
+    using namespace mj;
+    using mahjong::Action;
+    // South waits on the Six of Circles between its Five and Seven, with a
+    // pung of the Four of Bamboo the indicator makes dora: three dora, no yaku.
+    const std::vector<Face> south = tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 3 }, { D(7), 1 },
+                                            { D(8), 1 }, { D(9), 1 }, { W(3), 2 }, { C(5), 1 }, { C(7), 1 } });
+    {
+        std::array<std::vector<Face>, 4> hands { { plus(junk(), { C(6) }), south, junk(), junk() } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall({ Dr(3), Dr(3) }, B(3)), 0, 0, 1);
+        const Win w = h.winOn(1, C(6), 0, false);
+        h.play({ 0, Action::Discard, C(6), 0 });
+        check(w && w->second.qualifying == 0 && !offers(h, 1, Action::Win),
+              "riichi: a complete hand with three dora and no yaku is offered no Win (INV-6)");
+    }
+    {
+        std::array<std::vector<Face>, 4> hands { { junk(), plus(south, { Dr(3) }), plus(junk(), { C(6) }), junk() } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall({ Dr(3), Dr(3) }, B(3)), 1, 0, 1);
+        h.play({ 1, Action::Riichi, Dr(3), 0 });
+        passAll(h);
+        h.play({ 2, Action::Discard, C(6), 0 });
+        check(offers(h, 1, Action::Win), "riichi: the same tiles after riichi are offered Win (INV-6)");
+    }
+}
+
+// INV-7: the dora.
+void riichiDora()
+{
+    using namespace mj;
+    using mahjong::Action;
+    using mahjong::RiichiRules;
+    check(RiichiRules::doraFrom(C(9)) == C(1) && RiichiRules::doraFrom(Dr(1)) == Dr(3)
+              && RiichiRules::doraFrom(Dr(3)) == Dr(2) && RiichiRules::doraFrom(Dr(2)) == Dr(1)
+              && RiichiRules::doraFrom(W(4)) == W(1) && RiichiRules::doraFrom(B(4)) == B(5),
+          "riichi: an indicator points to the next tile: 9 to 1, red to white to green to red, north to east (INV-7)");
+    {
+        // East draws the fourth Five of Circles and makes a concealed kong.
+        const std::vector<Face> east = tiles({ { C(5), 3 }, { C(1), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 },
+                                               { B(8), 1 }, { D(3), 1 }, { D(6), 1 }, { D(9), 1 }, { W(1), 1 },
+                                               { W(2), 1 } });
+        std::array<std::vector<Face>, 4> hands { { east, junk(), junk(), plus(junk(), { Dr(2) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(
+            jr(), hands, riichiWall({ C(5), Dr(3), Dr(3) }, B(3), { C(8) }, { D(1) }), 3, 0, 1);
+        h.play({ 3, Action::Discard, Dr(2), 0 });
+        passAll(h);
+        const std::size_t before = h.doraIndicators().size();
+        h.play({ 0, Action::ConcealedKong, C(5), 0 });
+        check(before == 1 && h.doraIndicators() == std::vector<Face> { B(3), D(1) } && h.seat(0).drawn == C(8),
+              "riichi: a concealed kong turns the next indicator face up, and draws the last tile (INV-7)");
+    }
+    {
+        // East pungs a Five, later adds its own fourth, and South robs it.
+        const std::vector<Face> east = tiles({ { C(5), 3 }, { C(1), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 },
+                                               { B(8), 1 }, { D(3), 1 }, { D(6), 1 }, { D(9), 1 }, { W(1), 1 },
+                                               { W(2), 1 } });
+        const std::vector<Face> south = tiles({ { C(3), 1 }, { C(4), 1 }, { B(1), 1 }, { B(2), 1 }, { B(3), 1 },
+                                                { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { W(3), 3 }, { Dr(1), 2 } });
+        std::array<std::vector<Face>, 4> hands { { east, south, junk(), plus(junk(), { C(5) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(
+            jr(), hands, riichiWall({ W(4), W(4), W(4), Dr(3), Dr(3), Dr(3) }, B(3)), 3, 0, 1);
+        h.play({ 3, Action::Discard, C(5), 0 });
+        h.play({ 0, Action::Pung, C(5), 0 });
+        passAll(h);
+        h.play({ 0, Action::Discard, W(1), 0 });
+        playUntil(h, 0);
+        h.play({ 0, Action::AddedKong, C(5), 0 });
+        const bool robbable = offers(h, 1, Action::Win);
+        h.play({ 1, Action::Win, C(5), 0 });
+        passAll(h);
+        check(robbable && h.phase() == mahjong::Phase::Over && h.doraIndicators().size() == 1,
+              "riichi: an added kong that is robbed turns no indicator (INV-7)");
+    }
+    {
+        const std::vector<Face> p = tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                                            { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 },
+                                            { C(5), 1 }, { C(6), 1 }, { C(7), 1 } });
+        const How ura = [](mahjong::WinContext& w) {
+            w.doraIndicators = { W(1) };
+            w.uraIndicators = { B(1) }; // points at the pair of Twos
+        };
+        check(valueIn(jrWin(p, {}, both(ura, riichiOn)), mahjong::Fan::UraDora) == 2
+                  && countOf(jrWin(p, {}, ura), mahjong::Fan::UraDora) == 0,
+              "riichi: the ura indicators score for a riichi winner and not for one without riichi (INV-7)");
+    }
+}
+
+// INV-8: fourteen tiles stay in the dead wall.
+void riichiDeadWall()
+{
+    using namespace mj;
+    using mahjong::Action;
+    // East holds four Ones and three Twos of Circles, draws, and makes two
+    // kongs, the second on its first replacement.
+    const std::vector<Face> east = tiles({ { C(1), 4 }, { C(2), 3 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 },
+                                           { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 } });
+    std::array<std::vector<Face>, 4> hands { { east, junk(), junk(), plus(junk(), { Dr(3) }) } };
+    mahjong::Hand h = mahjong::Hand::arranged(
+        jr(), hands, riichiWall({ B(1), B(9), D(1), C(9), B(1), B(9), D(1), C(9) }, B(3), { C(2), D(2) }), 3, 0, 1);
+    h.play({ 3, Action::Discard, Dr(3), 0 });
+    passAll(h);
+    const bool first = h.play({ 0, Action::ConcealedKong, C(1), 0 });
+    const bool second = h.play({ 0, Action::ConcealedKong, C(2), 0 });
+    for (int step = 0; step < 200 && h.phase() != mahjong::Phase::Over; ++step) {
+        if (h.phase() == mahjong::Phase::Turn)
+            throwDrawn(h);
+        else
+            passAll(h);
+    }
+    check(first && second && h.result().drawn && undrawn(h) == 14,
+          "riichi: a hand with two kongs ends with fourteen tiles left in the wall (INV-8)");
+}
+
+// INV-9: furiten refuses a win on a thrown tile, and only that.
+void riichiFuriten()
+{
+    using namespace mj;
+    using mahjong::Action;
+    using mahjong::Furiten;
+    // South waits on the Three and Six of Bamboo; a Six makes the same chow in
+    // all three suits, a Three nothing.
+    const std::vector<Face> south = tiles({ { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { D(4), 1 }, { D(5), 1 },
+                                            { D(6), 1 }, { D(1), 1 }, { D(2), 1 }, { D(3), 1 }, { B(4), 1 },
+                                            { B(5), 1 }, { Dr(2), 2 } });
+    const std::vector<Face> wall = riichiWall({ W(4), W(4), W(4), W(4), W(4), W(4), W(4), B(6), W(4), W(4) }, Dr(3));
+    {
+        // South throws a Three that West pungs; North throws a Six.
+        std::array<std::vector<Face>, 4> hands { { junk(), plus(south, { B(3) }), plus(junk(), { B(3), B(3) }),
+                                                   plus(junk(), { B(6) }) } };
+        std::vector<Face> w = riichiWall({ W(4), W(4), B(6), W(4) }, Dr(3));
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, w, 1, 0, 1);
+        h.play({ 1, Action::Discard, B(3), 0 });
+        h.play({ 2, Action::Pung, B(3), 0 });
+        passAll(h);
+        h.play({ 2, Action::Discard, W(1), 0 });
+        playUntil(h, 3);
+        h.play({ 3, Action::Discard, B(6), 0 });
+        const bool refused = !offers(h, 1, Action::Win) && h.furiten(1) == Furiten::OwnDiscard;
+        playUntil(h, 1);
+        check(refused && h.seat(1).drawn == B(6) && offers(h, 1, Action::Win),
+              "riichi: having thrown a winning tile another seat claimed, no Win on a thrown one, "
+              "but Win on a drawn one (INV-9)");
+    }
+    {
+        // West throws a Three South cannot win on; North throws a Six.
+        std::array<std::vector<Face>, 4> hands { { junk(), south, plus(junk(), { B(3), B(6) }),
+                                                   plus(junk(), { B(6) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, wall, 2, 0, 1);
+        h.play({ 2, Action::Discard, B(3), 0 });
+        passAll(h);
+        h.play({ 3, Action::Discard, B(6), 0 });
+        const bool refused = !offers(h, 1, Action::Win) && h.furiten(1) == Furiten::Passed;
+        playUntil(h, 1);
+        throwDrawn(h); // South's next draw ends it
+        playUntil(h, 2);
+        h.play({ 2, Action::Discard, B(6), 0 });
+        check(refused && offers(h, 1, Action::Win),
+              "riichi: having passed a winning tile, no Win on a thrown one until its next draw (INV-9)");
+    }
+    {
+        // South declares riichi, then lets a Three go.
+        std::array<std::vector<Face>, 4> hands { { junk(), plus(south, { W(3) }), plus(junk(), { B(3), B(6) }),
+                                                   plus(junk(), { B(6) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, wall, 1, 0, 1);
+        h.play({ 1, Action::Riichi, W(3), 0 });
+        passAll(h);
+        h.play({ 2, Action::Discard, B(3), 0 });
+        const bool offered = offers(h, 1, Action::Win);
+        passAll(h);
+        h.play({ 3, Action::Discard, B(6), 0 });
+        const bool first = !offers(h, 1, Action::Win) && h.furiten(1) == Furiten::PassedAfterRiichi;
+        playUntil(h, 1);
+        throwDrawn(h);
+        playUntil(h, 2);
+        h.play({ 2, Action::Discard, B(6), 0 });
+        const bool still = !offers(h, 1, Action::Win);
+        playUntil(h, 1);
+        check(offered && first && still && h.seat(1).drawn == B(6) && offers(h, 1, Action::Win),
+              "riichi: having passed a winning tile after riichi, no Win on a thrown one to the end, "
+              "but Win on a drawn one (INV-9)");
+    }
+}
+
+// INV-10: riichi.
+void riichiDeclaring()
+{
+    using namespace mj;
+    using mahjong::Action;
+    // East waits on the Four or Seven of Circles.
+    const std::vector<Face> ready = tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                                            { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { W(3), 2 },
+                                            { C(5), 1 }, { C(6), 1 } });
+    const std::vector<Face> live { W(4), Dr(3), Dr(3), Dr(3), B(9), Dr(3), Dr(3), Dr(3) };
+    {
+        std::array<std::vector<Face>, 4> hands { { ready, junk(), junk(), plus(junk(), { C(4), Dr(2) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall(live, B(3)), 3, 0, 1);
+        h.play({ 3, Action::Discard, Dr(2), 0 });
+        passAll(h);
+        check(discardsOf(h, 0, Action::Riichi) == std::vector<Face> { W(4) },
+              "riichi: a ready concealed hand may declare with each throw that keeps it ready, and no other (INV-10)");
+        h.play({ 0, Action::Riichi, W(4), 0 });
+        playUntil(h, 3);
+        h.play({ 3, Action::Discard, C(4), 0 });
+        const std::vector<mahjong::Move> answers = h.legalMoves(0);
+        check(answers.size() == 2 && answers[0].action == Action::Win && answers[1].action == Action::Pass,
+              "riichi: after the declaration a thrown tile offers Win and Pass only, no chow (INV-10)");
+        h.play({ 0, Action::Pass, 0, 0 });
+        passAll(h);
+        check(h.toMove() == 0 && discardsOf(h, 0) == std::vector<Face> { B(9) },
+              "riichi: and the only tile it may throw is the one it drew (INV-10)");
+    }
+    {
+        // East chows a thrown Two first.
+        std::vector<Face> chowing = ready;
+        chowing.erase(std::find(chowing.begin(), chowing.end(), C(2)));
+        chowing.push_back(W(4));
+        std::array<std::vector<Face>, 4> hands { { chowing, junk(), junk(), plus(junk(), { C(2) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall(live, B(3)), 3, 0, 1);
+        h.play({ 3, Action::Discard, C(2), 0 });
+        h.play({ 0, Action::Chow, C(2), std::uint8_t(C(1)) });
+        passAll(h);
+        check(h.toMove() == 0 && !offers(h, 0, Action::Riichi), "riichi: with a chow claimed, none (INV-10)");
+    }
+    {
+        std::array<std::vector<Face>, 4> hands { { ready, junk(), junk(), plus(junk(), { Dr(2) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall({ W(4) }, B(3)), 3, 0, 1);
+        h.play({ 3, Action::Discard, Dr(2), 0 });
+        passAll(h);
+        check(h.toMove() == 0 && h.wallLeft() == 0 && !offers(h, 0, Action::Riichi),
+              "riichi: with the live wall empty, none (INV-10)");
+    }
+    {
+        // South wins on the declaring throw, a North wind, with the same chow
+        // in all three suits.
+        const std::vector<Face> south = tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(2), 1 }, { B(3), 1 },
+                                                { B(4), 1 }, { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { C(7), 1 },
+                                                { C(8), 1 }, { C(9), 1 }, { W(4), 1 } });
+        std::array<std::vector<Face>, 4> hands { { plus(ready, { W(4) }), south, junk(), junk() } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall(live, Dr(3)), 0, 0, 1);
+        h.play({ 0, Action::Riichi, W(4), 0 });
+        h.play({ 1, Action::Win, W(4), 0 });
+        passAll(h);
+        check(h.phase() == mahjong::Phase::Over && h.result().payments[0] == -2600
+                  && h.result().payments[1] == 2600 && h.result().sticksAfter == 0,
+              "riichi: a win on the declaring throw stakes nothing: the declarer pays only the win (INV-10)");
+    }
+    {
+        // East wins on South's Four before throwing again: ippatsu.
+        std::array<std::vector<Face>, 4> hands { { plus(ready, { W(4) }), plus(junk(), { C(4) }), junk(), junk() } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall(live, Dr(3)), 0, 0, 1);
+        h.play({ 0, Action::Riichi, W(4), 0 });
+        passAll(h);
+        h.play({ 1, Action::Discard, C(4), 0 });
+        h.play({ 0, Action::Win, C(4), 0 });
+        passAll(h);
+        const bool ippatsu = countOf(Win(std::make_pair(h.result().win, h.result().score)), mahjong::Fan::Ippatsu) == 1;
+        // The same, with West punging South's Red dragon in between.
+        std::array<std::vector<Face>, 4> again { { plus(ready, { W(4) }), plus(junk(), { C(4) }),
+                                                   plus(junk(), { Dr(1), C(4) }), junk() } };
+        mahjong::Hand g = mahjong::Hand::arranged(jr(), again, riichiWall(live, Dr(3)), 0, 0, 1);
+        g.play({ 0, Action::Riichi, W(4), 0 });
+        passAll(g);
+        g.play({ 1, Action::Discard, Dr(1), 0 });
+        g.play({ 2, Action::Pung, Dr(1), 0 });
+        passAll(g);
+        g.play({ 2, Action::Discard, C(4), 0 });
+        g.play({ 0, Action::Win, C(4), 0 });
+        passAll(g);
+        check(ippatsu && g.phase() == mahjong::Phase::Over
+                  && countOf(Win(std::make_pair(g.result().win, g.result().score)), mahjong::Fan::Ippatsu) == 0,
+              "riichi: a win before the declarer's next throw scores Ippatsu; with a pung claimed between, not "
+              "(INV-10)");
+    }
+    {
+        // After riichi, a concealed kong that keeps the waits is offered, and
+        // one that changes them is not.
+        const auto kongOffered = [&](const std::vector<Face>& hand13, Face fourth) {
+            std::array<std::vector<Face>, 4> hands { { plus(hand13, { W(4) }), junk(), junk(), junk() } };
+            mahjong::Hand h = mahjong::Hand::arranged(
+                jr(), hands, riichiWall({ Dr(3), Dr(3), Dr(3), fourth, Dr(3) }, B(3)), 0, 0, 1);
+            h.play({ 0, Action::Riichi, W(4), 0 });
+            playUntil(h, 0);
+            return h.seat(0).drawn == fourth && offers(h, 0, Action::ConcealedKong);
+        };
+        const std::vector<Face> keeps = tiles({ { B(2), 2 }, { B(5), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 },
+                                                { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { W(3), 2 } });
+        const std::vector<Face> changes = tiles({ { B(1), 3 }, { B(2), 1 }, { B(3), 1 }, { C(1), 1 }, { C(2), 1 },
+                                                  { C(3), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { W(3), 2 } });
+        check(kongOffered(keeps, B(5)) && !kongOffered(changes, B(1)),
+              "riichi: after riichi a concealed kong is offered only when the waits stay the same (INV-10)");
+    }
+}
+
+// INV-11: several winners, swap-calling, added kongs, the fifth kong and
+// robbing a concealed kong.
+void riichiClaims()
+{
+    using namespace mj;
+    using mahjong::Action;
+    {
+        // West and North both wait on the North wind.
+        const std::vector<Face> west = tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(2), 1 }, { B(3), 1 },
+                                               { B(4), 1 }, { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { C(7), 1 },
+                                               { C(8), 1 }, { C(9), 1 }, { W(4), 1 } });
+        const std::vector<Face> north = tiles({ { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { B(5), 1 }, { B(6), 1 },
+                                                { B(7), 1 }, { D(5), 1 }, { D(6), 1 }, { D(7), 1 }, { B(9), 3 },
+                                                { W(4), 1 } });
+        std::array<std::vector<Face>, 4> hands { { plus(junk(), { Dr(3) }), junk(), west, north } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall({ Dr(3) }, B(3)), 0, 0, 1);
+        h.play({ 0, Action::Discard, W(4), 0 });
+        h.play({ 3, Action::Win, W(4), 0 });
+        h.play({ 2, Action::Win, W(4), 0 });
+        passAll(h);
+        const mahjong::HandResult& r = h.result();
+        check(h.phase() == mahjong::Phase::Over && r.win.winner == 2 && r.alsoWon.size() == 1
+                  && r.alsoWon[0].first.winner == 3 && r.payments[2] > 0 && r.payments[3] > 0
+                  && r.payments[0] == -(r.payments[2] + r.payments[3]),
+              "riichi: two seats waiting on one tile both win it, and both are paid (INV-11)");
+    }
+    {
+        // South chows East's Three of Circles with its Four and Five.
+        const std::vector<Face> south = tiles({ { C(3), 1 }, { C(4), 2 }, { C(5), 1 }, { C(6), 1 }, { B(2), 1 },
+                                                { B(5), 1 }, { B(8), 1 }, { D(3), 1 }, { D(6), 1 }, { D(9), 1 },
+                                                { W(1), 1 }, { W(2), 1 } });
+        std::array<std::vector<Face>, 4> hands { { plus(junk(), { C(3) }), south, junk(), junk() } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall({ Dr(3) }, B(3)), 0, 0, 1);
+        h.play({ 0, Action::Discard, C(3), 0 });
+        h.play({ 1, Action::Chow, C(3), std::uint8_t(C(3)) });
+        passAll(h);
+        const std::vector<Face> may = discardsOf(h, 1);
+        const auto has = [&may](Face t) { return std::find(may.begin(), may.end(), t) != may.end(); };
+        check(h.toMove() == 1 && !has(C(3)) && !has(C(6)) && has(C(4)),
+              "riichi: after claiming the 3 for 4-5, neither the 3 nor the 6 may be thrown, and the 4 may (INV-11)");
+    }
+    {
+        // East pungs a Five, then adds the fourth it has held since the deal.
+        const std::vector<Face> east = tiles({ { C(5), 3 }, { C(1), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 },
+                                               { B(8), 1 }, { D(3), 1 }, { D(6), 1 }, { D(9), 1 }, { W(1), 1 },
+                                               { W(2), 1 } });
+        std::array<std::vector<Face>, 4> hands { { east, junk(), junk(), plus(junk(), { C(5) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(
+            jr(), hands, riichiWall({ Dr(3), Dr(3), Dr(3), Dr(2), Dr(3) }, B(3)), 3, 0, 1);
+        h.play({ 3, Action::Discard, C(5), 0 });
+        h.play({ 0, Action::Pung, C(5), 0 });
+        passAll(h);
+        h.play({ 0, Action::Discard, W(1), 0 });
+        playUntil(h, 0);
+        check(h.seat(0).drawn == Dr(2) && offers(h, 0, Action::AddedKong),
+              "riichi: an added kong may use a fourth tile held since the deal (INV-11)");
+    }
+    {
+        // East and South make two concealed kongs each; West then holds four
+        // Ones of Diamonds.
+        const std::vector<Face> east = tiles({ { C(1), 4 }, { C(2), 4 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 },
+                                               { W(4), 1 }, { Dr(1), 1 } });
+        const std::vector<Face> south = tiles({ { C(3), 4 }, { C(4), 4 }, { B(1), 1 }, { B(2), 1 }, { B(3), 1 },
+                                                { W(1), 1 }, { Dr(2), 1 } });
+        const std::vector<Face> west = tiles({ { D(1), 4 }, { B(5), 1 }, { B(8), 1 }, { D(6), 1 }, { D(9), 1 },
+                                               { C(7), 1 }, { W(1), 1 }, { W(2), 1 }, { W(4), 1 }, { Dr(1), 1 } });
+        std::array<std::vector<Face>, 4> hands { { east, south, west, plus(junk(), { Dr(3) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(
+            jr(), hands, riichiWall({ B(9), B(9), B(9), B(9), B(9), B(9), B(9), B(9) }, B(3)), 3, 0, 1);
+        h.play({ 3, Action::Discard, Dr(3), 0 });
+        passAll(h);
+        bool four = h.play({ 0, Action::ConcealedKong, C(1), 0 }) && h.play({ 0, Action::ConcealedKong, C(2), 0 });
+        throwDrawn(h);
+        passAll(h);
+        four = four && h.play({ 1, Action::ConcealedKong, C(3), 0 }) && h.play({ 1, Action::ConcealedKong, C(4), 0 });
+        throwDrawn(h);
+        passAll(h);
+        check(four && h.toMove() == 2 && !offers(h, 2, Action::ConcealedKong),
+              "riichi: after four kongs in the deal, no fifth is offered (INV-11)");
+    }
+    {
+        // East makes a concealed kong of East winds. South waits on it with
+        // Thirteen orphans; West waits on it for a pung.
+        const std::vector<Face> east = tiles({ { W(1), 3 }, { C(1), 1 }, { C(4), 1 }, { C(7), 1 }, { B(2), 1 },
+                                               { B(5), 1 }, { B(8), 1 }, { D(3), 1 }, { D(6), 1 }, { D(9), 1 },
+                                               { W(2), 1 } });
+        const std::vector<Face> orphans = tiles({ { C(1), 1 }, { C(9), 1 }, { B(1), 1 }, { B(9), 1 }, { D(1), 1 },
+                                                  { D(9), 1 }, { W(2), 1 }, { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 },
+                                                  { Dr(2), 1 }, { Dr(3), 2 } });
+        const std::vector<Face> west = tiles({ { W(1), 2 }, { C(5), 2 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 },
+                                               { B(5), 1 }, { B(6), 1 }, { B(7), 1 }, { D(2), 1 }, { D(3), 1 },
+                                               { D(4), 1 } });
+        std::array<std::vector<Face>, 4> hands { { east, orphans, west, plus(junk(), { B(9) }) } };
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall({ W(1), Dr(3) }, B(3)), 3, 0, 1);
+        h.play({ 3, Action::Discard, B(9), 0 });
+        passAll(h);
+        h.play({ 0, Action::ConcealedKong, W(1), 0 });
+        check(h.phase() == mahjong::Phase::Robbing && offers(h, 1, Action::Win) && h.legalMoves(2).empty(),
+              "riichi: a concealed kong may be robbed for Thirteen orphans, and for nothing else (INV-11)");
+    }
+}
+
+// INV-12: a drawn hand's payments, and the sticks.
+void riichiDrawnHand()
+{
+    using namespace mj;
+    using mahjong::Action;
+    const std::vector<Face> ready = tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                                            { B(6), 1 }, { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { W(3), 2 },
+                                            { C(5), 1 }, { C(6), 1 } });
+    const auto drawnWith = [&](std::array<bool, 4> readySeats) {
+        std::array<std::vector<Face>, 4> hands {};
+        for (std::size_t s = 0; s < 4; ++s)
+            hands[s] = readySeats[s] ? ready : junk();
+        hands[0].push_back(Dr(3));
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall({ Dr(3), Dr(3), Dr(3) }, B(3)), 0, 0, 1);
+        h.play({ 0, Action::Discard, Dr(3), 0 });
+        playUntil(h, -1);
+        return h.result();
+    };
+    const mahjong::HandResult one = drawnWith({ true, false, false, false });
+    const mahjong::HandResult two = drawnWith({ true, true, false, false });
+    const mahjong::HandResult three = drawnWith({ true, true, true, false });
+    const mahjong::HandResult none = drawnWith({ false, false, false, false });
+    const mahjong::HandResult all = drawnWith({ true, true, true, true });
+    check(one.drawn && one.payments == std::array<int, 4> { 3000, -1000, -1000, -1000 },
+          "riichi: at a drawn hand one ready seat takes 1,000 from each other (INV-12)");
+    check(two.payments == std::array<int, 4> { 1500, 1500, -1500, -1500 },
+          "riichi: two ready seats take 1,500 each (INV-12)");
+    check(three.payments == std::array<int, 4> { 1000, 1000, 1000, -3000 },
+          "riichi: three ready seats take 1,000 each (INV-12)");
+    check(none.payments == std::array<int, 4> {} && all.payments == std::array<int, 4> {},
+          "riichi: with none or all ready, nothing moves (INV-12)");
+    mahjong::HandEnd end;
+    end.drawn = true;
+    end.dealerReady = one.ready[0];
+    const bool keeps = jr().dealerKeepsDeal(end);
+    end.dealerReady = false;
+    check(jr().countersAfter(0, end) == 1 && keeps && !jr().dealerKeepsDeal(end),
+          "riichi: a drawn hand adds a counter, and the dealer keeps the deal only when ready (INV-12)");
+
+    // East declares riichi and the hand is drawn: the stick stays on the table.
+    std::array<std::vector<Face>, 4> hands { { plus(ready, { Dr(3) }), junk(), junk(), junk() } };
+    mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall({ Dr(3), Dr(3), Dr(3) }, B(3)), 0, 0, 1);
+    h.play({ 0, Action::Riichi, Dr(3), 0 });
+    playUntil(h, -1);
+    check(h.result().drawn && h.result().sticksAfter == 1000 && h.result().payments[0] == 2000,
+          "riichi: a stake made in a drawn hand stays on the table (INV-12)");
+    // The next hand, with that stick on the table: its winner takes it.
+    const auto southWins = [&](int sticks) {
+        const std::vector<Face> south = tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(2), 1 }, { B(3), 1 },
+                                                { B(4), 1 }, { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { C(7), 1 },
+                                                { C(8), 1 }, { C(9), 1 }, { W(4), 1 } });
+        std::array<std::vector<Face>, 4> table { { plus(junk(), { Dr(3) }), south, junk(), junk() } };
+        mahjong::HandStart start;
+        start.sticks = sticks;
+        mahjong::Hand g = mahjong::Hand::arranged(jr(), table, riichiWall({ Dr(3) }, B(3)), 0, 0, 1, start);
+        g.play({ 0, Action::Discard, W(4), 0 });
+        g.play({ 1, Action::Win, W(4), 0 });
+        passAll(g);
+        return g.result();
+    };
+    const mahjong::HandResult with = southWins(1000);
+    const mahjong::HandResult without = southWins(0);
+    check(with.payments[1] == without.payments[1] + 1000 && with.sticksAfter == 0,
+          "riichi: and goes to the next hand's winner (INV-12)");
+}
+
+// INV-13: counters.
+void riichiCounters()
+{
+    using namespace mj;
+    using mahjong::Action;
+    const auto settled = [](int winner, int payer, int counters) {
+        mahjong::WinContext w;
+        w.winner = winner;
+        w.seatWind = winner + 1;
+        w.payer = payer;
+        w.counters = counters;
+        mahjong::HandScore s;
+        s.points = 240;
+        return jr().settle(w, s);
+    };
+    check(settled(1, 0, 2)[1] == settled(1, 0, 0)[1] + 600,
+          "riichi: two counters add 600 to a win on a discard (INV-13)");
+    const std::array<int, 4> two = settled(1, -1, 2);
+    const std::array<int, 4> none = settled(1, -1, 0);
+    check(two[0] == none[0] - 200 && two[2] == none[2] - 200 && two[3] == none[3] - 200,
+          "riichi: and 200 more from each payer on a self-draw (INV-13)");
+    const auto twoWinners = [](int counters) {
+        const std::vector<Face> west = tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(2), 1 }, { B(3), 1 },
+                                               { B(4), 1 }, { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { C(7), 1 },
+                                               { C(8), 1 }, { C(9), 1 }, { W(4), 1 } });
+        const std::vector<Face> north = tiles({ { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { B(5), 1 }, { B(6), 1 },
+                                                { B(7), 1 }, { D(5), 1 }, { D(6), 1 }, { D(7), 1 }, { B(9), 3 },
+                                                { W(4), 1 } });
+        std::array<std::vector<Face>, 4> hands { { plus(junk(), { Dr(3) }), junk(), west, north } };
+        mahjong::HandStart start;
+        start.counters = counters;
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall({ Dr(3) }, B(3)), 0, 0, 1, start);
+        h.play({ 0, Action::Discard, W(4), 0 });
+        h.play({ 2, Action::Win, W(4), 0 });
+        h.play({ 3, Action::Win, W(4), 0 });
+        passAll(h);
+        return h.result().payments;
+    };
+    const std::array<int, 4> with = twoWinners(2);
+    const std::array<int, 4> plain = twoWinners(0);
+    check(with[0] == plain[0] - 1200 && with[2] == plain[2] + 600 && with[3] == plain[3] + 600,
+          "riichi: with two winners the discarder pays each of them the counters (INV-13)");
+    mahjong::HandEnd others;
+    mahjong::HandEnd dealer;
+    dealer.dealerWon = true;
+    check(jr().countersAfter(2, others) == 0 && jr().countersAfter(2, dealer) == 3,
+          "riichi: the counters are 0 after another seat's win, and one more after the dealer's (INV-13)");
+}
+
+// INV-14: liability for a third dragon set.
+void riichiLiability()
+{
+    using namespace mj;
+    using mahjong::Action;
+    // East claims a Red from North, a Green from South and, unless
+    // `thirdConcealed`, a White from West, then waits on the Five of
+    // Diamonds. South deals.
+    const auto play = [](bool thirdConcealed, bool onNorthsThrow, int counters) {
+        const std::vector<Face> east = thirdConcealed
+            ? tiles({ { Dr(1), 2 }, { Dr(2), 2 }, { Dr(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { D(5), 1 },
+                      { W(2), 1 }, { W(4), 1 } })
+            : tiles({ { Dr(1), 2 }, { Dr(2), 2 }, { Dr(3), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { D(5), 1 },
+                      { W(2), 1 }, { W(4), 1 }, { B(9), 1 } });
+        const std::vector<Face> south = { Dr(2), C(4), C(7), B(2), B(5), B(8), D(3), D(6), D(9), W(1), B(1), C(9), D(1) };
+        const std::vector<Face> west = { Dr(3), C(4), C(7), B(2), B(5), B(8), D(3), D(6), D(9), W(1), B(1), C(9), D(1) };
+        const std::vector<Face> north = { Dr(1), D(5), C(4), C(7), B(2), B(5), B(8), D(3), D(6), D(9), W(1), B(1),
+                                          C(9), D(1) };
+        std::array<std::vector<Face>, 4> hands { { east, south, west, north } };
+        mahjong::HandStart start;
+        start.counters = counters;
+        // Every tile drawn before East's is one nobody wants; East's is the
+        // Five. Six draws come before it after three claims, four after two.
+        std::vector<Face> live(thirdConcealed ? 4 : 6, C(8));
+        live.insert(live.end(), { D(5), C(8), C(8) });
+        mahjong::Hand h = mahjong::Hand::arranged(jr(), hands, riichiWall(live, B(3)), 3, 1, 1, start);
+        h.play({ 3, Action::Discard, Dr(1), 0 });
+        h.play({ 0, Action::Pung, Dr(1), 0 });
+        passAll(h);
+        h.play({ 0, Action::Discard, W(4), 0 });
+        passAll(h);
+        h.play({ 1, Action::Discard, Dr(2), 0 });
+        h.play({ 0, Action::Pung, Dr(2), 0 });
+        passAll(h);
+        h.play({ 0, Action::Discard, W(2), 0 });
+        if (!thirdConcealed) {
+            playUntil(h, 2);
+            h.play({ 2, Action::Discard, Dr(3), 0 });
+            h.play({ 0, Action::Pung, Dr(3), 0 });
+            passAll(h);
+            h.play({ 0, Action::Discard, B(9), 0 });
+        }
+        if (onNorthsThrow) {
+            playUntil(h, 3);
+            h.play({ 3, Action::Discard, D(5), 0 });
+            h.play({ 0, Action::Win, D(5), 0 });
+            passAll(h);
+        } else {
+            playUntil(h, 0);
+            h.play({ 0, Action::Win, h.seat(0).drawn, 0 });
+        }
+        return h.result();
+    };
+    const mahjong::HandResult drawn = play(false, false, 0);
+    check(drawn.payments == std::array<int, 4> { 32000, 0, -32000, 0 },
+          "riichi: Big three dragons self-drawn after West fed the third set: West pays it all (INV-14)");
+    const mahjong::HandResult thrown = play(false, true, 1);
+    check(thrown.payments == std::array<int, 4> { 32300, 0, -16000, -16300 },
+          "riichi: won on North's throw, West and North pay half each, and North alone the counters (INV-14)");
+    const mahjong::HandResult concealed = play(true, false, 0);
+    check(concealed.payments == std::array<int, 4> { 32000, -16000, -8000, -8000 },
+          "riichi: with one dragon pung concealed, nobody is liable (INV-14)");
+}
+
+// INV-15 and INV-17, with INV-8's and INV-12's game checks: whole games
+// between four computer seats.
+void riichiGamesEnd()
+{
+    using namespace mj;
+    const mahjong::RuleSetId id = mahjong::RuleSetId::JapaneseRiichi;
+    int hands = 0;
+    int won = 0;
+    int riichi = 0;
+    int belowZero = 0;
+    bool ended = true;
+    bool east = true;
+    bool full = true;
+    bool held = true;
+    bool zero = true;
+    bool dealt = true;
+    bool yaku = true;
+    bool deadWall = true;
+    bool points = true;
+    bool shared = true;
+    const auto add = [&](const GameRun& r) {
+        hands += r.hands;
+        won += r.won;
+        riichi += r.riichi;
+        belowZero += r.wentBelowZero ? 1 : 0;
+        ended = ended && r.ended;
+        held = held && r.tilesHeld;
+        zero = zero && r.zeroSum;
+        dealt = dealt && r.dealMoved;
+        yaku = yaku && r.minimumKept;
+        deadWall = deadWall && r.deadWallKept;
+        points = points && r.pointsKept;
+        shared = shared && r.sticksShared;
+    };
+    for (std::uint32_t seed = 1; seed <= 4; ++seed) {
+        const GameRun r = playGame(mahjong::Length::EastRound, seed, id);
+        add(r);
+        east = east && r.dealsPassed == 4 && r.lastWind == 1;
+    }
+    for (std::uint32_t seed = 11; seed <= 12; ++seed) {
+        const GameRun r = playGame(mahjong::Length::FullGame, seed, id);
+        add(r);
+        full = full && r.dealsPassed == 8 && r.lastWind == 2;
+    }
+    std::printf("      riichi: %d of %d hands won, %d riichi declared, %d games went below zero\n", won, hands,
+                riichi, belowZero);
+    check(ended, "riichi: every game between computers ends, a bust ending none (INV-15)");
+    check(east, "riichi: an East round ends when the deal has passed four times (INV-15)");
+    check(full, "riichi: a full game ends in the South round, the deal passed eight times (INV-15)");
+    check(yaku, "riichi: every win has a yaku (INV-17)");
+    check(hands > 0 && won * 5 >= hands, "riichi: at least one hand in five is won (INV-17)");
+    check(riichi > 0, "riichi: the computers declare riichi (INV-17)");
+    check(held, "riichi: every tile is somewhere, once, after every move (INV-8)");
+    check(deadWall, "riichi: every drawn hand leaves fourteen tiles in the wall (INV-8)");
+    check(points, "riichi: the totals and the sticks stay at 120,000 between hands (INV-12)");
+    check(zero && shared, "riichi: the payments sum to the sticks the table lost, and the last are shared out (INV-12)");
+    check(dealt, "riichi: the dealer keeps the deal after winning, or when ready at a drawn hand (INV-15)");
+    check(jr().finalScores({ 40000, 30000, 30000, 20000 }) == std::array<int, 4> { 25000, 0, 0, -25000 },
+          "riichi: the final scores add the placement bonus, tied seats sharing theirs (INV-15)");
 }
 
 } // namespace
@@ -9477,6 +10702,21 @@ int main()
     officialPayments();
     officialGamesEnd();
     officialLastTiles();
+    riichiYakuList();
+    riichiEveryYaku();
+    riichiStrikes();
+    riichiMinipoints();
+    riichiPayments();
+    riichiNeedsAYaku();
+    riichiDora();
+    riichiDeadWall();
+    riichiFuriten();
+    riichiDeclaring();
+    riichiClaims();
+    riichiDrawnHand();
+    riichiCounters();
+    riichiLiability();
+    riichiGamesEnd();
 
     holdLineStartsReady();
     holdLineMarches();

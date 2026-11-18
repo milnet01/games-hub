@@ -99,6 +99,18 @@ QString MahjongTableView::fanName(mahjong::Fan fan)
     case Fan::ClosedWait: return tr("Closed wait");
     case Fan::SingleWait: return tr("Single wait");
     case Fan::Flower: return tr("Flower or season");
+    case Fan::Riichi: return tr("Riichi");
+    case Fan::Ippatsu: return tr("Ippatsu");
+    case Fan::Pinfu: return tr("Pinfu");
+    case Fan::DoubleRiichi: return tr("Double riichi");
+    case Fan::SevenDifferentPairs: return tr("Seven different pairs");
+    case Fan::HalfOutsideHand: return tr("Half outside hand");
+    case Fan::TwicePureDoubleChow: return tr("Twice pure double chow");
+    case Fan::FullOutsideHand: return tr("Fully outside hand");
+    case Fan::BlessingOfMan: return tr("Blessing of man");
+    case Fan::BlessingOfEarth: return tr("Blessing of earth");
+    case Fan::Dora: return tr("Dora");
+    case Fan::UraDora: return tr("Ura dora");
     }
     return {};
 }
@@ -189,7 +201,7 @@ QString MahjongTableView::fanMeaning(mahjong::Fan fan)
     case Fan::MeldedHand: return tr("Four sets laid down, and won on a thrown tile that pairs your last tile.");
     case Fan::TwoDragonPungs: return tr("Pungs of two dragons.");
     case Fan::OutsideHand: return tr("A one, a nine, a wind or a dragon in every set and in the pair.");
-    case Fan::FullyConcealed: return tr("No set laid down, and won on a tile you drew.");
+    case Fan::FullyConcealed: return tr("No set claimed, and won on a tile you drew.");
     case Fan::TwoMeldedKongs: return tr("Two kongs, at least one of them claimed.");
     case Fan::LastOfItsKind: return tr("Won on a tile whose other three are already in view.");
     case Fan::AllChowsNoHonours:
@@ -213,6 +225,21 @@ QString MahjongTableView::fanMeaning(mahjong::Fan fan)
     case Fan::SingleWait: return tr("Waited only on the tile that made the pair.");
     case Fan::Flower:
         return tr("A flower or season set aside. Each one counts, but not toward the 8 points needed to win.");
+    case Fan::Riichi: return tr("Declared riichi.");
+    case Fan::Ippatsu: return tr("Won before your next throw after declaring riichi, with no claim or kong between.");
+    case Fan::Pinfu: return tr("Four chows and a pair that scores nothing, won on a wait at either end of a chow.");
+    case Fan::DoubleRiichi: return tr("Riichi declared on your first throw, with nothing claimed before it.");
+    case Fan::SevenDifferentPairs: return tr("Seven pairs, no two alike.");
+    case Fan::HalfOutsideHand:
+        return tr("A one, nine, wind or dragon in every set and in the pair, with at least one chow and one wind "
+                  "or dragon.");
+    case Fan::TwicePureDoubleChow: return tr("Two pairs of identical chows.");
+    case Fan::FullOutsideHand:
+        return tr("A one or nine in every set and in the pair, with at least one chow and no winds or dragons.");
+    case Fan::BlessingOfMan: return tr("Won on a thrown tile before your first turn, with nothing claimed before it.");
+    case Fan::BlessingOfEarth: return tr("Won on your own first draw, with nothing claimed and no kong before it.");
+    case Fan::Dora: return tr("One for each tile of the hand that a dora indicator points to.");
+    case Fan::UraDora: return tr("The same for the indicators underneath, read only after riichi.");
     }
     return {};
 }

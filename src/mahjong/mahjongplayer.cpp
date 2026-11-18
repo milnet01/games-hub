@@ -98,6 +98,9 @@ struct Plan {
     Suit suit = Suit::None; // the numbered suit it holds most of
     bool oneSuit = false;   // Mixed or Pure one suit, 3 or 7 fan
     bool pungs = false;     // All pungs, 3 fan
+    // Under riichi rules, an open hand whose only yaku is All simples throws
+    // its ones, nines and honours first (GHUB-0244 § 4.10).
+    bool simples = false;
 };
 
 Plan planFor(const SeatTiles& s)
@@ -151,7 +154,37 @@ bool valueHonour(Face t, int seatWind, int prevailing)
 
 bool offPlan(const Plan& plan, Face t)
 {
+    if (plan.simples && (isHonour(t) || isTerminal(t)))
+        return true;
     return plan.oneSuit && numbered(t) && suitOf(t) != plan.suit;
+}
+
+bool simple(Face t)
+{
+    return numbered(t) && !isTerminal(t);
+}
+
+bool meldSimple(const Meld& m)
+{
+    if (m.kind == SetKind::Chow)
+        return rankOf(m.tile) >= 2 && rankOf(m.tile) <= 6;
+    return simple(m.tile);
+}
+
+// No one, nine or honour among the tiles held and the sets laid down.
+bool allSimple(const SeatTiles& s)
+{
+    return std::all_of(s.concealed.begin(), s.concealed.end(), simple)
+        && std::all_of(s.melds.begin(), s.melds.end(), meldSimple);
+}
+
+// A set laid down that is a yaku on its own: a pung of a dragon or a wind
+// that scores.
+bool holdsValuePung(const SeatTiles& s, int seatWind, int prevailing)
+{
+    return std::any_of(s.melds.begin(), s.melds.end(), [&](const Meld& m) {
+        return m.kind != SetKind::Chow && !m.concealed && valueHonour(m.tile, seatWind, prevailing);
+    });
 }
 
 // How much a tile is worth keeping, beyond what the reckoning sees: the
@@ -186,9 +219,10 @@ std::vector<Face> without(std::vector<Face> tiles, Face t, int count)
     return tiles;
 }
 
-// The discard that leaves `tiles` best placed, with its reckoning.
+// The discard that leaves `tiles` best placed, with its reckoning. Only the
+// faces in `allowed` are thrown, where it is given.
 std::pair<Face, int> bestDiscard(const std::vector<Face>& tiles, int melds, const Plan& plan, int seatWind,
-                                 int prevailing)
+                                 int prevailing, const std::vector<Face>* allowed = nullptr)
 {
     Face choice = 0;
     std::tuple<int, int, double> best { INT_MAX, INT_MAX, 0.0 };
@@ -197,6 +231,8 @@ std::pair<Face, int> bestDiscard(const std::vector<Face>& tiles, int melds, cons
         if (t == last)
             continue;
         last = t;
+        if (allowed != nullptr && std::find(allowed->begin(), allowed->end(), t) == allowed->end())
+            continue;
         const int after = tilesFromReady(without(tiles, t, 1), melds, !plan.pungs);
         const std::tuple<int, int, double> key { offPlan(plan, t) ? 0 : 1, after,
                                                  keepValue(tiles, t, plan, seatWind, prevailing) };
@@ -214,6 +250,31 @@ const Move* find(const std::vector<Move>& moves, Action action)
         if (m.action == action)
             return &m;
     return nullptr;
+}
+
+// Riichi whenever it may: the throw leaving the most faces to wait on, and
+// among equals one it is not furiten on. Null when no riichi is offered.
+const Move* bestRiichi(const Hand& hand, int seat, const std::vector<Move>& legal)
+{
+    const SeatTiles& s = hand.seat(seat);
+    const Move* declare = nullptr;
+    std::pair<int, int> most { -1, -1 };
+    for (const Move& m : legal) {
+        if (m.action != Action::Riichi)
+            continue;
+        const std::vector<Face> waits = waitingTiles(hand.rules(), without(s.concealed, m.tile, 1), s.melds);
+        std::vector<Face> thrown = hand.thrown(seat);
+        thrown.push_back(m.tile);
+        const bool clear = std::none_of(waits.begin(), waits.end(), [&thrown](Face w) {
+            return std::find(thrown.begin(), thrown.end(), w) != thrown.end();
+        });
+        const std::pair<int, int> key { int(waits.size()), clear ? 1 : 0 };
+        if (key > most) {
+            most = key;
+            declare = &m;
+        }
+    }
+    return declare;
 }
 
 } // namespace
@@ -237,10 +298,16 @@ Move chooseMove(const Hand& hand, int seat)
         return *win;
 
     const SeatTiles& s = hand.seat(seat);
-    const Plan plan = planFor(s);
     const int wind = hand.seatWind(seat);
     const int prevailing = hand.prevailingWind();
     const int melds = int(s.melds.size());
+    // Under rules with riichi a hand needs a yaku to win, and a concealed one
+    // always has riichi to declare (GHUB-0244 § 4.10).
+    const bool needsYaku = hand.rules().table().riichiStake > 0;
+    Plan plan = planFor(s);
+    const bool laidDown = std::any_of(s.melds.begin(), s.melds.end(), [](const Meld& m) { return !m.concealed; });
+    plan.simples = needsYaku && laidDown && !plan.oneSuit && !plan.pungs && !holdsValuePung(s, wind, prevailing)
+        && std::all_of(s.melds.begin(), s.melds.end(), meldSimple);
 
     if (hand.phase() == Phase::Turn) {
         // A kong is a set that costs nothing and draws a tile, so take it.
@@ -248,7 +315,13 @@ Move chooseMove(const Hand& hand, int seat)
             return *kong;
         if (const Move* kong = find(legal, Action::AddedKong))
             return *kong;
-        const Face throwAway = bestDiscard(s.concealed, melds, plan, wind, prevailing).first;
+        if (const Move* declare = bestRiichi(hand, seat, legal))
+            return *declare;
+        std::vector<Face> allowed;
+        for (const Move& m : legal)
+            if (m.action == Action::Discard)
+                allowed.push_back(m.tile);
+        const Face throwAway = bestDiscard(s.concealed, melds, plan, wind, prevailing, &allowed).first;
         return { std::uint8_t(seat), Action::Discard, throwAway, 0 };
     }
 
@@ -258,8 +331,13 @@ Move chooseMove(const Hand& hand, int seat)
 
     const int now = tilesFromReady(s.concealed, melds, !plan.pungs);
     const Face t = hand.offered();
+    // Under riichi rules a claim must keep a yaku the hand can finish: a
+    // set laid down that already is one, one suit, all pungs, or all simples
+    // when the hand and the claim hold no one, nine or honour.
+    const bool yakuHeld = holdsValuePung(s, wind, prevailing);
+    const bool simplesOpen = needsYaku && simple(t) && allSimple(s);
     const bool wanted = valueHonour(t, wind, prevailing) || plan.pungs
-        || (plan.oneSuit && (isHonour(t) || suitOf(t) == plan.suit));
+        || (plan.oneSuit && (isHonour(t) || suitOf(t) == plan.suit)) || simplesOpen || (needsYaku && yakuHeld);
     for (Action set : { Action::Kong, Action::Pung }) {
         const Move* claim = find(legal, set);
         if (claim == nullptr)
@@ -272,8 +350,11 @@ Move chooseMove(const Hand& hand, int seat)
             return *claim;
     }
     // A chow gives up the concealed hand's fan, so only a seat building one
-    // suit -- whose fan does not depend on staying concealed -- takes one.
-    if (plan.oneSuit && !plan.pungs && suitOf(t) == plan.suit) {
+    // suit -- whose fan does not depend on staying concealed -- takes one;
+    // under riichi rules, also one building all simples or already holding a
+    // yaku laid down.
+    const bool chowKeepsYaku = plan.oneSuit ? suitOf(t) == plan.suit : needsYaku && (simplesOpen || yakuHeld);
+    if (chowKeepsYaku && !plan.pungs) {
         for (const Move& m : legal) {
             if (m.action != Action::Chow)
                 continue;
@@ -281,6 +362,8 @@ Move chooseMove(const Hand& hand, int seat)
             for (int k = 0; k < 3; ++k)
                 if (Face(m.chowLow + k) != t)
                     rest = without(rest, Face(m.chowLow + k), 1);
+            if (simplesOpen && !meldSimple({ SetKind::Chow, Face(m.chowLow), false }))
+                continue;
             if (bestDiscard(rest, melds + 1, plan, wind, prevailing).second < now)
                 return m;
         }

@@ -335,16 +335,6 @@ bool holdsFive(const Meld& m)
     return m.kind == SetKind::Chow ? r >= 3 && r <= 5 : r == 5;
 }
 
-bool isGreen(Face t)
-{
-    if (t == kDragonFirst + 1)
-        return true;
-    if (suitOf(t) != Suit::Bamboo)
-        return false;
-    const int r = rankOf(t);
-    return r == 2 || r == 3 || r == 4 || r == 6 || r == 8;
-}
-
 bool isReversible(Face t)
 {
     const int r = rankOf(t);
@@ -458,6 +448,7 @@ HandScore ChineseOfficialRules::score(const WinContext& win) const
     }
 
     switch (win.shape) {
+    case Shape::SevenDifferentPairs: break; // Riichi's; shapeAllowed refuses it here
     case Shape::ThirteenOrphans: add(Fan::ThirteenOrphans); break;
     case Shape::SevenPairs: {
         add(Fan::SevenPairs);

@@ -27,8 +27,9 @@ public:
     HandScore score(const WinContext& win) const override;
     std::vector<ScoreItem> fanList() const override;
     std::array<int, 4> settle(const WinContext& win, const HandScore& s) const override;
-    bool shapeAllowed(Shape) const override { return true; }
-    bool dealerRepeats() const override { return false; }
+    // Seven different pairs is Riichi's; Seven pairs already holds it here.
+    bool shapeAllowed(Shape shape) const override { return shape != Shape::SevenDifferentPairs; }
+    bool dealerKeepsDeal(const HandEnd&) const override { return false; }
 
     // § 4.4's points for one pattern, 0 for a Fan this rule set never scores.
     static int fanValue(Fan fan);

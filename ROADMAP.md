@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=257 -->
+<!-- ants-roadmap-id-high-water: GHUB=260 -->
 
 # Games Hub — Roadmap
 
@@ -10076,10 +10076,13 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: user-request-2026-11-11.
   Blocked-by: GHUB-0239.
 
-- 📋 [GHUB-0244] **Mahjong: Japanese Riichi rules as a third rule set.**
+- ✅ [GHUB-0244] **Mahjong: Japanese Riichi rules as a third rule set.**
   Adds calling riichi, dora bonus tiles and furiten to the shared
   table from GHUB-0239, with Riichi scoring. Comes after the Chinese
   Official rule set (GHUB-0243).
+  Built 2026-11-18 from docs/specs/GHUB-0244-japanese-riichi-mahjong.md.
+  INV-1 to INV-17 in tests/selftest.cpp; INV-1, INV-18 and INV-19 in
+  tests/uitest.cpp.
   **Layman:** Adds the Japanese rules to four-player Mahjong, chosen from the same menu as the other rule sets.
   Kind: feature.
   Source: user-request-2026-11-11.
@@ -10217,6 +10220,29 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** The rules screen's description of a concealed hand is slightly wrong; it should say no set was claimed from another player.
   Kind: review-fix.
   Source: review-contract-GHUB-0244-2026-11-18.
+
+- 📋 [GHUB-0258] **Ruin Runner Lanes slows down badly in play.**
+  Reported by the owner while the machine was busy, so the cause is
+  not yet known. First step: time a frame with --bench or a timed
+  run on a quiet machine, against the plain Ruin Runner.
+  **Layman:** The three-lane runner stutters. Find out whether the game or a busy machine is the cause, and fix the game if it is.
+  Kind: investigate.
+  Source: user-report-2026-11-18.
+
+- 📋 [GHUB-0259] **Ruin Runner Lanes never gets harder.**
+  Owner's report: the game does not seem to get any more difficult
+  as a run goes on. Read what GHUB-0241 built for pace before
+  deciding what rises and how fast.
+  **Layman:** The three-lane runner should speed up or crowd its obstacles as a run goes on.
+  Kind: enhancement.
+  Source: user-report-2026-11-18.
+
+- 📋 [GHUB-0260] **Ruin Runner Lanes keeps one scenery for the whole run.**
+  Owner's wish: the scenery changes every now and then. Assets are
+  drawn or generated, never sampled (ROADMAP.md Standing rules).
+  **Layman:** The three-lane runner's surroundings should change every now and then during a run.
+  Kind: enhancement.
+  Source: user-report-2026-11-18.
 
 ## P01 — Shipped
 

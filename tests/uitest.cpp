@@ -32,6 +32,7 @@
 #include "noughts/noughtsview.h"
 #include "mahjong/mahjongart.h"
 #include "mahjong/mahjongplayer.h"
+#include "mahjong/mahjongriichi.h"
 #include "mahjong/mahjongtableview.h"
 #include "mahjong/mahjongview.h"
 #include "pinball/pinballview.h"
@@ -168,6 +169,9 @@ public:
     using MahjongTableView::pendingNote;
     using MahjongTableView::centreSentence;
     using MahjongTableView::tableSentence;
+    using MahjongTableView::doraSentence;
+    using MahjongTableView::furitenSentence;
+    using MahjongTableView::pickedTile;
 };
 class DraughtsProbe : public DraughtsView
 {
@@ -2877,7 +2881,8 @@ void mahjongTableWaitsAndKeepsItsPlace()
     for (int f = 0; f < mahjong::kFanCount; ++f)
         everyWord = everyWord && !MahjongTableView::fanName(mahjong::Fan(f)).isEmpty()
             && !MahjongTableView::fanMeaning(mahjong::Fan(f)).isEmpty();
-    check(everyWord, "mahjong table: every Fan has a name and a plain sentence (INV-13, GHUB-0243 INV-1)");
+    check(everyWord,
+          "mahjong table: every Fan has a name and a plain sentence (INV-13, GHUB-0243 INV-1, GHUB-0244 INV-1)");
 
     // INV-11: an unknown stored rule set falls back, and the menu lists only
     // the rule sets this build has.
@@ -2892,9 +2897,9 @@ void mahjongTableWaitsAndKeepsItsPlace()
             if (a->objectName() == QStringLiteral("mahjong4-length-east"))
                 east = a;
         }
-        check(view.ruleSetInForce() == mahjong::RuleSetId::HongKong && ruleEntries == 2,
-              "mahjong table: an unknown stored rule set falls back to Hong Kong; the menu lists the two rule "
-              "sets this build has (INV-11, GHUB-0243 INV-12)");
+        check(view.ruleSetInForce() == mahjong::RuleSetId::HongKong && ruleEntries == 3,
+              "mahjong table: an unknown stored rule set falls back to Hong Kong; the menu lists the three rule "
+              "sets this build has (INV-11, GHUB-0243 INV-12, GHUB-0244 INV-18)");
         check(view.game().length() == mahjong::Length::FullGame, "mahjong table: a full game by default");
         if (east != nullptr)
             east->trigger();
@@ -3029,6 +3034,309 @@ void mahjongTableKeepsItsCorner()
         check(w >= mahjong::kTileMinWidth, "mahjong solitaire: large play keeps every tile at the floor or wider");
     }
     Legibility::instance().setEnabledForSession(false);
+}
+
+// ---- mahjongTableRiichi (GHUB-0244) ----
+//
+// The rules are the self-test's. This is the table under Japanese Riichi: the
+// menu entry, a save holding a declaration, and riichi, the dora, furiten and
+// a win's han and fu said on the table in words.
+
+// Whether the hand's last throw came with a riichi declaration.
+bool mahjongJustDeclared(const mahjong::Hand& h)
+{
+    const std::vector<mahjong::Move>& moves = h.moves();
+    for (auto it = moves.rbegin(); it != moves.rend(); ++it)
+        if (it->action == mahjong::Action::Discard || it->action == mahjong::Action::Riichi)
+            return it->action == mahjong::Action::Riichi;
+    return false;
+}
+
+// Your hand as the table draws it: sorted, the tile just drawn at the end.
+std::vector<mahjong::Face> mahjongShownHand(const mahjong::SeatTiles& s)
+{
+    std::vector<mahjong::Face> hand = s.concealed;
+    const auto at = std::find(hand.begin(), hand.end(), s.drawn);
+    if (s.drawn != 0 && at != hand.end()) {
+        hand.erase(at);
+        hand.push_back(s.drawn);
+    }
+    return hand;
+}
+
+// Paints the view, so every painting path for the state is run.
+void mahjongPaint(MahjongTableProbe& view)
+{
+    QPixmap pixmap(view.size());
+    view.render(&pixmap);
+}
+
+void mahjongTableRiichi()
+{
+    using mahjong::Action;
+    using mahjong::Phase;
+    using mahjong::RuleSetId;
+    const QStringList seats { QStringLiteral("You"), QStringLiteral("Right"), QStringLiteral("Across"),
+                              QStringLiteral("Left") };
+    QSettings().remove(QStringLiteral("mahjong4/ruleSet"));
+    QSettings().remove(QStringLiteral("mahjong4/length"));
+
+    // INV-18: the menu holds three rule sets, and Riichi chosen is in force
+    // in the next game.
+    {
+        MahjongTableProbe view;
+        int entries = 0;
+        QAction* riichi = nullptr;
+        for (QAction* a : view.gameActions()) {
+            if (a->objectName().startsWith(QStringLiteral("mahjong4-rules-")))
+                ++entries;
+            if (a->objectName() == QStringLiteral("mahjong4-rules-3"))
+                riichi = a;
+        }
+        check(entries == 3 && riichi != nullptr && riichi->text() == QStringLiteral("Japanese Riichi rules"),
+              "mahjong riichi: the menu lists Japanese Riichi as a third rule set (INV-18)");
+        if (riichi != nullptr)
+            riichi->trigger();
+        view.deactivate();
+        MahjongTableProbe next;
+        const QString rules = next.rulesText();
+        check(next.ruleSetInForce() == RuleSetId::JapaneseRiichi
+                  && next.game().totals()[0] == mahjong::RiichiRules::kStartingPoints
+                  && rules.contains(QStringLiteral("Japanese Riichi rules"))
+                  && rules.contains(MahjongTableView::fanMeaning(mahjong::Fan::Pinfu).toHtmlEscaped())
+                  && rules.contains(QString::number(mahjong::RiichiRules::kRiichiStake))
+                  && !rules.contains(QStringLiteral("<b>flower</b>")),
+              "mahjong riichi: chosen, it is remembered, and its rules text is its own (INV-18)");
+        next.deactivate();
+    }
+
+    // INV-18: a save holding a declaration restores, and saves the same.
+    const QByteArray declared = mahjongSaveWhere(
+        [](const mahjong::Hand& h) {
+            return h.phase() == Phase::Turn && mahjongJustDeclared(h) && h.lastClaimer() < 0;
+        },
+        RuleSetId::JapaneseRiichi);
+    check(!declared.isEmpty(), "mahjong riichi: some seeded game reaches a declaration");
+    {
+        MahjongTableProbe view;
+        view.resize(1200, 820);
+        const bool restored = view.restoreState(declared);
+        bool holds = false;
+        for (const mahjong::HandRecord& r : view.game().records())
+            for (const mahjong::Move& m : r.moves)
+                holds = holds || m.action == Action::Riichi;
+        check(restored && holds && view.saveState() == declared,
+              "mahjong riichi: a save holding a declaration restores to the same table (INV-18)");
+        MahjongTableProbe resumed;
+        check(resumed.restoreState(view.saveState()) && resumed.saveState() == declared,
+              "mahjong riichi: and again into a fresh view (INV-18)");
+        resumed.deactivate();
+
+        // INV-19: the declaration, the dora and the stick, in words.
+        const mahjong::Hand& h = *view.game().hand();
+        const int seat = h.lastDiscarder();
+        const QString sentence = view.tableSentence();
+        check(seat >= 0 && h.riichi(seat) && sentence.contains(seats[seat]) && sentence.contains(QStringLiteral("riichi"))
+                  && sentence.contains(mahjong::tileName(h.lastDiscard())),
+              "mahjong riichi: the sentence names the seat that declared riichi and its tile (INV-19)");
+        const QString dora = view.doraSentence();
+        bool named = !h.doraIndicators().empty();
+        for (mahjong::Face indicator : h.doraIndicators())
+            named = named && dora.contains(mahjong::tileName(mahjong::RiichiRules::doraFrom(indicator)))
+                && dora.contains(mahjong::tileName(indicator));
+        check(named, "mahjong riichi: the centre's words name each dora and its indicator (INV-19)");
+        check(h.sticks() > 0 && dora.contains(QStringLiteral("riichi stick")),
+              "mahjong riichi: and the riichi stick staked is on the table in words");
+        mahjongPaint(view);
+        Legibility::instance().setEnabledForSession(true);
+        mahjongPaint(view);
+        check(view.smallestTileWidth() >= mahjong::kTileMinWidth,
+              "mahjong riichi: large play keeps the dora and the pools at the floor or wider");
+        Legibility::instance().setEnabledForSession(false);
+        view.deactivate();
+    }
+
+    // INV-18: Action::Riichi inside a Hong Kong save is no legal move there.
+    {
+        const QByteArray hongKong = mahjongSaveWhere(
+            [](const mahjong::Hand& h) { return h.phase() == Phase::Turn && h.moves().size() > 8; });
+        MahjongTableProbe source;
+        const bool restored = source.restoreState(hongKong);
+        std::vector<mahjong::HandRecord> records = source.game().records();
+        bool changed = false;
+        for (mahjong::Move& m : records.back().moves) {
+            if (m.action == Action::Discard) {
+                m.action = Action::Riichi;
+                changed = true;
+                break;
+            }
+        }
+        source.deactivate();
+        MahjongTableProbe refused;
+        const QByteArray before = refused.saveState();
+        check(restored && changed
+                  && !refused.restoreState(MahjongTableView::encodeSave(RuleSetId::HongKong, source.game().length(),
+                                                                       source.game().firstDealer(), records))
+                  && refused.saveState() == before,
+              "mahjong riichi: a Hong Kong save with a discard turned into a riichi is refused (INV-18)");
+        refused.deactivate();
+    }
+
+    // INV-19: furiten is said on the table while it holds.
+    const QByteArray furiten = mahjongSaveWhere(
+        [](const mahjong::Hand& h) {
+            return h.phase() == Phase::Turn && h.toMove() == 0 && h.furiten(0) != mahjong::Furiten::None;
+        },
+        RuleSetId::JapaneseRiichi);
+    {
+        MahjongTableProbe view;
+        view.resize(1200, 820);
+        const bool restored = !furiten.isEmpty() && view.restoreState(furiten);
+        const QString said = view.furitenSentence();
+        check(restored && said.startsWith(QStringLiteral("You cannot win on a thrown tile"))
+                  && view.tableSentence().contains(said) && !view.centreSentence().contains(said),
+              "mahjong riichi: a furiten seat 0 is told why, on a line of its own (INV-19)");
+        mahjongPaint(view);
+        view.deactivate();
+    }
+
+    // After your riichi only the tile you drew may be thrown, and the table
+    // says why.
+    const QByteArray locked = mahjongSaveWhere(
+        [](const mahjong::Hand& h) {
+            return h.phase() == Phase::Turn && h.toMove() == 0 && h.riichi(0) && h.seat(0).drawn != 0;
+        },
+        RuleSetId::JapaneseRiichi);
+    {
+        MahjongTableProbe view;
+        view.resize(1200, 820);
+        view.show();
+        const bool restored = !locked.isEmpty() && view.restoreState(locked);
+        const mahjong::SeatTiles& you = view.game().hand()->seat(0);
+        const std::vector<mahjong::Face> hand = mahjongShownHand(you);
+        pressKey(&view, Qt::Key_Left);
+        const int picked = view.pickedTile();
+        check(restored
+                  && view.tableSentence().contains(QStringLiteral("You declared riichi: throw the tile you drew, or win."))
+                  && picked >= 0 && picked < int(hand.size()) && hand[std::size_t(picked)] == you.drawn,
+              "mahjong riichi: after your riichi only the drawn tile can be picked, and the sentence says why");
+        mahjongPaint(view);
+        view.deactivate();
+    }
+
+    // A tile you may declare riichi with gets its button beside Throw.
+    const QByteArray mayDeclare = mahjongSaveWhere(
+        [](const mahjong::Hand& h) {
+            if (h.phase() != Phase::Turn || h.toMove() != 0)
+                return false;
+            for (const mahjong::Move& m : h.legalMoves(0))
+                if (m.action == Action::Riichi)
+                    return true;
+            return false;
+        },
+        RuleSetId::JapaneseRiichi);
+    {
+        MahjongTableProbe view;
+        view.resize(1200, 820);
+        view.show();
+        view.activate();
+        bool offered = false;
+        int button = -1;
+        if (!mayDeclare.isEmpty() && view.restoreState(mayDeclare)) {
+            // Along the hand until the tile picked out goes with a riichi.
+            for (int i = 0; i < 15 && button < 0; ++i) {
+                const QStringList labels = view.buttonLabels();
+                for (int b = 0; b + 1 < labels.size(); ++b)
+                    if (labels[b].startsWith(QStringLiteral("Riichi, throwing the "))
+                        && labels[b + 1] == QStringLiteral("Throw the ") + labels[b].mid(21))
+                        button = b;
+                if (button < 0)
+                    pressKey(&view, Qt::Key_Left);
+            }
+            offered = button >= 0;
+        }
+        check(offered, "mahjong riichi: a tile that may go with a riichi has its button beside Throw");
+        if (offered) {
+            pressKey(&view, Qt::Key(Qt::Key_1 + button));
+            Action yours = Action::Pass;
+            const std::vector<mahjong::HandRecord> records = view.game().records();
+            for (const mahjong::Move& m : records.back().moves)
+                if (m.seat == 0 && m.action != Action::Pass)
+                    yours = m.action;
+            check(yours == Action::Riichi, "mahjong riichi: and pressing it declares riichi");
+        }
+        view.deactivate();
+    }
+
+    // INV-19: a win's lines name each item, with its han, and the fu.
+    const QByteArray won = mahjongSaveWhere(
+        [](const mahjong::Hand& h) {
+            return h.phase() == Phase::Over && !h.result().drawn && h.result().score.tier == mahjong::Limit::None;
+        },
+        RuleSetId::JapaneseRiichi);
+    {
+        MahjongTableProbe view;
+        view.resize(1200, 820);
+        bool named = !won.isEmpty() && view.restoreState(won);
+        if (named) {
+            const mahjong::HandResult& r = view.game().results().back();
+            const QStringList lines = view.endOfHandLines();
+            named = !r.score.items.empty()
+                && lines.join(QLatin1Char('\n'))
+                       .contains(QStringLiteral("Total: %1 han, %2 fu.").arg(r.score.total).arg(r.score.fu));
+            for (const mahjong::ScoreItem& item : r.score.items)
+                named = named && lines.contains(MahjongTableView::fanName(item.fan) + QStringLiteral(" — ")
+                                                + QStringLiteral("%1 han").arg(item.value));
+        }
+        check(named, "mahjong riichi: a win lists every item with its han, then the han and fu (INV-19)");
+        mahjongPaint(view);
+        view.deactivate();
+    }
+
+    // A drawn hand says who was ready and whether the dealer deals again.
+    const QByteArray drawn = mahjongSaveWhere(
+        [](const mahjong::Hand& h) { return h.phase() == Phase::Over && h.result().drawn; },
+        RuleSetId::JapaneseRiichi);
+    {
+        MahjongTableProbe view;
+        view.resize(1200, 820);
+        bool said = !drawn.isEmpty() && view.restoreState(drawn);
+        for (int s = 0; said && s < mahjong::kSeats; ++s) {
+            const mahjong::HandResult& r = view.game().results().back();
+            said = view.endOfHandLines().contains(
+                (r.ready[std::size_t(s)] ? QStringLiteral("%1 — ready, ") : QStringLiteral("%1 — not ready, "))
+                    .arg(seats[s])
+                + (r.payments[std::size_t(s)] > 0 ? QStringLiteral("+%1") : QStringLiteral("%1"))
+                      .arg(r.payments[std::size_t(s)]));
+        }
+        check(said && view.endOfHandLines().first().startsWith(QStringLiteral("A drawn hand, and ")),
+              "mahjong riichi: a drawn hand names each seat ready or not, with its payment");
+        mahjongPaint(view);
+        view.deactivate();
+    }
+
+    // The end of the game gives each total and its final score.
+    QSettings().setValue(QStringLiteral("mahjong4/length"), QStringLiteral("east"));
+    {
+        MahjongTableProbe view;
+        view.resize(1200, 820);
+        view.advanceForShot(100000);
+        const std::array<int, mahjong::kSeats> finals = view.game().finalScores();
+        bool listed = view.game().over();
+        for (int s = 0; s < mahjong::kSeats; ++s) {
+            const int f = finals[std::size_t(s)];
+            listed = listed
+                && view.endOfHandLines().contains(QStringLiteral("%1: %2 points, final %3")
+                                                      .arg(seats[s])
+                                                      .arg(view.game().totals()[std::size_t(s)])
+                                                      .arg(f > 0 ? QStringLiteral("+%1").arg(f) : QString::number(f)));
+        }
+        check(listed, "mahjong riichi: the end of the game lists each total and its final score");
+        mahjongPaint(view);
+        view.deactivate();
+    }
+    QSettings().remove(QStringLiteral("mahjong4/ruleSet"));
+    QSettings().remove(QStringLiteral("mahjong4/length"));
 }
 
 // ---- holdLinePausesAndKeepsItsTable (GHUB-0237) ----
@@ -9591,6 +9899,7 @@ int main(int argc, char* argv[])
     mahjongPlaysAndKeepsItsPlace();
     mahjongTableWaitsAndKeepsItsPlace();
     mahjongTableKeepsItsCorner();
+    mahjongTableRiichi();
     holdLinePausesAndKeepsItsTable();
     runnerPausesAndKeepsItsTable();
     laneRunnerSteersAndSharesTheTable();

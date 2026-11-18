@@ -138,6 +138,9 @@ public:
 }
 ```
 
+GHUB-0244 § 4.2 replaced `dealerRepeats()` with `dealerKeepsDeal(const
+HandEnd&)`; where this spec names the first, the code reads the second.
+
 Hong Kong allows `Sets` and `ThirteenOrphans`, repeats the dealer, and sets
 `qualifying` to `total`. Its scoring reads `shape` where it read
 `thirteenOrphans`, and ignores the new flags. **`HongKongRules::fanList`
@@ -247,7 +250,7 @@ a kong. "Set laid down" excludes a concealed kong.
 | 6 | `MeldedHand` | Four sets laid down, won on a discard that pairs your last tile | Single wait |
 | 6 | `TwoDragonPungs` | Pungs of two dragons | Dragon pung† |
 | 4 | `OutsideHand` | A one, a nine or an honour in every element | — |
-| 4 | `FullyConcealed` | No set laid down, won on a tile you drew | Self-drawn†, Concealed hand† |
+| 4 | `FullyConcealed` | No set claimed, won on a tile you drew (GHUB-0244 § 4.7) | Self-drawn†, Concealed hand† |
 | 4 | `TwoMeldedKongs` | Two kongs, at least one claimed | Melded kong† |
 | 4 | `LastOfItsKind` | Won on a tile whose other three are already on view | — |
 | 2 | *`DragonPung`* | A pung of dragons, each | — |
@@ -481,7 +484,7 @@ creates. Each names the rule its fixture isolates.
 
 - **INV-12** — The menu lists both rule sets, Chinese Official is remembered,
   and a Chinese Official save restores.
-  *Test:* `tests/uitest.cpp`: the menu holds two entries; set Chinese Official,
+  *Test:* `tests/uitest.cpp`: the menu holds three entries since GHUB-0244; set Chinese Official,
   build a fresh view, assert it is in force; save mid-hand and restore into a
   fresh view, comparing `saveState()`.
   *Breaks when:* the setting or the save falls back to Hong Kong.

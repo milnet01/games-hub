@@ -1078,27 +1078,40 @@ one place and the card in another. Sort before the flights are built.
 
 ### Mahjong
 
-Four players, Hong Kong or Chinese Official rules. Core: `mahjongtable.*`,
-`mahjongrules.*`, `mahjongofficial.*`, `mahjongplayer.*`. View:
-`mahjongtableview.*` and `mahjongtablewords.cpp`. All in `src/mahjong/`,
-beside Mahjong Solitaire, whose tiles and art it shares. The contracts are
-`docs/specs/GHUB-0239-four-player-mahjong.md` and
-`docs/specs/GHUB-0243-chinese-official-mahjong.md`.
+Four players, Hong Kong, Chinese Official or Japanese Riichi rules. Core:
+`mahjongtable.*`, `mahjongrules.*`, `mahjongofficial.*`, `mahjongriichi.*`,
+`mahjongplayer.*`. View: `mahjongtableview.*` and `mahjongtablewords.cpp`.
+All in `src/mahjong/`, beside Mahjong Solitaire, whose tiles and art it
+shares. The contracts are `docs/specs/GHUB-0239-four-player-mahjong.md`,
+`docs/specs/GHUB-0243-chinese-official-mahjong.md` and
+`docs/specs/GHUB-0244-japanese-riichi-mahjong.md`.
 
 **A rule set is a `RuleSet`, and the table never asks which one it has.**
 `Hand` deals, draws and settles claims; the rule set says whether chows and
 bonus tiles are in play, which hand shapes win, what a hand needs to win, how
-it scores, who pays and whether the dealer repeats. Japanese Riichi
-(GHUB-0244) arrives as a new rule set, not as branches in `Hand`. **Every Hong
-Kong number lives in `HongKongRules`**: `fanValue`, `pointsFor`, `kMinimum`
-and `kLimit`. **Every Chinese Official value and exclusion lives in one row
-table in `mahjongofficial.cpp`**, one row per pattern, read by `fanValue`,
-`excludes` and `fanList()`. The rules text reads the values through
-`fanList()`, `limit()` and `points()` rather than keeping its own copy.
+it scores, who pays, whether the dealer keeps the deal (`dealerKeepsDeal`),
+and what a drawn hand and the game's end pay. **Every Hong Kong number lives
+in `HongKongRules`**: `fanValue`, `pointsFor`, `kMinimum` and `kLimit`.
+**Every Chinese Official value and exclusion lives in one row table in
+`mahjongofficial.cpp`**, one row per pattern, read by `fanValue`, `excludes`
+and `fanList()`. **Every Riichi value lives in `mahjongriichi.*`**: one row
+table of han concealed and open, and `RiichiRules`' constants,
+`basicPoints` and `tierFor`. The rules text reads the values through the rule
+set rather than keeping its own copy.
+
+**How the table plays, beyond scoring, is the rule set's `TableRules`**: one
+struct of plain values whose defaults are Hong Kong's. Riichi's dead wall,
+dora indicators, riichi stake, furiten, several winners, kong limits,
+no swap-calling, liability, starting points and length are fields there, so
+`Hand` and `Game` ask what to do and never which rule set they have. **The
+dead wall is the last fourteen tiles of the shuffled wall**, and a kong's
+replacement comes off its end, so the live wall shrinks by one per kong while
+the indicators keep fixed places. `Hand::doraIndicators()` says which places.
 
 **The minimum is read against `HandScore::qualifying`, not the total.**
-Chinese Official counts flowers in the total and not toward its 8 points, so
-a check against `total` offers a win the rules refuse.
+Chinese Official counts flowers in the total and not toward its 8 points, and
+Riichi counts dora in its han but needs a yaku without them, so a check
+against `total` offers a win the rules refuse.
 
 **The core names a scoring pattern by `Fan`; the view owns its words.**
 `MahjongTableView::fanName` and `fanMeaning`, both in `mahjongtablewords.cpp`,
@@ -1110,8 +1123,10 @@ fails the build, since both switches list every value.
 
 **A win is read every way the tiles allow, and the best reading scores.**
 `bestWin` tries every shape the rule set allows — sets and a pair, seven
-pairs, thirteen orphans, the knitted hands — every way the tiles split, and
-each part the winning tile could sit in, and asks the rule set to score each.
+pairs, seven different pairs, thirteen orphans, the knitted hands — every way
+the tiles split, and each part the winning tile could sit in, and asks the
+rule set to score each. The best is the one that pays most, then the one with
+the higher total: under Riichi more han can pay less than more minipoints.
 It also counts how many faces would have finished the hand, which the wait
 patterns read. The same call answers "may this seat win?" — at or above
 `minimumToWin()` — so the button offered and the score shown cannot
@@ -1122,12 +1137,14 @@ players chose; draws are not moves, since the wall decides them. A game is its
 hands. `Game::replay` plays every move back through `Hand::play`, which
 refuses anything not in `legalMoves()`, so a save no game could reach is
 refused whole. The totals, the dealer and the wind are never stored: they are
-what the replay gives.
+what the replay gives — and under Riichi so are the counters, the riichi
+sticks, the dora and furiten.
 
 **A claim waits for you, with no clock.** The computers answer a discard at
 once, but their answers stay hidden until every seat has answered, so
 answering first decides nothing. Win beats a pung or kong, which beats a
-chow; two wins go to the first seat after the discarder. Only a turn waits out
+chow; two wins go to the first seat after the discarder, except under Riichi,
+where every seat claiming Win wins. Only a turn waits out
 the computer's pause, `kAiPauseMs`, the same 0.95 seconds as Canasta's.
 
 **The computer plays toward the 3-fan minimum.** `chooseMove` reckons how many
@@ -1136,8 +1153,11 @@ one suit with honours, all pungs, dragons and its own winds. It claims a chow
 only when building one suit, since a chow costs the concealed hand's fan. It
 has one strength. **Under Chinese Official it plays the same way**: a complete
 hand that scores nothing else is a Chicken hand, worth the 8 needed, so its
-Hong Kong play wins there too. The self-test prints how many hands the computers win
-across six seeded East rounds; it requires one in five.
+Hong Kong play wins there too. **Under Riichi it attacks and does not
+defend** (GHUB-0256 is the defence): it declares riichi whenever it may, and
+claims a set only when the hand keeps a yaku it can finish, since an open
+hand with none cannot win. The self-test prints how many hands the computers
+win across its seeded games; it requires one in five.
 
 **Everything that matters is said on the table.** The last discard is drawn
 large and spelled out under the centre, with who took it for a set. Each

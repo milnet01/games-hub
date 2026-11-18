@@ -14,9 +14,8 @@
 // (GHUB-0244) plug in. No Qt and no words: the view owns every sentence.
 namespace mahjong {
 
-// Stored in settings and saves, so a value never changes meaning. 3 is kept
-// for GHUB-0244.
-enum class RuleSetId : std::uint8_t { HongKong = 1, ChineseOfficial = 2 };
+// Stored in settings and saves, so a value never changes meaning.
+enum class RuleSetId : std::uint8_t { HongKong = 1, ChineseOfficial = 2, JapaneseRiichi = 3 };
 
 // How the fourteen tiles make a winning hand (GHUB-0243 § 4.3). A rule set
 // says which it allows.
@@ -26,6 +25,7 @@ enum class Shape : std::uint8_t {
     ThirteenOrphans,   // one of each terminal and honour, one doubled
     KnittedStraight,   // a knitted straight, one set and a pair
     HonoursAndKnitted, // fourteen different singles: honours and knitted tiles
+    SevenDifferentPairs, // seven pairs, no two alike (GHUB-0244 § 4.3)
 };
 
 enum class SetKind : std::uint8_t { Chow, Pung, Kong };
@@ -136,22 +136,41 @@ enum class Fan : std::uint8_t {
     ClosedWait,
     SingleWait,
     Flower,
+    // Japanese Riichi, the yaku no earlier pattern already means (GHUB-0244
+    // § 4.7), then the two kinds of dora.
+    Riichi,
+    Ippatsu,
+    Pinfu,
+    DoubleRiichi,
+    SevenDifferentPairs,
+    HalfOutsideHand,
+    TwicePureDoubleChow,
+    FullOutsideHand,
+    BlessingOfMan,
+    BlessingOfEarth,
+    Dora,
+    UraDora,
 };
-constexpr int kFanCount = int(Fan::Flower) + 1;
+constexpr int kFanCount = int(Fan::UraDora) + 1;
 
 struct ScoreItem {
     Fan fan;
     int value;
 };
 
+// Japanese Riichi's named levels of a big hand (GHUB-0244 § 4.6).
+enum class Limit : std::uint8_t { None, Mangan, Haneman, Baiman, Sanbaiman, Yakuman };
+
 struct HandScore {
     std::vector<ScoreItem> items;
     int total = 0; // after the limit
     // The part of total the minimum is read against: Chinese Official leaves
-    // the flowers out of it.
+    // the flowers out of it, and Riichi the dora.
     int qualifying = 0;
     bool limit = false;
     int points = 0;
+    int fu = 0; // Riichi's minipoints after rounding; 0 where unused
+    Limit tier = Limit::None;
 };
 
 // Everything about how a hand was won that a rule set's scoring reads.
@@ -191,6 +210,41 @@ struct WinContext {
     // Who pays: the discarder, or the player whose kong was robbed. -1 when
     // the winner drew the tile.
     int payer = -1;
+    // Japanese Riichi (GHUB-0244).
+    bool riichi = false;
+    bool doubleRiichi = false;
+    bool ippatsu = false;
+    // Won before any claim or kong, and before the winner's first discard.
+    bool firstGoRound = false;
+    std::vector<Face> doraIndicators; // face up when the hand ended
+    std::vector<Face> uraIndicators;  // under them; empty unless riichi or double riichi
+    int counters = 0;
+    int liable = -1; // the seat liable for a big wind or dragon hand, else -1
+};
+
+// How the table plays under a rule set, beyond scoring (GHUB-0244 § 4.2).
+// Each default is how Hong Kong and Chinese Official play, so neither changes.
+struct TableRules {
+    int deadWall = 0;       // tiles kept back at the end of the wall
+    int startingPoints = 0; // each seat's total before the first hand
+    int fullGameRounds = 4; // winds a Full game plays
+    int mostKongs = 0;      // kongs declared in the deal, all seats together; 0 is no limit
+    int riichiStake = 0;    // 0: no riichi
+    bool doraIndicators = false;
+    bool furiten = false;
+    bool severalWinners = false;   // every seat claiming Win on a tile wins
+    bool kongsAfterADraw = false;  // concealed and added kongs only in a turn begun with a draw
+    bool addAHeldTile = false;     // an added kong may use any tile held, not only the one drawn
+    bool noSwapCalling = false;    // after a claim, not the claimed face nor the run's other end
+    bool robConcealedKong = false; // for Thirteen orphans only
+    bool liability = false;        // a seat feeding a big wind or dragon hand pays for it
+};
+
+// How a hand ended, for the dealer and the counters.
+struct HandEnd {
+    bool drawn = false;
+    bool dealerWon = false;   // the dealer is one of the winners
+    bool dealerReady = false; // at a drawn hand, the dealer is ready
 };
 
 class RuleSet
@@ -213,8 +267,15 @@ public:
     virtual std::array<int, 4> settle(const WinContext& win, const HandScore& s) const = 0;
     // Whether a hand of this shape may win at all.
     virtual bool shapeAllowed(Shape shape) const = 0;
-    // Whether the dealer keeps the deal after winning or after a drawn hand.
-    virtual bool dealerRepeats() const = 0;
+    virtual TableRules table() const { return {}; }
+    // Whether the dealer deals again after the hand that ended as `end`.
+    virtual bool dealerKeepsDeal(const HandEnd& end) const = 0;
+    // The counters on the table for the next hand.
+    virtual int countersAfter(int /*counters*/, const HandEnd& /*end*/) const { return 0; }
+    // What each seat gains or pays at a drawn hand; `ready` by seat.
+    virtual std::array<int, 4> settleDraw(const std::array<bool, 4>& /*ready*/) const { return {}; }
+    // The final scores from the totals once the game is over.
+    virtual std::array<int, 4> finalScores(const std::array<int, 4>& totals) const { return totals; }
 };
 
 // Hong Kong Old Style, § 4.4 and § 4.5: 3 fan to win, 10 the limit.
@@ -237,7 +298,7 @@ public:
     {
         return shape == Shape::Sets || shape == Shape::ThirteenOrphans;
     }
-    bool dealerRepeats() const override { return true; }
+    bool dealerKeepsDeal(const HandEnd& end) const override { return end.drawn || end.dealerWon; }
 
     // § 4.4's value for one pattern: every limit hand is worth the limit.
     static int fanValue(Fan fan);
@@ -262,9 +323,21 @@ std::optional<std::pair<WinContext, HandScore>> bestWin(const RuleSet& rules,
                                                         const std::vector<Meld>& melds,
                                                         WinContext how);
 
+// Every face that would complete a hand of `concealed` (one tile short) and
+// `melds` sets under any shape `rules` allows, the minimum aside. A face of
+// which the hand and its sets already hold all four is not one.
+std::vector<Face> waitingTiles(const RuleSet& rules, const std::vector<Face>& concealed,
+                               const std::vector<Meld>& melds);
+
+// Whether every reading of `concealed` as `needed` sets and a pair holds a
+// pung of `tile` -- false when there is no such reading.
+bool pungInEveryReading(const std::vector<Face>& concealed, int needed, Face tile);
+
 // Whether `tile` is a dragon, wind, or a one or nine of a numbered suit.
 bool isHonour(Face tile);
 bool isTerminal(Face tile);
 bool isNumbered(Face tile);
+// The green dragon, and the 2, 3, 4, 6 and 8 of bamboo: All green's tiles.
+bool isGreen(Face tile);
 
 } // namespace mahjong

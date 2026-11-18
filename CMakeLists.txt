@@ -193,6 +193,7 @@ set(GAME_CORE_SOURCES
     src/mahjong/mahjongboard.cpp
     src/mahjong/mahjongrules.cpp
     src/mahjong/mahjongofficial.cpp
+    src/mahjong/mahjongriichi.cpp
     src/mahjong/mahjongtable.cpp
     src/mahjong/mahjongplayer.cpp
     src/holdline/holdlinefield.cpp

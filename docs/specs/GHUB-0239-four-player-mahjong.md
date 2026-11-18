@@ -151,19 +151,22 @@ the back. Then the player discards one tile, declares a win, or makes a kong.
 **Priority: Win beats Kong and Pung, which beat Chow.** Two Win claims go to
 the first seat after the discarder in turn order. After a Pung or Kong claim
 the turn jumps to the claimer, skipping any seat between. A claimed set is
-laid face up and is no longer concealed.
+laid face up and is no longer concealed. Under Japanese Riichi every seat
+claiming Win wins (GHUB-0244 § 4.5).
 
 **Robbing a kong.** A player may add only the tile just drawn to their pung,
-never a copy already held. Any other seat whose hand that tile completes may
+never a copy already held; Riichi lets any tile held be added (GHUB-0244
+§ 4.4). Any other seat whose hand that tile completes may
 win on it. Only Win may be claimed.
 
 **A winning hand** is four sets (chow, pung or kong) and a pair, or Thirteen
 Orphans (§ 4.4). Seven pairs is not a winning hand in Hong Kong rules. The
 rule set says which shapes win: GHUB-0243 § 4.3 adds the Chinese Official
-ones.
+ones, and GHUB-0244 § 4.3 the Riichi ones.
 
 **A drawn hand.** The wall keeps no reserve. When it is empty and the last
-discard is not claimed for a win, the hand is drawn. No points move.
+discard is not claimed for a win, the hand is drawn. No points move. Riichi
+keeps a dead wall and pays the ready seats (GHUB-0244 § 4.3, § 4.6).
 
 **The deal and the dealer.** East deals. Each player starts with thirteen
 tiles, and East draws first. The dealer keeps the deal after the dealer wins,
@@ -267,7 +270,8 @@ points table come from there too.
 **The core names a pattern by `Fan`; the view owns its words.** The view maps
 each `Fan` to a `tr()` sentence, so the core carries no display text. The
 interface holds what Hong Kong needs. GHUB-0243 and GHUB-0244 extend it where
-their rules need more — Riichi's declaration and dora are not designed here.
+their rules need more — Riichi's declaration and dora are not designed here;
+GHUB-0244 § 4.2 designs them.
 
 **Settings**, read and written as `CanastaView` does with `QSettings`:
 
@@ -359,7 +363,8 @@ creates. Each names the rule its fixture isolates.
 
 - **INV-1** — Every tile is somewhere, once. At every step of a hand, the wall,
   the four hands, the claimed sets, the bonus tiles set aside and the discard
-  pools together hold exactly `fullSet()`.
+  pools together hold exactly the tiles the rule set plays with: `fullSet()`,
+  less the flowers and seasons under Riichi (GHUB-0244 INV-8).
   *Test:* `tests/selftest.cpp`, a block playing seeded four-computer hands and
   checking the count after every move. The fixture isolates the bookkeeping
   rule: every move it plays is legal, so only a tile counted twice or lost can
@@ -367,7 +372,8 @@ creates. Each names the rule its fixture isolates.
   *Breaks when:* a claimed discard stays in the pool as well as joining a set.
 
 - **INV-2** — Claims are settled Win, then Kong or Pung, then Chow; two Win
-  claims go to the first seat after the discarder.
+  claims go to the first seat after the discarder, under Hong Kong and Chinese
+  Official (Riichi: GHUB-0244 INV-11).
   *Test:* `tests/selftest.cpp`, a block with set-up hands. Seat 0 discards a
   tile that seat 1 can chow and seat 3 can pung: seat 3 takes it. Seats 2 and 3
   can both win on a discard by seat 0: seat 2 takes it. Each claim is first
@@ -410,7 +416,8 @@ creates. Each names the rule its fixture isolates.
   the Robbing a kong item.
   *Breaks when:* an added kong is final, or offers a pung.
 
-- **INV-8** — An empty wall with no win draws the hand: no points move and,
+- **INV-8** — An empty wall with no win draws the hand: no points move (Riichi
+  pays the ready seats: GHUB-0244 INV-12) and,
   under Hong Kong, the dealer keeps the deal (Chinese Official passes it:
   GHUB-0243 INV-9).
   *Test:* `tests/selftest.cpp`, a seeded hand played to an empty wall with every
@@ -438,9 +445,8 @@ creates. Each names the rule its fixture isolates.
   to Hong Kong, and the menu lists only rule sets this build has.
   *Test:* `tests/uitest.cpp`: set `mahjong4/ruleSet` to an unknown value, build
   the view, and assert Hong Kong is in force and the menu holds the rule sets
-  this build has — two since GHUB-0243.
-  *Breaks when:* the menu lists a rule set the build does not have, such as
-  Japanese Riichi before GHUB-0244 ships it.
+  this build has — three since GHUB-0244.
+  *Breaks when:* the menu lists a rule set the build does not have.
 
 - **INV-12** — Mahjong Solitaire looks exactly as before the tile art moved.
   *Test:* a `--shot` of `--game "Mahjong Solitaire" --seed 1` before the move

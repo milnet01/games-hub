@@ -1,6 +1,7 @@
 #include "mahjongrules.h"
 
 #include "mahjongofficial.h"
+#include "mahjongriichi.h"
 
 #include <algorithm>
 
@@ -17,6 +18,16 @@ bool isTerminal(Face tile)
     const Suit s = suitOf(tile);
     const bool numbered = s == Suit::Circles || s == Suit::Bamboo || s == Suit::Characters;
     return numbered && (rankOf(tile) == 1 || rankOf(tile) == 9);
+}
+
+bool isGreen(Face t)
+{
+    if (t == kDragonFirst + 1)
+        return true;
+    if (suitOf(t) != Suit::Bamboo)
+        return false;
+    const int r = rankOf(t);
+    return r == 2 || r == 3 || r == 4 || r == 6 || r == 8;
 }
 
 bool isNumbered(Face f)
@@ -111,9 +122,12 @@ bool isThirteenOrphans(const Counts& c)
     return total == 14 && all == 14;
 }
 
+// Points first: under Riichi a reading with more han can pay less than one
+// with more minipoints, and the book takes the higher-scoring (GHUB-0244
+// § 4.2). Under the other rule sets points never fall as the total rises.
 bool better(const HandScore& a, const HandScore& b)
 {
-    return a.total != b.total ? a.total > b.total : a.points > b.points;
+    return a.points != b.points ? a.points > b.points : a.total > b.total;
 }
 
 } // namespace
@@ -346,7 +360,8 @@ std::array<int, 4> HongKongRules::settle(const WinContext& win, const HandScore&
 
 const std::vector<RuleSetId>& ruleSets()
 {
-    static const std::vector<RuleSetId> all { RuleSetId::HongKong, RuleSetId::ChineseOfficial };
+    static const std::vector<RuleSetId> all { RuleSetId::HongKong, RuleSetId::ChineseOfficial,
+                                              RuleSetId::JapaneseRiichi };
     return all;
 }
 
@@ -362,9 +377,11 @@ const RuleSet& ruleSet(RuleSetId id)
 {
     static const HongKongRules hongKong;
     static const ChineseOfficialRules chineseOfficial;
+    static const RiichiRules riichi;
     switch (id) {
     case RuleSetId::HongKong: return hongKong;
     case RuleSetId::ChineseOfficial: return chineseOfficial;
+    case RuleSetId::JapaneseRiichi: return riichi;
     }
     return hongKong;
 }
@@ -437,6 +454,11 @@ bool isSevenPairs(const Counts& c)
     return std::all_of(c.begin(), c.end(), [](int n) { return n % 2 == 0; });
 }
 
+bool isSevenDifferentPairs(const Counts& c)
+{
+    return tileCount(c) == 14 && std::all_of(c.begin(), c.end(), [](int n) { return n == 0 || n == 2; });
+}
+
 bool holdsAll(const Counts& c, const std::array<Face, 9>& tiles)
 {
     return std::all_of(tiles.begin(), tiles.end(), [&c](Face t) { return c[t] > 0; });
@@ -463,6 +485,8 @@ bool complete(const RuleSet& rules, const Counts& c, int melds)
     if (rules.shapeAllowed(Shape::Sets) && setsComplete(c, needed))
         return true;
     if (melds == 0 && rules.shapeAllowed(Shape::SevenPairs) && isSevenPairs(c))
+        return true;
+    if (melds == 0 && rules.shapeAllowed(Shape::SevenDifferentPairs) && isSevenDifferentPairs(c))
         return true;
     if (melds == 0 && rules.shapeAllowed(Shape::ThirteenOrphans) && isThirteenOrphans(c))
         return true;
@@ -567,6 +591,12 @@ std::optional<std::pair<WinContext, HandScore>> bestWin(const RuleSet& rules,
         ctx.shape = Shape::SevenPairs;
         readings.push_back(ctx);
     }
+    if (melds.empty() && rules.shapeAllowed(Shape::SevenDifferentPairs) && isSevenDifferentPairs(c)) {
+        WinContext ctx = how;
+        ctx.shape = Shape::SevenDifferentPairs;
+        ctx.winningIn = -1; // a pair wait, always
+        readings.push_back(ctx);
+    }
     if (melds.empty() && rules.shapeAllowed(Shape::ThirteenOrphans) && isThirteenOrphans(c)) {
         WinContext ctx = how;
         ctx.shape = Shape::ThirteenOrphans;
@@ -637,6 +667,61 @@ std::optional<std::pair<WinContext, HandScore>> bestWin(const RuleSet& rules,
             best = std::make_pair(ctx, std::move(s));
     }
     return best;
+}
+
+std::vector<Face> waitingTiles(const RuleSet& rules, const std::vector<Face>& concealed,
+                               const std::vector<Meld>& melds)
+{
+    std::vector<Face> waits;
+    if (int(concealed.size()) != (4 - int(melds.size())) * 3 + 1)
+        return waits;
+    Counts c {};
+    for (Face t : concealed) {
+        if (t == 0 || t >= kFlowerFirst)
+            return waits;
+        ++c[t];
+    }
+    Counts held = c;
+    for (const Meld& m : melds) {
+        std::vector<Face> tiles;
+        addMeldTiles(tiles, m);
+        for (Face t : tiles)
+            ++held[t];
+    }
+    for (Face f = 1; f < kFlowerFirst; ++f) {
+        if (held[f] >= 4)
+            continue;
+        ++c[f];
+        if (complete(rules, c, int(melds.size())))
+            waits.push_back(f);
+        --c[f];
+    }
+    return waits;
+}
+
+bool pungInEveryReading(const std::vector<Face>& concealed, int needed, Face tile)
+{
+    Counts c {};
+    for (Face t : concealed)
+        if (t > 0 && t < kFlowerFirst)
+            ++c[t];
+    bool any = false;
+    for (Face pair = 1; pair < kFlowerFirst; ++pair) {
+        if (c[pair] < 2)
+            continue;
+        c[pair] -= 2;
+        std::vector<std::vector<Meld>> found;
+        std::vector<Meld> sets;
+        decompose(c, sets, needed, found);
+        c[pair] += 2;
+        for (const std::vector<Meld>& reading : found) {
+            any = true;
+            const Meld pung { SetKind::Pung, tile, true };
+            if (std::find(reading.begin(), reading.end(), pung) == reading.end())
+                return false;
+        }
+    }
+    return any;
 }
 
 } // namespace mahjong

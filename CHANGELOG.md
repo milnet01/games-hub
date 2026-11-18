@@ -12,6 +12,20 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Mahjong: Japanese Riichi rules** (GHUB-0244)
+  The European Mahjong Association's riichi rules join the Rule set menu.
+  The tiles have no flowers, and fourteen stay back as a dead wall that
+  shows the dora: bonus tiles that add to a win. A hand needs at least one
+  named pattern, a yaku, to win. Call "riichi" when one tile from winning
+  with nothing claimed: you stake 1,000 points and must throw every tile
+  you draw unless it wins. You cannot win on a thrown tile you have
+  already thrown or let pass. Wins pay from han and minipoints, several
+  players may win on one tile, and a drawn hand pays the players who were
+  ready. Everyone starts on 30,000 points; a full game is the East and
+  South rounds, and the final scores add a bonus by place. The computers
+  declare riichi too. Riichi, the dora, and why you cannot win are all
+  written on the table.
+
 - **Mahjong: Chinese Official rules** (GHUB-0243)
   The tournament rules join Hong Kong in Mahjong's Rule set menu. A hand
   needs 8 points to win, scored from 81 named patterns; flowers count a

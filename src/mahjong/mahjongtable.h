@@ -31,7 +31,10 @@ enum class Action : std::uint8_t {
     AddedKong,
     Win,
     Pass,
+    Riichi, // declare riichi and throw `tile` (GHUB-0244 § 4.4)
 };
+// The last Action, the bound a stored move is read against.
+constexpr Action kLastAction = Action::Riichi;
 
 struct Move {
     std::uint8_t seat = 0;
@@ -60,11 +63,33 @@ struct SeatTiles {
     Face drawn = 0;
 };
 
+// What a hand is told when it starts (GHUB-0244 § 4.6). Points, not sticks.
+struct HandStart {
+    std::array<int, kSeats> totals {};
+    int counters = 0;
+    int sticks = 0; // riichi stakes left on the table, in points
+};
+
 struct HandResult {
     bool drawn = false; // the wall ran out with nobody out
+    // The first winner after the discarder, or the only one.
     WinContext win;
     HandScore score;
+    // Each seat's net change over the whole hand: every winner's payment, the
+    // riichi stakes and the sticks taken.
     std::array<int, kSeats> payments {};
+    // Every other seat that won the same tile, in turn order.
+    std::vector<std::pair<WinContext, HandScore>> alsoWon;
+    std::array<bool, kSeats> ready {}; // at a drawn hand, by seat
+    int sticksAfter = 0;               // in points
+};
+
+// Why a seat may not win on a thrown tile (GHUB-0244 § 4.5).
+enum class Furiten : std::uint8_t {
+    None,
+    OwnDiscard,        // it threw a tile it now waits on
+    Passed,            // it let a winning tile go since its last draw
+    PassedAfterRiichi, // it let one go after declaring riichi
 };
 
 class Hand
@@ -73,14 +98,16 @@ public:
     // A fresh hand: the wall built and shuffled from `seed`, thirteen tiles
     // each, bonus tiles replaced, and the dealer's first draw made.
     // `prevailingWind` is 1 for east to 4 for north.
-    Hand(const RuleSet& rules, std::uint32_t seed, int dealer, int prevailingWind);
+    Hand(const RuleSet& rules, std::uint32_t seed, int dealer, int prevailingWind, const HandStart& start = {});
 
     // For a test: the four hands as given (a bonus tile among them set aside),
     // the wall to draw from in order (front first), and `toMove` to act with
     // the tiles it holds. Not a hand a game deals -- the tile count is the
-    // test's business.
+    // test's business. The wall's last tiles are its dead wall, laid out as a
+    // dealt one is (see doraIndicators()).
     static Hand arranged(const RuleSet& rules, const std::array<std::vector<Face>, kSeats>& hands,
-                         std::vector<Face> wall, int toMove, int dealer, int prevailingWind);
+                         std::vector<Face> wall, int toMove, int dealer, int prevailingWind,
+                         const HandStart& start = {});
 
     const RuleSet& rules() const { return *m_rules; }
     std::uint32_t seed() const { return m_seed; }
@@ -109,7 +136,26 @@ public:
     Action lastClaim() const { return m_lastClaim; }
 
     const SeatTiles& seat(int s) const { return m_seats[std::size_t(s)]; }
-    int wallLeft() const { return std::max(0, m_back - m_front + 1); }
+    // The live wall: the tiles still to be drawn, the dead wall aside.
+    int wallLeft() const { return std::max(0, m_back - m_front + 1 - m_table.deadWall); }
+
+    const HandStart& start() const { return m_start; }
+    // Riichi stakes on the table now, in points.
+    int sticks() const { return m_sticks; }
+    // Whether `seat` has declared riichi, and where in its pool the tile it
+    // declared with lies (or the next one, if that tile was claimed).
+    bool riichi(int seat) const { return m_riichi[std::size_t(seat)]; }
+    std::size_t riichiAt(int seat) const { return m_riichiAt[std::size_t(seat)]; }
+    // Every tile `seat` has thrown this hand, claimed ones too.
+    const std::vector<Face>& thrown(int seat) const { return m_thrown[std::size_t(seat)]; }
+    Furiten furiten(int seat) const;
+    // The dora indicators face up now, and the ura indicators under them.
+    // Counted from the wall's last tile as built: the 5th is the dora
+    // indicator and the 6th its ura; the 7th, 9th, 11th and 13th the kan dora
+    // indicators and the tiles after each their ura. The 1st to 4th are the
+    // kongs' replacements.
+    std::vector<Face> doraIndicators() const;
+    std::vector<Face> uraIndicators() const;
 
     // Every move `seat` may make now; empty when nothing is theirs to make.
     // A claim's list always ends in Pass.
@@ -142,10 +188,24 @@ private:
     void openClaims();
     void passOn();
     void settleClaims();
+    void openRob(int seat, Face tile, bool concealedKong);
     void settleRob();
     void finishKong(int seat);
-    void win(int seat, Face tile, int payer, bool robbing);
+    // Who answered Win, in turn order after `from`: all of them where the
+    // rule set lets several win, else the first.
+    std::vector<int> winners(int from) const;
+    void finish(const std::vector<int>& winners, Face tile, int payer, bool robbing);
     void drawHand();
+    // Furiten: every seat the tile on offer completed and that did not win.
+    void notePassed();
+    // The riichi stake of a declaration nobody won on moves to the table.
+    void stake();
+    void noteLiability(int seat, int from);
+    bool mayWinOn(int seat) const;
+    bool kongRoom() const;
+    bool riichiKong(int seat, Face tile) const;
+    // Whether a seat holding `rest` after a claim would have a tile to throw.
+    bool canThrowAfter(const std::vector<Face>& rest, const std::vector<Face>& barred) const;
     WinContext contextFor(int seat) const;
     // How many of `tile` lie face up: in the pools and in sets laid down. A
     // concealed kong is face down and does not count.
@@ -153,6 +213,8 @@ private:
     std::vector<Move> turnMoves(int seat) const;
 
     const RuleSet* m_rules = nullptr;
+    TableRules m_table;
+    HandStart m_start;
     std::uint32_t m_seed = 0;
     int m_dealer = 0;
     int m_prevailing = 1;
@@ -179,6 +241,24 @@ private:
     int m_kongs = 0;
     bool m_afterKong = false;
     bool m_drewBonus = false; // the last drawInto set a bonus tile aside
+    bool m_pastFirstRound = false; // an arranged hand starts past it
+
+    // Japanese Riichi (GHUB-0244).
+    using SeatFlags = std::array<bool, kSeats>;
+    int m_revealed = 0; // dora indicators face up
+    int m_sticks = 0;
+    std::array<int, kSeats> m_stakes {}; // staked this hand, by seat
+    int m_pendingStake = -1;             // the seat whose declaring throw is on offer
+    SeatFlags m_riichi {};
+    SeatFlags m_doubleRiichi {};
+    SeatFlags m_ippatsu {};
+    std::array<std::size_t, kSeats> m_riichiAt {};
+    std::array<std::vector<Face>, kSeats> m_thrown {};
+    SeatFlags m_completes {}; // the tile on offer completes this seat's hand
+    SeatFlags m_passed {};
+    SeatFlags m_passedAfterRiichi {};
+    std::array<int, kSeats> m_liable { -1, -1, -1, -1 };
+    std::vector<Face> m_barred; // faces the seat that just claimed may not throw
 
     std::vector<Move> m_moves;
     HandResult m_result;
@@ -191,8 +271,8 @@ struct HandRecord {
     std::vector<Move> moves;
 };
 
-// A game: hands until the deal has gone round once (an East round) or four
-// times (a full game), with running totals.
+// A game: hands until the deal has gone round once (an East round) or as many
+// times as the rule set's full game plays, with running totals.
 class Game
 {
 public:
@@ -206,6 +286,11 @@ public:
     int prevailingWind() const { return std::min(kSeats, m_dealsPassed / kSeats + 1); }
     int dealsPassed() const { return m_dealsPassed; }
     const std::array<int, kSeats>& totals() const { return m_totals; }
+    // The counters and the riichi sticks on the table for the next hand.
+    int counters() const { return m_counters; }
+    int sticks() const { return m_sticks; }
+    // The totals as the rule set scores them once the game is over.
+    std::array<int, kSeats> finalScores() const;
     const std::vector<HandResult>& results() const { return m_results; }
     bool over() const;
     // The seats on the highest total once the game is over: one, or several
@@ -235,6 +320,8 @@ private:
     int m_dealer = 0;
     int m_dealsPassed = 0;
     std::array<int, kSeats> m_totals {};
+    int m_counters = 0;
+    int m_sticks = 0;
     std::vector<HandResult> m_results;
     std::vector<HandRecord> m_finished;
     std::optional<Hand> m_hand;
