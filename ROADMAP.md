@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=255 -->
+<!-- ants-roadmap-id-high-water: GHUB=256 -->
 
 # Games Hub — Roadmap
 
@@ -10195,6 +10195,17 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** Tidy-up: the two runner games draw their score boxes and end-of-run panel with copied code; share one copy so a fix reaches both.
   Kind: refactor.
   Source: self-review-2026-11-16.
+
+- 📋 [GHUB-0256] **Mahjong: the computer defends under Riichi rules.**
+  GHUB-0244's computer attacks only: it declares riichi and aims for a
+  hand with a yaku. The owner chose attack now, defence later, on
+  2026-11-18. This adds safe-tile play once an opponent has declared
+  riichi: tiles already discarded by that player, and tiles their
+  discards make unlikely to win for them.
+  **Layman:** Once a player declares ready under Japanese rules, the computers stop throwing tiles that player is likely waiting on.
+  Kind: enhancement.
+  Source: user-decision-2026-11-18.
+  Blocked-by: GHUB-0244.
 
 ## P01 — Shipped
 
