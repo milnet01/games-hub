@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # GHUB-0244 — Japanese Riichi rules for four-player Mahjong
 
-**Status:** spec draft (2026-11-18).
+**Status:** accepted (2026-11-18).
 **Kind:** feature.
 **Source:** ROADMAP GHUB-0244 (user-request-2026-11-11; the owner's decisions
 of 2026-11-18, recorded in § 3).
@@ -100,7 +100,7 @@ It replaces the 2016 edition.
 | `TableRules`, the new `RuleSet` members, `Shape::SevenDifferentPairs`, `waitingTiles` | `src/mahjong/mahjongrules.*` | core |
 | The dead wall, riichi, furiten, several winners, counters and sticks, the game's length and end | `src/mahjong/mahjongtable.*` | core |
 | The computer's riichi and yaku aims | `src/mahjong/mahjongplayer.*` | core |
-| `fanName` and `fanMeaning` for the new `Fan` values | `src/mahjong/mahjongtablewords.cpp` | view |
+| `fanName` and `fanMeaning` for the new `Fan` values, and `FullyConcealed`'s sentence | `src/mahjong/mahjongtablewords.cpp` | view |
 | The menu label, the table words, the rules text, the save bound | `src/mahjong/mahjongtableview.*` | view |
 
 ### 4.2 The interface
@@ -120,7 +120,7 @@ struct TableRules {
     int deadWall = 0;           // tiles kept back at the end of the wall
     int startingPoints = 0;     // each seat's total before the first hand
     int fullGameRounds = 4;     // winds a Full game plays
-    int mostKongs = 0;          // kongs a hand may hold in all; 0 is no limit
+    int mostKongs = 0;          // kongs declared in the deal, all seats together; 0 is no limit
     int riichiStake = 0;        // 0: no riichi
     bool doraIndicators = false;
     bool furiten = false;
@@ -155,7 +155,7 @@ struct WinContext {
     // Won before any claim or kong, and before the winner's first discard.
     bool firstGoRound = false;
     std::vector<Face> doraIndicators; // face up when the hand ended
-    std::vector<Face> uraIndicators;  // under them; empty unless riichi
+    std::vector<Face> uraIndicators;  // under them; empty unless riichi or double riichi
     int counters = 0;
     int liable = -1;                  // the seat liable under § 4.6, else -1
 };
@@ -193,7 +193,20 @@ struct HandResult {
 // Every face that would complete a hand of `concealed` (one tile short) and
 // `melds` sets under any shape `rules` allows, the minimum aside. A face of
 // which the hand and its sets already hold all four is not one (book § 3.3.8).
-std::vector<Face> waitingTiles(const RuleSet& rules, const std::vector<Face>& concealed, int melds);
+std::vector<Face> waitingTiles(const RuleSet& rules, const std::vector<Face>& concealed,
+                               const std::vector<Meld>& melds);
+
+// The riichi rules files.
+class RiichiRules : public RuleSet {
+public:
+    // ... every RuleSet member, and:
+    // A yakuman item's value: above any han a § 4.7 row carries.
+    static constexpr int kYakuman = 100;
+    // The han a § 4.7 row scores with a set claimed; 0 for a concealed-only row.
+    static int openValue(Fan fan);
+    // § 4.6's basic points for `han` and the rounded `fu`; 8,000 when `han` is kYakuman.
+    static int basicPoints(int han, int fu);
+};
 }
 ```
 
@@ -215,6 +228,9 @@ minipoints; the book always takes the highest-scoring reading (§ 3.4.3).
 ### 4.3 The wall and the dora
 
 **136 tiles.** `bonusTilesInPlay()` is false and `chowAllowed()` true.
+`shapeAllowed` allows `Sets`, `SevenDifferentPairs` and `ThirteenOrphans`.
+Chinese Official's `shapeAllowed`, which allows every shape today, refuses
+`SevenDifferentPairs`.
 
 **The dead wall is the last `deadWall` tiles of the shuffled wall.**
 `wallLeft()` counts the live wall only: the tiles between the front and the
@@ -223,10 +239,11 @@ so the live wall shrinks by one with each kong. That is the book's "the last
 tile in the wall becomes part of the dead wall" (§ 3.3.4). Where it sits in
 the shuffle changes nothing, since the shuffle is uniform.
 
-**Fixed places, counted from the back of the wall** (book § 2.6, § 2.7):
+**Fixed places, counted from the wall's last tile as built** (book § 2.6,
+§ 2.7). They do not move as replacements are drawn:
 
-| From the back | Holds |
-|---------------|-------|
+| From the last tile | Holds |
+|--------------------|-------|
 | 1st to 4th | the replacement tiles, 1st first |
 | 5th | the dora indicator |
 | 6th | its ura indicator |
@@ -267,14 +284,15 @@ tile remains in the live wall. A seat's total does not limit it (§ 3).
   when the drawn tile is the fourth of a concealed pung, the waiting tiles
   do not change, and in every winning hand those three tiles are a pung.
 - **Ippatsu** stands from the declaration to the seat's next discard. Any
-  claim of a set, or any kong, by anyone ends it (book § 4.2.1).
+  claim of a set, or any kong that stands, ends it; an added kong that is
+  robbed does not (book § 4.2.1).
 - **Double riichi**: a declaration on the seat's first discard, with no claim
   or kong before it (book § 4.2.2).
 
 **Kongs** (book § 3.3.4, § 3.3.5). A concealed or added kong only in a turn
 that began with a draw (`kongsAfterADraw`). An added kong may use the fourth
-tile from the hand, not only the one just drawn (`addAHeldTile`). No kong past
-the fourth in a hand (`mostKongs`).
+tile from the hand, not only the one just drawn (`addAHeldTile`). No fifth
+kong in a deal, counting every seat's (`mostKongs`).
 
 **No swap-calling** (book § 3.3.2). After claiming a tile, the seat may not
 throw that face. After a chow, it may not throw the face that would make the
@@ -299,7 +317,8 @@ robbed kong, while any of these holds:
   the end of the hand.
 
 A furiten seat may still win on a tile it draws. `Hand::furiten(seat)`
-answers for the view.
+answers for the view, and says which of the three holds, so § 4.11 can pick
+its sentence.
 
 **Several winners** (book § 3.3.1, § 4.1). Every seat that answers Win on one
 tile wins it, the discarder paying each. `HandResult::win` and `score` stay
@@ -320,8 +339,9 @@ above 1,900 it is 2,000. At 5 han and over:
 | — | Yakuman | 8,000 |
 
 There is no count to yakuman: 13 han is Sanbaiman. `HandScore::points` is the
-basic points, and 0 when the hand has no yaku. `total` is the han with the
-dora; `qualifying` is the han without them; `minimumToWin()` is 1.
+basic points, and 0 when the hand has no yaku. Below yakuman (§ 4.8 step 1),
+`total` is the han with the dora and `qualifying` the han without them.
+`minimumToWin()` is 1.
 
 **Who pays** (§ 4.1.2), each payment rounded up to the next 100:
 
@@ -355,16 +375,20 @@ After a drawn hand the sticks stay. `Hand` is told the counters, the sticks
 and the totals when it starts, through a `HandStart` argument to its
 constructor and to `Hand::arranged`, defaulting to none of each.
 
-`HandResult::payments` includes the stakes and the sticks taken, and
+`HandResult::payments` is each seat's net change over the whole hand: every
+winner's payment, the stakes and the sticks taken. `Game` adds it to the
+totals, as now, and
 `HandResult::sticksAfter` holds what is left on the table. **Across every
 hand, the four totals plus the sticks sum to four times 30,000.**
 
 ### 4.7 The yaku
 
 Han concealed, han with a set claimed, the `Fan`, and what it means. A `Fan`
-in *italics* is an existing one, reused because its sentence is already true
-here (GHUB-0243 § 3, one word per meaning); its Means cell is the sentence it
-already has, unchanged. "—" in the open column: concealed
+in *italics* is an existing one, reused because it means the same here
+(GHUB-0243 § 3, one word per meaning); its Means cell says its sentence
+briefly. One sentence changes for every rule set: `FullyConcealed`'s becomes
+"No set claimed, and won on a tile you drew.", since a concealed kong is laid
+down yet claims nothing. "—" in the open column: concealed
 hands only. "Pung" includes a kong. The meanings are the book's § 4.2,
 reworded plainly.
 
@@ -424,11 +448,13 @@ Seven different pairs, as the book says.
 
 `RiichiRules::score` counts one reading.
 
-1. **A yakuman reading** scores its yakuman items alone: tier `Yakuman`, no
-   han, no dora. Two yakuman pay as one (§ 4.2: not cumulative).
+1. **A yakuman reading** scores its yakuman items alone, with no dora: tier
+   `Yakuman`, `total` and `qualifying` both `kYakuman`, so it may win, and
+   `points` 8,000. Two yakuman pay as one (§ 4.2: not cumulative).
 2. **Otherwise the yaku**, by § 4.7, concealed or open by
-   `WinContext::claimedASet`. On a discard, the set the winning tile finishes
-   counts as claimed (§ 4.2), as `bestWin` already does. Struck: `Riichi`
+   `WinContext::claimedASet`. A win on a discard leaves the hand concealed;
+   only the pung the winning tile finishes counts as claimed (book § 4.2),
+   as `bestWin` already marks it. Struck: `Riichi`
    beside `DoubleRiichi`; `LastTile` beside `KongReplacement`;
    `PureDoubleChow` beside `TwicePureDoubleChow`.
 3. **No yaku, no win**: `qualifying` 0 and `points` 0.
@@ -521,10 +547,13 @@ yaku and outside furiten, so it never makes a false call.
   the placement bonus ("You: 41,300 points, final +26,300").
 - **The rules text** reads the rule set in force. For Riichi: the tiles with
   no flowers, the dead wall and dora, riichi, furiten, a yaku needed to win,
-  the yaku by han with their open values from `RiichiRules`, minipoints and
-  the points table, who pays, counters, sticks, the dealer and the game's
-  end. Every value comes from `RiichiRules`, as GHUB-0249 has the Hong Kong
-  points table come from the rule set.
+  the yaku by han with their open values from `RiichiRules::openValue`,
+  minipoints and the points table from `RiichiRules::basicPoints`, who pays,
+  counters, sticks, the dealer and the game's end. Every value comes from
+  `RiichiRules`, as GHUB-0249 has the Hong Kong points table come from the
+  rule set. The shared "How it plays" sentences that state a Hong Kong rule
+  — the flowers, two wins going to one player, adding only the tile just
+  drawn, a drawn hand moving no points — follow the rule set in force too.
 - **Words.** Each new sentence goes through `tr()`. The book's Japanese names
   — riichi, dora, furiten, han, fu, mangan, yakuman — are used where the rules
   text defines them in plain words first.
@@ -563,7 +592,7 @@ creates. Each names the rule its fixture isolates. The self-test blocks build
 their positions with `Hand::arranged`.
 
 - **INV-1** — `RiichiRules::fanList()` holds exactly § 4.7's rows and its
-  yakuman, with their han, and `RiichiRules`' open values match the Open
+  yakuman, with their han, and `RiichiRules::openValue` matches the Open
   column; every new `Fan` has a non-empty `fanName` and `fanMeaning`.
   *Test:* `tests/selftest.cpp` checks each row's values; `tests/uitest.cpp`
   checks the words for every `Fan`.
@@ -629,9 +658,10 @@ their positions with `Hand::arranged`.
   live wall's end.
 
 - **INV-9** — Furiten refuses a win on a thrown tile and only that.
-  *Test:* `tests/selftest.cpp`, one seat waiting on 3 and 6 of bamboo. Having
-  thrown a 6 that another seat claimed, it is offered no Win on a thrown 3,
-  and is offered Win on a drawn 3. Having passed a 3 with no yaku, it is
+  *Test:* `tests/selftest.cpp`, one seat waiting on 3 and 6 of bamboo, with a
+  yaku on a thrown 6 and none on a thrown 3. Having
+  thrown a 3 that another seat claimed, it is offered no Win on a thrown 6,
+  and is offered Win on a drawn 6. Having passed a 3 with no yaku, it is
   refused a 6 thrown before its next draw, and offered one after it. Having
   passed a 3 after riichi, it is refused every thrown winning tile to the end.
   *Breaks when:* claimed throws are left out, or temporary furiten never ends.
@@ -641,8 +671,9 @@ their positions with `Hand::arranged`.
   offered `Action::Riichi` with each ready-keeping throw and no other. The
   same hand with a chow claimed, or with the live wall empty, is offered none.
   After the declaration its only discard is the drawn tile, and a thrown tile
-  offers it Win and Pass only. A win on the declaring throw leaves the
-  declarer's total and the sticks as they were. A win before the declarer's
+  offers it Win and Pass only. A win on the declaring throw stakes nothing:
+  the declarer pays only the win, and its 1,000 is not staked. A win
+  before the declarer's
   next discard scores `Ippatsu`; with a pung claimed between, it does not. A
   concealed kong that would change the waits is not offered.
   *Breaks when:* any one condition of § 4.4 is missing.
@@ -663,7 +694,7 @@ their positions with `Hand::arranged`.
   all; two take 1,500 each; three take 1,000 each; none and all move nothing; the counters rise by one; the dealer keeps the deal
   only when ready; a riichi stake stays on the table into the next hand and
   goes to its winner. Across seeded games the totals plus the sticks stay at
-  120,000.
+  120,000 until the game's end shares out the sticks.
   *Breaks when:* a drawn hand moves nothing, or the sticks are lost.
 
 - **INV-13** — Counters pay as § 4.6 and reset after another seat's win.
@@ -817,7 +848,8 @@ GHUB-0239:
   points move" likewise; INV-11's menu holds three since this item; § 4.6's
   interface points here.
 - `docs/specs/GHUB-0243-chinese-official-mahjong.md` — § 4.2 and INV-9:
-  `dealerRepeats()` becomes `dealerKeepsDeal`; INV-12's menu holds three.
+  `dealerRepeats()` becomes `dealerKeepsDeal`; INV-12's menu holds three;
+  § 4.4's `FullyConcealed` meaning reads "no set claimed".
 - `tests/uitest.cpp` — the existing rule-set check counts two menu entries;
   it counts three.
 - `docs/design.md` — § Mahjong: the third rule set, `TableRules`, the dead

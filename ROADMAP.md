@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=256 -->
+<!-- ants-roadmap-id-high-water: GHUB=257 -->
 
 # Games Hub — Roadmap
 
@@ -10206,6 +10206,17 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: enhancement.
   Source: user-decision-2026-11-18.
   Blocked-by: GHUB-0244.
+
+- 📋 [GHUB-0257] **Mahjong: Concealed hand's sentence says "no set laid down", but a concealed kong is laid down.**
+  `ConcealedHand`'s sentence in `src/mahjong/mahjongtablewords.cpp` reads
+  "No set laid down, and won on a tile another player threw." A hand
+  holding a concealed kong still scores it, and that kong is laid down.
+  GHUB-0244's review fixed the same wording in `FullyConcealed`'s
+  sentence ("No set claimed"). This is the matching fix, here and in
+  GHUB-0243 § 4.4.
+  **Layman:** The rules screen's description of a concealed hand is slightly wrong; it should say no set was claimed from another player.
+  Kind: review-fix.
+  Source: review-contract-GHUB-0244-2026-11-18.
 
 ## P01 — Shipped
 
