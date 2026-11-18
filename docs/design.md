@@ -885,6 +885,52 @@ putting the tuned constant back reddens it here rather than three minutes into
 CI. Reach for that shape whenever a constant is really a property of the
 platform's font, not of this codebase.
 
+### Twisty Cube
+
+Core: `src/twisty/twistypuzzle.*`. View: `twistyview.*`, with the colours,
+marks, camera and painting in `twistyart.*`, which the hub's tile shares.
+
+**Every shape is built one way.** `Puzzle::build()` takes a solid's faces and
+a list of flat cuts, and splits every face by every cut that crosses it; each
+piece is a sticker. A layer is the stickers whose centres lie between two
+heights along an axis, and what one step of it does is found once, by rotating
+each centre and finding which sticker sits there. Adding a shape is a solid,
+its cuts and its layers — nothing else knows which shape it holds.
+
+**The position is the scramble and the turns, never colours.** `encode()`
+writes the moves, and `decode()` replays them from solved, so a save — even a
+hand-edited one — can only hold a position real turns reach. That is how the
+owner's "every one must be solvable" holds. `twistyEveryScrambleSolves` plays
+each scramble back in reverse and checks it solves.
+
+**A mark is printed on its sticker.** `markUpAt()` is the way up of the mark
+now at a position, turned with every turn that carries it, so a centre that
+stays put still spins with its face. Owner's call, 2026-11-18: marks lie on
+the sticker at its angle, never turned to face the player.
+
+**The drawing needs no depth sort.** With no layer turning, the puzzle is
+convex, so every surface facing the eye is seen whole. With one turning it is
+three convex pieces along the turning axis — below, the layer, above — drawn
+far to near, each with the cut faces that close the gap. `paintPuzzle()` holds
+both cases.
+
+**The puzzle already holds a turn while it is shown turning.** `startNext()`
+applies the move at once, and `spin()` draws the layer turned back by what is
+left of it. So `deactivate()` and `settle()` finish a turn by dropping the
+animation, and `hasPendingAnimation()` stays false.
+
+**A drag and Shift and an arrow are one press.** `TwistyView::turnFrom()`
+takes a sticker and a screen direction, tries each layer the sticker turns
+with, and picks the one that moves it most nearly that way. A layer whose
+axis runs through the sticker's own face only spins it on the spot, so it is
+left out; where two layers move it alike, as the pyramid's tip and the tip
+with its layer do, the smaller wins.
+
+**Drawing speed.** Each mark's path is built once and cached, and each
+sticker is a filled rounded shape rather than a polygon rounded with a wide
+pen: both were measured as the cost of a slow frame. `--bench` times the
+twelve-sided shape, which has the most stickers.
+
 ### Mahjong Solitaire
 
 Core: `mahjongboard.*`, with the tiles themselves in `mahjongtiles.*`. View:

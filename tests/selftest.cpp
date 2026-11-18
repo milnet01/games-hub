@@ -28,6 +28,7 @@
 #include "klondike/klondiketable.h"
 #include "pyramid/pyramidtable.h"
 #include "twenty48/twenty48board.h"
+#include "twisty/twistypuzzle.h"
 #include "update/ed25519.h"
 #include "update/updatelogic.h"
 
@@ -8284,6 +8285,244 @@ void laneHitsCostHearts()
     check(ranOn, "lane runner: and the runner scrambles out and runs on");
 }
 
+// ---------------------------------------------------------------------------
+// Twisty Cube (GHUB-0253)
+// ---------------------------------------------------------------------------
+
+const char* twistyName(twisty::Shape shape)
+{
+    switch (shape) {
+    case twisty::Shape::Cube2: return "2x2";
+    case twisty::Shape::Cube3: return "3x3";
+    case twisty::Shape::Cube4: return "4x4";
+    case twisty::Shape::Cube5: return "5x5";
+    case twisty::Shape::Pyramid: return "pyramid";
+    case twisty::Shape::Dodecahedron: return "dodecahedron";
+    }
+    return "?";
+}
+
+std::string twistyWhat(twisty::Shape shape, const char* what)
+{
+    return std::string("twisty ") + twistyName(shape) + ": " + what;
+}
+
+// Every mark points the way it did when solved, within rounding.
+bool twistyMarksHome(const twisty::Puzzle& p)
+{
+    for (int i = 0; i < int(p.stickers().size()); ++i)
+        if ((p.markUpAt(i) - p.stickers()[size_t(i)].up).length() > 1e-6)
+            return false;
+    return true;
+}
+
+// Every mark lies flat on its sticker and is unit length.
+bool twistyMarksFlat(const twisty::Puzzle& p)
+{
+    for (int i = 0; i < int(p.stickers().size()); ++i) {
+        const twisty::Vec3& up = p.markUpAt(i);
+        if (std::abs(up.dot(p.stickers()[size_t(i)].normal)) > 1e-6 || std::abs(up.length() - 1.0) > 1e-6)
+            return false;
+    }
+    return true;
+}
+
+// Every shape is cut into the stickers its puzzle has, the same number on
+// every face, and every layer is a real turn: each step moves stickers, is a
+// permutation, and comes back to where it started after a full turn.
+void twistyShapesAreCutRight()
+{
+    const int expected[twisty::kShapeCount] = { 24, 54, 96, 150, 36, 132 };
+    const int expectedLayers[twisty::kShapeCount] = { 6, 9, 12, 15, 8, 12 };
+    for (int s = 0; s < twisty::kShapeCount; ++s) {
+        const auto shape = twisty::Shape(s);
+        const twisty::Puzzle puzzle(shape);
+        const int n = int(puzzle.stickers().size());
+        check(n == expected[s], twistyWhat(shape, "has the stickers its puzzle has").c_str());
+        check(int(puzzle.layers().size()) == expectedLayers[s],
+              twistyWhat(shape, "has the layers its puzzle has").c_str());
+
+        std::vector<int> perFace(size_t(puzzle.faceCount()), 0);
+        for (const twisty::Sticker& st : puzzle.stickers())
+            ++perFace[size_t(st.face)];
+        check(std::all_of(perFace.begin(), perFace.end(), [&](int c) { return c == perFace[0]; }),
+              twistyWhat(shape, "every face has as many stickers as the others").c_str());
+
+        bool permutations = true;
+        bool moves = true;
+        bool fullTurnIsNothing = true;
+        for (size_t l = 0; l < puzzle.layers().size(); ++l) {
+            const twisty::Layer& layer = puzzle.layers()[l];
+            std::vector<int> hit(size_t(n), 0);
+            int moved = 0;
+            for (int i = 0; i < n; ++i) {
+                const int to = layer.step[size_t(i)];
+                if (to < 0 || to >= n) {
+                    permutations = false;
+                    continue;
+                }
+                ++hit[size_t(to)];
+                moved += to != i ? 1 : 0;
+            }
+            permutations = permutations && std::all_of(hit.begin(), hit.end(), [](int h) { return h == 1; });
+            moves = moves && moved > 0;
+            twisty::Puzzle p(shape);
+            for (int k = 0; k < layer.order; ++k)
+                p.turn({ int(l), true });
+            fullTurnIsNothing = fullTurnIsNothing && p.solved() && twistyMarksHome(p);
+        }
+        check(permutations, twistyWhat(shape, "every turn sends each sticker to exactly one place").c_str());
+        check(moves, twistyWhat(shape, "every turn moves something").c_str());
+        check(fullTurnIsNothing,
+              twistyWhat(shape, "a full turn of any layer comes back solved, every mark upright").c_str());
+    }
+}
+
+// The owner's rule: every scramble must be solvable. A scramble is real turns
+// from solved, so playing them back in reverse must solve it -- checked on
+// many seeds for every shape, since this is the property the game rests on.
+void twistyEveryScrambleSolves()
+{
+    for (int s = 0; s < twisty::kShapeCount; ++s) {
+        const auto shape = twisty::Shape(s);
+        bool scrambled = true;
+        bool solves = true;
+        bool lengths = true;
+        bool flat = true;
+        for (unsigned seed = 1; seed <= 40; ++seed) {
+            std::mt19937 rng(seed);
+            twisty::Puzzle p(shape);
+            p.scramble(rng);
+            scrambled = scrambled && !p.solved() && p.moveCount() == 0;
+            lengths = lengths && int(p.scrambleMoves().size()) == p.scrambleLength();
+            const std::vector<twisty::Move> moves = p.scrambleMoves();
+            for (auto it = moves.rbegin(); it != moves.rend(); ++it)
+                p.turn({ it->layer, !it->clockwise });
+            flat = flat && twistyMarksFlat(p);
+            solves = solves && p.solved() && twistyMarksHome(p);
+        }
+        check(scrambled, twistyWhat(shape, "a scramble leaves it unsolved with no moves counted").c_str());
+        check(lengths, twistyWhat(shape, "a scramble is as long as the shape asks").c_str());
+        check(flat, twistyWhat(shape, "after a scramble every mark still lies flat on its sticker").c_str());
+        check(solves,
+              twistyWhat(shape, "every scramble played back in reverse solves it, every mark upright").c_str());
+    }
+
+    // A mark is printed on its sticker, so a centre that stays put still
+    // spins with its face, and a quarter turn takes it a quarter round.
+    twisty::Puzzle cube(twisty::Shape::Cube3);
+    int centre = -1;
+    int layer = -1;
+    for (int i = 0; i < int(cube.stickers().size()) && centre < 0; ++i) {
+        for (int l = 0; l < int(cube.layers().size()); ++l) {
+            if (cube.inLayer(l, i) && cube.layers()[size_t(l)].step[size_t(i)] == i) {
+                centre = i;
+                layer = l;
+                break;
+            }
+        }
+    }
+    bool spun = false;
+    if (centre >= 0) {
+        cube.turn({ layer, true });
+        spun = std::abs(cube.markUpAt(centre).dot(cube.stickers()[size_t(centre)].up)) < 1e-6;
+    }
+    check(spun, "twisty 3x3: a face's centre stays put but its mark turns a quarter round");
+}
+
+// One seed scrambles alike every time, so --seed can pin a picture.
+void twistyScrambleFollowsTheSeed()
+{
+    std::mt19937 a(7);
+    std::mt19937 b(7);
+    twisty::Puzzle p(twisty::Shape::Cube3);
+    twisty::Puzzle q(twisty::Shape::Cube3);
+    p.scramble(a);
+    q.scramble(b);
+    check(p.scrambleMoves() == q.scrambleMoves(), "twisty: one seed, one scramble");
+}
+
+// Undo takes back exactly the last turn, and a turn on no layer is refused.
+void twistyUndoAndRefusal()
+{
+    std::mt19937 rng(3);
+    twisty::Puzzle p(twisty::Shape::Cube4);
+    p.scramble(rng);
+    const QByteArray before = p.encode();
+    check(p.turn({ 5, true }) && p.moveCount() == 1, "twisty: a turn counts one move");
+    twisty::Move undone;
+    check(p.undo(&undone) && undone == twisty::Move { 5, true } && p.moveCount() == 0,
+          "twisty: undo takes back that turn");
+    bool same = true;
+    twisty::Puzzle fresh(twisty::Shape::Cube4);
+    fresh.decode(before);
+    for (int i = 0; i < int(p.stickers().size()); ++i)
+        same = same && p.colourAt(i) == fresh.colourAt(i);
+    check(same, "twisty: and leaves the stickers as they were");
+    check(!p.undo(), "twisty: undo stops at the scramble");
+    check(!p.turn({ 99, true }) && !p.turn({ -1, true }) && p.moveCount() == 0,
+          "twisty: a turn on no layer is refused");
+}
+
+// A save is the scramble and the turns, replayed from solved, so whatever it
+// holds is reachable. Every refusal leaves the puzzle as it was.
+void twistySavesReplayAndRefuse()
+{
+    for (int s = 0; s < twisty::kShapeCount; ++s) {
+        const auto shape = twisty::Shape(s);
+        std::mt19937 rng(11u + unsigned(s));
+        twisty::Puzzle p(shape);
+        p.scramble(rng);
+        for (int i = 0; i < 9; ++i)
+            p.turn({ int(rng() % unsigned(p.layers().size())), (rng() & 1u) != 0 });
+        twisty::Puzzle back;
+        bool same = back.decode(p.encode()) && back.shape() == shape && back.moveCount() == 9;
+        for (int i = 0; same && i < int(p.stickers().size()); ++i)
+            same = p.colourAt(i) == back.colourAt(i);
+        check(same, twistyWhat(shape, "a save comes back to the same position and count").c_str());
+    }
+
+    twisty::Puzzle p(twisty::Shape::Cube3);
+    std::mt19937 rng(5);
+    p.scramble(rng);
+    const QByteArray good = p.encode();
+    const auto refused = [&](const QByteArray& blob) {
+        twisty::Puzzle target(twisty::Shape::Cube2);
+        return !target.decode(blob) && target.shape() == twisty::Shape::Cube2 && target.solved();
+    };
+    check(refused({}), "twisty: an empty save is refused");
+    check(refused(good.left(good.size() - 1)), "twisty: a cut-short save is refused");
+    check(refused(good + QByteArray(1, '\0')), "twisty: a save with bytes left over is refused");
+
+    QByteArray badShape;
+    {
+        QDataStream out(&badShape, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << quint32(0x54575354) << quint16(1) << qint32(twisty::kShapeCount);
+        out << quint32(0) << quint32(0);
+    }
+    check(refused(badShape), "twisty: a save naming no shape is refused");
+
+    QByteArray badLayer;
+    {
+        QDataStream out(&badLayer, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << quint32(0x54575354) << quint16(1) << qint32(int(twisty::Shape::Cube3));
+        out << quint32(1) << quint16(9) << quint8(1); // a 3x3 has layers 0 to 8
+        out << quint32(0);
+    }
+    check(refused(badLayer), "twisty: a save turning a layer the shape lacks is refused");
+
+    QByteArray tooLong;
+    {
+        QDataStream out(&tooLong, QIODevice::WriteOnly);
+        out.setVersion(QDataStream::Qt_6_0);
+        out << quint32(0x54575354) << quint16(1) << qint32(int(twisty::Shape::Cube3));
+        out << quint32(twisty::Puzzle::kMaxMoves + 1);
+    }
+    check(refused(tooLong), "twisty: a save claiming too many turns is refused before reading them");
+}
+
 } // namespace
 
 int main()
@@ -8475,6 +8714,13 @@ int main()
     spiderRowNeedsEveryColumnOccupied();
     spiderDealtRowSaysWhichRunsItFinished();
     spiderPlaysOutWithoutLosingACard();
+
+    section("Twisty Cube");
+    twistyShapesAreCutRight();
+    twistyEveryScrambleSolves();
+    twistyScrambleFollowsTheSeed();
+    twistyUndoAndRefusal();
+    twistySavesReplayAndRefuse();
 
     section("Self-update");
     updateSignaturesAreChecked();

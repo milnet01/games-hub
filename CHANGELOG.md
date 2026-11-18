@@ -12,6 +12,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Twisty Cube** (GHUB-0253)
+  A twisty puzzle in six shapes: cubes from 2×2 to 5×5, a pyramid, and a
+  twelve-sided puzzle. Drag a sticker to turn its layer, or turn the whole
+  puzzle round to see the far side; the keyboard does both. Every colour
+  carries a mark of its own, such as a circle, a star or a heart, printed
+  on the sticker so it turns with its piece. Every scramble is made of
+  real turns, and the tests play each one back to prove it solves. The
+  stickers are glossy and catch the light, a turn snaps into place, and a
+  solve spins the puzzle in a shower of confetti. The clock starts on your
+  first turn, and the best time for each shape is kept.
+
 - **Ruin Runner Lanes** (GHUB-0241)
   Ruin Runner seen from behind the runner, heading into the ruins along
   three lanes. Change lane round tall carved blocks, jump fallen trunks

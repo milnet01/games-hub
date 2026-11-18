@@ -197,6 +197,7 @@ set(GAME_CORE_SOURCES
     src/holdline/holdlinefield.cpp
     src/runner/runnercourse.cpp
     src/runner/lanecourse.cpp
+    src/twisty/twistypuzzle.cpp
     src/pyramid/pyramidtable.cpp
     src/freecell/freecelltable.cpp
     src/klondike/klondiketable.cpp
@@ -236,6 +237,8 @@ set(GAME_VIEW_SOURCES
     src/runner/runnerview.cpp
     src/runner/laneart.cpp
     src/runner/laneview.cpp
+    src/twisty/twistyart.cpp
+    src/twisty/twistyview.cpp
     src/spider/spiderview.cpp
     src/hearts/heartsview.cpp
     src/canasta/canastaview.cpp

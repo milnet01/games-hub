@@ -19,6 +19,8 @@
 #include "noughts/noughtsview.h"
 #include "runner/laneview.h"
 #include "runner/runnerview.h"
+#include "twisty/twistyart.h"
+#include "twisty/twistyview.h"
 #include "mahjong/mahjongart.h"
 #include "mahjong/mahjongtableview.h"
 #include "mahjong/mahjongview.h"
@@ -948,6 +950,9 @@ void HubWindow::buildEntries()
         { QStringLiteral("Sudoku"), // untranslated: the game's id
           tr("Sudoku"), tr("Fill the grid"), sudokuTile,
           [] { return new SudokuView; }, Category::Puzzle },
+        { QStringLiteral("Twisty Cube"), // untranslated: the game's id
+          tr("Twisty Cube"), tr("Turn every face to one colour"), twisty::paintTile,
+          [] { return new TwistyView; }, Category::Puzzle },
         { QStringLiteral("Mahjong Solitaire"), // untranslated: the game's id
           tr("Mahjong Solitaire"), tr("Match the free pairs"), mahjongTile,
           [] { return new MahjongView; }, Category::Puzzle },

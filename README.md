@@ -72,6 +72,7 @@ A few things worth knowing before you download:
 | **FreeCell** | Four free cells, everything face up, almost always solvable. |
 | **Pyramid** | Clear the pyramid by taking pairs that add to 13. |
 | **Sudoku** | Generated puzzles at three difficulties, with pencil marks. |
+| **Twisty Cube** | Turn the layers until every face is one colour: cubes from 2×2 to 5×5, a pyramid and a twelve-sided puzzle. Each colour carries a mark of its own. |
 | **Mahjong Solitaire** | Clear a heap of 144 tiles by taking free pairs that match. Every heap can be cleared. |
 | **Hearts** | Four-handed Hearts against three computer players, to 100. |
 | **Canasta** | Partnership Canasta, two against two, with melds, wild cards, red threes and a freezing discard pile. Classic rules, plus a house set you can edit. |
@@ -88,7 +89,8 @@ its own buttons — New Game, Undo, difficulty — on the toolbar beside it, and
 the **Sound** switch at the right mutes the lot.
 
 Best scores are kept between sessions: games won at Chess and Draughts, discs
-won at each Reversi level, fastest Minesweeper and Sudoku clears, top Klondike
+won at each Reversi level, fastest Minesweeper and Sudoku clears, the fastest
+solve of each Twisty Cube shape, top Klondike
 score, fewest Spider and FreeCell moves, most Pyramid pairs cleared, lowest
 winning Hearts total, highest winning Canasta score, the Snake, 2048 and
 Pinball high scores, and the five best scores of Hold the Line and of Ruin Runner, a table both Ruin Runners share.
@@ -101,13 +103,14 @@ such as Canasta, widens it while it is open and gives your size back after.
 last played, Canasta on the rule set you last used — Classic or House — and
 Noughts and Crosses on the opponent you last chose, Mahjong Solitaire
 remembers whether you shade the tiles you cannot take yet, and Mahjong
-remembers its rule set and whether you play a full game or an East round. You
+remembers its rule set and whether you play a full game or an East round, and
+Twisty Cube reopens on the shape you last chose. You
 pick them once rather than every time, and finishing a game no longer forgets
 them.
 
 **Almost every game picks up where you left off.** Close the window in the
 middle of one and it comes back exactly as you left it — Chess, Canasta,
-Draughts, Reversi, Noughts and Crosses, Minesweeper, Sudoku, Mahjong Solitaire, Mahjong, Hearts, 2048, and all four card games
+Draughts, Reversi, Noughts and Crosses, Minesweeper, Sudoku, Twisty Cube, Mahjong Solitaire, Mahjong, Hearts, 2048, and all four card games
 (Klondike, Spider, FreeCell and Pyramid). Canasta brings back the whole table:
 every hand, the melds, the pile, the stock, the scores and the rules in force.
 Chess brings back the board *and* the moves that led to it, so Undo still
@@ -119,8 +122,8 @@ never come back to a board you have already won.
 
 Snake, Pinball, Hold the Line and both Ruin Runners do not do this yet.
 
-**Minesweeper and Sudoku can be paused**, which stops the clock and covers the
-board, so walking away costs you nothing. `P` pauses both, and Hold the Line and both Ruin Runners
+**Minesweeper, Sudoku and Twisty Cube can be paused**, which stops the clock and
+covers the board, so walking away costs you nothing. `P` pauses all three, and Hold the Line and both Ruin Runners
 too. Snake has its own pause on the space bar. Sudoku's pencil mode is `N`, for
 Notes.
 
@@ -178,6 +181,14 @@ session's score.
 **Minesweeper.** Left click digs, right click plants a flag. A number says how
 many mines touch that square. Clicking a number you have fully flagged clears
 its remaining neighbours in one go. The first click is always safe.
+
+**Twisty Cube.** Drag a sticker the way you want its layer to go, and the layer
+turns one step. Drag off the puzzle to turn the whole puzzle round. With the
+keyboard, the arrows move a gold frame from sticker to sticker, `Shift` and an
+arrow turns the framed sticker's layer, and `Ctrl` and an arrow turns the whole
+puzzle. `Ctrl+Z` undoes a turn and `Home` straightens the view. Every scramble
+is made of real turns, so every one can be solved. The clock starts on your
+first turn, so you can look the puzzle over first.
 
 **Solitaire (Klondike).** Drag cards to build the four foundations up from Ace
 to King in one suit. On the table, build downwards in alternating colours; only

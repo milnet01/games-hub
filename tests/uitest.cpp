@@ -25,6 +25,7 @@
 #include "holdline/holdlineview.h"
 #include "runner/laneview.h"
 #include "runner/runnerview.h"
+#include "twisty/twistyview.h"
 #include "hubwindow.h"
 #include "klondike/klondikeview.h"
 #include "minesweeper/minesweeperview.h"
@@ -495,6 +496,17 @@ void frameCost()
     pump(30);
     std::printf("        ruin runner, three lanes      %6.2f\n",
                 msPerFrame(&lanes, frames));
+
+    // The most stickers any shape has, each with its gloss and mark: the
+    // dearest frame Twisty Cube draws (GHUB-0253).
+    TwistyView twisty;
+    twisty.setShape(twisty::Shape::Dodecahedron);
+    twisty.resize(1000, 740);
+    twisty.show();
+    twisty.settle();
+    pump(30);
+    std::printf("        twisty cube, twelve sides     %6.2f\n",
+                msPerFrame(&twisty, frames));
 
     HubWindow hub;
     hub.resize(1000, 740);
@@ -1240,7 +1252,7 @@ void idsAndKeysSurviveATranslation()
         const QStringList ids = {
             QStringLiteral("Chess"),    QStringLiteral("Reversi"),     QStringLiteral("Draughts"),
             QStringLiteral("Noughts and Crosses"), QStringLiteral("Minesweeper"), QStringLiteral("Solitaire"), QStringLiteral("Spider"),
-            QStringLiteral("FreeCell"), QStringLiteral("Pyramid"),     QStringLiteral("Sudoku"),
+            QStringLiteral("FreeCell"), QStringLiteral("Pyramid"),     QStringLiteral("Sudoku"), QStringLiteral("Twisty Cube"),
             QStringLiteral("Mahjong Solitaire"),
             QStringLiteral("Hearts"),   QStringLiteral("Canasta"),     QStringLiteral("Mahjong"),
             QStringLiteral("Snake"),
@@ -3088,6 +3100,72 @@ void runnerPausesAndKeepsItsTable()
           "ruin runner: Space after the end starts a fresh run");
     game.deactivate();
     QSettings().remove(QStringLiteral("runner/best_scores"));
+}
+
+// ---- twistyTurnsByDragAndKey (GHUB-0253) ----
+//
+// A drag on a sticker turns its layer, Shift and an arrow turns the framed
+// sticker's layer, Undo takes a turn back, leaving the game finishes any
+// turn in flight and stops every clock, and a solve records a best time.
+void twistyTurnsByDragAndKey()
+{
+    QSettings().remove(QStringLiteral("twisty"));
+    TwistyView game;
+    game.resize(800, 700);
+    game.show();
+    pump(20);
+    check(game.focusPolicy() == Qt::StrongFocus, "twisty: takes the keyboard");
+    game.activate();
+
+    // A sticker facing the eye, found where it is drawn.
+    int sticker = -1;
+    for (int i = 0; i < int(game.puzzle().stickers().size()) && sticker < 0; ++i)
+        if (game.stickerAt(game.stickerCentre(i)) == i)
+            sticker = i;
+    check(sticker >= 0, "twisty: a sticker can be found where it is drawn");
+    if (sticker < 0)
+        return;
+
+    const QPointF from = game.stickerCentre(sticker);
+    dragBetween(&game, from, from + QPointF(70, 0));
+    check(game.puzzle().moveCount() == 1, "twisty: a drag across a sticker turns one layer");
+    check(game.animating() && activeTimers(&game) > 0, "twisty: and the turn is shown turning");
+    game.deactivate();
+    check(!game.animating() && activeTimers(&game) == 0,
+          "twisty: leaving the game finishes the turn and stops every clock");
+    game.activate();
+
+    QKeyEvent shiftRight(QEvent::KeyPress, Qt::Key_Right, Qt::ShiftModifier);
+    QCoreApplication::sendEvent(&game, &shiftRight);
+    check(game.puzzle().moveCount() == 2, "twisty: Shift and an arrow turns the framed sticker's layer");
+    pressKey(&game, Qt::Key_Left);
+    check(game.cursorSticker() >= 0, "twisty: the arrows move the frame");
+
+    QAction* undo = nullptr;
+    for (QAction* a : game.gameActions())
+        if (a->text() == QStringLiteral("Undo"))
+            undo = a;
+    check(undo != nullptr && undo->shortcut() == QKeySequence(QKeySequence::Undo), "twisty: Undo is on Ctrl+Z");
+    if (undo != nullptr)
+        undo->trigger();
+    game.settle();
+    check(game.puzzle().moveCount() == 1, "twisty: Undo takes back the last turn");
+
+    // Solve it: play the turns made so far and the scramble back in reverse.
+    std::vector<twisty::Move> back(game.puzzle().history().rbegin(), game.puzzle().history().rend());
+    const auto& scramble = game.puzzle().scrambleMoves();
+    back.insert(back.end(), scramble.rbegin(), scramble.rend());
+    for (const twisty::Move& m : back)
+        game.playTurn({ m.layer, !m.clockwise });
+    game.settle();
+    check(game.puzzle().solved(), "twisty: played back, the puzzle is solved");
+    check(game.saveState().isEmpty(), "twisty: a solved puzzle is not saved");
+    check(Scores::instance().has(QStringLiteral("twisty/best_time_3x3")), "twisty: a solve records a best time");
+    const int before = game.puzzle().moveCount();
+    game.playTurn({ 0, true });
+    check(game.puzzle().moveCount() == before, "twisty: a solved puzzle takes no more turns");
+    game.deactivate();
+    QSettings().remove(QStringLiteral("twisty"));
 }
 
 // ---- laneRunnerSteersAndSharesTheTable (GHUB-0241) ----
@@ -9468,6 +9546,7 @@ int main(int argc, char* argv[])
     holdLinePausesAndKeepsItsTable();
     runnerPausesAndKeepsItsTable();
     laneRunnerSteersAndSharesTheTable();
+    twistyTurnsByDragAndKey();
 
     turnLightFollowsTheTurn();
     turnLightComesUpAndHolds();
