@@ -12,6 +12,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Mahjong: Chinese Official rules** (GHUB-0243)
+  The tournament rules join Hong Kong in Mahjong's Rule set menu. A hand
+  needs 8 points to win, scored from 81 named patterns; flowers count a
+  point each but not toward the 8. Seven pairs, thirteen orphans and the
+  knitted hands win as well as four sets and a pair. Patterns that the rule
+  book says cannot be scored together are not. Every loser pays 8 points,
+  and whoever threw the winning tile pays the hand's points too. The deal
+  passes after every hand, so a full game is sixteen hands. The rules
+  screen now says in one plain sentence what each pattern is, under both
+  rule sets.
+
 - **Twisty Cube** (GHUB-0253)
   A twisty puzzle in six shapes: cubes from 2×2 to 5×5, a pyramid, and a
   twelve-sided puzzle. Drag a sticker to turn its layer, or turn the whole

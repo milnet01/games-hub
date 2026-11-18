@@ -10062,11 +10062,15 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Source: in-session-2026-11-10.
   Lanes: tests.
 
-- 📋 [GHUB-0243] **Mahjong: Chinese Official rules as a second rule set.**
+- ✅ [GHUB-0243] **Mahjong: Chinese Official rules as a second rule set.**
   The tournament rule set: a hand needs at least 8 points, from
   the official list of scoring patterns. Added to the rule-set
   chooser GHUB-0239 builds; the table, drawing and claiming are
   shared. Each scoring pattern is named in words on the table.
+  Shipped 2026-11-18. Contract:
+  docs/specs/GHUB-0243-chinese-official-mahjong.md. The computer plays
+  unchanged: the Chicken hand makes nearly every complete hand worth 8,
+  and it wins 20 of 24 seeded hands.
   **Layman:** Adds the tournament rules to four-player Mahjong, chosen from the same menu as the other rule sets.
   Kind: feature.
   Source: user-request-2026-11-11.

@@ -1,6 +1,7 @@
 #include "mahjongtableview.h"
 
 #include "mahjongart.h"
+#include "mahjongofficial.h"
 #include "mahjongplayer.h"
 
 #include "dealseed.h"
@@ -71,8 +72,20 @@ QString ruleSetLabel(mahjong::RuleSetId id)
 {
     switch (id) {
     case mahjong::RuleSetId::HongKong: return QCoreApplication::translate("MahjongTableView", "Hong Kong rules");
+    case mahjong::RuleSetId::ChineseOfficial:
+        return QCoreApplication::translate("MahjongTableView", "Chinese Official rules");
     }
     return {};
+}
+
+// A pattern's or a hand's value in the rule set's own unit: Hong Kong counts
+// fan, Chinese Official points (GHUB-0243 § 4.8).
+QString valueText(mahjong::RuleSetId id, int value)
+{
+    if (id != mahjong::RuleSetId::ChineseOfficial)
+        return QCoreApplication::translate("MahjongTableView", "%n fan", nullptr, value);
+    return value == 1 ? QCoreApplication::translate("MahjongTableView", "1 point")
+                      : QCoreApplication::translate("MahjongTableView", "%1 points").arg(value);
 }
 
 // Your hand as it is drawn: sorted, with the tile just drawn set apart at the
@@ -145,7 +158,7 @@ void MahjongTableView::buildActions()
     separator->setSeparator(true);
     m_actions.append(separator);
 
-    // Only the rule sets this build has: GHUB-0243 and GHUB-0244 join here.
+    // Only the rule sets this build has: GHUB-0244 joins here.
     m_ruleGroup = new QActionGroup(this);
     m_ruleGroup->setExclusive(true);
     for (mahjong::RuleSetId id : mahjong::ruleSets()) {
@@ -211,25 +224,83 @@ void MahjongTableView::setLength(mahjong::Length length)
     refresh();
 }
 
-// GHUB-0016. The rules as mahjong::Hand and HongKongRules play them, and the
-// controls as mousePressEvent, keyPressEvent and buildActions take them. The
-// fan list comes from the rule set in force, in the words the end of a hand
-// uses.
+// GHUB-0016. The rules as mahjong::Hand and the rule set in force play them,
+// and the controls as mousePressEvent, keyPressEvent and buildActions take
+// them. The pattern list comes from the rule set, grouped by value, each with
+// the words the end of a hand uses and one plain sentence (GHUB-0243 § 4.8).
 QString MahjongTableView::rulesText() const
 {
+    const mahjong::RuleSetId id = m_game.ruleSetId();
+    const mahjong::RuleSet& rules = mahjong::ruleSet(id);
+    const bool official = id == mahjong::RuleSetId::ChineseOfficial;
+
+    std::vector<mahjong::ScoreItem> list = rules.fanList();
+    std::stable_sort(list.begin(), list.end(),
+                     [](const mahjong::ScoreItem& a, const mahjong::ScoreItem& b) { return a.value > b.value; });
     QString fans;
-    const mahjong::RuleSet& rules = mahjong::ruleSet(m_game.ruleSetId());
-    for (const mahjong::ScoreItem& item : rules.fanList())
-        fans.append(tr("<li>%1: %n fan</li>", nullptr, item.value).arg(fanName(item.fan)));
-    // The points table from the rule set, one whole sentence a line, so the
-    // text cannot keep a copy that drifts from the scoring (GHUB-0249).
-    QString points;
-    for (int fan = rules.minimumToWin(); fan <= rules.limit(); ++fan)
-        points.append(tr("<li>%n fan is worth %1 points.</li>", nullptr, fan).arg(rules.points(fan)));
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        if (i == 0 || list[i].value != list[i - 1].value) {
+            if (i > 0)
+                fans.append(QStringLiteral("</ul>")); // untranslated: markup
+            fans.append(QStringLiteral("<p><b>%1</b></p><ul>") // untranslated: markup
+                            .arg(valueText(id, list[i].value).toHtmlEscaped()));
+        }
+        fans.append(QStringLiteral("<li><b>%1.</b> %2</li>") // untranslated: markup
+                        .arg(fanName(list[i].fan).toHtmlEscaped(), fanMeaning(list[i].fan).toHtmlEscaped()));
+    }
+    if (!list.empty())
+        fans.append(QStringLiteral("</ul>")); // untranslated: markup
+
+    QString scoring;
+    if (official) {
+        scoring = tr("<h3>Scoring</h3>"
+                     "<p>Every scoring pattern of a win is written on the table with its points. A hand needs "
+                     "at least %1 points to win, not counting flowers. There is no limit to what a hand can "
+                     "score.</p>"
+                     "<p>When one pattern always includes another, only the bigger one counts. A pattern made "
+                     "by combining sets may join a set already used for another such pattern only once.</p>"
+                     "<p>Every player who did not win pays the winner %2 points. The player who threw the "
+                     "winning tile also pays the hand's points. A win on a tile you drew is paid %2 points "
+                     "plus the hand's points by each of the three others. A robbed kong is paid as if the "
+                     "player who added the tile had thrown it.</p>"
+                     "<p>The deal passes to the next player after every hand, won or drawn. A <b>full "
+                     "game</b> is sixteen hands, with the wind of the round moving from East to South, West "
+                     "and North every four hands. An <b>East round</b> is four hands.</p>")
+                      .arg(rules.minimumToWin())
+                      .arg(mahjong::ChineseOfficialRules::kBase);
+    } else {
+        // The points table from the rule set, one whole sentence a line, so the
+        // text cannot keep a copy that drifts from the scoring (GHUB-0249).
+        QString points;
+        for (int fan = rules.minimumToWin(); fan <= rules.limit(); ++fan)
+            points.append(tr("<li>%n fan is worth %1 points.</li>", nullptr, fan).arg(rules.points(fan)));
+        scoring = tr("<h3>Scoring</h3>"
+                     "<p>Every scoring pattern of a win is written on the table with its value. A hand needs "
+                     "at least %1 fan to win, and %2 fan is the most a hand can score.</p>"
+                     "<ul>%3</ul>"
+                     "<p>A win on a thrown tile is paid by the player who threw it. A win on a tile you "
+                     "drew is paid by all three others. A robbed kong is paid by the player who added the "
+                     "tile.</p>"
+                     "<p>The dealer is East. The dealer keeps the deal after winning, or after a drawn hand; "
+                     "otherwise it passes to the next player. A <b>full game</b> ends when the deal has "
+                     "gone round the table four times, with the wind of the round moving from East to "
+                     "South, West and North. An <b>East round</b> ends after it has gone round once.</p>")
+                      .arg(rules.minimumToWin())
+                      .arg(rules.limit())
+                      .arg(points);
+    }
+
+    const QString aim = official
+        ? tr("Make a winning hand before the three computer players do. Most winning hands are four sets "
+             "and a pair, from fourteen tiles; seven pairs and the special hands in the list below win "
+             "too. The game is played by %1.")
+              .arg(ruleSetLabel(id))
+        : tr("Make a winning hand before the three computer players do: four sets and a pair, from "
+             "fourteen tiles. The game is played by %1.")
+              .arg(ruleSetLabel(id));
 
     return tr("<h3>The aim</h3>"
-              "<p>Make a winning hand before the three computer players do: four sets and a pair, "
-              "from fourteen tiles. The game is played by %1.</p>"
+              "<p>%1</p>"
 
               "<h3>The tiles</h3>"
               "<p>The tiles are the ones Mahjong Solitaire uses: circles, bamboo and diamonds "
@@ -253,20 +324,10 @@ QString MahjongTableView::rulesText() const
               "<p>Holding four of a tile, you may lay it down as a kong on your turn and draw "
               "another tile. You may also add the tile you just drew to a pung you laid down. Another "
               "player waiting on that tile may then win on it: that is <b>robbing a kong</b>.</p>"
-              "<p>A hand needs at least %2 fan to win. If the wall runs out with nobody out, "
-              "the hand is drawn and no points move.</p>"
-
-              "<h3>Scoring</h3>"
-              "<p>Every scoring feature of a win is written on the table with its value. "
-              "%3 fan is the most a hand can score.</p>"
-              "<ul>%4</ul>"
-              "<p>A win on a thrown tile is paid by the player who threw it. A win on a tile you "
-              "drew is paid by all three others. A robbed kong is paid by the player who added the tile.</p>"
-              "<ul>%5</ul>"
-              "<p>The dealer is East. The dealer keeps the deal after winning, or after a drawn hand; "
-              "otherwise it passes to the next player. A <b>full game</b> ends when the deal has "
-              "gone round the table four times, with the wind of the round moving from East to "
-              "South, West and North. An <b>East round</b> ends after it has gone round once.</p>"
+              "<p>If the wall runs out with nobody out, the hand is drawn and no points move.</p>"
+              "%2"
+              "<h3>The scoring patterns</h3>"
+              "%3"
 
               "<h3>Controls</h3>"
               "<p><b>With the mouse:</b></p>"
@@ -292,48 +353,7 @@ QString MahjongTableView::rulesText() const
               "<li>The rule set and <b>Full game</b> or <b>East round</b> are remembered, and "
               "take effect from the next game.</li>"
               "</ul>")
-        .arg(ruleSetLabel(m_game.ruleSetId()))
-        .arg(rules.minimumToWin())
-        .arg(rules.limit())
-        .arg(fans)
-        .arg(points);
-}
-
-QString MahjongTableView::fanName(mahjong::Fan fan)
-{
-    using mahjong::Fan;
-    switch (fan) {
-    case Fan::SelfDrawn: return tr("Self-drawn");
-    case Fan::ConcealedHand: return tr("Concealed hand");
-    case Fan::NoBonusTiles: return tr("No flowers or seasons");
-    case Fan::OwnFlower: return tr("Own flower");
-    case Fan::OwnSeason: return tr("Own season");
-    case Fan::AllFourFlowers: return tr("All four flowers");
-    case Fan::AllFourSeasons: return tr("All four seasons");
-    case Fan::AllChows: return tr("All chows");
-    case Fan::DragonPung: return tr("Pung of dragons");
-    case Fan::SeatWindPung: return tr("Pung of your own wind");
-    case Fan::PrevailingWindPung: return tr("Pung of the round's wind");
-    case Fan::LastTile: return tr("Drew the last tile of the wall to win");
-    case Fan::KongReplacement: return tr("Won on a kong's replacement tile");
-    case Fan::RobbingAKong: return tr("Robbing a kong");
-    case Fan::AllPungs: return tr("All pungs");
-    case Fan::MixedOneSuit: return tr("Mixed one suit");
-    case Fan::SmallThreeDragons: return tr("Small three dragons");
-    case Fan::PureOneSuit: return tr("Pure one suit");
-    case Fan::BigThreeDragons: return tr("Big three dragons");
-    case Fan::SmallFourWinds: return tr("Small four winds");
-    case Fan::BigFourWinds: return tr("Big four winds");
-    case Fan::AllHonours: return tr("All honours");
-    case Fan::AllTerminals: return tr("All ones and nines");
-    case Fan::ThirteenOrphans: return tr("Thirteen orphans");
-    case Fan::NineGates: return tr("Nine gates");
-    case Fan::FourConcealedPungs: return tr("Four concealed pungs");
-    case Fan::FourKongs: return tr("Four kongs");
-    case Fan::HeavenlyHand: return tr("Heavenly hand");
-    case Fan::EarthlyHand: return tr("Earthly hand");
-    }
-    return {};
+        .arg(aim.toHtmlEscaped(), scoring, fans);
 }
 
 // ---------------------------------------------------------------------------
@@ -629,17 +649,23 @@ QStringList MahjongTableView::endOfHandLines() const
         return lines;
     const mahjong::HandResult& r = m_game.results().back();
     if (r.drawn) {
-        lines << tr("A drawn hand. No points move, and the dealer deals again.");
+        lines << (mahjong::ruleSet(m_game.ruleSetId()).dealerRepeats()
+                      ? tr("A drawn hand. No points move, and the dealer deals again.")
+                      : tr("A drawn hand. No points move, and the deal passes on."));
         return lines;
     }
     const QString who = seatName(r.win.winner);
     lines << (r.win.payer < 0 ? tr("%1 won on a tile drawn from the wall.").arg(who)
                               : tr("%1 won on the %2 from %3.")
                                     .arg(who, mahjong::tileName(r.win.winningTile), seatName(r.win.payer)));
+    const mahjong::RuleSetId id = m_game.ruleSetId();
     for (const mahjong::ScoreItem& item : r.score.items)
-        lines << tr("%1 — %n fan", nullptr, item.value).arg(fanName(item.fan));
-    lines << (r.score.limit ? tr("A limit hand: %1 fan, %2 points.").arg(r.score.total).arg(r.score.points)
-                            : tr("Total: %1 fan, %2 points.").arg(r.score.total).arg(r.score.points));
+        lines << tr("%1 — %2").arg(fanName(item.fan), valueText(id, item.value));
+    if (id == mahjong::RuleSetId::ChineseOfficial)
+        lines << tr("Total: %1.").arg(valueText(id, r.score.total));
+    else
+        lines << (r.score.limit ? tr("A limit hand: %1 fan, %2 points.").arg(r.score.total).arg(r.score.points)
+                                : tr("Total: %1 fan, %2 points.").arg(r.score.total).arg(r.score.points));
     QStringList pays;
     for (int s = 0; s < mahjong::kSeats; ++s) {
         const int p = r.payments[std::size_t(s)];
@@ -744,7 +770,8 @@ void MahjongTableView::showScoreSheet()
             html += QStringLiteral("<td align='right'>%1</td>").arg(running[std::size_t(s)]); // untranslated: markup
         }
         const QString what = r.drawn ? tr("Drawn")
-                                     : tr("%1 won, %2 fan").arg(seatName(r.win.winner)).arg(r.score.total);
+                                     : tr("%1 won, %2")
+                                           .arg(seatName(r.win.winner), valueText(m_game.ruleSetId(), r.score.total));
         html += QStringLiteral("<td>%1</td></tr>").arg(what.toHtmlEscaped()); // untranslated: markup
     }
     html += QStringLiteral("</table>"); // untranslated: markup

@@ -1078,29 +1078,43 @@ one place and the card in another. Sort before the flights are built.
 
 ### Mahjong
 
-Four players, Hong Kong rules. Core: `mahjongtable.*`, `mahjongrules.*`,
-`mahjongplayer.*`. View: `mahjongtableview.*`. All in `src/mahjong/`, beside
-Mahjong Solitaire, whose tiles and art it shares. The contract is
-`docs/specs/GHUB-0239-four-player-mahjong.md`.
+Four players, Hong Kong or Chinese Official rules. Core: `mahjongtable.*`,
+`mahjongrules.*`, `mahjongofficial.*`, `mahjongplayer.*`. View:
+`mahjongtableview.*` and `mahjongtablewords.cpp`. All in `src/mahjong/`,
+beside Mahjong Solitaire, whose tiles and art it shares. The contracts are
+`docs/specs/GHUB-0239-four-player-mahjong.md` and
+`docs/specs/GHUB-0243-chinese-official-mahjong.md`.
 
 **A rule set is a `RuleSet`, and the table never asks which one it has.**
 `Hand` deals, draws and settles claims; the rule set says whether chows and
-bonus tiles are in play, what a hand needs to win, how it scores and who
-pays. Chinese Official (GHUB-0243) and Japanese Riichi (GHUB-0244) arrive as
-new rule sets, not as branches in `Hand`. **Every Hong Kong number lives in
-`HongKongRules`**: `fanValue`, `pointsFor`, `kMinimum` and `kLimit`. The rules
-text reads the values through `fanList()`, `limit()` and `points()` rather
-than keeping its own copy.
+bonus tiles are in play, which hand shapes win, what a hand needs to win, how
+it scores, who pays and whether the dealer repeats. Japanese Riichi
+(GHUB-0244) arrives as a new rule set, not as branches in `Hand`. **Every Hong
+Kong number lives in `HongKongRules`**: `fanValue`, `pointsFor`, `kMinimum`
+and `kLimit`. **Every Chinese Official value and exclusion lives in one row
+table in `mahjongofficial.cpp`**, one row per pattern, read by `fanValue`,
+`excludes` and `fanList()`. The rules text reads the values through
+`fanList()`, `limit()` and `points()` rather than keeping its own copy.
+
+**The minimum is read against `HandScore::qualifying`, not the total.**
+Chinese Official counts flowers in the total and not toward its 8 points, so
+a check against `total` offers a win the rules refuse.
 
 **The core names a scoring pattern by `Fan`; the view owns its words.**
-`MahjongTableView::fanName` is the one place a pattern becomes a sentence, for
-the end of a hand and the rules text alike. A new `Fan` with no words fails
-the UI test.
+`MahjongTableView::fanName` and `fanMeaning`, both in `mahjongtablewords.cpp`,
+are the one place a pattern becomes words: a name for the end of a hand and
+the rules text, and one plain sentence for the rules text. **A `Fan` means one
+thing under every rule set that scores it**, so a Chinese Official pattern
+that means what a Hong Kong one means reuses it. A new `Fan` with no words
+fails the build, since both switches list every value.
 
 **A win is read every way the tiles allow, and the best reading scores.**
-`bestWin` splits the hand into a pair and sets in each possible way and asks
-the rule set to score each. The same call answers "may this seat win?" — at
-or above `minimumToWin()` — so the button offered and the score shown cannot
+`bestWin` tries every shape the rule set allows — sets and a pair, seven
+pairs, thirteen orphans, the knitted hands — every way the tiles split, and
+each part the winning tile could sit in, and asks the rule set to score each.
+It also counts how many faces would have finished the hand, which the wait
+patterns read. The same call answers "may this seat win?" — at or above
+`minimumToWin()` — so the button offered and the score shown cannot
 disagree.
 
 **The save is the moves, as Chess's is.** A hand is its seed and the moves the
@@ -1120,7 +1134,9 @@ the computer's pause, `kAiPauseMs`, the same 0.95 seconds as Canasta's.
 tiles each discard leaves the hand from ready, and keeps tiles that score:
 one suit with honours, all pungs, dragons and its own winds. It claims a chow
 only when building one suit, since a chow costs the concealed hand's fan. It
-has one strength. The self-test prints how many hands the computers win
+has one strength. **Under Chinese Official it plays the same way**: a complete
+hand that scores nothing else is a Chicken hand, worth the 8 needed, so its
+Hong Kong play wins there too. The self-test prints how many hands the computers win
 across six seeded East rounds; it requires one in five.
 
 **Everything that matters is said on the table.** The last discard is drawn

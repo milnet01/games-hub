@@ -147,6 +147,9 @@ private:
     void win(int seat, Face tile, int payer, bool robbing);
     void drawHand();
     WinContext contextFor(int seat) const;
+    // How many of `tile` lie face up: in the pools and in sets laid down. A
+    // concealed kong is face down and does not count.
+    int onView(Face tile) const;
     std::vector<Move> turnMoves(int seat) const;
 
     const RuleSet* m_rules = nullptr;
@@ -175,6 +178,7 @@ private:
     int m_claims = 0;
     int m_kongs = 0;
     bool m_afterKong = false;
+    bool m_drewBonus = false; // the last drawInto set a bonus tile aside
 
     std::vector<Move> m_moves;
     HandResult m_result;

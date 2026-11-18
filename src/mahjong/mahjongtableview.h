@@ -40,8 +40,11 @@ public:
     // Large play holds it to mahjong::kTileMinWidth (GHUB-0248).
     double smallestTileWidth() const;
 
-    // A scoring pattern in words, as the end of a hand and the rules list it.
+    // A scoring pattern in words, as the end of a hand and the rules list it,
+    // and one plain sentence saying what it is, for the rules list. Both live
+    // in mahjongtablewords.cpp.
     static QString fanName(mahjong::Fan fan);
+    static QString fanMeaning(mahjong::Fan fan);
     // The save's bytes for a game's records. Public so a test can write a
     // save holding a move that is not legal, and see it refused.
     static QByteArray encodeSave(mahjong::RuleSetId rules, mahjong::Length length, int firstDealer,

@@ -89,7 +89,6 @@ Source for the account-once reading in § 4.5:
 | `ChineseOfficialRules`, its fan list and its exclusions | `src/mahjong/mahjongofficial.*`, new | core |
 | `RuleSet` additions, the shapes in `bestWin` | `src/mahjong/mahjongrules.*` | core |
 | The win flags, the dealer, the minimum | `src/mahjong/mahjongtable.*` | core |
-| The computer's aims | `src/mahjong/mahjongplayer.*` | core |
 | `fanName` and `fanMeaning` for every `Fan` | a new view file in `src/mahjong/` holding those two `MahjongTableView` members | view |
 | The rules text, the end of a hand, the menu label | `src/mahjong/mahjongtableview.cpp` | view |
 
@@ -156,7 +155,9 @@ could hold the winning tile, with `winningIn` set to that part (book § 3.9.1
 5(4), the freedom to choose the higher score).
 
 - **Sets.** As today. On a discard, the set holding the winning tile counts as
-  claimed: a pung is not concealed, a chow costs nothing.
+  claimed: a pung is not concealed, a chow costs nothing. A reading no part of
+  which holds the winning tile — only a test that names none — is kept whole,
+  with `winningIn` at -2.
 - **Seven pairs.** No sets laid down; fourteen tiles in seven pairs, four
   alike counting as two.
 - **Thirteen orphans.** As today, under `Shape::ThirteenOrphans`.
@@ -228,7 +229,7 @@ a kong. "Set laid down" excludes a concealed kong.
 | 12 | `KnittedStraight` | 1-4-7, 2-5-8 and 3-6-9, each in a different suit | — |
 | 12 | `UpperFour` | Only sixes to nines | No honours |
 | 12 | `LowerFour` | Only ones to fours | No honours |
-| 12 | `BigThreeWinds` | Pungs of three winds | Pung of terminals or honours† |
+| 12 | `BigThreeWinds` | Pungs of three winds | — |
 | 8 | `MixedStraight` | 1-2-3, 4-5-6 and 7-8-9, each in a different suit | — |
 | 8 | `ReversibleTiles` | Only tiles that look the same upside down: 1, 2, 3, 4, 5, 8 and 9 of circles, 2, 4, 5, 6, 8 and 9 of bamboo, and the white dragon | One voided suit |
 | 8 | `MixedTripleChow` | The same chow in all three suits | — |
@@ -249,9 +250,9 @@ a kong. "Set laid down" excludes a concealed kong.
 | 4 | `FullyConcealed` | No set laid down, won on a tile you drew | Self-drawn†, Concealed hand† |
 | 4 | `TwoMeldedKongs` | Two kongs, at least one claimed | Melded kong† |
 | 4 | `LastOfItsKind` | Won on a tile whose other three are already on view | — |
-| 2 | *`DragonPung`* | A pung of dragons, each | Pung of terminals or honours† |
-| 2 | *`PrevailingWindPung`* | A pung of the round's wind | Pung of terminals or honours† |
-| 2 | *`SeatWindPung`* | A pung of your own wind | Pung of terminals or honours† |
+| 2 | *`DragonPung`* | A pung of dragons, each | — |
+| 2 | *`PrevailingWindPung`* | A pung of the round's wind | — |
+| 2 | *`SeatWindPung`* | A pung of your own wind | — |
 | 2 | *`ConcealedHand`* | No set laid down, won on a discard | — |
 | 2 | `AllChowsNoHonours` | Four chows and a pair, no honours; a knitted straight counts as three chows | No honours |
 | 2 | `TileHog` | All four of one suit tile, none of them a kong, each | — |
@@ -309,9 +310,12 @@ points, book Two melded kongs). One kong scores `ConcealedKong` or
 `TwoConcealedPungs`, `ThreeConcealedPungs` and `FourConcealedPungs`.
 
 **Pungs that are already a pattern.** A wind pung scored as the seat or
-prevailing wind, or inside Big three winds, Small four winds or Big four
-winds, scores no `TerminalOrHonourPung`. A dragon pung is never one; it scores
-`DragonPung` unless a three-dragon or two-dragon pattern holds it.
+prevailing wind, or inside Big three winds, scores no `TerminalOrHonourPung`.
+A dragon pung is never one; it scores `DragonPung` unless a three-dragon or
+two-dragon pattern holds it. This is per pung: another pung of ones or nines
+in the same hand still scores, as the book's Two melded kongs example shows.
+Where a row's last column names Pung of terminals or honours, the whole
+pattern is struck, as the book lists it.
 
 **Waits.** With `waits == 1` only: `winningIn == -1` scores `SingleWait`; the
 middle of a chow scores `ClosedWait`; the 3 of 1-2-3 or the 7 of 7-8-9 scores
@@ -354,33 +358,11 @@ counts deals passed.
 
 ### 4.7 The computer
 
-**It keeps one aim and plays toward it.** Before each choice it measures, for
-a fixed list of aims, how many tiles the hand is from ready for that aim:
-
-- Seven pairs.
-- Mixed straight, for each of the six ways to give the three runs to the
-  three suits; Pure straight, for each suit; Mixed triple chow, for each
-  starting number.
-- Knitted straight, for each of its six assignments.
-- One suit with honours, for each suit; all pungs.
-- Any four sets and a pair, the fallback.
-
-The distance for a fixed-tile aim is the missing tiles of its pattern plus
-`tilesFromReady` of what is left, with that many fewer sets needed. The
-nearest aim wins; ties go to the higher-scoring aim.
-
-**Ready means ready to win.** A discard that leaves the hand one tile from
-complete counts as ready only when some tile would finish it into a legal
-win, scored by `bestWin` as a win on a discard. Otherwise it counts one tile
-further.
-
-**Claims.** It claims a set only when the claim brings its aim nearer, and
-never for Seven pairs or a knitted aim, which must stay concealed. It always
-wins when it can, as now.
-
-Hong Kong's computer is unchanged: the aims above are Chinese Official's, and
-`chooseMove` picks by `hand.rules().id()`. That is the one place outside the
-registry that names a rule set, because the computer's strategy is not a rule.
+**It plays as under Hong Kong, unchanged.** Any complete hand that scores
+nothing else is a Chicken hand, worth 8, so nearly every complete hand
+qualifies, and the computer's Hong Kong play reaches one often. Measured at
+the build: 20 of 24 hands won across six seeded East rounds, which INV-11
+prints. It always wins when it can, as now.
 
 ### 4.8 The view
 
@@ -420,9 +402,11 @@ creates. Each names the rule its fixture isolates.
 - **INV-2** — Each pattern scores on a hand that holds it, and not on one
   that does not.
   *Test:* `tests/selftest.cpp`, one fixture hand per § 4.4 row through
-  `bestWin`, asserting the item. The fixtures are the book's appendix
-  examples where it gives one. Each fixture isolates its row's meaning: a
-  near miss beside it (one tile changed) loses that item.
+  `bestWin`, asserting the item. Each fixture isolates its row's meaning: a
+  near miss beside it (one tile changed, or the way of winning) loses that
+  item. Four kongs, Three kongs, Two concealed kongs, Two melded kongs,
+  Concealed kong, Melded kong and Thirteen orphans have no near miss; their
+  sets are laid down as the pattern.
   *Breaks when:* a pattern is detected by the wrong test, so its near miss
   still scores it.
 
@@ -453,8 +437,9 @@ creates. Each names the rule its fixture isolates.
 
 - **INV-6** — The minimum is 8 without flowers.
   *Test:* `tests/selftest.cpp`. A complete hand worth 7 points plus two
-  flowers is offered no Win; the same hand with one more point is. Both are
-  complete, so only the minimum rule can refuse the first.
+  flowers is offered no Win on a discard; the same hand drawn yourself, 9
+  points, is. Both are complete, so only the minimum rule can refuse the
+  first.
   *Breaks when:* flowers count toward the minimum.
 
 - **INV-7** — Seven pairs, Thirteen orphans and both knitted shapes win
@@ -481,10 +466,10 @@ creates. Each names the rule its fixture isolates.
   tile follow § 4.3.
   *Test:* `tests/selftest.cpp`, arranged hands: a win on the discard after
   the wall empties scores Last tile claim; a win on a tile whose three others
-  lie in pools and laid-down sets scores Last of its kind, and does not when
-  one of them is in a concealed kong; a win on a flower's replacement after a
-  kong scores Self-drawn and not Out with replacement tile.
-  *Breaks when:* a concealed kong counts as on view, or a flower replacement
+  lie in the pools scores Last of its kind, and with two there does not; a win
+  on a flower's replacement after a kong is self-drawn and not Out with
+  replacement tile.
+  *Breaks when:* fewer than three on view count, or a flower replacement
   counts as a kong's.
 
 - **INV-11** — Four-computer games under Chinese Official end, every win
@@ -492,8 +477,7 @@ creates. Each names the rule its fixture isolates.
   *Test:* `tests/selftest.cpp`, six seeded East rounds: each ends; every win's
   `qualifying` is at least 8; at least one hand in five is won. It prints the
   number won.
-  *Breaks when:* the computer aims at patterns that do not reach 8, so every
-  hand draws.
+  *Breaks when:* the computer stops completing hands, so every hand draws.
 
 - **INV-12** — The menu lists both rule sets, Chinese Official is remembered,
   and a Chinese Official save restores.
@@ -516,10 +500,9 @@ creates. Each names the rule its fixture isolates.
   different reading is a change to § 4.5.
 - **The computer rarely reaches 8** — INV-11 notices. Hands then draw, and
   the deal still passes, so the game still ends.
-- **Scoring cost** — `waits` adds 34 shape checks to each `bestWin`, which
-  `legalMoves` calls for each seat on each discard. If `--bench` or the
-  self-test's run time moves noticeably, `waits` is computed only for a
-  rule set that scores waits.
+- **Scoring cost** — `waits` adds 34 shape checks to each `bestWin` that
+  finds a win. Measured at the build: the whole self-test ran in 4.4 to 4.6
+  seconds against 4.2 to 4.5 before, while playing six more games.
 
 ## 7. Tests
 

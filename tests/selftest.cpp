@@ -14,6 +14,7 @@
 #include "holdline/holdlinefield.h"
 #include "noughts/noughtsboard.h"
 #include "mahjong/mahjongboard.h"
+#include "mahjong/mahjongofficial.h"
 #include "mahjong/mahjongplayer.h"
 #include "mahjong/mahjongtable.h"
 #include "pinball/pinballtable.h"
@@ -43,6 +44,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <map>
 
 #include <QByteArray>
@@ -2226,11 +2228,13 @@ struct GameRun {
 };
 
 // A whole game, four computer seats, checking INV-1, INV-6 and INV-9 as it
-// goes.
-GameRun playGame(mahjong::Length length, std::uint32_t seed)
+// goes -- and GHUB-0243's INV-8, INV-9 and INV-11 under Chinese Official.
+GameRun playGame(mahjong::Length length, std::uint32_t seed,
+                 mahjong::RuleSetId rules = mahjong::RuleSetId::HongKong)
 {
     GameRun run;
-    mahjong::Game g(mahjong::RuleSetId::HongKong, length);
+    const mahjong::RuleSet& set = mahjong::ruleSet(rules);
+    mahjong::Game g(rules, length);
     for (int hand = 0; hand < 200 && !g.over(); ++hand) {
         const int dealer = g.dealer();
         const int passed = g.dealsPassed();
@@ -2252,9 +2256,9 @@ GameRun playGame(mahjong::Length length, std::uint32_t seed)
         run.zeroSum = run.zeroSum && sum == 0;
         if (!r.drawn) {
             ++run.won;
-            run.minimumKept = run.minimumKept && r.score.total >= hk().minimumToWin();
+            run.minimumKept = run.minimumKept && r.score.qualifying >= set.minimumToWin();
         }
-        const bool keeps = r.drawn || r.win.winner == dealer;
+        const bool keeps = set.dealerRepeats() && (r.drawn || r.win.winner == dealer);
         run.dealMoved = run.dealMoved
             && (keeps ? g.dealer() == dealer && g.dealsPassed() == passed
                       : g.dealer() == (dealer + 1) % 4 && g.dealsPassed() == passed + 1)
@@ -2548,7 +2552,7 @@ void mahjongTableFanList()
         covered.insert(int(f.fan));
     }
     check(all, "mahjong table: every § 4.4 pattern and limit hand scores its listed fan (INV-5)");
-    check(int(covered.size()) == mahjong::kFanCount, "mahjong table: and the fixtures cover every Fan");
+    check(covered.size() == hk().fanList().size(), "mahjong table: and the fixtures cover every Hong Kong Fan");
 
     // The includes: Small three dragons does not add its two dragon pungs.
     mahjong::WinContext how;
@@ -2790,8 +2794,804 @@ void mahjongTableReplays()
           "mahjong table: a replay meeting a move that is not legal is refused");
 }
 
-} // namespace
 
+// ---------------------------------------------------------------------------
+// Chinese Official rules (GHUB-0243)
+//
+// The spec's § 5. Each fixture hand is built tile by tile; the winning tile
+// is the last one listed, and the seat is South in an East round, winning on
+// a discard from East with no flowers, unless a fixture says otherwise.
+// ---------------------------------------------------------------------------
+
+namespace mj {
+
+const mahjong::RuleSet& co()
+{
+    return mahjong::ruleSet(mahjong::RuleSetId::ChineseOfficial);
+}
+
+using How = std::function<void(mahjong::WinContext&)>;
+
+std::optional<std::pair<mahjong::WinContext, mahjong::HandScore>>
+coWin(const std::vector<Face>& concealed, const std::vector<mahjong::Meld>& melds = {}, const How& how = {},
+      const mahjong::RuleSet* rules = nullptr)
+{
+    mahjong::WinContext w;
+    w.seatWind = 2;
+    w.prevailingWind = 1;
+    w.winner = 1;
+    w.payer = 0;
+    w.winningTile = concealed.empty() ? Face(0) : concealed.back();
+    if (how)
+        how(w);
+    return mahjong::bestWin(rules ? *rules : co(), concealed, melds, w);
+}
+
+int countOf(const std::optional<std::pair<mahjong::WinContext, mahjong::HandScore>>& w, mahjong::Fan fan)
+{
+    if (!w)
+        return 0;
+    return int(std::count_if(w->second.items.begin(), w->second.items.end(),
+                             [fan](const mahjong::ScoreItem& i) { return i.fan == fan; }));
+}
+
+std::string itemsOf(const std::optional<std::pair<mahjong::WinContext, mahjong::HandScore>>& w)
+{
+    if (!w)
+        return "no win";
+    std::string out;
+    for (const mahjong::ScoreItem& i : w->second.items)
+        out += std::to_string(int(i.fan)) + ":" + std::to_string(i.value) + " ";
+    return out;
+}
+
+const How selfDraw = [](mahjong::WinContext& w) {
+    w.selfDrawn = true;
+    w.payer = -1;
+};
+
+// Four chows of three suits and a pair of the Two of Bamboo, on a discard.
+std::vector<Face> chowHand()
+{
+    return tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(7), 1 },
+                   { D(8), 1 }, { D(9), 1 }, { B(2), 2 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 } });
+}
+
+// Nothing scores but the hand itself: two chows laid down, a pung of a
+// middle number, an open wait, honours only in the pair.
+const std::vector<mahjong::Meld> chickenMelds { { mahjong::SetKind::Chow, C(1), false },
+                                                { mahjong::SetKind::Pung, B(5), false } };
+std::vector<Face> chickenHand()
+{
+    return tiles({ { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { W(3), 2 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 } });
+}
+
+} // namespace mj
+
+// INV-1: the list is § 4.4's, by value.
+void officialFanList()
+{
+    using namespace mj;
+    const std::vector<mahjong::ScoreItem> list = co().fanList();
+    std::map<int, int> byValue;
+    std::set<int> fans;
+    for (const mahjong::ScoreItem& i : list) {
+        ++byValue[i.value];
+        fans.insert(int(i.fan));
+    }
+    const std::map<int, int> book { { 88, 7 }, { 64, 6 }, { 48, 2 }, { 32, 3 }, { 24, 9 }, { 16, 6 },
+                                    { 12, 5 }, { 8, 10 }, { 6, 6 },  { 4, 4 },  { 2, 10 }, { 1, 13 } };
+    check(list.size() == 81 && fans.size() == 81,
+          "chinese official: the fan list holds 81 different patterns (INV-1)");
+    check(byValue == book, "chinese official: and as many at each value as the rule book (INV-1)");
+}
+
+// INV-2: each pattern scores on a hand that holds it, and a near miss beside
+// it does not.
+void officialEveryPattern()
+{
+    using namespace mj;
+    using mahjong::Fan;
+    using mahjong::Meld;
+    using mahjong::SetKind;
+    struct Fixture {
+        const char* name;
+        Fan fan;
+        std::vector<Face> concealed;
+        std::vector<Meld> melds;
+        How how;
+        // One tile changed, or the way of winning changed: the pattern goes.
+        std::vector<Face> near;
+        How nearHow;
+    };
+    const std::vector<Face> chows = chowHand();
+    const How set = [](auto&) {};
+    const std::vector<Fixture> fixtures {
+        { "Big four winds", Fan::BigFourWinds,
+          tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { C(1), 2 }, { W(4), 3 } }), {}, set,
+          tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { C(1), 2 }, { C(4), 3 } }), set },
+        { "Big three dragons", Fan::BigThreeDragons,
+          tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(5), 2 }, { Dr(3), 3 } }),
+          {}, set,
+          tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(5), 2 }, { W(3), 3 } }),
+          set },
+        { "All green", Fan::AllGreen,
+          tiles({ { B(2), 2 }, { B(3), 2 }, { B(4), 2 }, { B(6), 3 }, { B(8), 3 }, { Dr(2), 2 } }), {}, set,
+          tiles({ { B(2), 2 }, { B(3), 2 }, { B(4), 2 }, { B(6), 3 }, { B(8), 3 }, { Dr(1), 2 } }), set },
+        { "Nine gates", Fan::NineGates,
+          tiles({ { C(1), 3 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 },
+                  { C(9), 3 }, { C(5), 2 } }),
+          {}, set,
+          tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 2 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 },
+                  { C(9), 3 }, { C(1), 3 } }),
+          set },
+        { "Four kongs", Fan::FourKongs, tiles({ { B(8), 2 } }),
+          { { SetKind::Kong, C(2), false }, { SetKind::Kong, B(3), false }, { SetKind::Kong, D(4), true },
+            { SetKind::Kong, C(7), false } },
+          set, {}, {} },
+        { "Seven shifted pairs", Fan::SevenShiftedPairs,
+          tiles({ { C(1), 2 }, { C(2), 2 }, { C(3), 2 }, { C(4), 2 }, { C(5), 2 }, { C(6), 2 }, { C(7), 2 } }), {},
+          set,
+          tiles({ { C(1), 2 }, { C(2), 2 }, { C(3), 2 }, { C(4), 2 }, { C(5), 2 }, { C(6), 2 }, { C(8), 2 } }),
+          set },
+        { "Thirteen orphans", Fan::ThirteenOrphans,
+          tiles({ { C(1), 2 }, { C(9), 1 }, { B(1), 1 }, { B(9), 1 }, { D(1), 1 }, { D(9), 1 }, { W(1), 1 },
+                  { W(2), 1 }, { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 }, { Dr(3), 1 } }),
+          {}, set, {}, {} },
+        { "All terminals", Fan::AllTerminals,
+          tiles({ { C(1), 3 }, { C(9), 3 }, { B(1), 3 }, { B(9), 3 }, { D(1), 2 } }), {}, set,
+          tiles({ { C(1), 3 }, { C(9), 3 }, { B(1), 3 }, { B(9), 3 }, { W(1), 2 } }), set },
+        { "Small four winds", Fan::SmallFourWinds,
+          tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { W(4), 2 } }),
+          {}, set,
+          tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { Dr(1), 2 } }),
+          set },
+        { "Small three dragons", Fan::SmallThreeDragons,
+          tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                  { B(6), 1 }, { Dr(3), 2 } }),
+          {}, set,
+          tiles({ { Dr(1), 3 }, { Dr(2), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                  { B(6), 1 }, { W(3), 2 } }),
+          set },
+        { "All honours", Fan::AllHonours,
+          tiles({ { W(1), 3 }, { W(2), 3 }, { Dr(1), 3 }, { Dr(2), 3 }, { W(3), 2 } }), {}, set,
+          tiles({ { W(1), 3 }, { W(2), 3 }, { Dr(1), 3 }, { Dr(2), 3 }, { C(1), 2 } }), set },
+        { "Four concealed pungs", Fan::FourConcealedPungs,
+          tiles({ { C(2), 3 }, { B(3), 3 }, { D(4), 3 }, { B(8), 2 }, { C(7), 3 } }), {}, selfDraw,
+          tiles({ { C(2), 3 }, { B(3), 3 }, { D(4), 3 }, { B(8), 2 }, { C(7), 3 } }), set },
+        { "Pure terminal chows", Fan::PureTerminalChows,
+          tiles({ { C(1), 2 }, { C(2), 2 }, { C(3), 2 }, { C(7), 2 }, { C(8), 2 }, { C(9), 2 }, { C(5), 2 } }), {},
+          set,
+          tiles({ { C(1), 2 }, { C(2), 2 }, { C(3), 2 }, { C(7), 2 }, { C(8), 2 }, { C(9), 2 }, { B(5), 2 } }),
+          set },
+        { "Quadruple chow", Fan::QuadrupleChow, tiles({ { C(2), 4 }, { C(3), 4 }, { B(5), 2 }, { C(4), 4 } }), {},
+          set, tiles({ { C(2), 4 }, { C(3), 4 }, { B(5), 2 }, { C(4), 3 }, { C(5), 1 } }), set },
+        { "Four shifted pungs", Fan::FourPureShiftedPungs,
+          tiles({ { C(2), 3 }, { C(3), 3 }, { C(4), 3 }, { B(9), 2 }, { C(5), 3 } }), {}, set,
+          tiles({ { C(2), 3 }, { C(3), 3 }, { C(4), 3 }, { B(9), 2 }, { C(6), 3 } }), set },
+        { "Four shifted chows", Fan::FourPureShiftedChows,
+          tiles({ { C(1), 1 }, { C(2), 2 }, { C(3), 3 }, { C(4), 3 }, { C(5), 2 }, { B(9), 2 }, { C(6), 1 } }), {},
+          set,
+          tiles({ { C(1), 1 }, { C(2), 2 }, { C(3), 3 }, { C(4), 3 }, { C(5), 2 }, { B(9), 2 }, { D(6), 1 } }),
+          set },
+        { "Three kongs", Fan::ThreeKongs, tiles({ { D(7), 1 }, { D(8), 1 }, { B(5), 2 }, { D(9), 1 } }),
+          { { SetKind::Kong, C(2), false }, { SetKind::Kong, B(3), false }, { SetKind::Kong, D(4), false } }, set,
+          {}, {} },
+        { "All ones, nines and honours", Fan::AllTerminalsAndHonours,
+          tiles({ { C(1), 3 }, { C(9), 3 }, { W(3), 3 }, { B(1), 2 }, { Dr(1), 3 } }), {}, set,
+          tiles({ { C(1), 3 }, { C(9), 3 }, { W(3), 3 }, { B(1), 2 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 } }),
+          set },
+        { "Seven pairs", Fan::SevenPairs,
+          tiles({ { C(1), 2 }, { C(3), 2 }, { C(5), 2 }, { B(2), 2 }, { B(7), 2 }, { D(4), 2 }, { W(3), 2 } }), {},
+          set,
+          tiles({ { C(1), 2 }, { C(3), 2 }, { C(5), 2 }, { B(2), 2 }, { B(7), 2 }, { D(4), 2 }, { W(3), 1 },
+                  { W(4), 1 } }),
+          set },
+        { "Greater honours and knitted tiles", Fan::GreaterHonoursKnitted,
+          tiles({ { C(1), 1 }, { C(4), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 }, { B(8), 1 }, { D(3), 1 },
+                  { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 }, { Dr(3), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(4), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 }, { B(8), 1 }, { D(3), 1 },
+                  { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 }, { D(6), 1 } }),
+          set },
+        { "All even pungs", Fan::AllEvenPungs,
+          tiles({ { C(2), 3 }, { B(4), 3 }, { D(6), 3 }, { B(2), 2 }, { C(8), 3 } }), {}, set,
+          tiles({ { C(2), 3 }, { B(4), 3 }, { D(6), 3 }, { B(2), 2 }, { C(9), 3 } }), set },
+        { "Pure one suit", Fan::PureOneSuit,
+          tiles({ { C(1), 1 }, { C(2), 4 }, { C(3), 1 }, { C(4), 1 }, { C(5), 3 }, { C(6), 1 }, { C(7), 1 },
+                  { C(8), 1 }, { C(9), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 3 }, { C(6), 1 }, { C(7), 1 },
+                  { C(8), 1 }, { C(9), 1 }, { B(2), 3 } }),
+          set },
+        { "Pure triple chow", Fan::PureTripleChow,
+          tiles({ { C(2), 2 }, { C(3), 2 }, { C(4), 2 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(5), 2 } }),
+          { { SetKind::Chow, C(2), false } }, set,
+          tiles({ { C(2), 2 }, { C(3), 2 }, { C(4), 1 }, { C(5), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 },
+                  { D(5), 2 } }),
+          set },
+        { "Three shifted pungs", Fan::PureShiftedPungs,
+          tiles({ { C(2), 3 }, { C(3), 3 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(5), 2 }, { C(4), 3 } }), {},
+          set,
+          tiles({ { C(2), 3 }, { C(3), 3 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(5), 2 }, { C(5), 3 } }),
+          set },
+        { "Upper tiles", Fan::UpperTiles,
+          tiles({ { C(7), 1 }, { C(8), 1 }, { C(9), 4 }, { B(7), 1 }, { B(8), 3 }, { B(9), 1 }, { D(7), 1 },
+                  { D(8), 1 }, { D(9), 1 } }),
+          {}, set,
+          tiles({ { C(7), 1 }, { C(8), 1 }, { C(9), 4 }, { B(7), 1 }, { B(8), 3 }, { B(9), 1 }, { D(6), 1 },
+                  { D(7), 1 }, { D(8), 1 } }),
+          set },
+        { "Middle tiles", Fan::MiddleTiles,
+          tiles({ { C(4), 1 }, { C(5), 4 }, { C(6), 1 }, { B(4), 1 }, { B(5), 3 }, { B(6), 1 }, { D(4), 1 },
+                  { D(5), 1 }, { D(6), 1 } }),
+          {}, set,
+          tiles({ { C(4), 1 }, { C(5), 4 }, { C(6), 1 }, { B(4), 1 }, { B(5), 3 }, { B(6), 1 }, { D(5), 1 },
+                  { D(6), 1 }, { D(7), 1 } }),
+          set },
+        { "Lower tiles", Fan::LowerTiles,
+          tiles({ { C(1), 1 }, { C(2), 4 }, { C(3), 1 }, { B(1), 1 }, { B(2), 3 }, { B(3), 1 }, { D(1), 1 },
+                  { D(2), 1 }, { D(3), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 4 }, { C(3), 1 }, { B(1), 1 }, { B(2), 3 }, { B(3), 1 }, { D(2), 1 },
+                  { D(3), 1 }, { D(4), 1 } }),
+          set },
+        { "Pure straight", Fan::PureStraight,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                  { C(8), 1 }, { B(2), 3 }, { D(5), 2 }, { C(9), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                  { C(8), 1 }, { B(2), 3 }, { D(5), 2 }, { C(6), 1 } }),
+          set },
+        { "Three-suited terminal chows", Fan::ThreeSuitedTerminalChows,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(7), 1 }, { C(8), 1 }, { C(9), 1 }, { B(1), 1 },
+                  { B(2), 1 }, { B(3), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(5), 2 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(7), 1 }, { C(8), 1 }, { C(9), 1 }, { B(1), 1 },
+                  { B(2), 1 }, { B(3), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(6), 2 } }),
+          set },
+        { "Three shifted chows", Fan::PureShiftedChows,
+          tiles({ { C(1), 1 }, { C(2), 2 }, { C(3), 3 }, { C(4), 2 }, { B(7), 3 }, { D(5), 2 }, { C(5), 1 } }), {},
+          set,
+          tiles({ { C(1), 1 }, { C(2), 2 }, { C(3), 2 }, { C(4), 1 }, { D(3), 1 }, { D(4), 1 }, { D(5), 3 },
+                  { B(7), 3 } }),
+          set },
+        { "All fives", Fan::AllFives,
+          tiles({ { C(3), 1 }, { C(4), 1 }, { C(5), 4 }, { B(4), 1 }, { B(5), 3 }, { B(6), 1 }, { D(5), 3 } }), {},
+          set,
+          tiles({ { C(3), 1 }, { C(4), 1 }, { C(5), 4 }, { B(4), 1 }, { B(5), 3 }, { B(6), 1 }, { D(6), 3 } }),
+          set },
+        { "Triple pung", Fan::TriplePung,
+          tiles({ { C(3), 3 }, { B(3), 3 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 }, { W(3), 2 }, { D(3), 3 } }), {},
+          set,
+          tiles({ { C(3), 3 }, { B(3), 3 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 }, { W(3), 2 }, { D(4), 3 } }),
+          set },
+        { "Three concealed pungs", Fan::ThreeConcealedPungs,
+          tiles({ { C(2), 3 }, { B(5), 3 }, { D(8), 3 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { W(3), 2 } }), {},
+          set,
+          tiles({ { C(2), 3 }, { B(5), 3 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { W(3), 2 }, { D(8), 3 } }),
+          set },
+        { "Lesser honours and knitted tiles", Fan::LesserHonoursKnitted,
+          tiles({ { C(1), 1 }, { C(4), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 }, { B(8), 1 }, { D(3), 1 },
+                  { D(6), 1 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(4), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 }, { B(8), 1 }, { D(3), 1 },
+                  { D(5), 1 }, { W(1), 1 }, { W(2), 1 }, { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 } }),
+          set },
+        { "Knitted straight", Fan::KnittedStraight,
+          tiles({ { C(1), 1 }, { C(4), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 }, { B(8), 1 }, { D(3), 1 },
+                  { D(6), 1 }, { Dr(1), 3 }, { C(5), 2 }, { D(9), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(4), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 }, { B(8), 1 }, { D(3), 1 },
+                  { D(6), 1 }, { Dr(1), 3 }, { C(5), 2 }, { D(8), 1 } }),
+          set },
+        { "Upper four", Fan::UpperFour,
+          tiles({ { C(6), 1 }, { C(7), 1 }, { C(8), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { B(6), 2 }, { C(9), 3 } }),
+          {}, set,
+          tiles({ { C(6), 1 }, { C(7), 1 }, { C(8), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { B(6), 2 }, { C(5), 3 } }),
+          set },
+        { "Lower four", Fan::LowerFour,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(2), 1 }, { B(3), 1 }, { B(4), 1 }, { D(1), 1 },
+                  { D(2), 1 }, { D(3), 1 }, { B(1), 2 }, { C(4), 3 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(2), 1 }, { B(3), 1 }, { B(4), 1 }, { D(1), 1 },
+                  { D(2), 1 }, { D(3), 1 }, { B(1), 2 }, { C(5), 3 } }),
+          set },
+        { "Big three winds", Fan::BigThreeWinds,
+          tiles({ { W(1), 3 }, { W(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(5), 2 }, { W(4), 3 } }), {},
+          set,
+          tiles({ { W(1), 3 }, { W(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(5), 2 }, { Dr(1), 3 } }),
+          set },
+        { "Mixed straight", Fan::MixedStraight,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(7), 1 },
+                  { D(8), 1 }, { W(3), 3 }, { C(5), 2 }, { D(9), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 },
+                  { D(7), 1 }, { W(3), 3 }, { C(5), 2 }, { D(8), 1 } }),
+          set },
+        { "Reversible tiles", Fan::ReversibleTiles,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 2 }, { C(4), 1 }, { C(5), 1 }, { B(4), 1 }, { B(5), 1 },
+                  { B(6), 1 }, { Dr(3), 2 }, { B(8), 3 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 2 }, { C(4), 1 }, { C(5), 1 }, { B(4), 1 }, { B(5), 1 },
+                  { B(6), 1 }, { Dr(3), 2 }, { B(7), 3 } }),
+          set },
+        { "Mixed triple chow", Fan::MixedTripleChow,
+          tiles({ { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { B(3), 1 }, { B(4), 1 }, { B(5), 1 }, { D(3), 1 },
+                  { D(4), 1 }, { W(3), 3 }, { Dr(1), 2 }, { D(5), 1 } }),
+          {}, set,
+          tiles({ { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { B(3), 1 }, { B(4), 1 }, { B(5), 1 }, { D(4), 1 },
+                  { D(5), 1 }, { W(3), 3 }, { Dr(1), 2 }, { D(6), 1 } }),
+          set },
+        { "Mixed shifted pungs", Fan::MixedShiftedPungs,
+          tiles({ { C(3), 3 }, { B(4), 3 }, { C(7), 1 }, { C(8), 1 }, { C(9), 1 }, { W(3), 2 }, { D(5), 3 } }), {},
+          set,
+          tiles({ { C(3), 3 }, { B(4), 3 }, { C(7), 1 }, { C(8), 1 }, { C(9), 1 }, { W(3), 2 }, { D(6), 3 } }),
+          set },
+        { "Chicken hand", Fan::ChickenHand, chickenHand(), chickenMelds, set, chickenHand(), selfDraw },
+        { "Last tile of the wall", Fan::LastTile, chows, {},
+          [](auto& w) {
+              selfDraw(w);
+              w.lastTile = true;
+          },
+          chows, selfDraw },
+        { "Won on the last discard", Fan::LastTileClaim, chows, {}, [](auto& w) { w.lastTileClaim = true; }, chows,
+          set },
+        { "Kong replacement", Fan::KongReplacement, chows, {},
+          [](auto& w) {
+              selfDraw(w);
+              w.kongReplacement = true;
+          },
+          chows, selfDraw },
+        { "Robbing a kong", Fan::RobbingAKong, chows, {}, [](auto& w) { w.robbedKong = true; }, chows, set },
+        { "Two concealed kongs", Fan::TwoConcealedKongs,
+          tiles({ { D(4), 1 }, { D(5), 1 }, { D(6), 1 }, { C(7), 1 }, { C(8), 1 }, { B(8), 2 }, { C(9), 1 } }),
+          { { SetKind::Kong, C(2), true }, { SetKind::Kong, B(3), true } }, set, {}, {} },
+        { "All pungs", Fan::AllPungs, tiles({ { C(2), 3 }, { B(3), 3 }, { D(4), 3 }, { B(8), 2 } }),
+          { { SetKind::Pung, C(7), false } }, set,
+          tiles({ { C(2), 3 }, { B(3), 1 }, { B(4), 1 }, { B(5), 1 }, { D(4), 3 }, { B(8), 2 } }), set },
+        { "Mixed one suit", Fan::MixedOneSuit,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 },
+                  { C(9), 1 }, { W(3), 3 }, { C(5), 3 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(6), 1 }, { C(7), 1 }, { C(8), 1 },
+                  { C(9), 1 }, { B(3), 3 }, { C(5), 3 } }),
+          set },
+        { "Mixed shifted chows", Fan::MixedShiftedChows,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(2), 1 }, { B(3), 1 }, { B(4), 1 }, { D(3), 1 },
+                  { D(4), 1 }, { W(3), 3 }, { Dr(1), 2 }, { D(5), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(2), 1 }, { B(3), 1 }, { B(4), 1 }, { D(4), 1 },
+                  { D(5), 1 }, { W(3), 3 }, { Dr(1), 2 }, { D(6), 1 } }),
+          set },
+        { "All types", Fan::AllTypes,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(7), 3 },
+                  { W(3), 3 }, { Dr(1), 2 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(7), 3 },
+                  { W(3), 3 }, { W(4), 2 } }),
+          set },
+        { "Melded hand", Fan::MeldedHand, tiles({ { Dr(1), 2 } }),
+          { { SetKind::Chow, C(1), false }, { SetKind::Pung, B(5), false }, { SetKind::Chow, D(2), false },
+            { SetKind::Pung, W(3), false } },
+          set, tiles({ { Dr(1), 2 } }), selfDraw },
+        { "Two dragon pungs", Fan::TwoDragonPungs,
+          tiles({ { Dr(1), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                  { D(5), 2 }, { Dr(2), 3 } }),
+          {}, set,
+          tiles({ { Dr(1), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                  { D(5), 2 }, { W(2), 3 } }),
+          set },
+        { "Outside hand", Fan::OutsideHand,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(7), 1 }, { B(8), 1 }, { B(9), 1 }, { D(1), 3 },
+                  { W(3), 3 }, { C(9), 2 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(6), 1 }, { B(7), 1 }, { B(8), 1 }, { D(1), 3 },
+                  { W(3), 3 }, { C(9), 2 } }),
+          set },
+        { "Fully concealed hand", Fan::FullyConcealed, chows, {}, selfDraw, chows, set },
+        { "Two melded kongs", Fan::TwoMeldedKongs,
+          tiles({ { D(4), 1 }, { D(5), 1 }, { D(6), 1 }, { C(7), 1 }, { C(8), 1 }, { B(8), 2 }, { C(9), 1 } }),
+          { { SetKind::Kong, C(2), false }, { SetKind::Kong, B(3), false } }, set, {}, {} },
+        { "Last of its kind", Fan::LastOfItsKind, chows, {}, [](auto& w) { w.lastOfItsKind = true; }, chows, set },
+        { "Pung of dragons", Fan::DragonPung,
+          tiles({ { Dr(1), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 } }),
+          {}, set,
+          tiles({ { W(3), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 } }),
+          set },
+        { "Pung of the round's wind", Fan::PrevailingWindPung,
+          tiles({ { W(1), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 } }),
+          {}, set,
+          tiles({ { W(4), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 } }),
+          set },
+        { "Pung of your own wind", Fan::SeatWindPung,
+          tiles({ { W(2), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 } }),
+          {}, set,
+          tiles({ { W(4), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { B(2), 2 } }),
+          set },
+        { "Concealed hand", Fan::ConcealedHand, chows, {}, set, chows, selfDraw },
+        { "All chows, no honours", Fan::AllChowsNoHonours, chows, {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(7), 1 },
+                  { D(8), 1 }, { D(9), 1 }, { W(3), 2 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 } }),
+          set },
+        { "Tile hog", Fan::TileHog,
+          tiles({ { C(3), 4 }, { C(4), 1 }, { C(5), 1 }, { B(6), 1 }, { B(7), 1 }, { B(8), 1 }, { W(3), 2 },
+                  { D(2), 3 } }),
+          {}, set,
+          tiles({ { C(3), 3 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { B(6), 1 }, { B(7), 1 }, { B(8), 1 },
+                  { W(3), 2 }, { D(2), 3 } }),
+          set },
+        { "Double pung", Fan::DoublePung,
+          tiles({ { C(3), 3 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                  { W(3), 2 }, { B(3), 3 } }),
+          {}, set,
+          tiles({ { C(3), 3 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                  { W(3), 2 }, { B(4), 3 } }),
+          set },
+        { "Two concealed pungs", Fan::TwoConcealedPungs,
+          tiles({ { C(2), 3 }, { B(5), 3 }, { D(6), 1 }, { D(7), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                  { W(3), 2 }, { D(8), 1 } }),
+          {}, set,
+          tiles({ { C(2), 3 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                  { W(3), 2 }, { B(5), 3 } }),
+          set },
+        { "Concealed kong", Fan::ConcealedKong,
+          tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { C(5), 1 },
+                  { C(6), 1 }, { W(3), 2 }, { C(7), 1 } }),
+          { { SetKind::Kong, C(2), true } }, set, {}, {} },
+        { "All simples", Fan::AllSimples,
+          tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { C(5), 1 }, { C(6), 1 }, { B(8), 2 }, { C(7), 1 } }),
+          {}, set,
+          tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { C(5), 1 }, { C(6), 1 }, { B(9), 2 }, { C(7), 1 } }),
+          set },
+        { "Pure double chow", Fan::PureDoubleChow,
+          tiles({ { C(2), 2 }, { C(3), 2 }, { B(6), 1 }, { B(7), 1 }, { B(8), 1 }, { D(5), 3 }, { W(3), 2 },
+                  { C(4), 2 } }),
+          {}, set,
+          tiles({ { C(2), 2 }, { C(3), 2 }, { B(6), 1 }, { B(7), 1 }, { B(8), 1 }, { D(5), 3 }, { W(3), 2 },
+                  { C(4), 1 }, { C(1), 1 } }),
+          set },
+        { "Mixed double chow", Fan::MixedDoubleChow,
+          tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(2), 1 }, { B(3), 1 }, { D(6), 3 }, { C(7), 1 },
+                  { C(8), 1 }, { C(9), 1 }, { W(3), 2 }, { B(4), 1 } }),
+          {}, set,
+          tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(3), 1 }, { B(4), 1 }, { D(6), 3 }, { C(7), 1 },
+                  { C(8), 1 }, { C(9), 1 }, { W(3), 2 }, { B(5), 1 } }),
+          set },
+        { "Short straight", Fan::ShortStraight,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { B(7), 3 }, { D(2), 1 },
+                  { D(3), 1 }, { D(4), 1 }, { W(3), 2 }, { C(6), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(5), 1 }, { C(6), 1 }, { B(7), 3 }, { D(2), 1 },
+                  { D(3), 1 }, { D(4), 1 }, { W(3), 2 }, { C(7), 1 } }),
+          set },
+        { "Two terminal chows", Fan::TwoTerminalChows,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(7), 1 }, { C(8), 1 }, { B(5), 3 }, { D(2), 1 },
+                  { D(3), 1 }, { D(4), 1 }, { W(3), 2 }, { C(9), 1 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(6), 1 }, { C(7), 1 }, { B(5), 3 }, { D(2), 1 },
+                  { D(3), 1 }, { D(4), 1 }, { W(3), 2 }, { C(8), 1 } }),
+          set },
+        { "Pung of ones, nines or a wind", Fan::TerminalOrHonourPung,
+          tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { C(5), 1 },
+                  { C(6), 1 }, { C(7), 1 }, { W(3), 2 }, { C(1), 3 } }),
+          {}, set,
+          tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { C(5), 1 },
+                  { C(6), 1 }, { C(7), 1 }, { W(3), 2 }, { C(2), 3 } }),
+          set },
+        { "Melded kong", Fan::MeldedKong,
+          tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { C(5), 1 },
+                  { C(6), 1 }, { W(3), 2 }, { C(7), 1 } }),
+          { { SetKind::Kong, C(2), false } }, set, {}, {} },
+        { "One suit missing", Fan::OneVoidedSuit,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { B(4), 1 },
+                  { B(5), 1 }, { B(6), 1 }, { W(3), 2 }, { B(8), 3 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { B(4), 1 },
+                  { B(5), 1 }, { B(6), 1 }, { W(3), 2 }, { D(8), 3 } }),
+          set },
+        { "No honours", Fan::NoHonours,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(7), 3 },
+                  { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { B(2), 2 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(7), 3 },
+                  { C(5), 1 }, { C(6), 1 }, { C(7), 1 }, { W(2), 2 } }),
+          set },
+        { "Edge wait", Fan::EdgeWait,
+          tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { B(8), 3 },
+                  { W(3), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 } }),
+          {}, set,
+          tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { B(8), 3 },
+                  { W(3), 2 }, { C(4), 1 }, { C(5), 1 }, { C(3), 1 } }),
+          set },
+        { "Closed wait", Fan::ClosedWait,
+          tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { B(8), 3 },
+                  { W(3), 2 }, { C(4), 1 }, { C(6), 1 }, { C(5), 1 } }),
+          {}, set,
+          tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 }, { B(8), 3 },
+                  { W(3), 2 }, { C(6), 1 }, { C(7), 1 }, { C(5), 1 } }),
+          set },
+        { "Single wait", Fan::SingleWait,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { B(8), 3 }, { W(3), 2 } }),
+          {}, set,
+          tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 },
+                  { D(7), 1 }, { D(8), 1 }, { B(8), 3 }, { C(4), 2 } }),
+          set },
+        { "Self-drawn", Fan::SelfDrawn, chickenHand(), chickenMelds, selfDraw, chickenHand(), set },
+        { "Flower or season", Fan::Flower, chows, {}, [](auto& w) { w.bonus = { F(1), S(3) }; }, chows, set },
+    };
+
+    std::set<int> covered;
+    bool all = true;
+    bool nearAll = true;
+    for (const Fixture& f : fixtures) {
+        const auto w = coWin(f.concealed, f.melds, f.how);
+        if (countOf(w, f.fan) == 0) {
+            std::printf("      chinese official: %s not scored: %s\n", f.name, itemsOf(w).c_str());
+            all = false;
+        }
+        covered.insert(int(f.fan));
+        if (!f.near.empty() || f.nearHow) {
+            const auto n = coWin(f.near.empty() ? f.concealed : f.near, f.melds, f.nearHow);
+            if (countOf(n, f.fan) != 0) {
+                std::printf("      chinese official: %s still scored by its near miss: %s\n", f.name,
+                            itemsOf(n).c_str());
+                nearAll = false;
+            }
+        }
+    }
+    check(all, "chinese official: every § 4.4 pattern scores on a hand that holds it (INV-2)");
+    check(nearAll, "chinese official: and not on the near miss beside it (INV-2)");
+    check(covered.size() == co().fanList().size(), "chinese official: and the fixtures cover every pattern");
+}
+
+// INV-3: a pattern a scored pattern's row rules out is struck.
+void officialExclusions()
+{
+    using namespace mj;
+    using mahjong::Fan;
+    // South holds all four wind pungs, so its own wind is among them.
+    const auto winds = coWin(tiles({ { W(1), 3 }, { W(2), 3 }, { W(3), 3 }, { C(1), 2 }, { W(4), 3 } }));
+    check(countOf(winds, Fan::BigFourWinds) == 1 && countOf(winds, Fan::SeatWindPung) == 0
+              && countOf(winds, Fan::BigThreeWinds) == 0 && countOf(winds, Fan::AllPungs) == 0
+              && countOf(winds, Fan::TerminalOrHonourPung) == 0,
+          "chinese official: Big four winds strikes Seat wind, Big three winds, All pungs (INV-3)");
+    const auto drawn = coWin(chowHand(), {}, selfDraw);
+    check(countOf(drawn, Fan::FullyConcealed) == 1 && countOf(drawn, Fan::SelfDrawn) == 0,
+          "chinese official: Fully concealed strikes Self-drawn (INV-3)");
+    const auto pairs = coWin(
+        tiles({ { C(1), 2 }, { C(3), 2 }, { C(5), 2 }, { B(2), 2 }, { B(7), 2 }, { D(4), 2 }, { W(3), 2 } }));
+    check(countOf(pairs, Fan::SevenPairs) == 1 && countOf(pairs, Fan::ConcealedHand) == 0,
+          "chinese official: Seven pairs strikes Concealed hand (INV-3)");
+    // Per pung, not per hand: a dragon pung leaves a pung of nines its point.
+    const auto mixed = coWin(tiles({ { Dr(1), 3 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(4), 1 }, { B(5), 1 },
+                                     { B(6), 1 }, { D(5), 2 }, { C(9), 3 } }));
+    check(countOf(mixed, Fan::DragonPung) == 1 && countOf(mixed, Fan::TerminalOrHonourPung) == 1,
+          "chinese official: a dragon pung and a pung of nines both score (book, Two melded kongs)");
+}
+
+// INV-4: the account-once rule.
+void officialAccountOnce()
+{
+    using namespace mj;
+    using mahjong::Fan;
+    const auto pairCount = [](const auto& w) {
+        return countOf(w, Fan::PureDoubleChow) + countOf(w, Fan::MixedDoubleChow) + countOf(w, Fan::ShortStraight)
+            + countOf(w, Fan::TwoTerminalChows);
+    };
+    // 2-3-4 and 5-6-7 in circles and diamonds: four two-chow patterns, a loop.
+    const auto loop = coWin(tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 }, { C(7), 1 },
+                                    { D(2), 1 }, { D(3), 1 }, { D(4), 1 }, { D(5), 1 }, { D(6), 1 }, { W(3), 2 },
+                                    { D(7), 1 } }));
+    check(pairCount(loop) == 3,
+          "chinese official: four chows holding four two-chow patterns score three of them (INV-4)");
+    // A pure straight and a second 1-2-3: the fourth chow joins it once.
+    const auto straight = coWin(tiles({ { C(1), 2 }, { C(2), 2 }, { C(3), 2 }, { C(4), 1 }, { C(5), 1 }, { C(6), 1 },
+                                        { C(7), 1 }, { C(8), 1 }, { B(5), 2 }, { C(9), 1 } }));
+    check(countOf(straight, Fan::PureStraight) == 1 && pairCount(straight) == 1,
+          "chinese official: a pure straight and a fourth chow score one two-chow pattern more (INV-4)");
+}
+
+// INV-5: a wait pattern needs one face alone to have finished the hand.
+void officialWaits()
+{
+    using namespace mj;
+    using mahjong::Fan;
+    const auto edge = coWin(tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 },
+                                    { B(8), 3 }, { W(3), 2 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 } }));
+    const auto open = coWin(tiles({ { B(4), 1 }, { B(5), 1 }, { B(6), 1 }, { D(6), 1 }, { D(7), 1 }, { D(8), 1 },
+                                    { B(8), 3 }, { W(3), 2 }, { C(4), 1 }, { C(5), 1 }, { C(3), 1 } }));
+    check(edge && edge->first.waits == 1 && countOf(edge, Fan::EdgeWait) == 1,
+          "chinese official: One-Two waiting only on the Three scores Edge wait (INV-5)");
+    check(open && open->first.waits == 2 && countOf(open, Fan::EdgeWait) == 0 && countOf(open, Fan::ClosedWait) == 0,
+          "chinese official: Four-Five waiting on Three or Six scores no wait (INV-5)");
+}
+
+// INV-6: 8 points to win, flowers aside.
+void officialMinimum()
+{
+    using namespace mj;
+    using mahjong::Action;
+    // Seat 1, South: concealed hand, all chows, all simples and one mixed
+    // double chow -- 7 points -- waiting on the Four or Seven of Diamonds.
+    const std::vector<Face> waiting = tiles({ { C(2), 1 }, { C(3), 1 }, { C(4), 1 }, { B(2), 1 }, { B(3), 1 },
+                                              { B(4), 1 }, { D(5), 1 }, { D(6), 1 }, { C(6), 1 }, { C(7), 1 },
+                                              { C(8), 1 }, { B(5), 2 }, { F(1), 1 }, { S(2), 1 } });
+    const std::vector<Face> junk = tiles({ { D(1), 3 }, { B(9), 3 }, { W(3), 1 }, { Dr(3), 1 }, { C(9), 1 },
+                                           { W(2), 1 }, { D(7), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 } });
+    {
+        std::array<std::vector<Face>, 4> hands { { junk, waiting, {}, {} } };
+        mahjong::Hand h = mahjong::Hand::arranged(co(), hands, tiles({ { C(1), 10 } }), 0, 0, 1);
+        const auto w = h.winOn(1, D(7), 0, false);
+        check(w && w->second.qualifying == 7 && w->second.total == 9,
+              "chinese official: a 7-point hand with two flowers totals 9, 7 toward the minimum");
+        h.play({ 0, Action::Discard, D(7), 0 });
+        check(!offers(h, 1, Action::Win), "chinese official: so Win is not offered for it (INV-6)");
+    }
+    {
+        std::array<std::vector<Face>, 4> hands { { junk, waiting, {}, {} } };
+        mahjong::Hand h = mahjong::Hand::arranged(co(), hands, tiles({ { D(7), 1 }, { C(1), 10 } }), 0, 0, 1);
+        h.play({ 0, Action::Discard, W(4), 0 });
+        passAll(h);
+        const auto w = h.winFor(1);
+        check(h.toMove() == 1 && w && w->second.qualifying >= 8 && offers(h, 1, Action::Win),
+              "chinese official: the same hand drawn yourself is fully concealed, 9, and may win (INV-6)");
+    }
+}
+
+// INV-7: the shapes win under Chinese Official, and only Thirteen orphans
+// under Hong Kong too.
+void officialShapes()
+{
+    using namespace mj;
+    const std::vector<Face> pairs =
+        tiles({ { C(1), 2 }, { C(3), 2 }, { C(5), 2 }, { B(2), 2 }, { B(7), 2 }, { D(4), 2 }, { W(3), 2 } });
+    const std::vector<Face> knitted = tiles({ { C(1), 1 }, { C(4), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 },
+                                              { B(8), 1 }, { D(3), 1 }, { D(6), 1 }, { Dr(1), 3 }, { C(5), 2 },
+                                              { D(9), 1 } });
+    const std::vector<Face> honours = tiles({ { C(1), 1 }, { C(4), 1 }, { C(7), 1 }, { B(2), 1 }, { B(5), 1 },
+                                              { B(8), 1 }, { D(3), 1 }, { D(6), 1 }, { W(1), 1 }, { W(2), 1 },
+                                              { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 } });
+    const std::vector<Face> orphans =
+        tiles({ { C(1), 2 }, { C(9), 1 }, { B(1), 1 }, { B(9), 1 }, { D(1), 1 }, { D(9), 1 }, { W(1), 1 },
+                { W(2), 1 }, { W(3), 1 }, { W(4), 1 }, { Dr(1), 1 }, { Dr(2), 1 }, { Dr(3), 1 } });
+    bool official = true;
+    bool hongKong = true;
+    for (const auto* hand : { &pairs, &knitted, &honours }) {
+        official = official && coWin(*hand).has_value();
+        hongKong = hongKong && !coWin(*hand, {}, {}, &hk()).has_value();
+    }
+    check(official && coWin(orphans).has_value(),
+          "chinese official: seven pairs, the knitted hands and thirteen orphans win (INV-7)");
+    check(hongKong && coWin(orphans, {}, {}, &hk()).has_value(),
+          "chinese official: under Hong Kong only thirteen orphans of them does (INV-7)");
+}
+
+// INV-8: 8 from every loser, the hand's points from whoever pays them.
+void officialPayments()
+{
+    using namespace mj;
+    mahjong::WinContext win;
+    win.winner = 1;
+    win.payer = 0;
+    mahjong::HandScore ten;
+    ten.points = 10;
+    const std::array<int, 4> discard = co().settle(win, ten);
+    check(discard == std::array<int, 4> { -18, 34, -8, -8 },
+          "chinese official: a 10-point win on a discard takes 18 from the thrower and 8 from the others (INV-8)");
+    win.payer = -1;
+    const std::array<int, 4> drawn = co().settle(win, ten);
+    check(drawn == std::array<int, 4> { -18, 54, -18, -18 },
+          "chinese official: self-drawn, 18 from each (INV-8)");
+}
+
+// INV-9 and INV-11: whole games between four computer seats.
+void officialGamesEnd()
+{
+    using namespace mj;
+    int hands = 0;
+    int won = 0;
+    bool ended = true;
+    bool held = true;
+    bool zero = true;
+    bool dealt = true;
+    bool minimum = true;
+    bool four = true;
+    for (std::uint32_t seed = 1; seed <= 6; ++seed) {
+        const GameRun r = playGame(mahjong::Length::EastRound, seed, mahjong::RuleSetId::ChineseOfficial);
+        hands += r.hands;
+        won += r.won;
+        ended = ended && r.ended;
+        held = held && r.tilesHeld;
+        zero = zero && r.zeroSum;
+        dealt = dealt && r.dealMoved;
+        minimum = minimum && r.minimumKept;
+        four = four && r.hands == 4;
+    }
+    std::printf("      chinese official: %d of %d hands won across six East rounds\n", won, hands);
+    check(ended && four, "chinese official: every East round ends after exactly four hands (INV-9)");
+    check(dealt, "chinese official: and the deal passes after every hand, won or drawn (INV-9)");
+    check(minimum, "chinese official: every win is worth 8 points without flowers (INV-11)");
+    check(hands > 0 && won * 5 >= hands, "chinese official: at least one hand in five is won (INV-11)");
+    check(held, "chinese official: every tile is somewhere, once, after every move");
+    check(zero, "chinese official: every hand's payments sum to zero (INV-8)");
+}
+
+// INV-10: the last discard, the last of its kind, and a flower after a kong.
+void officialLastTiles()
+{
+    using namespace mj;
+    using mahjong::Action;
+    using mahjong::Fan;
+    // Seat 1 waits on the Five of Circles between its Four and Six.
+    const std::vector<Face> waiting = tiles({ { C(4), 1 }, { C(6), 1 }, { B(1), 1 }, { B(2), 1 }, { B(3), 1 },
+                                              { D(7), 1 }, { D(8), 1 }, { D(9), 1 }, { W(3), 3 }, { Dr(1), 2 } });
+    {
+        // An empty wall: the discard is the last tile anyone can win on.
+        const std::vector<Face> junk = tiles({ { D(1), 3 }, { B(9), 3 }, { W(4), 3 }, { Dr(3), 3 }, { C(5), 2 } });
+        std::array<std::vector<Face>, 4> hands { { junk, waiting, {}, {} } };
+        mahjong::Hand h = mahjong::Hand::arranged(co(), hands, {}, 0, 0, 1);
+        const auto w = h.winOn(1, C(5), 0, false);
+        check(w && countOf(w, Fan::LastTileClaim) == 1,
+              "chinese official: a win on the discard after the wall empties is Won on the last discard (INV-10)");
+    }
+    {
+        // Three Fives thrown and passed, then the fourth: the last of its kind.
+        const std::vector<Face> east = tiles({ { C(5), 2 }, { D(1), 3 }, { B(9), 3 }, { W(4), 3 }, { Dr(3), 3 } });
+        const std::vector<Face> west = tiles({ { C(5), 1 }, { D(2), 3 }, { B(8), 3 }, { W(1), 3 }, { Dr(2), 3 } });
+        const std::vector<Face> north = tiles({ { C(5), 1 }, { D(3), 3 }, { B(7), 3 }, { W(2), 3 }, { C(9), 3 } });
+        std::array<std::vector<Face>, 4> hands { { east, waiting, west, north } };
+        // Each seat draws a tile it throws straight back.
+        mahjong::Hand h = mahjong::Hand::arranged(co(), hands, tiles({ { C(1), 1 }, { C(2), 1 }, { C(3), 1 },
+                                                                       { C(7), 1 }, { C(8), 1 } }),
+                                                  0, 0, 1);
+        h.play({ 0, Action::Discard, C(5), 0 });
+        passAll(h);
+        h.play({ 1, Action::Discard, C(1), 0 });
+        passAll(h);
+        h.play({ 2, Action::Discard, C(5), 0 });
+        passAll(h);
+        h.play({ 3, Action::Discard, C(5), 0 }); // two lie in the pools
+        const auto two = h.winOn(1, C(5), 3, false);
+        passAll(h);
+        h.play({ 0, Action::Discard, C(5), 0 }); // the fourth, three in the pools
+        const auto three = h.winOn(1, C(5), 0, false);
+        check(two && countOf(two, Fan::LastOfItsKind) == 0 && three && countOf(three, Fan::LastOfItsKind) == 1,
+              "chinese official: a Five whose other three are in the pools is Last of its kind; with two, not "
+              "(INV-10)");
+    }
+    {
+        // A kong whose replacement is a flower: the win on the flower's
+        // replacement is self-drawn, not on a kong's replacement.
+        const std::vector<Face> south = tiles({ { B(6), 4 }, { C(1), 1 }, { C(2), 1 }, { C(3), 1 }, { B(1), 1 },
+                                                { B(2), 1 }, { B(3), 1 }, { D(7), 1 }, { D(8), 1 }, { W(3), 2 } });
+        std::array<std::vector<Face>, 4> plain { { {}, south, {}, {} } };
+        mahjong::Hand h = mahjong::Hand::arranged(co(), plain, tiles({ { C(1), 4 }, { D(9), 1 } }), 1, 0, 1);
+        h.play({ 1, Action::ConcealedKong, B(6), 0 });
+        const auto direct = h.winFor(1);
+        mahjong::Hand f = mahjong::Hand::arranged(co(), plain, tiles({ { C(1), 4 }, { D(9), 1 }, { F(2), 1 } }), 1, 0,
+                                                  1);
+        f.play({ 1, Action::ConcealedKong, B(6), 0 });
+        const auto flowered = f.winFor(1);
+        check(direct && countOf(direct, Fan::KongReplacement) == 1,
+              "chinese official: the tile replacing a kong wins as a kong's replacement (INV-10)");
+        check(flowered && countOf(flowered, Fan::KongReplacement) == 0 && countOf(flowered, Fan::FullyConcealed) == 1,
+              "chinese official: a flower's replacement after a kong is self-drawn instead (INV-10)");
+    }
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Pyramid
@@ -8666,6 +9466,17 @@ int main()
     mahjongTableDrawnHand();
     mahjongTableReplays();
     mahjongTableGamesEnd();
+
+    officialFanList();
+    officialEveryPattern();
+    officialExclusions();
+    officialAccountOnce();
+    officialWaits();
+    officialMinimum();
+    officialShapes();
+    officialPayments();
+    officialGamesEnd();
+    officialLastTiles();
 
     holdLineStartsReady();
     holdLineMarches();

@@ -2721,10 +2721,11 @@ void mahjongPlaysAndKeepsItsPlace()
 
 // A save of a four-computer game, stopped at the first moment `stop` holds.
 // Empty if no seed reaches one.
-QByteArray mahjongSaveWhere(const std::function<bool(const mahjong::Hand&)>& stop)
+QByteArray mahjongSaveWhere(const std::function<bool(const mahjong::Hand&)>& stop,
+                            mahjong::RuleSetId rules = mahjong::RuleSetId::HongKong)
 {
     for (std::uint32_t seed = 1; seed < 60; ++seed) {
-        mahjong::Game g(mahjong::RuleSetId::HongKong, mahjong::Length::FullGame);
+        mahjong::Game g(rules, mahjong::Length::FullGame);
         for (int hand = 0; hand < 6 && !g.over(); ++hand) {
             g.startHand(seed * 100u + std::uint32_t(hand));
             for (int step = 0; step < 2000; ++step) {
@@ -2874,8 +2875,9 @@ void mahjongTableWaitsAndKeepsItsPlace()
     }
     bool everyWord = true;
     for (int f = 0; f < mahjong::kFanCount; ++f)
-        everyWord = everyWord && !MahjongTableView::fanName(mahjong::Fan(f)).isEmpty();
-    check(everyWord, "mahjong table: every Fan has its words (INV-13)");
+        everyWord = everyWord && !MahjongTableView::fanName(mahjong::Fan(f)).isEmpty()
+            && !MahjongTableView::fanMeaning(mahjong::Fan(f)).isEmpty();
+    check(everyWord, "mahjong table: every Fan has a name and a plain sentence (INV-13, GHUB-0243 INV-1)");
 
     // INV-11: an unknown stored rule set falls back, and the menu lists only
     // the rule sets this build has.
@@ -2890,8 +2892,9 @@ void mahjongTableWaitsAndKeepsItsPlace()
             if (a->objectName() == QStringLiteral("mahjong4-length-east"))
                 east = a;
         }
-        check(view.ruleSetInForce() == mahjong::RuleSetId::HongKong && ruleEntries == 1,
-              "mahjong table: an unknown stored rule set falls back to Hong Kong, one entry in the menu (INV-11)");
+        check(view.ruleSetInForce() == mahjong::RuleSetId::HongKong && ruleEntries == 2,
+              "mahjong table: an unknown stored rule set falls back to Hong Kong; the menu lists the two rule "
+              "sets this build has (INV-11, GHUB-0243 INV-12)");
         check(view.game().length() == mahjong::Length::FullGame, "mahjong table: a full game by default");
         if (east != nullptr)
             east->trigger();
@@ -2901,7 +2904,7 @@ void mahjongTableWaitsAndKeepsItsPlace()
         // note (GHUB-0249).
         const QString lengthNote = view.pendingNote();
         for (QAction* a : view.gameActions())
-            if (a->objectName().startsWith(QStringLiteral("mahjong4-rules-")))
+            if (a->objectName() == QStringLiteral("mahjong4-rules-1"))
                 a->trigger();
         check(!lengthNote.isEmpty() && view.pendingNote() == lengthNote,
               "mahjong table: the length's note survives choosing a rule set (GHUB-0249)");
@@ -2909,6 +2912,51 @@ void mahjongTableWaitsAndKeepsItsPlace()
         MahjongTableProbe next;
         check(next.game().length() == mahjong::Length::EastRound, "mahjong table: and the choice is remembered");
         next.deactivate();
+    }
+
+    // GHUB-0243 INV-12: Chinese Official chosen is in force in the next game,
+    // its rules text explains its patterns, and its save restores.
+    {
+        MahjongTableProbe view;
+        for (QAction* a : view.gameActions())
+            if (a->objectName() == QStringLiteral("mahjong4-rules-2"))
+                a->trigger();
+        view.deactivate();
+        MahjongTableProbe next;
+        const QString rules = next.rulesText();
+        check(next.ruleSetInForce() == mahjong::RuleSetId::ChineseOfficial
+                  && rules.contains(QStringLiteral("Chinese Official rules"))
+                  && rules.contains(MahjongTableView::fanMeaning(mahjong::Fan::KnittedStraight).toHtmlEscaped()),
+              "mahjong table: Chinese Official is remembered, and its rules text says what each pattern is "
+              "(GHUB-0243 INV-12)");
+        next.deactivate();
+    }
+    {
+        const QByteArray official = mahjongSaveWhere(
+            [](const mahjong::Hand& h) { return h.phase() == mahjong::Phase::Turn && h.moves().size() > 12; },
+            mahjong::RuleSetId::ChineseOfficial);
+        MahjongTableProbe resumed;
+        check(!official.isEmpty() && resumed.restoreState(official) && resumed.saveState() == official
+                  && resumed.game().ruleSetId() == mahjong::RuleSetId::ChineseOfficial,
+              "mahjong table: a Chinese Official save restores to the same table (GHUB-0243 INV-12)");
+        resumed.deactivate();
+        const QByteArray won = mahjongSaveWhere(
+            [](const mahjong::Hand& h) { return h.phase() == mahjong::Phase::Over && !h.result().drawn; },
+            mahjong::RuleSetId::ChineseOfficial);
+        MahjongTableProbe view;
+        const bool restored = view.restoreState(won);
+        const QString lines = restored ? view.endOfHandLines().join(QLatin1Char('\n')) : QString();
+        check(restored && lines.contains(QStringLiteral(" points")) && !lines.contains(QStringLiteral(" fan")),
+              "mahjong table: a Chinese Official win is counted in points, not fan (GHUB-0243 § 4.8)");
+        view.deactivate();
+        const QByteArray drawn = mahjongSaveWhere(
+            [](const mahjong::Hand& h) { return h.phase() == mahjong::Phase::Over && h.result().drawn; },
+            mahjong::RuleSetId::ChineseOfficial);
+        MahjongTableProbe draw;
+        check(draw.restoreState(drawn)
+                  && draw.endOfHandLines().join(QLatin1Char(' ')).contains(QStringLiteral("the deal passes on")),
+              "mahjong table: a drawn Chinese Official hand says the deal passes on (GHUB-0243 INV-9)");
+        draw.deactivate();
     }
     QSettings().remove(QStringLiteral("mahjong4/ruleSet"));
     QSettings().remove(QStringLiteral("mahjong4/length"));

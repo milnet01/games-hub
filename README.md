@@ -76,7 +76,7 @@ A few things worth knowing before you download:
 | **Mahjong Solitaire** | Clear a heap of 144 tiles by taking free pairs that match. Every heap can be cleared. |
 | **Hearts** | Four-handed Hearts against three computer players, to 100. |
 | **Canasta** | Partnership Canasta, two against two, with melds, wild cards, red threes and a freezing discard pile. Classic rules, plus a house set you can edit. |
-| **Mahjong** | The four-player table game against three computer players, by Hong Kong rules. Every scoring feature of a win is written out in words. |
+| **Mahjong** | The four-player table game against three computer players, by Hong Kong or Chinese Official rules. Every scoring feature of a win is written out in words, and the rules screen says what each one is. |
 | **Snake** | Eat, grow, and don't run into anything. |
 | **2048** | Slide the tiles, merge the numbers. |
 | **Pinball** | One table, three balls, two flippers. |

@@ -1,5 +1,7 @@
 #include "mahjongrules.h"
 
+#include "mahjongofficial.h"
+
 #include <algorithm>
 
 namespace mahjong {
@@ -17,19 +19,19 @@ bool isTerminal(Face tile)
     return numbered && (rankOf(tile) == 1 || rankOf(tile) == 9);
 }
 
+bool isNumbered(Face f)
+{
+    const Suit s = suitOf(f);
+    return s == Suit::Circles || s == Suit::Bamboo || s == Suit::Characters;
+}
+
 namespace {
 
 using Counts = std::array<int, kLastFace + 1>;
 
 bool numbered(Face f)
 {
-    const Suit s = suitOf(f);
-    return s == Suit::Circles || s == Suit::Bamboo || s == Suit::Characters;
-}
-
-bool isPungLike(const Meld& m)
-{
-    return m.kind == SetKind::Pung || m.kind == SetKind::Kong;
+    return isNumbered(f);
 }
 
 // Every way to read the tiles counted in `c` as exactly `needed` sets. The
@@ -146,8 +148,10 @@ int HongKongRules::fanValue(Fan fan)
 
 std::vector<ScoreItem> HongKongRules::fanList() const
 {
+    // GHUB-0239 § 4.4 only: the Fan values after EarthlyHand are Chinese
+    // Official's.
     std::vector<ScoreItem> all;
-    for (int f = 0; f < kFanCount; ++f)
+    for (int f = 0; f <= int(Fan::EarthlyHand); ++f)
         all.push_back({ Fan(f), fanValue(Fan(f)) });
     return all;
 }
@@ -207,7 +211,7 @@ HandScore HongKongRules::score(const WinContext& win) const
         limits.push_back(Fan::HeavenlyHand);
     if (win.earthly)
         limits.push_back(Fan::EarthlyHand);
-    if (win.thirteenOrphans) {
+    if (win.shape == Shape::ThirteenOrphans) {
         limits.push_back(Fan::ThirteenOrphans);
     } else {
         if (windPungs == 4)
@@ -239,6 +243,7 @@ HandScore HongKongRules::score(const WinContext& win) const
         for (Fan f : limits)
             add(f);
         s.total = kLimit;
+        s.qualifying = s.total;
         s.limit = true;
         s.points = pointsFor(s.total);
         return s;
@@ -310,6 +315,7 @@ HandScore HongKongRules::score(const WinContext& win) const
     for (const ScoreItem& item : s.items)
         sum += item.value;
     s.total = std::min(sum, kLimit);
+    s.qualifying = s.total;
     s.points = pointsFor(s.total);
     return s;
 }
@@ -340,7 +346,7 @@ std::array<int, 4> HongKongRules::settle(const WinContext& win, const HandScore&
 
 const std::vector<RuleSetId>& ruleSets()
 {
-    static const std::vector<RuleSetId> all { RuleSetId::HongKong };
+    static const std::vector<RuleSetId> all { RuleSetId::HongKong, RuleSetId::ChineseOfficial };
     return all;
 }
 
@@ -355,15 +361,134 @@ bool knownRuleSet(int value)
 const RuleSet& ruleSet(RuleSetId id)
 {
     static const HongKongRules hongKong;
+    static const ChineseOfficialRules chineseOfficial;
     switch (id) {
     case RuleSetId::HongKong: return hongKong;
+    case RuleSetId::ChineseOfficial: return chineseOfficial;
     }
     return hongKong;
 }
 
 // ---------------------------------------------------------------------------
-// Reading a hand as a win
+// Reading a hand as a win (GHUB-0243 § 4.3)
 // ---------------------------------------------------------------------------
+
+namespace {
+
+// The six ways to give the knitted runs 1-4-7, 2-5-8 and 3-6-9 to the three
+// suits: perm[run] is the suit, 0 circles, 1 bamboo, 2 characters.
+using KnitPerm = std::array<int, 3>;
+constexpr std::array<KnitPerm, 6> kKnitPerms { { { 0, 1, 2 }, { 0, 2, 1 }, { 1, 0, 2 },
+                                                 { 1, 2, 0 }, { 2, 0, 1 }, { 2, 1, 0 } } };
+
+Face suitFirst(int suit)
+{
+    return suit == 0 ? kCirclesFirst : suit == 1 ? kBambooFirst : kCharactersFirst;
+}
+
+// The nine tiles of the knitted straight `perm` makes.
+std::array<Face, 9> knittedTiles(const KnitPerm& perm)
+{
+    std::array<Face, 9> tiles {};
+    for (int run = 0; run < 3; ++run)
+        for (int step = 0; step < 3; ++step)
+            tiles[std::size_t(run) * 3 + std::size_t(step)] = Face(suitFirst(perm[std::size_t(run)]) + run + 3 * step);
+    return tiles;
+}
+
+// WinContext::knitted for `perm`: each suit's lowest knitted tile, in suit order.
+std::array<Face, 3> knittedLows(const KnitPerm& perm)
+{
+    std::array<Face, 3> lows {};
+    for (int run = 0; run < 3; ++run)
+        lows[std::size_t(perm[std::size_t(run)])] = Face(suitFirst(perm[std::size_t(run)]) + run);
+    return lows;
+}
+
+int tileCount(const Counts& c)
+{
+    int n = 0;
+    for (int k : c)
+        n += k;
+    return n;
+}
+
+// Whether the tiles in `c` make `needed` sets and a pair.
+bool setsComplete(Counts c, int needed)
+{
+    for (Face pair = 1; pair < kFlowerFirst; ++pair) {
+        if (c[pair] < 2)
+            continue;
+        c[pair] -= 2;
+        std::vector<std::vector<Meld>> readings;
+        std::vector<Meld> sets;
+        decompose(c, sets, needed, readings);
+        c[pair] += 2;
+        if (!readings.empty())
+            return true;
+    }
+    return false;
+}
+
+bool isSevenPairs(const Counts& c)
+{
+    if (tileCount(c) != 14)
+        return false;
+    return std::all_of(c.begin(), c.end(), [](int n) { return n % 2 == 0; });
+}
+
+bool holdsAll(const Counts& c, const std::array<Face, 9>& tiles)
+{
+    return std::all_of(tiles.begin(), tiles.end(), [&c](Face t) { return c[t] > 0; });
+}
+
+// Fourteen different tiles, every numbered one a tile of `perm`'s knitted
+// straight.
+bool fitsHonoursAndKnitted(const Counts& c, const KnitPerm& perm)
+{
+    if (tileCount(c) != 14 || std::any_of(c.begin(), c.end(), [](int n) { return n > 1; }))
+        return false;
+    const std::array<Face, 9> knit = knittedTiles(perm);
+    for (Face f = 1; f < kWindFirst; ++f)
+        if (c[f] > 0 && std::find(knit.begin(), knit.end(), f) == knit.end())
+            return false;
+    return true;
+}
+
+// Whether `c`, with `melds` sets laid down beside it, is a winning hand of any
+// shape `rules` allows -- the scoring and the minimum aside.
+bool complete(const RuleSet& rules, const Counts& c, int melds)
+{
+    const int needed = 4 - melds;
+    if (rules.shapeAllowed(Shape::Sets) && setsComplete(c, needed))
+        return true;
+    if (melds == 0 && rules.shapeAllowed(Shape::SevenPairs) && isSevenPairs(c))
+        return true;
+    if (melds == 0 && rules.shapeAllowed(Shape::ThirteenOrphans) && isThirteenOrphans(c))
+        return true;
+    for (const KnitPerm& perm : kKnitPerms) {
+        if (melds <= 1 && rules.shapeAllowed(Shape::KnittedStraight)) {
+            const std::array<Face, 9> knit = knittedTiles(perm);
+            if (holdsAll(c, knit)) {
+                Counts rest = c;
+                for (Face t : knit)
+                    --rest[t];
+                if (setsComplete(rest, needed - 3))
+                    return true;
+            }
+        }
+        if (melds == 0 && rules.shapeAllowed(Shape::HonoursAndKnitted) && fitsHonoursAndKnitted(c, perm))
+            return true;
+    }
+    return false;
+}
+
+bool holdsTile(const Meld& m, Face t)
+{
+    return m.kind == SetKind::Chow ? t >= m.tile && t <= m.tile + 2 : m.tile == t;
+}
+
+} // namespace
 
 std::optional<std::pair<WinContext, HandScore>> bestWin(const RuleSet& rules,
                                                         const std::vector<Face>& concealed,
@@ -385,46 +510,131 @@ std::optional<std::pair<WinContext, HandScore>> bestWin(const RuleSet& rules,
     for (const Meld& m : melds)
         addMeldTiles(how.tiles, m);
 
+    // Every reading of the tiles, once for each part of it that could hold
+    // the winning tile: the freedom to choose the higher score (book § 3.9.1).
+    std::vector<WinContext> readings;
+    const bool onADiscard = !how.selfDrawn && how.payer >= 0;
+    // A reading no part of which holds the winning tile -- only a test that
+    // names none -- is kept whole, with winningIn left at -2.
+    const auto place = [&](const WinContext& ctx) {
+        const std::size_t before = readings.size();
+        if (ctx.pair != 0 && ctx.pair == how.winningTile) {
+            WinContext p = ctx;
+            p.winningIn = -1;
+            readings.push_back(p);
+        }
+        for (std::size_t i = melds.size(); i < ctx.sets.size(); ++i) {
+            const Meld& m = ctx.sets[i];
+            if (!holdsTile(m, how.winningTile))
+                continue;
+            // Two alike sets read the same either way; one is enough.
+            if (std::find(ctx.sets.begin() + std::ptrdiff_t(melds.size()), ctx.sets.begin() + std::ptrdiff_t(i), m)
+                != ctx.sets.begin() + std::ptrdiff_t(i))
+                continue;
+            WinContext p = ctx;
+            p.winningIn = int(i);
+            // A pung finished by a discard was not held concealed: the tile
+            // came from another player.
+            if (onADiscard && m.kind != SetKind::Chow)
+                p.sets[i].concealed = false;
+            readings.push_back(p);
+        }
+        if (readings.size() == before)
+            readings.push_back(ctx);
+    };
+
+    if (rules.shapeAllowed(Shape::Sets)) {
+        for (Face pair = 1; pair < kFlowerFirst; ++pair) {
+            if (c[pair] < 2)
+                continue;
+            c[pair] -= 2;
+            std::vector<std::vector<Meld>> found;
+            std::vector<Meld> sets;
+            decompose(c, sets, needed, found);
+            c[pair] += 2;
+            for (const std::vector<Meld>& reading : found) {
+                WinContext ctx = how;
+                ctx.shape = Shape::Sets;
+                ctx.pair = pair;
+                ctx.sets = melds;
+                ctx.sets.insert(ctx.sets.end(), reading.begin(), reading.end());
+                place(ctx);
+            }
+        }
+    }
+    if (melds.empty() && rules.shapeAllowed(Shape::SevenPairs) && isSevenPairs(c)) {
+        WinContext ctx = how;
+        ctx.shape = Shape::SevenPairs;
+        readings.push_back(ctx);
+    }
+    if (melds.empty() && rules.shapeAllowed(Shape::ThirteenOrphans) && isThirteenOrphans(c)) {
+        WinContext ctx = how;
+        ctx.shape = Shape::ThirteenOrphans;
+        readings.push_back(ctx);
+    }
+    for (const KnitPerm& perm : kKnitPerms) {
+        const std::array<Face, 9> knit = knittedTiles(perm);
+        if (melds.size() <= 1 && rules.shapeAllowed(Shape::KnittedStraight) && holdsAll(c, knit)) {
+            Counts rest = c;
+            for (Face t : knit)
+                --rest[t];
+            for (Face pair = 1; pair < kFlowerFirst; ++pair) {
+                if (rest[pair] < 2)
+                    continue;
+                rest[pair] -= 2;
+                std::vector<std::vector<Meld>> found;
+                std::vector<Meld> sets;
+                decompose(rest, sets, needed - 3, found);
+                rest[pair] += 2;
+                for (const std::vector<Meld>& reading : found) {
+                    WinContext ctx = how;
+                    ctx.shape = Shape::KnittedStraight;
+                    ctx.knitted = knittedLows(perm);
+                    ctx.pair = pair;
+                    ctx.sets = melds;
+                    ctx.sets.insert(ctx.sets.end(), reading.begin(), reading.end());
+                    place(ctx);
+                    if (std::find(knit.begin(), knit.end(), how.winningTile) != knit.end())
+                        readings.push_back(ctx); // the winning tile in the knitted run
+                }
+            }
+        }
+        if (melds.empty() && rules.shapeAllowed(Shape::HonoursAndKnitted) && fitsHonoursAndKnitted(c, perm)) {
+            WinContext ctx = how;
+            ctx.shape = Shape::HonoursAndKnitted;
+            ctx.knitted = knittedLows(perm);
+            readings.push_back(ctx);
+        }
+    }
+    if (readings.empty())
+        return std::nullopt;
+
+    // How many faces would have finished the hand before the winning tile
+    // came. A face of which all four are already in the hand cannot come.
+    int waits = 0;
+    if (how.winningTile > 0 && how.winningTile < kFlowerFirst && c[how.winningTile] > 0) {
+        Counts held {};
+        for (Face t : how.tiles)
+            if (t < kFlowerFirst)
+                ++held[t];
+        Counts before = c;
+        --before[how.winningTile];
+        for (Face f = 1; f < kFlowerFirst; ++f) {
+            if (held[f] - (f == how.winningTile ? 1 : 0) >= 4)
+                continue;
+            ++before[f];
+            if (complete(rules, before, int(melds.size())))
+                ++waits;
+            --before[f];
+        }
+    }
+
     std::optional<std::pair<WinContext, HandScore>> best;
-    const auto consider = [&](const WinContext& ctx) {
+    for (WinContext& ctx : readings) {
+        ctx.waits = waits;
         HandScore s = rules.score(ctx);
         if (!best || better(s, best->second))
             best = std::make_pair(ctx, std::move(s));
-    };
-
-    if (melds.empty() && isThirteenOrphans(c)) {
-        WinContext ctx = how;
-        ctx.thirteenOrphans = true;
-        consider(ctx);
-    }
-
-    const bool onADiscard = !how.selfDrawn && how.payer >= 0;
-    for (Face pair = 1; pair < kFlowerFirst; ++pair) {
-        if (c[pair] < 2)
-            continue;
-        c[pair] -= 2;
-        std::vector<std::vector<Meld>> readings;
-        std::vector<Meld> sets;
-        decompose(c, sets, needed, readings);
-        c[pair] += 2;
-        for (std::vector<Meld>& reading : readings) {
-            // A pung finished by a discard was not held concealed: the tile
-            // came from another player. Where the winning tile could be the
-            // pair instead, that reading is tried as well, under its own pair.
-            if (onADiscard && pair != how.winningTile) {
-                for (Meld& m : reading) {
-                    if (isPungLike(m) && m.tile == how.winningTile) {
-                        m.concealed = false;
-                        break;
-                    }
-                }
-            }
-            WinContext ctx = how;
-            ctx.pair = pair;
-            ctx.sets = melds;
-            ctx.sets.insert(ctx.sets.end(), reading.begin(), reading.end());
-            consider(ctx);
-        }
     }
     return best;
 }

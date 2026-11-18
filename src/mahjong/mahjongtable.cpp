@@ -137,6 +137,23 @@ WinContext Hand::contextFor(int who) const
     return how;
 }
 
+int Hand::onView(Face tile) const
+{
+    int n = 0;
+    for (const SeatTiles& s : m_seats) {
+        n += int(std::count(s.pool.begin(), s.pool.end(), tile));
+        for (const Meld& m : s.melds) {
+            if (m.concealed)
+                continue;
+            if (m.kind == SetKind::Chow)
+                n += tile >= m.tile && tile <= m.tile + 2 ? 1 : 0;
+            else if (m.tile == tile)
+                n += m.kind == SetKind::Kong ? 4 : 3;
+        }
+    }
+    return n;
+}
+
 std::optional<std::pair<WinContext, HandScore>> Hand::winFor(int seat) const
 {
     const SeatTiles& s = this->seat(seat);
@@ -148,6 +165,7 @@ std::optional<std::pair<WinContext, HandScore>> Hand::winFor(int seat) const
     // after the wall runs out does not score it (owner's ruling, 2026-11-12).
     how.lastTile = wallLeft() == 0;
     how.winningTile = s.drawn;
+    how.lastOfItsKind = onView(s.drawn) == 3;
     how.kongReplacement = m_afterKong;
     how.heavenly = seat == m_dealer && m_discards == 0 && m_claims == 0 && m_kongs == 0;
     return bestWin(*m_rules, s.concealed, s.melds, how);
@@ -163,6 +181,8 @@ std::optional<std::pair<WinContext, HandScore>> Hand::winOn(int seat, Face tile,
     how.winningTile = tile;
     how.payer = payer;
     how.robbedKong = robbing;
+    how.lastTileClaim = !robbing && wallLeft() == 0;
+    how.lastOfItsKind = onView(tile) == 3;
     how.earthly = !robbing && m_discards == 1 && payer == m_dealer && m_claims == 0 && m_kongs == 0;
     return bestWin(*m_rules, tiles, s.melds, how);
 }
@@ -173,7 +193,7 @@ std::vector<Move> Hand::turnMoves(int seat) const
     const SeatTiles& s = this->seat(seat);
     const auto st = std::uint8_t(seat);
     const auto win = winFor(seat);
-    if (win && win->second.total >= m_rules->minimumToWin())
+    if (win && win->second.qualifying >= m_rules->minimumToWin())
         moves.push_back({ st, Action::Win, s.drawn, 0 });
     if (wallLeft() > 0) {
         for (Face t = 1; t < kFlowerFirst; ++t) {
@@ -260,7 +280,7 @@ bool Hand::play(const Move& move)
                 if (o == who)
                     continue;
                 const auto w = winOn(o, move.tile, who, true);
-                if (w && w->second.total >= m_rules->minimumToWin())
+                if (w && w->second.qualifying >= m_rules->minimumToWin())
                     m_options[std::size_t(o)] = { { std::uint8_t(o), Action::Win, move.tile, 0 },
                                                   { std::uint8_t(o), Action::Pass, 0, 0 } };
             }
@@ -298,6 +318,7 @@ void Hand::takeFrom(int seat, Face tile, int count)
 bool Hand::drawInto(int seat, bool fromBack)
 {
     SeatTiles& s = seatAt(seat);
+    m_drewBonus = false;
     for (;;) {
         if (wallLeft() == 0)
             return false;
@@ -305,6 +326,7 @@ bool Hand::drawInto(int seat, bool fromBack)
         if (isBonus(t)) {
             // Set aside face up, and replaced from the back at once.
             s.bonus.push_back(t);
+            m_drewBonus = true;
             fromBack = true;
             continue;
         }
@@ -340,7 +362,7 @@ void Hand::openClaims()
             continue;
         const auto st = std::uint8_t(o);
         const auto w = winOn(o, t, from, false);
-        if (w && w->second.total >= m_rules->minimumToWin())
+        if (w && w->second.qualifying >= m_rules->minimumToWin())
             opts.push_back({ st, Action::Win, t, 0 });
         // With the wall empty a set claimed now could never be followed by a
         // draw, so only a win may take the last discard.
@@ -466,7 +488,9 @@ void Hand::finishKong(int seat)
         return;
     }
     startTurn(seat);
-    m_afterKong = true;
+    // A tile that replaced a flower is the flower's replacement, not the
+    // kong's (GHUB-0243 § 4.3).
+    m_afterKong = !m_drewBonus;
 }
 
 void Hand::win(int seat, Face tile, int payer, bool robbing)
@@ -545,9 +569,10 @@ void Game::settle()
     m_results.push_back(r);
     for (int s = 0; s < kSeats; ++s)
         m_totals[std::size_t(s)] += r.payments[std::size_t(s)];
-    // The dealer keeps the deal on a win or a drawn hand; otherwise it passes
-    // on, and every fourth pass the prevailing wind moves with it.
-    if (!r.drawn && r.win.winner != m_dealer) {
+    // Under a rule set whose dealer repeats, the dealer keeps the deal on a
+    // win or a drawn hand; otherwise it passes on. Every fourth pass the
+    // prevailing wind moves with it.
+    if (!ruleSet(m_rules).dealerRepeats() || (!r.drawn && r.win.winner != m_dealer)) {
         m_dealer = (m_dealer + 1) % kSeats;
         ++m_dealsPassed;
     }

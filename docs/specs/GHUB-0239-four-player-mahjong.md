@@ -158,7 +158,9 @@ never a copy already held. Any other seat whose hand that tile completes may
 win on it. Only Win may be claimed.
 
 **A winning hand** is four sets (chow, pung or kong) and a pair, or Thirteen
-Orphans (§ 4.4). Seven pairs is not a winning hand in Hong Kong rules.
+Orphans (§ 4.4). Seven pairs is not a winning hand in Hong Kong rules. The
+rule set says which shapes win: GHUB-0243 § 4.3 adds the Chinese Official
+ones.
 
 **A drawn hand.** The wall keeps no reserve. When it is empty and the last
 discard is not claimed for a win, the hand is drawn. No points move.
@@ -408,14 +410,16 @@ creates. Each names the rule its fixture isolates.
   the Robbing a kong item.
   *Breaks when:* an added kong is final, or offers a pung.
 
-- **INV-8** — An empty wall with no win draws the hand: no points move and the
-  dealer keeps the deal.
+- **INV-8** — An empty wall with no win draws the hand: no points move and,
+  under Hong Kong, the dealer keeps the deal (Chinese Official passes it:
+  GHUB-0243 INV-9).
   *Test:* `tests/selftest.cpp`, a seeded hand played to an empty wall with every
   win declined by the fixture.
   *Breaks when:* a drawn hand passes the deal.
 
-- **INV-9** — The deal passes only when the dealer does not win, and the game
-  ends after the East round or after four winds, by `mahjong4/length`.
+- **INV-9** — Under Hong Kong the deal passes only when the dealer does not
+  win, and the game ends after the East round or after four winds, by
+  `mahjong4/length`.
   *Test:* `tests/selftest.cpp`, seeded four-computer games at both lengths,
   asserting the prevailing wind and dealer after each hand and that each game
   ends.
@@ -433,8 +437,10 @@ creates. Each names the rule its fixture isolates.
 - **INV-11** — The rule set is remembered, an unknown stored value falls back
   to Hong Kong, and the menu lists only rule sets this build has.
   *Test:* `tests/uitest.cpp`: set `mahjong4/ruleSet` to an unknown value, build
-  the view, and assert Hong Kong is in force and the menu holds one entry.
-  *Breaks when:* the menu lists Chinese Official before GHUB-0243 ships it.
+  the view, and assert Hong Kong is in force and the menu holds the rule sets
+  this build has — two since GHUB-0243.
+  *Breaks when:* the menu lists a rule set the build does not have, such as
+  Japanese Riichi before GHUB-0244 ships it.
 
 - **INV-12** — Mahjong Solitaire looks exactly as before the tile art moved.
   *Test:* a `--shot` of `--game "Mahjong Solitaire" --seed 1` before the move

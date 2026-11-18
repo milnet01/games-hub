@@ -192,6 +192,7 @@ set(GAME_CORE_SOURCES
     src/mahjong/mahjongtiles.cpp
     src/mahjong/mahjongboard.cpp
     src/mahjong/mahjongrules.cpp
+    src/mahjong/mahjongofficial.cpp
     src/mahjong/mahjongtable.cpp
     src/mahjong/mahjongplayer.cpp
     src/holdline/holdlinefield.cpp
@@ -233,6 +234,7 @@ set(GAME_VIEW_SOURCES
     src/mahjong/mahjongart.cpp
     src/mahjong/mahjongview.cpp
     src/mahjong/mahjongtableview.cpp
+    src/mahjong/mahjongtablewords.cpp
     src/holdline/holdlineview.cpp
     src/runner/runnerview.cpp
     src/runner/laneart.cpp
