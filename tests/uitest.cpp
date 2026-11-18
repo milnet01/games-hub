@@ -2940,11 +2940,11 @@ void mahjongTableWaitsAndKeepsItsPlace()
                   && resumed.game().ruleSetId() == mahjong::RuleSetId::ChineseOfficial,
               "mahjong table: a Chinese Official save restores to the same table (GHUB-0243 INV-12)");
         resumed.deactivate();
-        const QByteArray won = mahjongSaveWhere(
+        const QByteArray officialWon = mahjongSaveWhere(
             [](const mahjong::Hand& h) { return h.phase() == mahjong::Phase::Over && !h.result().drawn; },
             mahjong::RuleSetId::ChineseOfficial);
         MahjongTableProbe view;
-        const bool restored = view.restoreState(won);
+        const bool restored = view.restoreState(officialWon);
         const QString lines = restored ? view.endOfHandLines().join(QLatin1Char('\n')) : QString();
         check(restored && lines.contains(QStringLiteral(" points")) && !lines.contains(QStringLiteral(" fan")),
               "mahjong table: a Chinese Official win is counted in points, not fan (GHUB-0243 § 4.8)");
