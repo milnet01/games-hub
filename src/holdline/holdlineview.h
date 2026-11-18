@@ -122,8 +122,8 @@ private:
     };
     struct Star {
         QPointF at;      // 0..1 across the widget
-        double depth;    // 0 far .. 1 near
-        double phase;
+        double depth = 0.0; // 0 far .. 1 near
+        double phase = 0.0;
     };
     std::vector<Particle> m_particles;
     std::vector<Ring> m_rings;

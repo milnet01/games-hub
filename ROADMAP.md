@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=254 -->
+<!-- ants-roadmap-id-high-water: GHUB=255 -->
 
 # Games Hub — Roadmap
 
@@ -8999,6 +8999,17 @@ ready does not wait for a slow one.
   **Layman:** A colour cube puzzle like the famous one: it gets mixed up, and you twist its sides until every face is a single colour again.
   Kind: feature.
   Source: user-request-2026-11-16.
+
+- ✅ [GHUB-0255] **Two clang-tidy findings that only a newer clang-tidy than CI's reports.**
+  clang-tidy 23 reports the hub's filter values as statics whose
+  construction may throw (cert-err58-cpp), and Hold the Line's Star
+  leaving depth and phase uninitialised. CI pins clang-tidy 18, which
+  reports neither. The filter values now live in function-local
+  statics, as filterKey() already did; Star's fields default to 0.
+  **Layman:** Tidies two small spots in the code that a newer checking tool flags, so the checks stay clean when CI upgrades.
+  Kind: audit-fix.
+  Source: clang-tidy-23-local-2026-11-16.
+  Lanes: hub, holdline.
 
 ## 1.6.0 — Five more card games
 

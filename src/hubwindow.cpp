@@ -992,8 +992,17 @@ QString menuText(QString label)
 
 // The filter row's choices as stored under hub/filter. Settings values, so
 // never translated: a translation must not reset the player's filter.
-const QString kFilterAll = QStringLiteral("all"); // untranslated: settings value
-const QString kFilterFavourites = QStringLiteral("favourites"); // untranslated: settings value
+const QString& filterAll()
+{
+    static const QString value = QStringLiteral("all"); // untranslated: settings value
+    return value;
+}
+
+const QString& filterFavourites()
+{
+    static const QString value = QStringLiteral("favourites"); // untranslated: settings value
+    return value;
+}
 
 const QString& filterKey()
 {
@@ -1031,24 +1040,24 @@ void HubWindow::buildChrome()
     // every choice is on screen at once, and "All" is a button of its own,
     // first and lit when nothing is filtered (owner's call, 2026-10-29).
     m_favourites = QSettings().value(favouritesKey()).toStringList();
-    m_filter = QSettings().value(filterKey(), kFilterAll).toString();
+    m_filter = QSettings().value(filterKey(), filterAll()).toString();
     auto* filters = new QHBoxLayout;
     filters->setSpacing(8);
     m_filterGroup = new QButtonGroup(this);
     m_filterGroup->setExclusive(true);
     const QList<std::pair<QString, QString>> choices = {
-        { kFilterAll, tr("All") },
+        { filterAll(), tr("All") },
         { categoryId(Category::Board), tr("Board") },
         { categoryId(Category::Cards), tr("Cards") },
         { categoryId(Category::Puzzle), tr("Puzzle") },
         { categoryId(Category::Arcade), tr("Arcade") },
-        { kFilterFavourites, tr("★ Favourites") },
+        { filterFavourites(), tr("★ Favourites") },
     };
     bool known = false;
     for (const auto& choice : choices)
         known = known || choice.first == m_filter;
     if (!known)
-        m_filter = kFilterAll; // a value from a later build, or a hand edit
+        m_filter = filterAll(); // a value from a later build, or a hand edit
     for (const auto& [id, text] : choices) {
         auto* button = new QPushButton(text, m_menuPage);
         button->setObjectName(QStringLiteral("filter/") + id);
@@ -1399,9 +1408,9 @@ QString HubWindow::categoryId(Category c)
 
 bool HubWindow::passesFilter(const Entry& e) const
 {
-    if (m_filter == kFilterFavourites)
+    if (m_filter == filterFavourites())
         return m_favourites.contains(e.name);
-    return m_filter == kFilterAll || m_filter == categoryId(e.category);
+    return m_filter == filterAll() || m_filter == categoryId(e.category);
 }
 
 void HubWindow::applyFilter()
@@ -1423,7 +1432,7 @@ void HubWindow::applyFilter()
             ++shown;
         }
     }
-    m_noFavourites->setVisible(shown == 0 && m_filter == kFilterFavourites);
+    m_noFavourites->setVisible(shown == 0 && m_filter == filterFavourites());
 }
 
 void HubWindow::toggleFavourite(int index)
