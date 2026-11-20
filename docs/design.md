@@ -1270,6 +1270,12 @@ the UI test reach the end of a run, since the pilot never would.
 `advanceForShot` treats a turn as one second run by `pilot()`, and clears
 every effect before it returns.
 
+**The run keeps the wall clock's time, in both runners.** Each tick moves the
+course on by the time since the last one, up to a tenth of a second, so a
+slow frame drops a picture rather than slowing the game. A longer stall slows
+it, so a hitch never carries the runner into an obstacle unseen.
+`advanceForShot` holds that clock, so a seeded shot is the same every time.
+
 ### Ruin Runner Lanes
 
 Core: `lanecourse.*`. View: `laneview.*`, with its painted art in
@@ -1299,9 +1305,14 @@ colour, so they stand out from the jungle.
 next row, the one `pilot()` reads, and shows a sign under each lane it fills
 for the last `kSignSeconds` before it arrives. A clear lane has no sign.
 
-`--bench` times both runners mid-run. On 2026-11-16 the view from behind took
-about three times the side-on view's frame, well inside one frame at 60 a
-second.
+**The play is painted into a picture of its own, no sharper than 1920 by
+1080, and stretched over the canvas** (`kSceneScaleCap`). A frame costs by
+the pixel: filling a 4K screen, the view from behind took about 50 ms a frame
+before the cap and about 24 after, on 2026-11-20 on a busy machine. The score
+panel and other words are painted over it at the window's own sharpness.
+
+`--bench` times both runners mid-run, in a small window and filling a 4K
+screen.
 
 ## Cold-eyes loop log
 

@@ -21,6 +21,12 @@
 
 namespace {
 constexpr int kFrameMs = 16;
+// The most one tick may move the run on. A longer stall slows the game
+// instead, so a hitch never carries the runner into a row unseen.
+constexpr double kLongestTick = 0.1;
+// The sharpest the scene is painted, in pixels to a canvas unit: 1920 by
+// 1080. A frame costs by the pixel, and painted at 4K one took about 50 ms.
+constexpr double kSceneScaleCap = 3.0;
 using Course = LaneCourse;
 using LaneArt::kHaze;
 
@@ -211,9 +217,10 @@ void LaneView::deactivate()
 
 void LaneView::runClock()
 {
-    if (m_active && !m_pause->isChecked())
+    if (m_active && !m_pause->isChecked() && !m_heldForShot) {
         m_timer->start();
-    else
+        m_clock.start();
+    } else
         m_timer->stop();
 }
 
@@ -229,8 +236,12 @@ void LaneView::gameOver()
 bool LaneView::advanceForShot(int turns)
 {
     // One turn is one second of running with the course's own pilot at the
-    // keys. Driven through the course alone, so no sound plays and no effect
-    // is left in the air.
+    // keys, driven through the course alone, so no sound plays and no effect
+    // is left in the air. The clock is held from here on, so the picture is
+    // of this moment and a seeded shot is the same every time: the clock
+    // moves by wall time, and the slow first paint would carry the run on.
+    m_heldForShot = true;
+    runClock();
     if (turns > 0)
         m_course.start();
     for (int f = 0; f < turns * 60 && !m_course.over(); ++f) {
@@ -270,7 +281,7 @@ void LaneView::runUnattendedForTest(double seconds)
 
 void LaneView::tick()
 {
-    const double dt = kFrameMs / 1000.0;
+    const double dt = std::min(kLongestTick, double(m_clock.restart()) / 1000.0);
     m_time += dt;
 
     m_course.setSlide(m_slideKey || m_slideButton);
@@ -493,7 +504,6 @@ void LaneView::resizeEvent(QResizeEvent* event)
 {
     GameView::resizeEvent(event);
     m_backdrop = QPixmap();
-    m_overlay = QPixmap();
 }
 
 // ---- painted once per size ----
@@ -502,23 +512,30 @@ void LaneView::buildLayers()
 {
     const qreal dpr = devicePixelRatioF();
     const QSize size(std::max(1, int(width() * dpr)), std::max(1, int(height() * dpr)));
-    const QRectF all(rect());
-    const QRectF f = canvasRect();
-    const double s = scale();
-
-    m_backdrop = QPixmap(size);
-    m_backdrop.setDevicePixelRatio(dpr);
     {
+        const QRectF canvas = canvasRect();
+        const double s = scale();
+        m_backdrop = QPixmap(size);
+        m_backdrop.setDevicePixelRatio(dpr);
         QPainter p(&m_backdrop);
-        LaneArt::paintSky(p, all, f, f.top() + kHorizon * s, s);
+        LaneArt::paintSky(p, QRectF(rect()), canvas, canvas.top() + kHorizon * s, s);
+    }
+
+    // The scene's layers are drawn at the scene's own size, where the canvas
+    // is the whole picture.
+    const double s = m_scenePixels;
+    const QRectF f(QPointF(0, 0), QSizeF(m_scene.size()));
+    m_sceneSky = QImage(m_scene.size(), QImage::Format_RGB32);
+    {
+        QPainter p(&m_sceneSky);
+        LaneArt::paintSky(p, f, f, kHorizon * s, s);
     }
 
     // Over the scene: shafts of low sun, the leaves framing the top, and a
     // soft darkening towards the corners that draws the eye down the path.
-    m_overlay = QPixmap(size);
-    m_overlay.setDevicePixelRatio(dpr);
-    m_overlay.fill(Qt::transparent);
-    QPainter p(&m_overlay);
+    m_sceneOverlay = QImage(m_scene.size(), QImage::Format_ARGB32_Premultiplied);
+    m_sceneOverlay.fill(Qt::transparent);
+    QPainter p(&m_sceneOverlay);
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setPen(Qt::NoPen);
     const QPointF sun(f.center().x() + 50 * s, f.top() + (kHorizon - 42) * s);
@@ -549,38 +566,53 @@ void LaneView::buildLayers()
 
 void LaneView::paintEvent(QPaintEvent*)
 {
+    const QRectF f = canvasRect();
+    const double s = scale();
+    const qreal dpr = devicePixelRatioF();
+
+    // The scene: everything on the canvas, painted at no more than
+    // kSceneScaleCap pixels to a canvas unit.
+    m_scenePixels = std::min(s * dpr, kSceneScaleCap);
+    const QSize scenePx(int(std::ceil(kCanvasW * m_scenePixels)), int(std::ceil(kCanvasH * m_scenePixels)));
+    const QSize want(int(width() * dpr), int(height() * dpr));
+    if (m_backdrop.isNull() || m_backdrop.size() != want || m_scene.size() != scenePx) {
+        m_scene = QImage(scenePx, QImage::Format_RGB32);
+        buildLayers();
+    }
+    {
+        QPainter q(&m_scene);
+        q.setRenderHint(QPainter::Antialiasing, true);
+        q.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        q.drawImage(0, 0, m_sceneSky);
+        q.save();
+        if (m_shake > 0.0) {
+            const double amount = 5.0 * m_shake * m_shake * m_scenePixels / s;
+            q.translate(std::sin(m_time * 71.0) * amount, std::cos(m_time * 53.0) * amount);
+        }
+        q.scale(m_scenePixels, m_scenePixels);
+        q.setClipRect(QRectF(0, 0, kCanvasW, kCanvasH));
+        paintGround(q);
+        paintWorld(q);
+        paintEffects(q);
+        paintLeaves(q);
+        q.restore();
+        q.drawImage(0, 0, m_sceneOverlay);
+        q.scale(m_scenePixels, m_scenePixels);
+        paintSigns(q);
+    }
+
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::SmoothPixmapTransform, true);
-
-    const QSize want(int(width() * devicePixelRatioF()), int(height() * devicePixelRatioF()));
-    if (m_backdrop.isNull() || m_backdrop.size() != want)
-        buildLayers();
+    p.save();
+    p.setClipRegion(QRegion(rect()).subtracted(QRegion(f.toAlignedRect())));
     p.drawPixmap(0, 0, m_backdrop);
-
-    const QRectF f = canvasRect();
-    const double s = scale();
-    p.save();
-    if (m_shake > 0.0) {
-        const double amount = 5.0 * m_shake * m_shake;
-        p.translate(std::sin(m_time * 71.0) * amount, std::cos(m_time * 53.0) * amount);
-    }
-    p.translate(f.topLeft());
-    p.scale(s, s);
-    p.setClipRect(QRectF(0, 0, kCanvasW, kCanvasH));
-    paintGround(p);
-    paintWorld(p);
-    paintEffects(p);
-    paintLeaves(p);
     p.restore();
-
-    p.drawPixmap(0, 0, m_overlay);
-
-    p.save();
-    p.translate(f.topLeft());
-    p.scale(s, s);
-    paintSigns(p);
-    p.restore();
+    // At the scene's own size this is a plain copy, on a whole pixel; past
+    // the cap it is stretched. The image keeps a pixel ratio of 1, since a
+    // painter opened on it later would scale by any other.
+    const QPointF corner(std::round(f.left() * dpr) / dpr, std::round(f.top() * dpr) / dpr);
+    p.drawImage(QRectF(corner, QSizeF(m_scene.size()) * (s / m_scenePixels)), m_scene);
 
     // Beyond the canvas, the scenery is dimmed, so nothing past its edges
     // looks playable.
@@ -827,7 +859,7 @@ void LaneView::paintWorld(QPainter& p) const
 
     std::stable_sort(items.begin(), items.end(), [](const Item& a, const Item& b) { return a.z > b.z; });
 
-    const double pixels = scale() * devicePixelRatioF();
+    const double pixels = m_scenePixels;
     for (const Item& item : items) {
         switch (item.thing) {
         case Thing::Scenery: {
@@ -851,7 +883,7 @@ void LaneView::paintObstacle(QPainter& p, const Course::Obstacle& o) const
     const double outline = outlineWidth();
     const double z0 = std::max(o.z, kNearest);
     const double z1 = o.far();
-    const double pixels = scale() * devicePixelRatioF();
+    const double pixels = m_scenePixels;
     const LaneArt::Set& art = LaneArt::art();
     p.setOpacity(clearness(o.z));
 

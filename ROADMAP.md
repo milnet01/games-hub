@@ -10221,10 +10221,20 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: review-fix.
   Source: review-contract-GHUB-0244-2026-11-18.
 
-- 📋 [GHUB-0258] **Ruin Runner Lanes slows down badly in play.**
+- ✅ [GHUB-0258] **Ruin Runner Lanes slows down badly in play.**
   Reported by the owner while the machine was busy, so the cause is
   not yet known. First step: time a frame with --bench or a timed
   run on a quiet machine, against the plain Ruin Runner.
+  Shipped 2026-11-20. Cause: both runners moved a fixed 16 ms step per
+  frame, so a frame drawn slower than that ran the game in slow motion.
+  The owner's screen is 3840x2160; --bench at 4K had Lanes at about 50 ms a
+  frame (a third of real speed) and the side-on view at about 28. Now each
+  tick moves the run by wall time, capped at 0.1 s, in both runners;
+  advanceForShot holds the clock so a seeded shot stays repeatable. Lanes
+  also paints its scene at no more than 1920x1080 (kSceneScaleCap) and
+  stretches it: about 24 ms at 4K on a busy machine. Still above 16 ms, so
+  4K plays at correct speed but below 60 frames a second. The UI test's
+  runnerKeepsRealTime proves both clocks.
   **Layman:** The three-lane runner stutters. Find out whether the game or a busy machine is the cause, and fix the game if it is.
   Kind: investigate.
   Source: user-report-2026-11-18.

@@ -5,6 +5,7 @@
 #include "runner/runnercourse.h"
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QPixmap>
 #include <QPointF>
 
@@ -93,6 +94,11 @@ private:
     QList<QAction*> m_actions;
     QAction* m_pause = nullptr;
     QTimer* m_timer = nullptr;
+    // Wall time since the last tick: the run moves on by this, not by the
+    // timer's interval, so a late frame never slows the game (GHUB-0258).
+    QElapsedTimer m_clock;
+    // Set by advanceForShot: the run stays at the moment photographed.
+    bool m_heldForShot = false;
 
     RunnerCourse m_course;
 

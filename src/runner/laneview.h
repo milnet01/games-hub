@@ -5,6 +5,8 @@
 #include "runner/lanecourse.h"
 
 #include <QColor>
+#include <QElapsedTimer>
+#include <QImage>
 #include <QPixmap>
 #include <QPointF>
 
@@ -106,6 +108,11 @@ private:
     QList<QAction*> m_actions;
     QAction* m_pause = nullptr;
     QTimer* m_timer = nullptr;
+    // Wall time since the last tick: the run moves on by this, not by the
+    // timer's interval, so a late frame never slows the game (GHUB-0258).
+    QElapsedTimer m_clock;
+    // Set by advanceForShot: the run stays at the moment photographed.
+    bool m_heldForShot = false;
 
     LaneCourse m_course;
 
@@ -157,7 +164,14 @@ private:
     QString m_banner;
     QString m_statusShown;
 
-    // Painted once per size: the sky behind, and the light and leaves over.
+    // The play is painted into m_scene, at m_scenePixels to a canvas unit,
+    // then stretched over the canvas: capped, so a 4K window costs no more
+    // to paint than a 1080p one (GHUB-0258).
+    QImage m_scene;
+    double m_scenePixels = 1.0;
+    // Painted once per size: the sky the whole window shows beyond the
+    // canvas, and the scene's own sky behind and light and leaves over.
     QPixmap m_backdrop;
-    QPixmap m_overlay;
+    QImage m_sceneSky;
+    QImage m_sceneOverlay;
 };

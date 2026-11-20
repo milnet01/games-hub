@@ -158,6 +158,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Ruin Runner and Ruin Runner Lanes no longer slow down on a big screen** (GHUB-0258)
+  Both runners moved on a fixed step each frame, so when a frame took
+  longer to draw, the whole game ran in slow motion. Filling a 4K screen,
+  Lanes ran at about a third of its speed. Now the run keeps real time:
+  a slow frame skips a picture instead. Lanes also paints its play
+  area at no more than 1080p and stretches it to fit, which halves the
+  time a 4K frame takes. The score and words stay sharp.
+
 - **Solitaire's score can no longer be raised by moving cards back and forth** (GHUB-0228)
   Taking a card down off a foundation now costs 15 points, and moving
   cards between columns scores nothing. Before, moving one card down

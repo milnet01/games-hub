@@ -71,6 +71,7 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QStatusBar>
+#include <QThread>
 #include <QThreadPool>
 #include <QToolBar>
 #include <QTranslator>
@@ -86,6 +87,7 @@
 #include <cstring>
 #include <optional>
 #include <span>
+#include <string>
 
 #ifdef GAMESHUB_UPDATER
 #include "update/updater.h"
@@ -499,6 +501,17 @@ void frameCost()
     lanes.advanceForShot(40);
     pump(30);
     std::printf("        ruin runner, three lanes      %6.2f\n",
+                msPerFrame(&lanes, frames));
+
+    // The same two filling a 4K screen, which is how the owner plays: a
+    // frame costs by the pixel, and past 16 ms the picture drops below 60 a
+    // second (GHUB-0258).
+    sideOn.resize(3840, 2100);
+    lanes.resize(3840, 2100);
+    pump(30);
+    std::printf("        ruin runner, side-on, 4K      %6.2f\n",
+                msPerFrame(&sideOn, frames));
+    std::printf("        ruin runner, three lanes, 4K  %6.2f\n",
                 msPerFrame(&lanes, frames));
 
     // The most stickers any shape has, each with its gloss and mark: the
@@ -3526,6 +3539,34 @@ void twistyTurnsByDragAndKey()
 
 // ---- laneRunnerSteersAndSharesTheTable (GHUB-0241) ----
 //
+// A slow frame must not slow the game (GHUB-0258). Every frame here comes
+// 50 ms late, as one did on the owner's 4K screen, and the run must still
+// keep the wall clock's time rather than one fixed step per frame. The sleep
+// is what makes it late, so a slow machine only makes the frames later.
+template <typename View>
+void runnerKeepsRealTime(const char* name)
+{
+    View game;
+    game.resize(900, 560);
+    game.show();
+    game.activate();
+    pressKey(&game, Qt::Key_Space);
+
+    QElapsedTimer wall;
+    wall.start();
+    const double before = game.course().runSeconds();
+    for (int i = 0; i < 20; ++i) {
+        QThread::msleep(50);
+        QCoreApplication::processEvents();
+    }
+    const double played = game.course().runSeconds() - before;
+    const double real = double(wall.nsecsElapsed()) / 1.0e9;
+    std::printf("      %s: %.2f s played in %.2f s of late frames\n", name, played, real);
+    const std::string what = std::string(name) + ": a late frame catches the run up rather than slowing it";
+    check(played > 0.75 * real, what.c_str());
+    game.deactivate();
+}
+
 // The view from behind takes the same keys as the side-on game plus Left and
 // Right, signs the next row under its lanes, and writes into the side-on
 // game's table rather than one of its own.
@@ -9903,6 +9944,8 @@ int main(int argc, char* argv[])
     holdLinePausesAndKeepsItsTable();
     runnerPausesAndKeepsItsTable();
     laneRunnerSteersAndSharesTheTable();
+    runnerKeepsRealTime<LaneView>("lane runner");
+    runnerKeepsRealTime<RunnerView>("runner");
     twistyTurnsByDragAndKey();
 
     turnLightFollowsTheTurn();

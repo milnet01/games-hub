@@ -20,6 +20,9 @@
 
 namespace {
 constexpr int kFrameMs = 16;
+// The most one tick may move the run on. A longer stall slows the game
+// instead, so a hitch never carries the runner into an obstacle unseen.
+constexpr double kLongestTick = 0.1;
 using Course = RunnerCourse;
 
 // A function for the reason scores.h's own keys are: nothing is built at
@@ -166,9 +169,10 @@ void RunnerView::runClock()
 {
     // The clock runs while the page is shown and not paused, Ready included,
     // so the scarf and the coins move before the run starts.
-    if (m_active && !m_pause->isChecked())
+    if (m_active && !m_pause->isChecked() && !m_heldForShot) {
         m_timer->start();
-    else
+        m_clock.start();
+    } else
         m_timer->stop();
 }
 
@@ -217,8 +221,12 @@ void RunnerView::gameOver()
 bool RunnerView::advanceForShot(int turns)
 {
     // One turn is one second of running with the course's own pilot at the
-    // keys. Driven through the course alone, so no sound plays and no effect
-    // is left in the air.
+    // keys, driven through the course alone, so no sound plays and no effect
+    // is left in the air. The clock is held from here on, so the picture is
+    // of this moment and a seeded shot is the same every time: the clock
+    // moves by wall time, and the slow first paint would carry the run on.
+    m_heldForShot = true;
+    runClock();
     if (turns > 0)
         m_course.start();
     for (int f = 0; f < turns * 60 && !m_course.over(); ++f) {
@@ -254,7 +262,7 @@ void RunnerView::runUnattendedForTest(double seconds)
 
 void RunnerView::tick()
 {
-    const double dt = kFrameMs / 1000.0;
+    const double dt = std::min(kLongestTick, double(m_clock.restart()) / 1000.0);
     m_time += dt;
 
     m_course.setDuck(m_duckKey || m_duckButton);
