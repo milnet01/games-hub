@@ -18,13 +18,17 @@ namespace LaneArt {
 // The haze the far course fades into. The view's sky and path use it too.
 inline constexpr QColor kHaze { 0xc9, 0x9c, 0x7a };
 
+// How finely the haze over a sprite is graded: one picture per step.
+inline constexpr int kHazeSteps = 32;
+
 // One picture at three sizes, so a far, small copy is scaled down from a
-// small picture and does not shimmer. `misted` holds the same shapes filled
-// with the haze, laid over at the strength of the haze where it stands;
-// it is empty for art that never stands in the haze.
+// small picture and does not shimmer. Art that stands in the haze keeps
+// each size already part-way into it, a step at a time, made on first use:
+// one draw a sprite rather than a picture and its haze over it (GHUB-0261).
 struct Sprite {
     std::array<QImage, 3> sizes {};
-    std::array<QImage, 3> misted {};
+    bool hazes = false;
+    mutable std::array<std::array<QImage, kHazeSteps>, 3> hazed {};
     double widthMetres = 1.0;
     double heightMetres = 1.0;
 };

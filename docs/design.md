@@ -1276,6 +1276,13 @@ slow frame drops a picture rather than slowing the game. A longer stall slows
 it, so a hitch never carries the runner into an obstacle unseen.
 `advanceForShot` holds that clock, so a seeded shot is the same every time.
 
+**Under Wayland the clock follows the screen** (`FramePacer`, in
+`src/runner/`). A frame starts when the compositor asks for the next one, so
+each frame painted is one the screen shows. A fixed 16 ms timer ran at 62.5 a
+second against a 60 Hz screen, and the two drifted into a hitch several times
+a second. Elsewhere the timer stays. A game starts before its window exists,
+so the timer runs the first frames and hands over at the first paint.
+
 ### Ruin Runner Lanes
 
 Core: `lanecourse.*`. View: `laneview.*`, with its painted art in
@@ -1296,7 +1303,9 @@ after the runner.
 
 **The art is painted once, not every frame.** `LaneArt::art()` paints the
 trees, ruins, plants and the carved faces of obstacles on first use, each at
-three sizes so a far copy is scaled from a small picture. The sky and the
+three sizes so a far copy is scaled from a small picture. Scenery keeps each
+size already part-way into the haze too, in `kHazeSteps` steps made on first
+use, so a tree is one draw rather than a picture with its haze over it. The sky and the
 leaves framing the top are painted once per window size. Scenery carries no
 outline and is hazed with distance; obstacles carry a dark outline and full
 colour, so they stand out from the jungle.
@@ -1311,8 +1320,14 @@ the pixel: filling a 4K screen, the view from behind took about 50 ms a frame
 before the cap and about 24 after, on 2026-11-20 on a busy machine. The score
 panel and other words are painted over it at the window's own sharpness.
 
-`--bench` times both runners mid-run, in a small window and filling a 4K
-screen.
+**The sky, ground and world are painted in bands of rows, one to a core, at
+once**, and the effects, leaves and signs after them on one painter. Nothing a
+band paints draws text. In the owner's window, about 1390 by 1130, a frame took
+about 13 ms before the bands and the folded haze and about 5 after, on
+2026-11-21 on a quiet machine.
+
+`--bench` times both runners mid-run, in a small window, in the owner's window
+and filling a 4K screen.
 
 ## Cold-eyes loop log
 

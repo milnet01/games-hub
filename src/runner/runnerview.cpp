@@ -1,6 +1,7 @@
 #include "runnerview.h"
 
 #include "legibility.h"
+#include "runner/framepacer.h"
 #include "sound.h"
 
 #include <QFocusEvent>
@@ -11,7 +12,6 @@
 #include <QPainterPath>
 #include <QRadialGradient>
 #include <QSettings>
-#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -19,10 +19,6 @@
 #include <numbers>
 
 namespace {
-constexpr int kFrameMs = 16;
-// The most one tick may move the run on. A longer stall slows the game
-// instead, so a hitch never carries the runner into an obstacle unseen.
-constexpr double kLongestTick = 0.1;
 using Course = RunnerCourse;
 
 // A function for the reason scores.h's own keys are: nothing is built at
@@ -93,10 +89,7 @@ RunnerView::RunnerView(QWidget* parent)
     setMinimumSize(RunnerView::minimumSizeHint());
     setFocusPolicy(Qt::StrongFocus);
 
-    m_timer = new QTimer(this);
-    m_timer->setInterval(kFrameMs);
-    m_timer->setTimerType(Qt::PreciseTimer);
-    connect(m_timer, &QTimer::timeout, this, &RunnerView::tick);
+    m_pacer = new FramePacer(this, [this](double dt) { tick(dt); });
 
     m_table = highScores();
     buildActions();
@@ -170,10 +163,9 @@ void RunnerView::runClock()
     // The clock runs while the page is shown and not paused, Ready included,
     // so the scarf and the coins move before the run starts.
     if (m_active && !m_pause->isChecked() && !m_heldForShot) {
-        m_timer->start();
-        m_clock.start();
+        m_pacer->start();
     } else
-        m_timer->stop();
+        m_pacer->stop();
 }
 
 QList<int> RunnerView::highScores()
@@ -260,9 +252,8 @@ void RunnerView::runUnattendedForTest(double seconds)
     refresh();
 }
 
-void RunnerView::tick()
+void RunnerView::tick(double dt)
 {
-    const double dt = std::min(kLongestTick, double(m_clock.restart()) / 1000.0);
     m_time += dt;
 
     m_course.setDuck(m_duckKey || m_duckButton);
@@ -495,6 +486,7 @@ void RunnerView::paintEvent(QPaintEvent*)
     paintHud(p);
     paintOverlay(p);
     paintStatusCaption(p, QRectF(rect()));
+    m_pacer->painted();
 }
 
 void RunnerView::paintScenery(QPainter& p) const

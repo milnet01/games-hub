@@ -158,6 +158,14 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Ruin Runner and Ruin Runner Lanes run smoothly at 60 frames a second** (GHUB-0261)
+  Both runners ticked 62.5 times a second against a 60 Hz screen, so a
+  frame landed late several times a second and the picture stuttered. On
+  Linux they now wait for the screen to be ready before each frame. Lanes
+  also draws its scene across several processor cores at once, and draws
+  each tree once instead of twice, so a frame takes about 5 ms instead of
+  13 in a normal-sized window.
+
 - **Ruin Runner and Ruin Runner Lanes no longer slow down on a big screen** (GHUB-0258)
   Both runners moved on a fixed step each frame, so when a frame took
   longer to draw, the whole game ran in slow motion. Filling a 4K screen,

@@ -503,6 +503,15 @@ void frameCost()
     std::printf("        ruin runner, three lanes      %6.2f\n",
                 msPerFrame(&lanes, frames));
 
+    // The window the owner plays in, which is well under the 1080p cap.
+    sideOn.resize(1388, 1236);
+    lanes.resize(1388, 1236);
+    pump(30);
+    std::printf("        ruin runner, side-on, owner   %6.2f\n",
+                msPerFrame(&sideOn, frames));
+    std::printf("        ruin runner, lanes, owner     %6.2f\n",
+                msPerFrame(&lanes, frames));
+
     // The same two filling a 4K screen, which is how the owner plays: a
     // frame costs by the pixel, and past 16 ms the picture drops below 60 a
     // second (GHUB-0258).

@@ -1,6 +1,7 @@
 #include "laneview.h"
 
 #include "legibility.h"
+#include "runner/framepacer.h"
 #include "runner/laneart.h"
 #include "runner/runnerview.h"
 #include "sound.h"
@@ -12,21 +13,22 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QRadialGradient>
-#include <QTimer>
+#include <QThread>
+#include <QtConcurrent/QtConcurrentMap>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#include <numeric>
 
 namespace {
-constexpr int kFrameMs = 16;
-// The most one tick may move the run on. A longer stall slows the game
-// instead, so a hitch never carries the runner into a row unseen.
-constexpr double kLongestTick = 0.1;
 // The sharpest the scene is painted, in pixels to a canvas unit: 1920 by
 // 1080. A frame costs by the pixel, and painted at 4K one took about 50 ms.
 constexpr double kSceneScaleCap = 3.0;
+// The most bands the scene is painted in at once: past this, a band is too
+// short for another core to earn its keep.
+constexpr int kMostBands = 8;
 using Course = LaneCourse;
 using LaneArt::kHaze;
 
@@ -126,10 +128,7 @@ LaneView::LaneView(QWidget* parent)
     setMinimumSize(LaneView::minimumSizeHint());
     setFocusPolicy(Qt::StrongFocus);
 
-    m_timer = new QTimer(this);
-    m_timer->setInterval(kFrameMs);
-    m_timer->setTimerType(Qt::PreciseTimer);
-    connect(m_timer, &QTimer::timeout, this, &LaneView::tick);
+    m_pacer = new FramePacer(this, [this](double dt) { tick(dt); });
 
     m_table = RunnerView::highScores();
     scatterLeaves();
@@ -218,10 +217,9 @@ void LaneView::deactivate()
 void LaneView::runClock()
 {
     if (m_active && !m_pause->isChecked() && !m_heldForShot) {
-        m_timer->start();
-        m_clock.start();
+        m_pacer->start();
     } else
-        m_timer->stop();
+        m_pacer->stop();
 }
 
 void LaneView::gameOver()
@@ -279,9 +277,8 @@ void LaneView::runUnattendedForTest(double seconds)
     refresh();
 }
 
-void LaneView::tick()
+void LaneView::tick(double dt)
 {
-    const double dt = std::min(kLongestTick, double(m_clock.restart()) / 1000.0);
     m_time += dt;
 
     m_course.setSlide(m_slideKey || m_slideButton);
@@ -579,20 +576,49 @@ void LaneView::paintEvent(QPaintEvent*)
         m_scene = QImage(scenePx, QImage::Format_RGB32);
         buildLayers();
     }
-    {
-        QPainter q(&m_scene);
+    QPointF shake;
+    if (m_shake > 0.0) {
+        const double amount = 5.0 * m_shake * m_shake * m_scenePixels / s;
+        shake = QPointF(std::sin(m_time * 71.0) * amount, std::cos(m_time * 53.0) * amount);
+    }
+
+    // The sky, the ground and everything standing on it are most of a
+    // frame's cost, so they are painted in bands of rows, one to a core, at
+    // once (GHUB-0261). Each band paints onto its own rows of m_scene and
+    // reads nothing another band writes; the hazed art made on first use is
+    // made under a lock. The picture matches one painter's but for a few
+    // shades of rounding in a gradient. Nothing here draws text.
+    LaneArt::art(); // built on first use; done here, before any band reads it
+    uchar* bits = m_scene.bits();
+    const qsizetype stride = m_scene.bytesPerLine();
+    const int rows = m_scene.height();
+    std::vector<int> bands(size_t(std::clamp(QThread::idealThreadCount(), 1, kMostBands)));
+    std::iota(bands.begin(), bands.end(), 0);
+    QtConcurrent::blockingMap(bands, [&](int band) {
+        const int count = int(bands.size());
+        const int top = rows * band / count;
+        const int bottom = rows * (band + 1) / count;
+        QImage part(bits + top * stride, m_scene.width(), bottom - top, stride, m_scene.format());
+        QPainter q(&part);
         q.setRenderHint(QPainter::Antialiasing, true);
         q.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        q.translate(0, -top);
         q.drawImage(0, 0, m_sceneSky);
-        q.save();
-        if (m_shake > 0.0) {
-            const double amount = 5.0 * m_shake * m_shake * m_scenePixels / s;
-            q.translate(std::sin(m_time * 71.0) * amount, std::cos(m_time * 53.0) * amount);
-        }
+        q.translate(shake);
         q.scale(m_scenePixels, m_scenePixels);
         q.setClipRect(QRectF(0, 0, kCanvasW, kCanvasH));
         paintGround(q);
         paintWorld(q);
+    });
+
+    {
+        QPainter q(&m_scene);
+        q.setRenderHint(QPainter::Antialiasing, true);
+        q.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        q.save();
+        q.translate(shake);
+        q.scale(m_scenePixels, m_scenePixels);
+        q.setClipRect(QRectF(0, 0, kCanvasW, kCanvasH));
         paintEffects(q);
         paintLeaves(q);
         q.restore();
@@ -627,6 +653,7 @@ void LaneView::paintEvent(QPaintEvent*)
     paintHud(p);
     paintOverlay(p);
     paintStatusCaption(p, QRectF(rect()));
+    m_pacer->painted();
 }
 
 void LaneView::paintGround(QPainter& p) const

@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=260 -->
+<!-- ants-roadmap-id-high-water: GHUB=262 -->
 
 # Games Hub — Roadmap
 
@@ -10250,9 +10250,43 @@ text: an owner decision, a measurement, or a better approach than the one tried.
 - 📋 [GHUB-0260] **Ruin Runner Lanes keeps one scenery for the whole run.**
   Owner's wish: the scenery changes every now and then. Assets are
   drawn or generated, never sampled (ROADMAP.md Standing rules).
+  2026-11-21, owner: as a run goes on, different biomes and possibly
+  different seasons, to keep the player engaged.
+  2026-11-21, owner: biomes and seasons in the side-on Ruin Runner too.
   **Layman:** The three-lane runner's surroundings should change every now and then during a run.
   Kind: enhancement.
   Source: user-report-2026-11-18.
+
+- ✅ [GHUB-0261] **Ruin Runner Lanes stutters in the owner's window.**
+  Measured 2026-11-21 on the desktop at 1389x1133: 61-63 paints a
+  second against a 60 Hz screen (the 16 ms timer beats against the
+  refresh), worst gaps 26-28 ms, and a paint of 12.5-14 ms. The
+  1080p cap of GHUB-0258 never applies at that size. Scenery
+  sprites cost about 5 ms (each drawn twice: picture, then haze)
+  and the ground about 2.3 ms. Pace frames to the screen and cut
+  the paint well under the 16.7 ms slot.
+  2026-11-21, owner: the side-on Ruin Runner too. It paints in 3.5 ms at
+  the owner's size but has the same 16 ms timer against a 60 Hz screen.
+  2026-11-21, quiet machine, owner's window: Lanes 60 frames a second,
+  worst gap 17.2-17.6 ms, paint 5.2 ms (was 61-63, gaps to 28 ms, paint
+  13 ms). Side-on 60 a second, paint 3.3 ms. FramePacer follows the
+  screen under Wayland; Lanes paints in bands; scenery haze is pre-made
+  in steps.
+  **Layman:** The three-lane runner should run at a smooth 60 frames a second in the window the owner plays in.
+  Kind: perf.
+  Source: user-report-2026-11-21.
+
+- 📋 [GHUB-0262] **Ruin Runner Lanes' graphics are plain.**
+  Owner asked for all four on 2026-11-21: a more detailed and
+  better-animated runner; lighting and atmosphere (sun shafts,
+  soft shadows, dust); richer obstacles and glinting coins; more
+  varied scenery and more detailed flagstones. Must stay inside
+  the frame budget the stutter item sets.
+  2026-11-21, owner: the side-on Ruin Runner gets the same graphics
+  pass.
+  **Layman:** Better art for the three-lane runner: the runner, lighting, obstacles and coins, scenery and ground.
+  Kind: enhancement.
+  Source: user-report-2026-11-21.
 
 ## P01 — Shipped
 

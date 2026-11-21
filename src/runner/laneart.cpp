@@ -1,6 +1,7 @@
 #include "laneart.h"
 
 #include <QLinearGradient>
+#include <QMutex>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRadialGradient>
@@ -56,13 +57,28 @@ QImage hazeOf(const QImage& image)
     return out;
 }
 
+// The scene is painted in bands at once, so the pictures made on first use
+// are made under a lock.
+QMutex hazeLock;
+
+const QImage& hazedAt(const Sprite& sprite, size_t size, int step)
+{
+    const QMutexLocker lock(&hazeLock);
+    QImage& out = sprite.hazed[size][size_t(step)];
+    if (out.isNull()) {
+        out = sprite.sizes[size].copy();
+        QPainter p(&out);
+        p.setOpacity(double(step) / (kHazeSteps - 1));
+        p.drawImage(0, 0, hazeOf(sprite.sizes[size]));
+    }
+    return out;
+}
+
 Sprite finish(const QImage& full, double widthMetres, double heightMetres, bool misted)
 {
     Sprite s;
     s.sizes = { full, shrink(full, 3), shrink(full, 9) };
-    if (misted)
-        for (int i = 0; i < 3; ++i)
-            s.misted[size_t(i)] = hazeOf(s.sizes[size_t(i)]);
+    s.hazes = misted;
     s.widthMetres = widthMetres;
     s.heightMetres = heightMetres;
     return s;
@@ -1003,13 +1019,8 @@ void draw(QPainter& p, const Sprite& sprite, const QRectF& target, double mist, 
         size = 2;
     else if (pixelsTall < sprite.sizes[1].height() * 1.5)
         size = 1;
-    p.drawImage(target, sprite.sizes[size]);
-    if (mist > 0.02 && !sprite.misted[size].isNull()) {
-        const double was = p.opacity();
-        p.setOpacity(was * std::min(1.0, mist));
-        p.drawImage(target, sprite.misted[size]);
-        p.setOpacity(was);
-    }
+    const int step = sprite.hazes ? int(std::lround(std::clamp(mist, 0.0, 1.0) * (kHazeSteps - 1))) : 0;
+    p.drawImage(target, step == 0 ? sprite.sizes[size] : hazedAt(sprite, size, step));
 }
 
 } // namespace LaneArt

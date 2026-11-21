@@ -5,7 +5,6 @@
 #include "runner/runnercourse.h"
 
 #include <QColor>
-#include <QElapsedTimer>
 #include <QPixmap>
 #include <QPointF>
 
@@ -13,7 +12,7 @@
 #include <vector>
 
 class QPainter;
-class QTimer;
+class FramePacer;
 
 // Ruin Runner: run through the jungle ruins, jumping and ducking, for a high
 // score. Draws RunnerCourse and feeds it input; every rule lives in the course.
@@ -65,7 +64,7 @@ protected:
 private:
     void buildActions();
     void newGame();
-    void tick();
+    void tick(double dt);
     void runClock();
     void refresh();
     void gameOver();
@@ -93,10 +92,9 @@ private:
 
     QList<QAction*> m_actions;
     QAction* m_pause = nullptr;
-    QTimer* m_timer = nullptr;
-    // Wall time since the last tick: the run moves on by this, not by the
-    // timer's interval, so a late frame never slows the game (GHUB-0258).
-    QElapsedTimer m_clock;
+    // The run moves on by wall time, one frame at a time (GHUB-0258,
+    // GHUB-0261).
+    FramePacer* m_pacer = nullptr;
     // Set by advanceForShot: the run stays at the moment photographed.
     bool m_heldForShot = false;
 
