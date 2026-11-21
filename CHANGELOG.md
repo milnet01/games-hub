@@ -184,6 +184,11 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Ruin Runner Lanes no longer freezes on a computer with few cores** (GHUB-0264)
+  Getting the next season's scenery ready could stop the game for good on
+  a computer with four processor cores. The work no longer waits on
+  itself.
+
 - **Ruin Runner and Ruin Runner Lanes keep up with a 4K screen** (GHUB-0263)
   On a 4K screen the score and words are about 100 pixels tall, and the
   letters were drawn from their outlines every frame. They are now kept

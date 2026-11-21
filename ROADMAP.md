@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=263 -->
+<!-- ants-roadmap-id-high-water: GHUB=264 -->
 
 # Games Hub — Roadmap
 
@@ -10332,6 +10332,19 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   **Layman:** Full-screen on a 4K monitor, both runners draw a little under 60 pictures a second.
   Kind: perf.
   Source: measured-2026-11-21.
+
+- ✅ [GHUB-0264] **Ruin Runner Lanes could freeze for good on a computer with few cores.**
+  Found 2026-11-21: CI's uitest hung on both legs for 30 minutes at
+  fdb87eb and 2715951. Reproduced here with taskset -c 0-3, three of
+  three runs. gdb showed all four global-pool threads in
+  Biomes::colour's blockingMap, waiting on pieces queued behind them
+  in the same pool, and the main thread waiting in Bands::paint.
+  Since GHUB-0260 (086f0b6).
+  Fix: Biomes::split runs on a pool of its own (splitPool()), where
+  nothing waits. After: three of three 4-core runs pass.
+  **Layman:** On a PC with four cores, Lanes could stop for ever while getting the next season's scenery ready.
+  Kind: fix.
+  Source: ci-hang-2026-11-21.
 
 ## P01 — Shipped
 

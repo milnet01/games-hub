@@ -1306,7 +1306,10 @@ a change. Lanes gives each tree and ruin the season of the place it stands,
 so the next season comes into sight at the far end of the path. Only the
 jungle's art is painted before the first frame at a new size; the other
 seasons are coloured in the background, the jungle standing in until they
-are ready, and a held shot waits for them.
+are ready, and a held shot waits for them. **Work split up inside a background
+task needs a thread pool of its own** (`Biomes::split`, GHUB-0264): on the
+global pool, a task waiting on pieces queued behind it deadlocks once every
+thread is such a task, which four cores were enough for.
 
 **Under Wayland the clock follows the screen** (`FramePacer`, in
 `src/runner/`). A frame starts when the compositor asks for the next one, so

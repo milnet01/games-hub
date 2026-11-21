@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QThread>
+#include <QThreadPool>
 #include <QtConcurrent/QtConcurrentMap>
 
 #include <algorithm>
@@ -134,14 +135,24 @@ double towards(double from, double to, double amount)
     return from + (to - from) * amount;
 }
 
-// Runs `work(first, last)` over `count` items split across the cores.
+// Runs `work(first, last)` over `count` items split across the cores, on a
+// pool of its own. colour() runs inside background tasks on the global pool,
+// and a task there waiting on pieces queued behind it waits for ever once
+// every thread is such a task: four cores deadlocked so (GHUB-0264). Nothing
+// on this pool waits, so its pieces always finish.
+QThreadPool& splitPool()
+{
+    static QThreadPool pool;
+    return pool;
+}
+
 template <class F>
 void split(int count, F work)
 {
     const int parts = std::clamp(QThread::idealThreadCount(), 1, 8);
     std::vector<int> chunks(static_cast<size_t>(parts));
     std::iota(chunks.begin(), chunks.end(), 0);
-    QtConcurrent::blockingMap(chunks, [&](int c) { work(count * c / parts, count * (c + 1) / parts); });
+    QtConcurrent::blockingMap(&splitPool(), chunks, [&](int c) { work(count * c / parts, count * (c + 1) / parts); });
 }
 
 // A colour channel in 0..1, back to a premultiplied byte under alpha `a`.
