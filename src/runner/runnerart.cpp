@@ -610,6 +610,8 @@ QImage paintLight(const Palette& c, const Frame& f, QSize size)
     return image;
 }
 
+} // namespace
+
 QImage softDot(int size, const QColor& colour)
 {
     QImage image = blank(size, size);
@@ -623,6 +625,8 @@ QImage softDot(int size, const QColor& colour)
     p.drawEllipse(QPointF(size / 2.0, size / 2.0), size / 2.0, size / 2.0);
     return image;
 }
+
+namespace {
 
 // A soft shadow on the ground at `centreX`, `half` units wide either side.
 void groundShadow(QPainter& p, double centreX, double half, int alpha)
@@ -953,6 +957,90 @@ Layers build(const Palette& palette, const Frame& frame)
         p.drawEllipse(QPointF(0, 0), 1.0, 1.0);
     }
     return l;
+}
+
+Layers dressed(const Layers& jungle, Biomes::Look look)
+{
+    Layers l = jungle;
+    if (look == Biomes::Look::Jungle)
+        return l;
+    const double snow = 5.0 * l.frame.pixels;
+    Biomes::colour(l.sky, look, Biomes::Part::Sky, 0.0);
+    for (Strip& strip : l.back)
+        Biomes::colour(strip.image, look, Biomes::Part::Scenery, snow);
+    Biomes::colour(l.ground.image, look, Biomes::Part::Ground, snow * 0.8);
+    Biomes::colour(l.front.image, look, Biomes::Part::Scenery, snow * 0.6);
+    Biomes::colour(l.vines.image, look, Biomes::Part::Scenery, snow * 0.6);
+    return l;
+}
+
+void paintWeather(QPainter& p, Biomes::Look look, double share, double time, double drift, const QRectF& area,
+                  double unit, const QImage& mote)
+{
+    if (share <= 0.0)
+        return;
+    const auto wrap = [](double v, double span) { return v - span * std::floor(v / span); };
+    const double w = area.width() + 40.0 * unit;
+    const double h = area.height() + 40.0 * unit;
+    const auto place = [&](double x, double y) { return QPointF(area.left() - 20.0 * unit + wrap(x, w),
+                                                                area.top() - 20.0 * unit + wrap(y, h)); };
+    p.save();
+    p.setPen(Qt::NoPen);
+    switch (Biomes::weather(look)) {
+    case Biomes::Weather::Motes:
+    case Biomes::Weather::Dust: {
+        const bool dust = Biomes::weather(look) == Biomes::Weather::Dust;
+        const int count = int((dust ? 50 : 34) * share);
+        for (int i = 0; i < count; ++i) {
+            const double depth = 0.4 + 0.6 * noise(i, 300);
+            const double speed = dust ? 22.0 + 30.0 * noise(i, 301) : 6.0 + 10.0 * noise(i, 301);
+            const QPointF at = place(noise(i, 302) * w + time * speed * unit - drift * depth,
+                                     noise(i, 303) * h * 0.8 + std::sin(time * 0.8 + i) * 6.0 * unit);
+            const double twinkle = 0.5 + 0.5 * std::sin(time * 1.7 + i * 2.1);
+            const double r = (dust ? 1.4 + 2.0 * noise(i, 304) : 2.0 + 3.0 * noise(i, 304)) * depth * unit;
+            p.setOpacity((dust ? 0.25 + 0.25 * twinkle : 0.12 + 0.4 * twinkle) * depth);
+            if (dust) {
+                p.setBrush(QColor(0xe8, 0xc8, 0x90));
+                p.drawEllipse(at, r * 0.6, r * 0.6);
+            } else {
+                p.drawImage(QRectF(at.x() - r, at.y() - r, r * 2.0, r * 2.0), mote);
+            }
+        }
+        break;
+    }
+    case Biomes::Weather::Snow: {
+        const int count = int(70 * share);
+        for (int i = 0; i < count; ++i) {
+            const double depth = 0.35 + 0.65 * noise(i, 310);
+            const QPointF at = place(noise(i, 311) * w + std::sin(time * 1.1 + i) * 10.0 * unit - drift * depth,
+                                     noise(i, 312) * h + time * (22.0 + 30.0 * noise(i, 313)) * depth * unit);
+            const double r = (1.4 + 2.2 * noise(i, 314)) * depth * unit;
+            p.setOpacity(0.55 + 0.4 * depth);
+            p.drawImage(QRectF(at.x() - r, at.y() - r, r * 2.0, r * 2.0), mote);
+        }
+        break;
+    }
+    case Biomes::Weather::Leaves: {
+        const int count = int(16 * share);
+        for (int i = 0; i < count; ++i) {
+            const QPointF at = place(noise(i, 320) * w - drift * 0.9 + std::sin(time * 1.3 + i) * 14.0 * unit,
+                                     noise(i, 321) * h + time * (14.0 + 12.0 * noise(i, 322)) * unit);
+            p.setOpacity(1.0);
+            p.save();
+            p.translate(at);
+            p.rotate(std::sin(time * 2.0 + i) * 70.0 + 360.0 * noise(i, 323));
+            const QColor c = Biomes::leafColour(look, i);
+            p.setBrush(c);
+            p.drawEllipse(QPointF(0, 0), 3.6 * unit, 1.5 * unit);
+            p.setPen(QPen(c.darker(150), 0.5 * unit));
+            p.drawLine(QPointF(-3.2 * unit, 0), QPointF(3.2 * unit, 0));
+            p.setPen(Qt::NoPen);
+            p.restore();
+        }
+        break;
+    }
+    }
+    p.restore();
 }
 
 void drawStrip(QPainter& p, const Strip& strip, const Frame& frame, double scroll, int sceneWidth)

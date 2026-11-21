@@ -2,6 +2,7 @@
 
 #include <QLinearGradient>
 #include <QMutex>
+#include <QMutexLocker>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRadialGradient>
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <numbers>
 
 namespace LaneArt {
@@ -48,12 +50,12 @@ QImage shrink(const QImage& full, int by)
     return full.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 }
 
-QImage hazeOf(const QImage& image)
+QImage hazeOf(const QImage& image, const QColor& haze)
 {
     QImage out = image;
     QPainter p(&out);
     p.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    p.fillRect(out.rect(), kHaze);
+    p.fillRect(out.rect(), haze);
     return out;
 }
 
@@ -69,7 +71,7 @@ const QImage& hazedAt(const Sprite& sprite, size_t size, int step)
         out = sprite.sizes[size].copy();
         QPainter p(&out);
         p.setOpacity(double(step) / (kHazeSteps - 1));
-        p.drawImage(0, 0, hazeOf(sprite.sizes[size]));
+        p.drawImage(0, 0, hazeOf(sprite.sizes[size], sprite.haze));
     }
     return out;
 }
@@ -1012,10 +1014,52 @@ void paintCanopy(QPainter& p, const QRectF& canvas, double unit)
     }
 }
 
-const Set& art()
+namespace {
+// The jungle's scenery in `look`'s colours, with snow on its tops where the
+// look has snow.
+// Reads only what never changes after build(): the jungle's hazed pictures
+// are made as bands paint, so they are not copied.
+Set dress(const Set& jungle, Biomes::Look look)
 {
-    static const Set set = build();
-    return set;
+    const auto dressed = [&](const std::vector<Sprite>& group) {
+        std::vector<Sprite> out;
+        for (const Sprite& from : group) {
+            Sprite sprite;
+            sprite.sizes = from.sizes;
+            sprite.hazes = from.hazes;
+            sprite.widthMetres = from.widthMetres;
+            sprite.heightMetres = from.heightMetres;
+            sprite.haze = Biomes::haze(look, kHaze);
+            for (QImage& size : sprite.sizes)
+                Biomes::colour(size, look, Biomes::Part::Scenery, size.height() * 0.03);
+            out.push_back(std::move(sprite));
+        }
+        return out;
+    };
+    Set s;
+    s.trees = dressed(jungle.trees);
+    s.ruins = dressed(jungle.ruins);
+    s.plants = dressed(jungle.plants);
+    // Faces are never hazed, so nothing writes them after build().
+    s.blockFaces = jungle.blockFaces;
+    s.trunkFaces = jungle.trunkFaces;
+    s.gateFaces = jungle.gateFaces;
+    return s;
+}
+} // namespace
+
+const Set& art(Biomes::Look look)
+{
+    static const Set jungle = build();
+    if (look == Biomes::Look::Jungle)
+        return jungle;
+    static std::array<std::unique_ptr<const Set>, Biomes::kLooks> seasons;
+    static QMutex lock;
+    const QMutexLocker locked(&lock);
+    std::unique_ptr<const Set>& slot = seasons[size_t(look)];
+    if (!slot)
+        slot = std::make_unique<const Set>(dress(jungle, look));
+    return *slot;
 }
 
 void draw(QPainter& p, const Sprite& sprite, const QRectF& target, double mist, double pixelsTall)

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "runner/biomes.h"
+
 #include <QColor>
 #include <QImage>
 #include <QRectF>
@@ -32,6 +34,8 @@ struct Sprite {
     mutable std::array<std::array<QImage, kHazeSteps>, 3> hazed {};
     double widthMetres = 1.0;
     double heightMetres = 1.0;
+    // What it fades into far off: the season's haze (GHUB-0260).
+    QColor haze = kHaze;
 };
 
 struct Set {
@@ -43,8 +47,11 @@ struct Set {
     std::array<Sprite, 4> gateFaces;
 };
 
-// Built on first use and kept for the life of the program.
-const Set& art();
+// Built on first use and kept for the life of the program: the jungle, or
+// its trees, ruins and plants in another season's colours (GHUB-0260). The
+// faces of obstacles are the same in every season. Safe to call from any
+// thread; a season is made on first use, under a lock.
+const Set& art(Biomes::Look look = Biomes::Look::Jungle);
 
 // The sky behind the course, painted once per window size: dawn, clouds,
 // mountains, the temple the path runs to, and the jungle either side down

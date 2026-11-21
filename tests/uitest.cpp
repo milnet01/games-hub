@@ -23,7 +23,9 @@
 #include "freecell/freecellview.h"
 #include "hearts/heartsview.h"
 #include "holdline/holdlineview.h"
+#include "runner/biomes.h"
 #include "runner/laneview.h"
+#include "runner/runnerart.h"
 #include "runner/runnerview.h"
 #include "twisty/twistyview.h"
 #include "hubwindow.h"
@@ -3579,6 +3581,63 @@ void runnerKeepsRealTime(const char* name)
 // The view from behind takes the same keys as the side-on game plus Left and
 // Right, signs the next row under its lanes, and writes into the side-on
 // game's table rather than one of its own.
+// Both runners pass through the seasons in turn, each change a short blend,
+// and a season recolours the scenery but never an obstacle (GHUB-0260).
+void runnerSeasonsComeInTurn()
+{
+    using Biomes::Look;
+    std::vector<Look> seen { Biomes::at(0.0).main() };
+    bool blends = true;
+    for (int m = 0; m <= int(Biomes::kMetresEach) * 9; ++m) {
+        const Biomes::Place p = Biomes::at(m);
+        blends = blends && p.blend >= 0.0 && p.blend <= 1.0 && (p.blend > 0.0 || p.from == p.to);
+        if (p.main() != seen.back())
+            seen.push_back(p.main());
+    }
+    check(seen.front() == Look::Jungle, "runner seasons: a run starts in the jungle");
+    bool inTurn = seen.size() >= 9;
+    for (size_t i = 1; i < seen.size(); ++i)
+        inTurn = inTurn && int(seen[i]) == (int(seen[i - 1]) + 1) % Biomes::kLooks;
+    check(inTurn, "runner seasons: jungle, autumn, snowfall and the dry season come in turn, and round again");
+    check(blends, "runner seasons: a change is a blend from one season to the next");
+
+    QImage leaf(8, 8, QImage::Format_ARGB32_Premultiplied);
+    leaf.fill(QColor(0x2c, 0x5a, 0x30));
+    QImage jungle = leaf;
+    Biomes::colour(jungle, Look::Jungle, Biomes::Part::Scenery, 0.0);
+    check(jungle == leaf, "runner seasons: the jungle is left as it was painted");
+    QImage autumn = leaf;
+    Biomes::colour(autumn, Look::Autumn, Biomes::Part::Scenery, 0.0);
+    const QColor turned = autumn.pixelColor(4, 4);
+    check(turned.red() > turned.green() && turned.red() > turned.blue(), "runner seasons: autumn turns a leaf");
+
+    QImage shape(8, 16, QImage::Format_ARGB32_Premultiplied);
+    shape.fill(Qt::transparent);
+    for (int y = 4; y < 16; ++y)
+        for (int x = 0; x < 8; ++x)
+            shape.setPixelColor(x, y, QColor(0x2c, 0x5a, 0x30));
+    Biomes::colour(shape, Look::Winter, Biomes::Part::Scenery, 4.0);
+    check(shape.pixelColor(4, 4).lightnessF() > shape.pixelColor(4, 14).lightnessF() + 0.2
+              && shape.pixelColor(4, 2).alpha() == 0,
+          "runner seasons: snow settles on the top of a shape, and nowhere else");
+
+    RunnerArt::Frame frame;
+    frame.top = -20.0;
+    frame.right = 640.0;
+    frame.bottom = 380.0;
+    const RunnerArt::Layers base = RunnerArt::build(RunnerArt::jungle(), frame);
+    bool untouched = true;
+    for (int i = 1; i < Biomes::kLooks; ++i) {
+        const RunnerArt::Layers season = RunnerArt::dressed(base, Look(i));
+        for (size_t k = 0; k < 4; ++k)
+            untouched = untouched && season.stones[k].image.cacheKey() == base.stones[k].image.cacheKey()
+                        && season.roots[k].image.cacheKey() == base.roots[k].image.cacheKey()
+                        && season.walls[k].image.cacheKey() == base.walls[k].image.cacheKey();
+        untouched = untouched && season.sky.cacheKey() != base.sky.cacheKey();
+    }
+    check(untouched, "runner seasons: every season recolours the scenery and leaves the obstacles as they are");
+}
+
 void laneRunnerSteersAndSharesTheTable()
 {
     QSettings().remove(QStringLiteral("runner/best_scores"));
@@ -9955,6 +10014,7 @@ int main(int argc, char* argv[])
     laneRunnerSteersAndSharesTheTable();
     runnerKeepsRealTime<LaneView>("lane runner");
     runnerKeepsRealTime<RunnerView>("runner");
+    runnerSeasonsComeInTurn();
     twistyTurnsByDragAndKey();
 
     turnLightFollowsTheTurn();

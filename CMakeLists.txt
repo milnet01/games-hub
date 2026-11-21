@@ -240,6 +240,7 @@ set(GAME_VIEW_SOURCES
     src/runner/runnerview.cpp
     src/runner/runnerart.cpp
     src/runner/bands.cpp
+    src/runner/biomes.cpp
     src/runner/framepacer.cpp
     src/runner/laneart.cpp
     src/runner/laneview.cpp

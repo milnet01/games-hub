@@ -2,6 +2,8 @@
 
 #include "legibility.h"
 #include "runner/bands.h"
+#include "runner/biomes.h"
+#include "runner/runnerart.h"
 #include "runner/framepacer.h"
 #include "runner/laneart.h"
 #include "runner/runnerview.h"
@@ -14,6 +16,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QRadialGradient>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 #include <cmath>
@@ -124,11 +127,18 @@ LaneView::LaneView(QWidget* parent)
     setFocusPolicy(Qt::StrongFocus);
 
     m_pacer = new FramePacer(this, [this](double dt) { tick(dt); });
+    connect(&m_dressing, &QFutureWatcherBase::finished, this, qOverload<>(&QWidget::update));
 
     m_table = RunnerView::highScores();
     scatterLeaves();
     buildActions();
     newGame();
+}
+
+LaneView::~LaneView()
+{
+    m_warm.waitForFinished();
+    m_dressing.waitForFinished();
 }
 
 void LaneView::buildActions()
@@ -165,6 +175,7 @@ void LaneView::newGame()
     m_stride = 0.0;
     m_bannerAge = 10.0;
     m_landAge = 10.0;
+    m_lookShown = Biomes::at(m_course.distance()).main();
     m_banner.clear();
     releaseKeys();
     m_pause->setChecked(false);
@@ -184,7 +195,6 @@ void LaneView::scatterLeaves()
         l.spin = (unit(m_fx) - 0.5) * 160.0;
         l.fall = 14.0 + 16.0 * unit(m_fx);
         l.sway = 0.8 + 1.4 * unit(m_fx);
-        l.colour = unit(m_fx) < 0.5 ? QColor(0x6a, 0x8c, 0x2c) : QColor(0xb0, 0x8a, 0x2c);
         m_leaves.push_back(l);
     }
 }
@@ -197,6 +207,11 @@ void LaneView::releaseKeys()
 
 void LaneView::activate()
 {
+    if (!m_warm.isValid())
+        m_warm = QtConcurrent::run([] {
+            for (int i = 1; i < Biomes::kLooks; ++i)
+                LaneArt::art(Biomes::Look(i));
+        });
     m_active = true;
     setFocus();
     runClock();
@@ -253,6 +268,7 @@ bool LaneView::advanceForShot(int turns)
     m_shake = m_flash = 0.0;
     m_bannerAge = 10.0;
     m_landAge = 10.0;
+    m_lookShown = Biomes::at(m_course.distance()).main();
     m_cameraX = laneX(m_course.lane()) * kCameraFollow;
     m_stride = m_course.distance() / 0.9;
     if (m_course.over())
@@ -282,6 +298,14 @@ void LaneView::tick(double dt)
     m_course.advance(dt);
     readEvents();
     m_landAge += dt;
+
+    // A banner names each new season as the run enters it (GHUB-0260).
+    const Biomes::Look look = Biomes::at(m_course.distance()).main();
+    if (look != m_lookShown) {
+        m_lookShown = look;
+        m_banner = Biomes::name(look);
+        m_bannerAge = 0.0;
+    }
 
     m_cameraX += (laneX(m_course.lane()) * kCameraFollow - m_cameraX) * std::min(1.0, dt * 8.0);
 
@@ -499,7 +523,7 @@ QFont LaneView::canvasFont(double units, bool bold) const
 void LaneView::resizeEvent(QResizeEvent* event)
 {
     GameView::resizeEvent(event);
-    m_backdrop = QPixmap();
+    m_backdrop = {};
 }
 
 // ---- painted once per size ----
@@ -511,9 +535,9 @@ void LaneView::buildLayers()
     {
         const QRectF canvas = canvasRect();
         const double s = scale();
-        m_backdrop = QPixmap(size);
-        m_backdrop.setDevicePixelRatio(dpr);
-        QPainter p(&m_backdrop);
+        m_backdrop[0] = QImage(size, QImage::Format_RGB32);
+        m_backdrop[0].setDevicePixelRatio(dpr);
+        QPainter p(&m_backdrop[0]);
         LaneArt::paintSky(p, QRectF(rect()), canvas, canvas.top() + kHorizon * s, s);
     }
 
@@ -521,17 +545,17 @@ void LaneView::buildLayers()
     // is the whole picture.
     const double s = m_scenePixels;
     const QRectF f(QPointF(0, 0), QSizeF(m_scene.size()));
-    m_sceneSky = QImage(m_scene.size(), QImage::Format_RGB32);
+    m_sceneSky[0] = QImage(m_scene.size(), QImage::Format_RGB32);
     {
-        QPainter p(&m_sceneSky);
+        QPainter p(&m_sceneSky[0]);
         LaneArt::paintSky(p, f, f, kHorizon * s, s);
     }
 
     // Over the scene: shafts of low sun, the leaves framing the top, and a
     // soft darkening towards the corners that draws the eye down the path.
-    m_sceneOverlay = QImage(m_scene.size(), QImage::Format_ARGB32_Premultiplied);
-    m_sceneOverlay.fill(Qt::transparent);
-    QPainter p(&m_sceneOverlay);
+    m_sceneOverlay[0] = QImage(m_scene.size(), QImage::Format_ARGB32_Premultiplied);
+    m_sceneOverlay[0].fill(Qt::transparent);
+    QPainter p(&m_sceneOverlay[0]);
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setPen(Qt::NoPen);
     const QPointF sun(f.center().x() + 50 * s, f.top() + (kHorizon - 42) * s);
@@ -556,6 +580,25 @@ void LaneView::buildLayers()
     vignette.setColorAt(1.0, QColor(10, 5, 0, 150));
     p.setBrush(vignette);
     p.drawRect(f);
+    p.end();
+
+    // The same in each season's colours (GHUB-0260), in the background.
+    m_seasonsReady = false;
+    m_dressing.setFuture(QtConcurrent::run([backdrop = m_backdrop[0], sky = m_sceneSky[0], overlay = m_sceneOverlay[0], s] {
+        Seasons out;
+        for (int i = 1; i < Biomes::kLooks; ++i) {
+            const auto look = Biomes::Look(i);
+            const auto at = size_t(i);
+            out.backdrop[at] = backdrop;
+            Biomes::colour(out.backdrop[at], look, Biomes::Part::Sky, 0.0);
+            out.sky[at] = sky;
+            Biomes::colour(out.sky[at], look, Biomes::Part::Sky, 0.0);
+            out.overlay[at] = overlay;
+            Biomes::colour(out.overlay[at], look, Biomes::Part::Scenery, 3.0 * s);
+        }
+        return out;
+    }));
+    m_mote = RunnerArt::softDot(std::max(4, int(std::lround(8.0 * s))), QColor(255, 255, 255, 230));
 }
 
 // ---- painting ----
@@ -571,10 +614,25 @@ void LaneView::paintEvent(QPaintEvent*)
     m_scenePixels = std::min(s * dpr, kSceneScaleCap);
     const QSize scenePx(int(std::ceil(kCanvasW * m_scenePixels)), int(std::ceil(kCanvasH * m_scenePixels)));
     const QSize want(int(width() * dpr), int(height() * dpr));
-    if (m_backdrop.isNull() || m_backdrop.size() != want || m_scene.size() != scenePx) {
+    if (m_backdrop[0].isNull() || m_backdrop[0].size() != want || m_scene.size() != scenePx) {
         m_scene = QImage(scenePx, QImage::Format_RGB32);
         buildLayers();
     }
+    // A held shot waits for the seasons, so it is the same every time.
+    if (!m_seasonsReady && m_heldForShot)
+        m_dressing.waitForFinished();
+    if (!m_seasonsReady && m_dressing.isFinished()) {
+        const Seasons seasons = m_dressing.result();
+        if (seasons.sky[1].size() == m_sceneSky[0].size() && seasons.backdrop[1].size() == m_backdrop[0].size()) {
+            for (int i = 1; i < Biomes::kLooks; ++i) {
+                m_backdrop[size_t(i)] = seasons.backdrop[size_t(i)];
+                m_sceneSky[size_t(i)] = seasons.sky[size_t(i)];
+                m_sceneOverlay[size_t(i)] = seasons.overlay[size_t(i)];
+            }
+            m_seasonsReady = true;
+        }
+    }
+    const auto season = [&](Biomes::Look look) { return m_seasonsReady ? size_t(look) : size_t(0); };
     QPointF shake;
     if (m_shake > 0.0) {
         const double amount = 5.0 * m_shake * m_shake * m_scenePixels / s;
@@ -587,11 +645,26 @@ void LaneView::paintEvent(QPaintEvent*)
     // reads nothing another band writes; the hazed art made on first use is
     // made under a lock. The picture matches one painter's but for a few
     // shades of rounding in a gradient. Nothing here draws text.
-    LaneArt::art(); // built on first use; done here, before any band reads it
+    // The season here, and while it changes, the next laid over it
+    // (GHUB-0260). The art of every season in sight is made before any band
+    // reads it.
+    const Biomes::Place place = Biomes::at(m_course.distance());
+    for (const Biomes::Place& seen : { place, Biomes::at(m_course.distance() + Course::kSightDepth) }) {
+        LaneArt::art(seen.from);
+        LaneArt::art(seen.to);
+    }
+    const auto seasons = [&](QPainter& q, const std::array<QImage, Biomes::kLooks>& images, QPointF at) {
+        q.drawImage(at, images[season(place.from)]);
+        if (place.blend > 0.0) {
+            q.setOpacity(place.blend);
+            q.drawImage(at, images[season(place.to)]);
+            q.setOpacity(1.0);
+        }
+    };
     Bands::paint(m_scene, [&](QPainter& q) {
         q.setRenderHint(QPainter::Antialiasing, true);
         q.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        q.drawImage(0, 0, m_sceneSky);
+        seasons(q, m_sceneSky, QPointF(0, 0));
         q.translate(shake);
         q.scale(m_scenePixels, m_scenePixels);
         q.setClipRect(QRectF(0, 0, kCanvasW, kCanvasH));
@@ -611,7 +684,7 @@ void LaneView::paintEvent(QPaintEvent*)
         paintAir(q);
         paintLeaves(q);
         q.restore();
-        q.drawImage(0, 0, m_sceneOverlay);
+        seasons(q, m_sceneOverlay, QPointF(0, 0));
         q.scale(m_scenePixels, m_scenePixels);
         paintSigns(q);
     }
@@ -621,7 +694,7 @@ void LaneView::paintEvent(QPaintEvent*)
     p.setRenderHint(QPainter::SmoothPixmapTransform, true);
     p.save();
     p.setClipRegion(QRegion(rect()).subtracted(QRegion(f.toAlignedRect())));
-    p.drawPixmap(0, 0, m_backdrop);
+    seasons(p, m_backdrop, QPointF(0, 0));
     p.restore();
     // At the scene's own size this is a plain copy, on a whole pixel; past
     // the cap it is stretched. The image keeps a pixel ratio of 1, since a
@@ -837,8 +910,19 @@ void LaneView::paintWorld(QPainter& p) const
     std::vector<Item> items;
     items.reserve(96);
 
-    const LaneArt::Set& art = LaneArt::art();
     const double travelled = m_course.distance();
+    // Each thing is in the season of the place it stands, so the next season
+    // comes into sight from the far end of the path (GHUB-0260). In a
+    // change, each takes one season or the other.
+    std::array<const LaneArt::Set*, Biomes::kLooks> sets {};
+    const auto setAt = [&](double metres, long long tile, int salt) -> const LaneArt::Set& {
+        const Biomes::Place here = Biomes::at(metres);
+        const Biomes::Look look = here.blend > tileHash(tile, salt) ? here.to : here.from;
+        const LaneArt::Set*& set = sets[size_t(look)];
+        if (set == nullptr)
+            set = &LaneArt::art(look);
+        return *set;
+    };
     // Trees and ruins, then smaller plants between them, along both sides.
     const auto line = [&](double pitch, int salt, double from, double spread, bool plants) {
         const long long first = (long long)std::floor((travelled - 3.0) / pitch);
@@ -850,6 +934,7 @@ void LaneView::paintWorld(QPainter& p) const
             for (int side = -1; side <= 1; side += 2) {
                 const long long tile = t * 2 + (side > 0 ? 1 : 0);
                 const double roll = tileHash(tile, salt);
+                const LaneArt::Set& art = setAt(double(t) * pitch, tile, salt + 2);
                 const LaneArt::Sprite* sprite = nullptr;
                 if (plants)
                     sprite = roll < 0.25 ? nullptr : &art.plants[size_t(roll * 97) % art.plants.size()];
@@ -1226,14 +1311,21 @@ void LaneView::paintRunner(QPainter& p) const
 
 void LaneView::paintLeaves(QPainter& p) const
 {
+    // Leaves fall where the season has them, in its colours.
+    const Biomes::Look look = Biomes::at(m_course.distance()).main();
+    const Biomes::Weather weather = Biomes::weather(look);
+    if (weather != Biomes::Weather::Motes && weather != Biomes::Weather::Leaves)
+        return;
     p.setPen(Qt::NoPen);
+    int which = 0;
     for (const Leaf& l : m_leaves) {
+        const QColor colour = Biomes::leafColour(look, which++);
         p.save();
         p.translate(l.at);
         p.rotate(l.angle);
-        p.setBrush(l.colour);
+        p.setBrush(colour);
         p.drawEllipse(QPointF(0, 0), 4.5, 2.0);
-        p.setPen(QPen(l.colour.darker(150), 0.6));
+        p.setPen(QPen(colour.darker(150), 0.6));
         p.drawLine(QPointF(-4, 0), QPointF(4, 0));
         p.restore();
     }
@@ -1241,22 +1333,13 @@ void LaneView::paintLeaves(QPainter& p) const
 
 void LaneView::paintAir(QPainter& p) const
 {
-    // Motes drifting in the shafts of low sun. They follow the clock, so a
-    // held shot shows them still.
-    const auto wrap = [](double v, double span) { return v - span * std::floor(v / span); };
-    p.setPen(Qt::NoPen);
-    for (int i = 0; i < 40; ++i) {
-        const double depth = 0.4 + 0.6 * tileHash(i, 70);
-        const double x = wrap(tileHash(i, 71) * 680.0 + m_time * (5.0 + 9.0 * tileHash(i, 72)), 680.0) - 20.0;
-        const double y = kHorizon - 60.0 + 230.0 * tileHash(i, 73) + std::sin(m_time * 0.8 + i) * 5.0;
-        const double twinkle = 0.5 + 0.5 * std::sin(m_time * 1.7 + i * 2.1);
-        const double r = (0.8 + 1.6 * tileHash(i, 74)) * depth;
-        QRadialGradient mote(QPointF(x, y), r);
-        mote.setColorAt(0.0, QColor(255, 236, 190, int(200 * (0.15 + 0.45 * twinkle) * depth)));
-        mote.setColorAt(1.0, QColor(255, 236, 190, 0));
-        p.setBrush(mote);
-        p.drawEllipse(QPointF(x, y), r, r);
-    }
+    // What drifts in the air is the season's (GHUB-0260): motes in the
+    // jungle, leaves in autumn, snow, and dust in the dry season.
+    const Biomes::Place place = Biomes::at(m_course.distance());
+    const QRectF area(0, 0, kCanvasW, kCanvasH);
+    RunnerArt::paintWeather(p, place.from, 1.0 - place.blend, m_time, 0.0, area, 1.0, m_mote);
+    if (place.blend > 0.0)
+        RunnerArt::paintWeather(p, place.to, place.blend, m_time, 0.0, area, 1.0, m_mote);
 }
 
 void LaneView::paintEffects(QPainter& p) const

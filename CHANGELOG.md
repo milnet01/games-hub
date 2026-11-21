@@ -12,6 +12,15 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Added
 
+- **Ruin Runner and Ruin Runner Lanes: seasons along the run** (GHUB-0260)
+  A run passes from the jungle into autumn woods, then snowfall, then the
+  dry season, and round again. The leaves turn orange and gold, snow
+  settles on trees, ruins and the grass, or everything dries to straw. The
+  sky warms or cools, and leaves, snowflakes or dust drift past. A banner
+  names each season as you enter it. In Lanes the next season comes into
+  view at the far end of the path. Obstacles and coins keep their colours
+  in every season.
+
 - **Mahjong: Japanese Riichi rules** (GHUB-0244)
   The European Mahjong Association's riichi rules join the Rule set menu.
   The tiles have no flowers, and fourteen stay back as a dead wall that

@@ -13,6 +13,7 @@
 #include <QPainterPath>
 #include <QRadialGradient>
 #include <QSettings>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 #include <cmath>
@@ -92,10 +93,21 @@ RunnerView::RunnerView(QWidget* parent)
     setFocusPolicy(Qt::StrongFocus);
 
     m_pacer = new FramePacer(this, [this](double dt) { tick(dt); });
+    connect(&m_dressing, &QFutureWatcherBase::finished, this, qOverload<>(&QWidget::update));
 
     m_table = highScores();
     buildActions();
     newGame();
+}
+
+RunnerView::~RunnerView()
+{
+    m_dressing.waitForFinished();
+}
+
+const RunnerArt::Layers& RunnerView::looks(Biomes::Look look) const
+{
+    return m_seasonsReady ? m_looks[size_t(look)] : m_looks[0];
 }
 
 void RunnerView::buildActions()
@@ -130,6 +142,7 @@ void RunnerView::newGame()
     m_shake = m_flash = 0.0;
     m_bannerAge = 10.0;
     m_landAge = 10.0;
+    m_lookShown = Biomes::at(m_course.distance() / Course::kUnitsPerMetre).main();
     m_banner.clear();
     releaseKeys();
     m_pause->setChecked(false);
@@ -237,6 +250,7 @@ bool RunnerView::advanceForShot(int turns)
     m_shake = m_flash = 0.0;
     m_bannerAge = 10.0;
     m_landAge = 10.0;
+    m_lookShown = Biomes::at(m_course.distance() / Course::kUnitsPerMetre).main();
     if (m_course.over())
         gameOver();
     refresh();
@@ -264,6 +278,14 @@ void RunnerView::tick(double dt)
     m_course.advance(dt);
     readEvents();
     m_landAge += dt;
+
+    // A banner names each new season as the run enters it (GHUB-0260).
+    const Biomes::Look look = Biomes::at(m_course.distance() / Course::kUnitsPerMetre).main();
+    if (look != m_lookShown) {
+        m_lookShown = look;
+        m_banner = Biomes::name(look);
+        m_bannerAge = 0.0;
+    }
 
     // A little dust kicked up at each footfall, and a stream of it under a
     // slide.
@@ -421,7 +443,8 @@ QFont RunnerView::courseFont(double units, bool bold) const
 void RunnerView::resizeEvent(QResizeEvent* event)
 {
     GameView::resizeEvent(event);
-    m_layers = RunnerArt::Layers();
+    m_looks = {};
+    m_seasonsReady = false;
 }
 
 // ---- painting ----
@@ -445,9 +468,27 @@ void RunnerView::paintEvent(QPaintEvent*)
     const QRectF f = courseRect();
     const double s = scale();
     const RunnerArt::Frame frame = artFrame();
-    if (m_layers.sky.isNull() || !(m_layers.frame == frame)) {
-        m_layers = RunnerArt::build(RunnerArt::jungle(), frame);
-        m_scene = QImage(m_layers.sky.size(), QImage::Format_RGB32);
+    if (m_looks[0].sky.isNull() || !(m_looks[0].frame == frame)) {
+        m_looks[0] = RunnerArt::build(RunnerArt::jungle(), frame);
+        m_seasonsReady = false;
+        m_dressing.setFuture(QtConcurrent::run([jungle = m_looks[0]] {
+            Seasons out;
+            for (int i = 1; i < Biomes::kLooks; ++i)
+                out[size_t(i - 1)] = RunnerArt::dressed(jungle, Biomes::Look(i));
+            return out;
+        }));
+        m_scene = QImage(m_looks[0].sky.size(), QImage::Format_RGB32);
+    }
+    // A held shot waits for the seasons, so it is the same every time.
+    if (!m_seasonsReady && m_heldForShot)
+        m_dressing.waitForFinished();
+    if (!m_seasonsReady && m_dressing.isFinished()) {
+        const Seasons seasons = m_dressing.result();
+        if (seasons[0].frame == m_looks[0].frame) {
+            for (int i = 1; i < Biomes::kLooks; ++i)
+                m_looks[size_t(i)] = seasons[size_t(i - 1)];
+            m_seasonsReady = true;
+        }
     }
     // A knock shakes the scene by whole pixels, so the art is still copied
     // rather than resampled.
@@ -499,16 +540,28 @@ void RunnerView::paintEvent(QPaintEvent*)
 
 void RunnerView::paintScene(QPainter& q, QPoint shake) const
 {
-    const RunnerArt::Layers& art = m_layers;
+    const RunnerArt::Layers& art = m_looks[0];
     const RunnerArt::Frame& frame = art.frame;
     const int w = m_scene.width();
     const double scroll = m_course.distance();
 
-    q.drawImage(0, 0, art.sky);
+    // One season, and while it changes, the next laid over it.
+    const Biomes::Place place = Biomes::at(scroll / Course::kUnitsPerMetre);
+    const auto seasons = [&](const auto& paint) {
+        paint(looks(place.from));
+        if (place.blend > 0.0) {
+            q.setOpacity(place.blend);
+            paint(looks(place.to));
+            q.setOpacity(1.0);
+        }
+    };
+    seasons([&](const RunnerArt::Layers& l) { q.drawImage(0, 0, l.sky); });
     q.translate(shake);
-    for (const RunnerArt::Strip& strip : art.back)
-        RunnerArt::drawStrip(q, strip, frame, scroll, w);
-    RunnerArt::drawStrip(q, art.ground, frame, scroll, w);
+    seasons([&](const RunnerArt::Layers& l) {
+        for (const RunnerArt::Strip& strip : l.back)
+            RunnerArt::drawStrip(q, strip, frame, scroll, w);
+        RunnerArt::drawStrip(q, l.ground, frame, scroll, w);
+    });
 
     // The play stays inside the course, so an obstacle never shows before
     // it is laid, however wide the window.
@@ -538,8 +591,10 @@ void RunnerView::paintScene(QPainter& q, QPoint shake) const
     paintAir(q);
     q.restore();
 
-    RunnerArt::drawStrip(q, art.front, frame, scroll, w);
-    RunnerArt::drawStrip(q, art.vines, frame, scroll, w);
+    seasons([&](const RunnerArt::Layers& l) {
+        RunnerArt::drawStrip(q, l.front, frame, scroll, w);
+        RunnerArt::drawStrip(q, l.vines, frame, scroll, w);
+    });
     q.translate(-shake);
     q.drawImage(0, 0, art.light);
 }
@@ -547,8 +602,8 @@ void RunnerView::paintScene(QPainter& q, QPoint shake) const
 void RunnerView::paintPits(QPainter& p) const
 {
     const double ground = Course::kGroundY;
-    const double bottom = m_layers.frame.bottom;
-    const double outline = m_layers.frame.outline;
+    const double bottom = m_looks[0].frame.bottom;
+    const double outline = m_looks[0].frame.outline;
     for (const Course::Obstacle& o : m_course.obstacles()) {
         if (o.kind != Course::Kind::Gap)
             continue;
@@ -613,7 +668,7 @@ void RunnerView::paintPits(QPainter& p) const
 
 void RunnerView::paintCoins(QPainter& p) const
 {
-    const double outline = m_layers.frame.outline;
+    const double outline = m_looks[0].frame.outline;
     const double r = Course::kCoinRadius;
     for (const Course::Coin& c : m_course.coins()) {
         if (c.taken)
@@ -623,7 +678,7 @@ void RunnerView::paintCoins(QPainter& p) const
         const double turn = std::abs(std::cos(m_time * 3.0 + c.at.x() * 0.04));
         const double rx = r * (0.35 + 0.65 * turn);
         p.setOpacity(0.5 + 0.2 * std::sin(m_time * 4.0 + c.at.x() * 0.05));
-        p.drawImage(QRectF(c.at - QPointF(r * 2.2, r * 2.2), QSizeF(r * 4.4, r * 4.4)), m_layers.glow);
+        p.drawImage(QRectF(c.at - QPointF(r * 2.2, r * 2.2), QSizeF(r * 4.4, r * 4.4)), m_looks[0].glow);
         p.setOpacity(1.0);
         p.setPen(QPen(kOutline, outline));
         p.setBrush(kGold.darker(145));
@@ -660,7 +715,7 @@ void RunnerView::paintCoins(QPainter& p) const
 
 void RunnerView::paintRunner(QPainter& p) const
 {
-    const double outline = m_layers.frame.outline;
+    const double outline = m_looks[0].frame.outline;
     const double ground = Course::kGroundY;
     const double feet = m_course.feetY();
     const double x = Course::kRunnerX;
@@ -674,7 +729,7 @@ void RunnerView::paintRunner(QPainter& p) const
         const double lift = std::clamp((ground - feet) / 160.0, 0.0, 1.0);
         const double half = 17.0 * (1.0 - 0.5 * lift);
         p.setOpacity(0.8 * (1.0 - 0.7 * lift));
-        p.drawImage(QRectF(x - half, ground - 3.0, half * 2.0, 6.0), m_layers.shadow);
+        p.drawImage(QRectF(x - half, ground - 3.0, half * 2.0, 6.0), m_looks[0].shadow);
         p.setOpacity(1.0);
     }
 
@@ -879,34 +934,15 @@ void RunnerView::paintRunner(QPainter& p) const
 
 void RunnerView::paintAir(QPainter& p) const
 {
-    // Motes drifting in the low sun, and now and then a falling leaf. They
-    // follow the clock, so a held shot shows them still.
+    // What drifts in the air is the season's (GHUB-0260): motes in the
+    // jungle, leaves in autumn, snow, and dust in the dry season.
     const double scroll = m_course.distance();
-    const RunnerArt::Palette& colours = RunnerArt::jungle();
-    const auto wrap = [](double v, double span) { return v - span * std::floor(v / span); };
-    for (int i = 0; i < 34; ++i) {
-        const double depth = 0.4 + 0.6 * tileHash(i, 50);
-        const double x = wrap(tileHash(i, 51) * 700.0 + m_time * (6.0 + 10.0 * tileHash(i, 52)) - scroll * 0.3 * depth,
-                              700.0) - 30.0;
-        const double y = 40.0 + 230.0 * tileHash(i, 53) + std::sin(m_time * 0.8 + i) * 6.0;
-        const double twinkle = 0.5 + 0.5 * std::sin(m_time * 1.7 + i * 2.1);
-        const double size = (2.0 + 3.0 * tileHash(i, 54)) * depth;
-        p.setOpacity((0.12 + 0.4 * twinkle) * depth);
-        p.drawImage(QRectF(x - size, y - size, size * 2.0, size * 2.0), m_layers.mote);
-    }
-    p.setOpacity(1.0);
-    p.setPen(Qt::NoPen);
-    for (int i = 0; i < 6; ++i) {
-        const double fall = 14.0 + 10.0 * tileHash(i, 60);
-        const double y = wrap(m_time * fall + tileHash(i, 61) * 400.0, 400.0) - 30.0;
-        const double x = wrap(tileHash(i, 62) * 700.0 - scroll * 0.9 + std::sin(m_time * 1.3 + i) * 14.0, 700.0) - 30.0;
-        p.save();
-        p.translate(x, y);
-        p.rotate(std::sin(m_time * 2.0 + i) * 70.0);
-        p.setBrush(i % 2 ? colours.leafLight : QColor(0xb0, 0x8a, 0x3a));
-        p.drawEllipse(QPointF(0, 0), 3.4, 1.4);
-        p.restore();
-    }
+    const Biomes::Place place = Biomes::at(scroll / Course::kUnitsPerMetre);
+    const RunnerArt::Frame& frame = m_looks[0].frame;
+    const QRectF area(0, frame.top, Course::kWidth, Course::kGroundY - frame.top);
+    RunnerArt::paintWeather(p, place.from, 1.0 - place.blend, m_time, scroll * 0.3, area, 1.0, m_looks[0].mote);
+    if (place.blend > 0.0)
+        RunnerArt::paintWeather(p, place.to, place.blend, m_time, scroll * 0.3, area, 1.0, m_looks[0].mote);
 }
 
 void RunnerView::paintWarnings(QPainter& p) const

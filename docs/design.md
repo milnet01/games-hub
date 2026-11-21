@@ -1291,6 +1291,23 @@ As in Lanes, the scene is painted no sharper than 1920 by 1080 and
 stretched, in bands of rows at once (`Bands::paint`, in `bands.*`), with
 words painted over it at the window's own sharpness.
 
+**A run passes through the seasons, in both runners** (`biomes.*`,
+GHUB-0260): the jungle, autumn woods, snowfall and the dry season, in that
+order and round again, each `Biomes::kMetresEach` long. `Biomes::at()` says
+where a point of the run is, blending one season into the next over
+`Biomes::kChangeMetres`, and a banner names each as the run enters it. A
+season is the jungle's finished art recoloured once by `Biomes::colour`:
+leaves change colour, the light warms or cools, and snow settles on the tops
+of things. **Obstacles and coins are never recoloured**, so they keep the
+colours no scenery uses; the UI test checks the obstacles' pictures are the
+jungle's own in every season. Each season has its own weather, painted by
+`RunnerArt::paintWeather`. The side-on view cross-fades its scenery through
+a change. Lanes gives each tree and ruin the season of the place it stands,
+so the next season comes into sight at the far end of the path. Only the
+jungle's art is painted before the first frame at a new size; the other
+seasons are coloured in the background, the jungle standing in until they
+are ready, and a held shot waits for them.
+
 **Under Wayland the clock follows the screen** (`FramePacer`, in
 `src/runner/`). A frame starts when the compositor asks for the next one, so
 each frame painted is one the screen shows. A fixed 16 ms timer ran at 62.5 a

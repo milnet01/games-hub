@@ -1,5 +1,7 @@
 #pragma once
 
+#include "runner/biomes.h"
+
 #include <QColor>
 #include <QImage>
 #include <QPointF>
@@ -8,6 +10,7 @@
 #include <vector>
 
 class QPainter;
+class QRectF;
 
 // The painted art of the side-on Ruin Runner (GHUB-0262): the sky, the
 // scenery, the path and the obstacles, painted once for a window size and
@@ -79,6 +82,20 @@ struct Layers {
 };
 
 Layers build(const Palette& palette, const Frame& frame);
+
+// The jungle's layers in another season's colours (GHUB-0260). The
+// obstacles are shared, never recoloured.
+Layers dressed(const Layers& jungle, Biomes::Look look);
+
+// A soft round dot of `colour`, `size` pixels across.
+QImage softDot(int size, const QColor& colour);
+
+// What drifts in the air in `look`, `share` (0 to 1) of its full amount,
+// over `area` in the painter's units, `unit` of which make a course unit.
+// It follows `time`, so a held shot shows it still; `drift` moves it
+// sideways with the run.
+void paintWeather(QPainter& p, Biomes::Look look, double share, double time, double drift, const QRectF& area,
+                  double unit, const QImage& mote);
 
 // Copies `strip` across a scene `sceneWidth` pixels wide, `scroll` course
 // units along. The painter is in scene pixels.

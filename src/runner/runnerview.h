@@ -6,10 +6,12 @@
 #include "runner/runnercourse.h"
 
 #include <QColor>
+#include <QFutureWatcher>
 #include <QImage>
 #include <QPoint>
 #include <QPointF>
 
+#include <array>
 #include <random>
 #include <vector>
 
@@ -24,6 +26,7 @@ class RunnerView : public GameView
 
 public:
     explicit RunnerView(QWidget* parent = nullptr);
+    ~RunnerView() override;
 
     QList<QAction*> gameActions() override { return m_actions; }
     // How to play, as the hub's Help window shows it (GHUB-0016).
@@ -153,6 +156,17 @@ private:
 
     // The art for this size, and the picture the course is painted into,
     // no sharper than RunnerArt's cap however large the window.
-    RunnerArt::Layers m_layers;
+    // One set a season (GHUB-0260), the jungle first; the obstacles, motes
+    // and shadows are the jungle set's.
+    std::array<RunnerArt::Layers, Biomes::kLooks> m_looks;
+    // The season the banner last named.
+    Biomes::Look m_lookShown = Biomes::Look::Jungle;
+    // The other seasons' art is coloured in the background once the
+    // jungle's is painted, so a new window size never waits for it; until
+    // it is ready, every season shows the jungle's.
+    using Seasons = std::array<RunnerArt::Layers, Biomes::kLooks - 1>;
+    QFutureWatcher<Seasons> m_dressing;
+    bool m_seasonsReady = false;
+    const RunnerArt::Layers& looks(Biomes::Look look) const;
     QImage m_scene;
 };

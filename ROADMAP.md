@@ -10247,12 +10247,16 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: enhancement.
   Source: user-report-2026-11-18.
 
-- 📋 [GHUB-0260] **Ruin Runner Lanes keeps one scenery for the whole run.**
+- ✅ [GHUB-0260] **Ruin Runner Lanes keeps one scenery for the whole run.**
   Owner's wish: the scenery changes every now and then. Assets are
   drawn or generated, never sampled (ROADMAP.md Standing rules).
   2026-11-21, owner: as a run goes on, different biomes and possibly
   different seasons, to keep the player engaged.
   2026-11-21, owner: biomes and seasons in the side-on Ruin Runner too.
+  2026-11-21: four seasons in both runners (src/runner/biomes.*):
+  jungle, autumn woods, snowfall, dry season, each a recolouring of the
+  jungle art with its own weather. They are seasons and climates of one
+  jungle, not new kinds of scenery (no desert plants or ice art).
   **Layman:** The three-lane runner's surroundings should change every now and then during a run.
   Kind: enhancement.
   Source: user-report-2026-11-18.

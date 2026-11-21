@@ -2,11 +2,13 @@
 
 #include "dealseed.h"
 #include "gameview.h"
+#include "runner/biomes.h"
 #include "runner/lanecourse.h"
 
 #include <QColor>
+#include <QFuture>
+#include <QFutureWatcher>
 #include <QImage>
-#include <QPixmap>
 #include <QPointF>
 
 #include <array>
@@ -26,6 +28,7 @@ class LaneView : public GameView
 
 public:
     explicit LaneView(QWidget* parent = nullptr);
+    ~LaneView() override;
 
     QList<QAction*> gameActions() override { return m_actions; }
     QString rulesText() const override;
@@ -146,7 +149,6 @@ private:
         double spin = 0.0;
         double fall = 0.0;
         double sway = 0.0;
-        QColor colour;
     };
     std::vector<Particle> m_particles;
     std::vector<Popup> m_popups;
@@ -171,9 +173,27 @@ private:
     // to paint than a 1080p one (GHUB-0258).
     QImage m_scene;
     double m_scenePixels = 1.0;
-    // Painted once per size: the sky the whole window shows beyond the
-    // canvas, and the scene's own sky behind and light and leaves over.
-    QPixmap m_backdrop;
-    QImage m_sceneSky;
-    QImage m_sceneOverlay;
+    // Painted once per size, one a season, the jungle first (GHUB-0260):
+    // the sky the whole window shows beyond the canvas, and the scene's own
+    // sky behind and light and leaves over.
+    std::array<QImage, Biomes::kLooks> m_backdrop;
+    std::array<QImage, Biomes::kLooks> m_sceneSky;
+    std::array<QImage, Biomes::kLooks> m_sceneOverlay;
+    // A soft dot, for what drifts in the air.
+    QImage m_mote;
+    // The season the banner last named.
+    Biomes::Look m_lookShown = Biomes::Look::Jungle;
+    // Makes the seasons' art in the background when the game opens, so no
+    // frame waits for it.
+    QFuture<void> m_warm;
+    // The sky, backdrop and overlay of the other seasons are coloured in the
+    // background once the jungle's are painted, so a new window size never
+    // waits for them; until they are ready, every season shows the jungle's.
+    struct Seasons {
+        std::array<QImage, Biomes::kLooks> backdrop;
+        std::array<QImage, Biomes::kLooks> sky;
+        std::array<QImage, Biomes::kLooks> overlay;
+    };
+    QFutureWatcher<Seasons> m_dressing;
+    bool m_seasonsReady = false;
 };
