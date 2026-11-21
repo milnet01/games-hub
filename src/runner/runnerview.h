@@ -2,10 +2,12 @@
 
 #include "dealseed.h"
 #include "gameview.h"
+#include "runner/runnerart.h"
 #include "runner/runnercourse.h"
 
 #include <QColor>
-#include <QPixmap>
+#include <QImage>
+#include <QPoint>
 #include <QPointF>
 
 #include <random>
@@ -76,14 +78,18 @@ private:
     double scale() const;
     QRectF courseRect() const;
 
-    void buildBackdrop();
-    void paintScenery(QPainter& p) const;
-    void paintGround(QPainter& p) const;
-    void paintObstacle(QPainter& p, const RunnerCourse::Obstacle& o) const;
+    // What the art is painted for at this size (GHUB-0262).
+    RunnerArt::Frame artFrame() const;
+    // Everything on the course but its words, in scene pixels. Run in bands
+    // at once, so it reads members and writes nothing.
+    void paintScene(QPainter& q, QPoint shake) const;
+    void paintPits(QPainter& p) const;
     void paintCoins(QPainter& p) const;
     void paintRunner(QPainter& p) const;
+    void paintAir(QPainter& p) const;
     void paintWarnings(QPainter& p) const;
     void paintEffects(QPainter& p) const;
+    void paintPopups(QPainter& p) const;
     void paintHud(QPainter& p) const;
     void paintOverlay(QPainter& p) const;
     void paintPanel(QPainter& p, const QRectF& r) const;
@@ -140,5 +146,13 @@ private:
     QString m_banner;
     QString m_statusShown;
 
-    QPixmap m_backdrop;
+    // Seconds since the runner last landed, for the squash as it does.
+    double m_landAge = 10.0;
+    // The stride last kicked up dust.
+    long long m_stride = 0;
+
+    // The art for this size, and the picture the course is painted into,
+    // no sharper than RunnerArt's cap however large the window.
+    RunnerArt::Layers m_layers;
+    QImage m_scene;
 };

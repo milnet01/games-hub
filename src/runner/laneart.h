@@ -8,6 +8,7 @@
 #include <vector>
 
 class QPainter;
+class QPainterPath;
 
 // The painted art of Ruin Runner Lanes (GHUB-0241): scenery and the faces of
 // obstacles, each drawn once at a generous size and kept, so every frame
@@ -54,6 +55,16 @@ void paintSky(QPainter& p, const QRectF& all, const QRectF& canvas, double horiz
 // The leaves framing the top of the play, painted once per window size and
 // laid over the scene.
 void paintCanopy(QPainter& p, const QRectF& canvas, double unit);
+
+// Painting helpers the side-on runner's art shares. A heap of leaves lit
+// from the upper right when `lit`; a frond from `base` at `angle` radians;
+// a groove cut along `path`; light and dark flecks over `r`.
+void leafCluster(QPainter& p, QPointF c, double r, const QColor& dark, const QColor& mid, const QColor& light,
+                 bool lit);
+void frond(QPainter& p, QPointF base, double angle, double length, double droop, double leaflet,
+           const QColor& leaf, const QColor& spine);
+void carve(QPainter& p, const QPainterPath& path, double width, const QColor& groove);
+void speckle(QPainter& p, const QRectF& r, int count, int salt, int alpha);
 
 // Draws `sprite` into `target`, `mist` (0 to 1) of the way into the haze.
 // `pixelsTall` is how tall the target is on the device, which picks the size.

@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: GHUB=262 -->
+<!-- ants-roadmap-id-high-water: GHUB=263 -->
 
 # Games Hub — Roadmap
 
@@ -10276,7 +10276,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: perf.
   Source: user-report-2026-11-21.
 
-- 📋 [GHUB-0262] **Ruin Runner Lanes' graphics are plain.**
+- ✅ [GHUB-0262] **Ruin Runner Lanes' graphics are plain.**
   Owner asked for all four on 2026-11-21: a more detailed and
   better-animated runner; lighting and atmosphere (sun shafts,
   soft shadows, dust); richer obstacles and glinting coins; more
@@ -10284,9 +10284,27 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   the frame budget the stutter item sets.
   2026-11-21, owner: the side-on Ruin Runner gets the same graphics
   pass.
+  2026-11-21: side-on art painted once per size into scrolling strips
+  (runnerart.*), both views share Bands::paint. Bench on a moderately
+  loaded machine, owner window 1388x1236: side-on about 4.5 to 5.6 ms,
+  Lanes about 3.8 to 5.5 ms. At 4K both stay around 19 to 28 ms, over
+  budget; the time goes to stretching the capped scene to the screen and
+  the words over it, not the art.
   **Layman:** Better art for the three-lane runner: the runner, lighting, obstacles and coins, scenery and ground.
   Kind: enhancement.
   Source: user-report-2026-11-21.
+
+- 📋 [GHUB-0263] **Both Ruin Runners take about 20 ms a frame filling a 4K screen.**
+  Bench, 2026-11-21, 3840x2100, under moderate load: side-on about
+  19 to 22 ms, Lanes about 21 to 28. A timed side-on frame split as:
+  scene painted in bands about 6 ms, stretching it to the window and
+  copying it about 9, the words over it about 3.5. Stretching in bands
+  saved nothing, since it adds a whole extra 4K copy. Try painting the
+  score and words cheaper, or an exact 2x stretch, and judge on the
+  desktop as well as the bench.
+  **Layman:** Full-screen on a 4K monitor, both runners draw a little under 60 pictures a second.
+  Kind: perf.
+  Source: measured-2026-11-21.
 
 ## P01 — Shipped
 

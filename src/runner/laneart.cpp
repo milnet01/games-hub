@@ -84,6 +84,10 @@ Sprite finish(const QImage& full, double widthMetres, double heightMetres, bool 
     return s;
 }
 
+} // namespace
+
+// Shared with the side-on runner's art (runnerart.cpp).
+
 // A heap of leaves: a dark scalloped blob, a mid-tone one over it, and a
 // highlight where the sun, high on the right, catches it.
 void leafCluster(QPainter& p, QPointF c, double r, const QColor& dark, const QColor& mid, const QColor& light,
@@ -166,6 +170,8 @@ void speckle(QPainter& p, const QRectF& r, int count, int salt, int alpha)
         p.drawEllipse(at, s, s);
     }
 }
+
+namespace {
 
 void mossOnTop(QPainter& p, double width, double top, int salt, double drips)
 {

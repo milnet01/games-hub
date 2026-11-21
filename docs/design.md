@@ -1276,6 +1276,21 @@ slow frame drops a picture rather than slowing the game. A longer stall slows
 it, so a hitch never carries the runner into an obstacle unseen.
 `advanceForShot` holds that clock, so a seeded shot is the same every time.
 
+**The art is painted once for a window size, not every frame**
+(`runnerart.*`, GHUB-0262). The sky and a light over everything are
+pictures the size of the scene. The scenery is strips that repeat as they
+scroll, each at its own speed: mountains, temples, a hazed jungle with its
+ruins, a nearer jungle, the path and earth, ferns in front and vines from
+the top. Stones, roots and walls are pictures too, four looks each. A frame
+copies these on whole pixels and draws only the runner, coins, pits and
+effects. The trees, ruins and plants are Lanes' own art, and ruins stand
+back in the haze, so none shares an obstacle's colour at path level. The
+colours are one `RunnerArt::Palette`.
+
+As in Lanes, the scene is painted no sharper than 1920 by 1080 and
+stretched, in bands of rows at once (`Bands::paint`, in `bands.*`), with
+words painted over it at the window's own sharpness.
+
 **Under Wayland the clock follows the screen** (`FramePacer`, in
 `src/runner/`). A frame starts when the compositor asks for the next one, so
 each frame painted is one the screen shows. A fixed 16 ms timer ran at 62.5 a
@@ -1321,7 +1336,7 @@ before the cap and about 24 after, on 2026-11-20 on a busy machine. The score
 panel and other words are painted over it at the window's own sharpness.
 
 **The sky, ground and world are painted in bands of rows, one to a core, at
-once**, and the effects, leaves and signs after them on one painter. Nothing a
+once** (`Bands::paint`), and the effects, leaves and signs after them on one painter. Nothing a
 band paints draws text. In the owner's window, about 1390 by 1130, a frame took
 about 13 ms before the bands and the folded haze and about 5 after, on
 2026-11-21 on a quiet machine.

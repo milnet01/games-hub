@@ -95,6 +95,8 @@ private:
     void paintCoin(QPainter& p, const LaneCourse::Coin& c) const;
     void paintRunner(QPainter& p) const;
     void paintLeaves(QPainter& p) const;
+    // Motes drifting in the low sun (GHUB-0262).
+    void paintAir(QPainter& p) const;
     void paintEffects(QPainter& p) const;
     void paintSigns(QPainter& p) const;
     static void paintSign(QPainter& p, QPointF centre, double radius, Sign sign, double outline);
@@ -159,6 +161,8 @@ private:
     // Where the runner's stride was last frame, to raise dust as a foot lands.
     double m_stride = 0.0;
     double m_bannerAge = 10.0;
+    // Seconds since the runner last landed, for the squash as it does.
+    double m_landAge = 10.0;
     QString m_banner;
     QString m_statusShown;
 

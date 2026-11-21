@@ -1,6 +1,7 @@
 #include "runnerview.h"
 
 #include "legibility.h"
+#include "runner/bands.h"
 #include "runner/framepacer.h"
 #include "sound.h"
 
@@ -21,6 +22,10 @@
 namespace {
 using Course = RunnerCourse;
 
+// The sharpest the scene is painted, in pixels to a course unit: about 1920
+// by 1080, as Lanes is (GHUB-0258). A frame costs by the pixel.
+constexpr double kSceneScaleCap = 3.0;
+
 // A function for the reason scores.h's own keys are: nothing is built at
 // static-initialisation time. The leaf starts "best_" so Scores::clear(),
 // which matches by that shape, forgets the table with every other record.
@@ -29,9 +34,6 @@ QString tableKey() { return QStringLiteral("runner/best_scores"); } // untransla
 constexpr QColor kOutline { 0x14, 0x0c, 0x06 };
 constexpr QColor kGold { 0xff, 0xd0, 0x3a };
 constexpr QColor kPath { 0xc9, 0xa8, 0x6a };
-constexpr QColor kRoot { 0xe0, 0x74, 0x2c };
-constexpr QColor kStone { 0xa6, 0xb4, 0xbe };
-constexpr QColor kWall { 0x8e, 0x7c, 0xa6 };
 constexpr QColor kPanelEdge { 0xff, 0xc8, 0x5a };
 constexpr QColor kInk { 0xfb, 0xf4, 0xe6 };
 
@@ -127,6 +129,7 @@ void RunnerView::newGame()
     m_popups.clear();
     m_shake = m_flash = 0.0;
     m_bannerAge = 10.0;
+    m_landAge = 10.0;
     m_banner.clear();
     releaseKeys();
     m_pause->setChecked(false);
@@ -233,6 +236,7 @@ bool RunnerView::advanceForShot(int turns)
     m_popups.clear();
     m_shake = m_flash = 0.0;
     m_bannerAge = 10.0;
+    m_landAge = 10.0;
     if (m_course.over())
         gameOver();
     refresh();
@@ -259,6 +263,23 @@ void RunnerView::tick(double dt)
     m_course.setDuck(m_duckKey || m_duckButton);
     m_course.advance(dt);
     readEvents();
+    m_landAge += dt;
+
+    // A little dust kicked up at each footfall, and a stream of it under a
+    // slide.
+    if (m_course.phase() == Course::Phase::Running && !m_course.airborne()) {
+        const QPointF heel(Course::kRunnerX - 2.0, Course::kGroundY);
+        if (m_course.ducking()) {
+            if (unit(m_fx) < 0.5)
+                burst(heel, kPath.lighter(115), 1, 40.0, 10.0);
+        } else {
+            const auto stride = (long long)std::floor(m_course.distance() / 16.0 / std::numbers::pi);
+            if (stride != m_stride) {
+                m_stride = stride;
+                burst(heel, kPath.lighter(115), 3, 30.0, 0.0);
+            }
+        }
+    }
 
     for (Particle& q : m_particles) {
         q.at += q.velocity * dt;
@@ -296,6 +317,7 @@ void RunnerView::readEvents()
             burst(e.at, kPath, 6, 50.0, 0.0);
             break;
         case Course::EventKind::Landed:
+            m_landAge = 0.0;
             burst(e.at, kPath.lighter(110), 8, 60.0, 0.0);
             break;
         case Course::EventKind::Coin:
@@ -399,76 +421,62 @@ QFont RunnerView::courseFont(double units, bool bold) const
 void RunnerView::resizeEvent(QResizeEvent* event)
 {
     GameView::resizeEvent(event);
-    m_backdrop = QPixmap();
-}
-
-// ---- the sky: drawn once per size ----
-
-void RunnerView::buildBackdrop()
-{
-    const qreal dpr = devicePixelRatioF();
-    m_backdrop = QPixmap(QSize(std::max(1, int(width() * dpr)), std::max(1, int(height() * dpr))));
-    m_backdrop.setDevicePixelRatio(dpr);
-    QPainter p(&m_backdrop);
-    p.setRenderHint(QPainter::Antialiasing, true);
-
-    const QRectF all(rect());
-    const QRectF f = courseRect();
-    const double horizon = f.top() + Course::kGroundY * scale();
-    // Dawn over the jungle, held soft so nothing in the sky competes with
-    // an obstacle.
-    QLinearGradient sky(QPointF(0, 0), QPointF(0, horizon));
-    sky.setColorAt(0.0, QColor(0x1d, 0x2c, 0x4a));
-    sky.setColorAt(0.45, QColor(0x4a, 0x5a, 0x78));
-    sky.setColorAt(0.8, QColor(0xb0, 0x86, 0x70));
-    sky.setColorAt(1.0, QColor(0xd8, 0xa0, 0x6e));
-    p.fillRect(all, sky);
-
-    const QPointF sun(f.left() + f.width() * 0.72, f.top() + f.height() * 0.42);
-    const double r = f.height() * 0.11;
-    QRadialGradient glow(sun, r * 4.0);
-    glow.setColorAt(0.0, QColor(255, 220, 160, 120));
-    glow.setColorAt(1.0, QColor(255, 220, 160, 0));
-    p.setPen(Qt::NoPen);
-    p.setBrush(glow);
-    p.drawEllipse(sun, r * 4.0, r * 4.0);
-    p.setBrush(QColor(0xff, 0xe2, 0xa8));
-    p.drawEllipse(sun, r, r);
+    m_layers = RunnerArt::Layers();
 }
 
 // ---- painting ----
 
-void RunnerView::paintEvent(QPaintEvent*)
+RunnerArt::Frame RunnerView::artFrame() const
 {
-    QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing, true);
-
-    if (m_backdrop.isNull() || m_backdrop.size() != QSize(int(width() * devicePixelRatioF()),
-                                                          int(height() * devicePixelRatioF())))
-        buildBackdrop();
-    p.drawPixmap(0, 0, m_backdrop);
-
     const QRectF f = courseRect();
     const double s = scale();
-    p.save();
-    if (m_shake > 0.0) {
-        const double amount = 5.0 * m_shake * m_shake;
-        p.translate(std::sin(m_time * 71.0) * amount, std::cos(m_time * 53.0) * amount);
+    RunnerArt::Frame a;
+    a.pixels = std::min(s * devicePixelRatioF(), kSceneScaleCap);
+    a.left = -f.left() / s;
+    a.top = -f.top() / s;
+    a.right = (width() - f.left()) / s;
+    a.bottom = (height() - f.top()) / s;
+    a.outline = outlineWidth();
+    return a;
+}
+
+void RunnerView::paintEvent(QPaintEvent*)
+{
+    const QRectF f = courseRect();
+    const double s = scale();
+    const RunnerArt::Frame frame = artFrame();
+    if (m_layers.sky.isNull() || !(m_layers.frame == frame)) {
+        m_layers = RunnerArt::build(RunnerArt::jungle(), frame);
+        m_scene = QImage(m_layers.sky.size(), QImage::Format_RGB32);
     }
+    // A knock shakes the scene by whole pixels, so the art is still copied
+    // rather than resampled.
+    QPoint shake;
+    if (m_shake > 0.0) {
+        const double amount = 5.0 * m_shake * m_shake * frame.pixels / s;
+        shake = QPoint(int(std::lround(std::sin(m_time * 71.0) * amount)),
+                       int(std::lround(std::cos(m_time * 53.0) * amount)));
+    }
+
+    // Painted in bands of rows, one to a core, at once, as Lanes is
+    // (GHUB-0261).
+    Bands::paint(m_scene, [&](QPainter& q) { paintScene(q, shake); });
+
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    // At the scene's own size this is a plain copy; past the cap it is
+    // stretched.
+    p.drawImage(QRectF(QPointF(0, 0), QSizeF(m_scene.size()) * (s / frame.pixels)), m_scene);
+
+    // The words over the course are painted at the window's own sharpness.
+    p.save();
+    p.translate(QPointF(shake) * (s / frame.pixels));
     p.translate(f.topLeft());
     p.scale(s, s);
-
-    paintScenery(p);
-    paintGround(p);
-    // The play itself stays inside the course, so an obstacle never shows
-    // before it is laid, however wide the window.
     p.save();
     p.setClipRect(QRectF(0, -f.top() / s, Course::kWidth, height() / s));
-    for (const Course::Obstacle& o : m_course.obstacles())
-        paintObstacle(p, o);
-    paintCoins(p);
-    paintRunner(p);
-    paintEffects(p);
+    paintPopups(p);
     p.restore();
     paintWarnings(p);
     p.restore();
@@ -489,164 +497,96 @@ void RunnerView::paintEvent(QPaintEvent*)
     m_pacer->painted();
 }
 
-void RunnerView::paintScenery(QPainter& p) const
+void RunnerView::paintScene(QPainter& q, QPoint shake) const
 {
-    const QRectF f = courseRect();
-    const double s = scale();
-    const double left = -f.left() / s;
-    const double right = (width() - f.left()) / s;
-    const double top = -f.top() / s;
-    const double ground = Course::kGroundY;
+    const RunnerArt::Layers& art = m_layers;
+    const RunnerArt::Frame& frame = art.frame;
+    const int w = m_scene.width();
     const double scroll = m_course.distance();
 
-    // Far hills, barely moving.
-    {
-        QPainterPath hills;
-        hills.moveTo(left, ground);
-        const int points = int(std::ceil((right - left) / 8.0)) + 1;
-        for (int i = 0; i <= points; ++i) {
-            const double x = left + 8.0 * i;
-            const double w = x + scroll * 0.08;
-            const double h = 70.0 + 24.0 * std::sin(w * 0.013) + 16.0 * std::sin(w * 0.031 + 1.7)
-                             + 8.0 * std::sin(w * 0.071 + 0.4);
-            hills.lineTo(x, ground - 40.0 - h);
-        }
-        hills.lineTo(left + 8.0 * points, ground);
-        hills.closeSubpath();
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0x5a, 0x6c, 0x7a, 200));
-        p.drawPath(hills);
-    }
+    q.drawImage(0, 0, art.sky);
+    q.translate(shake);
+    for (const RunnerArt::Strip& strip : art.back)
+        RunnerArt::drawStrip(q, strip, frame, scroll, w);
+    RunnerArt::drawStrip(q, art.ground, frame, scroll, w);
 
-    // Stepped temples among the hills.
-    {
-        const double pitch = 240.0;
-        const double shift = scroll * 0.22;
-        const long long first = (long long)std::floor((left + shift) / pitch) - 1;
-        const long long last = (long long)std::floor((right + shift) / pitch) + 1;
-        p.setBrush(QColor(0x40, 0x52, 0x50));
-        for (long long t = first; t <= last; ++t) {
-            if (tileHash(t, 1) < 0.35)
-                continue;
-            const double base = 80.0 + 60.0 * tileHash(t, 2);
-            const double cx = double(t) * pitch + pitch * (0.3 + 0.4 * tileHash(t, 3)) - shift;
-            const int steps = 4 + int(tileHash(t, 4) * 2.0);
-            const double stepH = 12.0 + 4.0 * tileHash(t, 5);
-            QPainterPath temple;
-            for (int i = 0; i < steps; ++i) {
-                const double w = base * (1.0 - 0.17 * i);
-                temple.addRect(QRectF(cx - w / 2.0, ground - 30.0 - stepH * (i + 1), w, stepH + 0.5));
-            }
-            const double shrine = base * 0.22;
-            temple.addRect(QRectF(cx - shrine / 2.0, ground - 30.0 - stepH * steps - 16.0, shrine, 16.5));
-            p.drawPath(temple.simplified());
+    // The play stays inside the course, so an obstacle never shows before
+    // it is laid, however wide the window.
+    q.save();
+    q.setClipRect(QRectF(-frame.left * frame.pixels, 0, Course::kWidth * frame.pixels, m_scene.height()));
+    q.setRenderHint(QPainter::Antialiasing, true);
+    q.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    const QTransform pixels = q.transform();
+    q.scale(frame.pixels, frame.pixels);
+    q.translate(-frame.left, -frame.top);
+    const QTransform units = q.transform();
+    paintPits(q);
+    q.setTransform(pixels);
+    for (const Course::Obstacle& o : m_course.obstacles()) {
+        const size_t look = size_t(std::clamp(o.look, 0, 3));
+        switch (o.kind) {
+        case Course::Kind::Gap: break; // part of the ground
+        case Course::Kind::Root: RunnerArt::drawPiece(q, art.roots[look], frame, { o.x, Course::kGroundY }); break;
+        case Course::Kind::Stone: RunnerArt::drawPiece(q, art.stones[look], frame, { o.x, Course::kGroundY }); break;
+        case Course::Kind::Arch: RunnerArt::drawPiece(q, art.walls[look], frame, { o.x, Course::kGroundY }); break;
         }
     }
+    q.setTransform(units);
+    paintCoins(q);
+    paintRunner(q);
+    paintEffects(q);
+    paintAir(q);
+    q.restore();
 
-    // The tree line: a band of canopy, darker and quicker.
-    {
-        const double pitch = 38.0;
-        const double shift = scroll * 0.45;
-        const long long first = (long long)std::floor((left + shift) / pitch) - 2;
-        const long long last = (long long)std::floor((right + shift) / pitch) + 2;
-        p.setBrush(QColor(0x24, 0x44, 0x2c));
-        p.drawRect(QRectF(left, ground - 34.0, right - left, 34.0));
-        for (long long t = first; t <= last; ++t) {
-            const double r = 22.0 + 16.0 * tileHash(t, 6);
-            const double cx = double(t) * pitch - shift;
-            p.drawEllipse(QPointF(cx, ground - 30.0 - r * 0.5), r, r * 0.8);
-        }
-        p.setBrush(QColor(0x1a, 0x33, 0x20));
-        for (long long t = first; t <= last; ++t) {
-            const double r = 14.0 + 10.0 * tileHash(t, 7);
-            const double cx = double(t) * pitch + pitch * 0.5 - shift;
-            p.drawEllipse(QPointF(cx, ground - 14.0), r, r * 0.7);
-        }
-    }
-
-    // A few leaves hanging into the top of the view, held faint.
-    {
-        const double pitch = 90.0;
-        const double shift = scroll * 1.15;
-        const long long first = (long long)std::floor((left + shift) / pitch) - 1;
-        const long long last = (long long)std::floor((right + shift) / pitch) + 1;
-        p.setPen(QPen(QColor(0x1e, 0x3a, 0x22, 170), 2.0));
-        for (long long t = first; t <= last; ++t) {
-            if (tileHash(t, 8) < 0.5)
-                continue;
-            const double x = double(t) * pitch - shift;
-            const double len = 20.0 + 40.0 * tileHash(t, 9);
-            p.drawLine(QPointF(x, top), QPointF(x + 4.0, len));
-            p.setBrush(QColor(0x2a, 0x55, 0x2e, 170));
-            p.drawEllipse(QPointF(x + 4.0, len), 6.0, 3.5);
-        }
-    }
+    RunnerArt::drawStrip(q, art.front, frame, scroll, w);
+    RunnerArt::drawStrip(q, art.vines, frame, scroll, w);
+    q.translate(-shake);
+    q.drawImage(0, 0, art.light);
 }
 
-void RunnerView::paintGround(QPainter& p) const
+void RunnerView::paintPits(QPainter& p) const
 {
-    const QRectF f = courseRect();
-    const double s = scale();
-    const double left = -f.left() / s;
-    const double right = (width() - f.left()) / s;
-    const double bottom = (height() - f.top()) / s;
     const double ground = Course::kGroundY;
-    const double scroll = m_course.distance();
-    const double outline = outlineWidth();
-
-    QLinearGradient earth(QPointF(0, ground), QPointF(0, bottom));
-    earth.setColorAt(0.0, QColor(0x6a, 0x48, 0x28));
-    earth.setColorAt(1.0, QColor(0x2a, 0x1a, 0x0e));
-    p.setPen(Qt::NoPen);
-    p.setBrush(earth);
-    p.drawRect(QRectF(left, ground, right - left, bottom - ground));
-
-    // The path: a course of worn blocks along the top.
-    const double blockW = 48.0;
-    const double blockH = 16.0;
-    p.setBrush(kPath);
-    p.drawRect(QRectF(left, ground, right - left, blockH));
-    p.setPen(QPen(QColor(0x6a, 0x50, 0x30), 1.4));
-    const double offset = std::fmod(scroll, blockW);
-    const int blocks = int(std::ceil((right - left) / blockW)) + 2;
-    for (int i = 0; i <= blocks; ++i) {
-        const double x = left - offset - blockW + blockW * i;
-        p.drawLine(QPointF(x, ground), QPointF(x, ground + blockH));
-    }
-    p.drawLine(QPointF(left, ground + blockH), QPointF(right, ground + blockH));
-    p.setPen(QPen(kOutline, outline));
-    p.drawLine(QPointF(left, ground), QPointF(right, ground));
-
-    // Grass tufts on the lip.
-    p.setPen(Qt::NoPen);
-    p.setBrush(QColor(0x4c, 0x8c, 0x30));
-    const double tuft = 22.0;
-    const double tuftOffset = std::fmod(scroll, tuft);
-    const int tufts = int(std::ceil((right - left) / tuft)) + 2;
-    for (int i = 0; i <= tufts; ++i) {
-        const double x = left - tuftOffset - tuft + tuft * i;
-        QPainterPath g;
-        g.moveTo(x, ground + 1);
-        g.lineTo(x + 3, ground - 5);
-        g.lineTo(x + 6, ground + 1);
-        g.lineTo(x + 8, ground - 3);
-        g.lineTo(x + 10, ground + 1);
-        g.closeSubpath();
-        p.drawPath(g);
-    }
-
-    // Pits cut through it all; one that has already cost a heart carries a
-    // plank, since the runner crosses it as if it were ground.
+    const double bottom = m_layers.frame.bottom;
+    const double outline = m_layers.frame.outline;
     for (const Course::Obstacle& o : m_course.obstacles()) {
         if (o.kind != Course::Kind::Gap)
             continue;
         const QRectF pit(o.x, ground - 1.0, o.width, bottom - ground + 2.0);
         QLinearGradient dark(pit.topLeft(), pit.bottomLeft());
-        dark.setColorAt(0.0, QColor(0x10, 0x08, 0x04));
+        dark.setColorAt(0.0, QColor(0x18, 0x0e, 0x06));
+        dark.setColorAt(0.3, QColor(0x06, 0x03, 0x01));
         dark.setColorAt(1.0, QColor(0x00, 0x00, 0x00));
         p.setPen(Qt::NoPen);
         p.setBrush(dark);
         p.drawRect(pit);
+        // Rough rock down each side, catching a little light at the top.
+        for (int side = 0; side < 2; ++side) {
+            const double edge = side == 0 ? o.x : o.right();
+            const double inward = side == 0 ? 1.0 : -1.0;
+            QPainterPath rock;
+            rock.moveTo(edge, ground);
+            for (int k = 1; k <= 8; ++k)
+                rock.lineTo(edge + inward * (2.0 + 4.0 * tileHash(static_cast<long long>(o.x) * 9 + k, 40 + side)), ground + k * 7.0);
+            rock.lineTo(edge, ground + 56.0);
+            rock.closeSubpath();
+            QLinearGradient shade(QPointF(0, ground), QPointF(0, ground + 56.0));
+            shade.setColorAt(0.0, QColor(0x5a, 0x40, 0x26));
+            shade.setColorAt(1.0, QColor(0x10, 0x0a, 0x04));
+            p.setBrush(shade);
+            p.drawPath(rock);
+        }
+        // Roots dangling into the dark.
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(0x4a, 0x30, 0x18), 1.6, Qt::SolidLine, Qt::RoundCap));
+        for (int k = 0; k < 2; ++k) {
+            const double x = o.x + o.width * (0.25 + 0.5 * k);
+            const double len = 10.0 + 16.0 * tileHash(static_cast<long long>(o.x) + k, 44);
+            QPainterPath r;
+            r.moveTo(x, ground);
+            r.quadTo(x + 4.0, ground + len * 0.5, x - 1.0, ground + len);
+            p.drawPath(r);
+        }
         p.setPen(QPen(kOutline, outline * 1.5));
         p.drawLine(pit.topLeft(), QPointF(pit.left(), bottom));
         p.drawLine(pit.topRight(), QPointF(pit.right(), bottom));
@@ -654,180 +594,115 @@ void RunnerView::paintGround(QPainter& p) const
         p.setPen(QPen(kPath.lighter(130), 3.0, Qt::SolidLine, Qt::RoundCap));
         p.drawLine(QPointF(o.x - 6, ground + 1.5), QPointF(o.x - 1, ground + 1.5));
         p.drawLine(QPointF(o.right() + 1, ground + 1.5), QPointF(o.right() + 6, ground + 1.5));
+        // One that has already cost a heart carries a plank, since the
+        // runner crosses it as if it were ground.
         if (o.spent) {
             const QRectF plank(o.x - 6, ground - 4, o.width + 12, 8);
             p.setPen(QPen(kOutline, outline));
             p.setBrush(QColor(0x9a, 0x6a, 0x3a));
             p.drawRoundedRect(plank, 2, 2);
+            p.setPen(QPen(QColor(0x6a, 0x44, 0x22), 0.9));
+            p.drawLine(QPointF(plank.left() + 3, plank.center().y() - 1), QPointF(plank.right() - 3, plank.center().y() - 1.5));
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(0x30, 0x24, 0x1c));
+            p.drawEllipse(QPointF(plank.left() + 3.5, plank.center().y()), 1.0, 1.0);
+            p.drawEllipse(QPointF(plank.right() - 3.5, plank.center().y()), 1.0, 1.0);
         }
-    }
-}
-
-void RunnerView::paintObstacle(QPainter& p, const Course::Obstacle& o) const
-{
-    const double ground = Course::kGroundY;
-    const double outline = outlineWidth();
-    switch (o.kind) {
-    case Course::Kind::Gap:
-        return;   // part of the ground
-    case Course::Kind::Root: {
-        // A gnarled root arching out of the path.
-        const double h = Course::kRootHeight;
-        const double bend = 4.0 * (o.look - 1.5);
-        QPainterPath root;
-        root.moveTo(o.x + 2, ground + 2);
-        root.cubicTo(QPointF(o.x + 4 + bend, ground - h * 1.25), QPointF(o.right() - 6 + bend, ground - h * 1.2),
-                     QPointF(o.right() - 2, ground + 2));
-        p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(kOutline, 9.0 + 2.0 * outline, Qt::SolidLine, Qt::RoundCap));
-        p.drawPath(root);
-        p.setPen(QPen(kRoot, 9.0, Qt::SolidLine, Qt::RoundCap));
-        p.drawPath(root);
-        p.setPen(QPen(kRoot.lighter(140), 2.0, Qt::SolidLine, Qt::RoundCap));
-        p.drawPath(root.translated(-1.0, -2.5));
-        // A rootlet to one side.
-        outlinedLine(p, QPointF(o.x + o.width * 0.6, ground - h * 0.7),
-                     QPointF(o.x + o.width * 0.85, ground - h * 1.05), 3.0, kRoot, outline);
-        return;
-    }
-    case Course::Kind::Stone: {
-        // A carved block, cooler in colour than the path it stands on.
-        const QRectF block(o.x, ground - Course::kStoneHeight, o.width, Course::kStoneHeight);
-        p.setPen(QPen(kOutline, outline * 1.6));
-        QLinearGradient face(block.topLeft(), block.bottomLeft());
-        face.setColorAt(0.0, kStone.lighter(118));
-        face.setColorAt(1.0, kStone.darker(115));
-        p.setBrush(face);
-        p.drawRoundedRect(block, 4, 4);
-        // Moss on top.
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0x5c, 0xa0, 0x3a));
-        p.drawRoundedRect(QRectF(block.left() + 2, block.top() - 2, block.width() - 4, 6), 3, 3);
-        // The carving: one of four marks.
-        const QPointF c = block.center() + QPointF(0, 3);
-        p.setPen(QPen(kStone.darker(190), 2.6, Qt::SolidLine, Qt::RoundCap));
-        p.setBrush(Qt::NoBrush);
-        switch (o.look) {
-        case 0: {
-            QPainterPath spiral;
-            for (int i = 0; i <= 40; ++i) {
-                const double a = i * 0.42;
-                const double r = 1.0 + i * 0.27;
-                const QPointF pt = c + QPointF(std::cos(a) * r, std::sin(a) * r);
-                if (i == 0)
-                    spiral.moveTo(pt);
-                else
-                    spiral.lineTo(pt);
-            }
-            p.drawPath(spiral);
-            break;
-        }
-        case 1:
-            p.drawEllipse(c, 10, 6);
-            p.setBrush(kStone.darker(190));
-            p.drawEllipse(c, 3, 3);
-            break;
-        case 2:
-            p.drawEllipse(c, 5, 5);
-            for (int i = 0; i < 8; ++i) {
-                const double a = i * std::numbers::pi / 4.0;
-                p.drawLine(c + QPointF(std::cos(a) * 7, std::sin(a) * 7),
-                           c + QPointF(std::cos(a) * 11, std::sin(a) * 11));
-            }
-            break;
-        default: {
-            QPainterPath zig;
-            zig.moveTo(c + QPointF(-12, 4));
-            for (int i = 1; i <= 6; ++i)
-                zig.lineTo(c + QPointF(-12 + i * 4, (i % 2) ? -4 : 4));
-            p.drawPath(zig);
-            break;
-        }
-        }
-        return;
-    }
-    case Course::Kind::Arch: {
-        // A wall of the ruin coming down from above, leaving room only to
-        // duck under it. Its underside carries a bright band, since that
-        // edge is the one that matters.
-        const QRectF f = courseRect();
-        const double top = -f.top() / scale() - 10.0;
-        const double underside = ground - Course::kArchClearance;
-        const QRectF wall(o.x, top, o.width, underside - top);
-        QLinearGradient face(wall.topLeft(), wall.topRight());
-        face.setColorAt(0.0, kWall.lighter(115));
-        face.setColorAt(1.0, kWall.darker(118));
-        p.setPen(QPen(kOutline, outline * 1.6));
-        p.setBrush(face);
-        p.drawRect(wall);
-        // Courses of stone.
-        p.setPen(QPen(kWall.darker(150), 1.4));
-        const int courses = int((underside - top) / 22.0);
-        for (int i = 1; i <= courses; ++i) {
-            const double y = underside - 22.0 * i;
-            p.drawLine(QPointF(o.x + 1, y), QPointF(o.right() - 1, y));
-        }
-        // The carved lintel at the bottom, with a warning band under it.
-        const QRectF lintel(o.x - 4, underside - 20, o.width + 8, 20);
-        p.setPen(QPen(kOutline, outline * 1.6));
-        p.setBrush(kWall.lighter(130));
-        p.drawRect(lintel);
-        p.setPen(QPen(kWall.darker(170), 2.2));
-        for (int i = 0; i < 5; ++i) {
-            const double x = lintel.left() + 6 + i * (lintel.width() - 12) / 4.0;
-            p.drawLine(QPointF(x - 4, lintel.center().y() + 4), QPointF(x, lintel.center().y() - 4));
-            p.drawLine(QPointF(x, lintel.center().y() - 4), QPointF(x + 4, lintel.center().y() + 4));
-        }
-        p.setPen(QPen(kOutline, outline));
-        p.setBrush(kGold);
-        p.drawRect(QRectF(lintel.left(), underside - 5, lintel.width(), 5));
-        return;
-    }
     }
 }
 
 void RunnerView::paintCoins(QPainter& p) const
 {
-    const double outline = outlineWidth();
+    const double outline = m_layers.frame.outline;
+    const double r = Course::kCoinRadius;
     for (const Course::Coin& c : m_course.coins()) {
         if (c.taken)
             continue;
-        // A slow spin: the coin narrows and widens, never vanishing.
+        // A slow spin: the coin narrows and widens, never vanishing, and its
+        // rim shows as it turns.
         const double turn = std::abs(std::cos(m_time * 3.0 + c.at.x() * 0.04));
-        const double rx = Course::kCoinRadius * (0.35 + 0.65 * turn);
-        const double ry = Course::kCoinRadius;
+        const double rx = r * (0.35 + 0.65 * turn);
+        p.setOpacity(0.5 + 0.2 * std::sin(m_time * 4.0 + c.at.x() * 0.05));
+        p.drawImage(QRectF(c.at - QPointF(r * 2.2, r * 2.2), QSizeF(r * 4.4, r * 4.4)), m_layers.glow);
+        p.setOpacity(1.0);
         p.setPen(QPen(kOutline, outline));
-        QRadialGradient shine(c.at + QPointF(-rx * 0.3, -ry * 0.3), ry * 1.2);
-        shine.setColorAt(0.0, kGold.lighter(140));
-        shine.setColorAt(1.0, kGold.darker(120));
+        p.setBrush(kGold.darker(145));
+        p.drawEllipse(c.at + QPointF(0.6 + 2.0 * (1.0 - turn), 0), rx, r);
+        QRadialGradient shine(c.at + QPointF(-rx * 0.3, -r * 0.3), r * 1.2);
+        shine.setColorAt(0.0, kGold.lighter(145));
+        shine.setColorAt(1.0, kGold.darker(118));
         p.setBrush(shine);
-        p.drawEllipse(c.at, rx, ry);
+        p.drawEllipse(c.at, rx, r);
         p.setPen(QPen(kGold.darker(150), 1.2));
         p.setBrush(Qt::NoBrush);
-        p.drawEllipse(c.at, rx * 0.6, ry * 0.6);
+        p.drawEllipse(c.at, rx * 0.62, r * 0.62);
+        if (rx > 5.0) {
+            p.setPen(Qt::NoPen);
+            p.setBrush(kGold.darker(140));
+            p.drawPolygon(QPolygonF({ c.at + QPointF(0, -r * 0.34), c.at + QPointF(rx * 0.22, 0),
+                                      c.at + QPointF(0, r * 0.34), c.at + QPointF(-rx * 0.22, 0) }));
+        }
+        // Now and then a glint crosses it.
+        const double glint = std::fmod(m_time * 0.7 + c.at.x() * 0.017, 1.0);
+        if (glint < 0.22) {
+            const double k = std::sin(glint / 0.22 * std::numbers::pi);
+            const QPointF at = c.at + QPointF(-rx * 0.35, -r * 0.42);
+            const double big = 7.5 * k;
+            const double thin = 1.2 * k;
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(255, 255, 245, 235));
+            p.drawPolygon(QPolygonF({ at + QPointF(0, -big), at + QPointF(thin, -thin), at + QPointF(big, 0),
+                                      at + QPointF(thin, thin), at + QPointF(0, big), at + QPointF(-thin, thin),
+                                      at + QPointF(-big, 0), at + QPointF(-thin, -thin) }));
+        }
     }
 }
 
 void RunnerView::paintRunner(QPainter& p) const
 {
+    const double outline = m_layers.frame.outline;
+    const double ground = Course::kGroundY;
+    const double feet = m_course.feetY();
+    const double x = Course::kRunnerX;
+
+    // Its shadow on the path, smaller and fainter the higher it jumps, and
+    // none over an open pit.
+    bool overPit = false;
+    for (const Course::Obstacle& o : m_course.obstacles())
+        overPit = overPit || (o.kind == Course::Kind::Gap && !o.spent && x > o.x && x < o.right());
+    if (!overPit && feet <= ground + 1.0) {
+        const double lift = std::clamp((ground - feet) / 160.0, 0.0, 1.0);
+        const double half = 17.0 * (1.0 - 0.5 * lift);
+        p.setOpacity(0.8 * (1.0 - 0.7 * lift));
+        p.drawImage(QRectF(x - half, ground - 3.0, half * 2.0, 6.0), m_layers.shadow);
+        p.setOpacity(1.0);
+    }
+
     // Blinks while it cannot be hurt, so the safe spell can be seen.
     if (m_course.hurtLeft() > 0.0 && std::fmod(m_course.hurtLeft(), 0.2) < 0.1)
         p.setOpacity(0.35);
 
-    const double outline = outlineWidth();
-    const double feet = m_course.feetY();
-    const double x = Course::kRunnerX;
     const QColor skin(0xf2, 0xc4, 0x90);
     const QColor hair(0x3a, 0x24, 0x18);
     const QColor tunic(0xf2, 0x8a, 0x22);
     const QColor trousers(0x3c, 0x4c, 0x70);
     const QColor boot(0x5a, 0x38, 0x1c);
     const QColor scarf(0x1c, 0xc8, 0xb4);
+    const QColor pack(0x7a, 0x52, 0x30);
 
     const bool sliding = m_course.ducking() || m_course.over();
     const bool flying = m_course.airborne() && !sliding;
     const bool running = m_course.phase() == Course::Phase::Running;
     const double phase = m_course.distance() / 16.0;
+
+    // Landing squashes the runner for a moment.
+    p.save();
+    if (m_landAge < 0.16 && !sliding) {
+        const double k = 1.0 - m_landAge / 0.16;
+        p.translate(x, feet);
+        p.scale(1.0 + 0.08 * k, 1.0 - 0.12 * k);
+        p.translate(-x, -feet);
+    }
 
     QPointF hip;
     QPointF shoulder;
@@ -852,11 +727,14 @@ void RunnerView::paintRunner(QPainter& p) const
         hand[1] = elbow[1] + QPointF(8, -3);
     } else {
         // Measured down from the top of the standing box: the head fills
-        // its top, the shoulders sit under the chin.
+        // its top, the shoulders sit under the chin. Running, the body
+        // rises off each push and leans into the pace.
         const double top = feet - Course::kStandHeight;
-        hip = { x, feet - 27 };
-        shoulder = { x + 3, top + 12 };
-        head = { x + 5, top + 5 };
+        const double bob = running && !flying ? -2.0 * std::abs(std::sin(phase)) : 0.0;
+        const double lean = running ? 2.0 : 0.0;
+        hip = { x, feet - 27 + bob };
+        shoulder = { x + 3 + lean, top + 12 + bob };
+        head = { x + 5 + lean, top + 5 + bob };
         for (int i = 0; i < 2; ++i) {
             const double side = i == 0 ? -1.0 : 1.0;
             double thigh;
@@ -883,7 +761,7 @@ void RunnerView::paintRunner(QPainter& p) const
                 fore = upper + 0.4;
             }
             knee[i] = limbEnd(hip, thigh, 14.0);
-            foot[i] = limbEnd(knee[i], shin, 13.0);
+            foot[i] = limbEnd(knee[i], shin, 13.0 - bob);
             elbow[i] = limbEnd(shoulder, upper, 11.0);
             hand[i] = limbEnd(elbow[i], fore, 10.0);
         }
@@ -893,14 +771,37 @@ void RunnerView::paintRunner(QPainter& p) const
         outlinedLine(p, hip, knee[i], 6.5, trousers, outline);
         outlinedLine(p, knee[i], foot[i], 5.5, trousers, outline);
         outlinedLine(p, foot[i], foot[i] + QPointF(4.5, 0.5), 5.5, boot, outline);
+        // The cuff of the boot, and its sole.
+        outlinedLine(p, foot[i] + QPointF(-0.5, -2.2), foot[i] + QPointF(1.0, -2.6), 3.0, boot.lighter(135), 0.0);
+        outlinedLine(p, foot[i] + QPointF(-1.0, 2.6), foot[i] + QPointF(5.5, 3.0), 1.2, kOutline, 0.0);
     };
     const auto arm = [&](int i) {
         outlinedLine(p, shoulder, elbow[i], 4.5, i == 0 ? tunic.darker(120) : tunic, outline);
         outlinedLine(p, elbow[i], hand[i], 4.0, skin, outline);
+        p.setPen(QPen(kOutline, outline * 0.8));
+        p.setBrush(i == 0 ? skin.darker(112) : skin);
+        p.drawEllipse(hand[i], 2.6, 2.6);
     };
 
     leg(0);
     arm(0);
+
+    // The pack on its back, a rolled blanket strapped on top.
+    {
+        const QPointF along = shoulder - hip;
+        const double angle = std::atan2(along.y(), along.x()) * 180.0 / std::numbers::pi + 90.0;
+        p.save();
+        p.translate(hip + along * 0.6);
+        p.rotate(angle);
+        p.setPen(QPen(kOutline, outline));
+        p.setBrush(pack);
+        p.drawRoundedRect(QRectF(-12.5, -9.0, 8.5, 17.0), 2.5, 2.5);
+        p.setBrush(pack.lighter(118));
+        p.drawRoundedRect(QRectF(-12.0, -1.0, 7.0, 6.0), 1.5, 1.5);
+        p.setBrush(QColor(0xc8, 0xb4, 0x8a));
+        p.drawRoundedRect(QRectF(-14.0, -13.5, 11.5, 5.5), 2.7, 2.7);
+        p.restore();
+    }
 
     // The scarf streams out behind and ripples.
     {
@@ -916,18 +817,37 @@ void RunnerView::paintRunner(QPainter& p) const
         p.drawPath(tail);
         p.setPen(QPen(scarf, 5.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         p.drawPath(tail);
+        p.setPen(QPen(scarf.lighter(135), 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.drawPath(tail.translated(0, -1.2));
     }
 
+    // The tunic, lit from the front where the sun is.
     outlinedLine(p, hip, shoulder, 13.0, tunic, outline);
-    // The belt.
+    outlinedLine(p, hip + QPointF(3.0, -1.0), shoulder + QPointF(3.0, 1.5), 3.5, tunic.lighter(122), 0.0);
+    outlinedLine(p, hip + QPointF(-3.5, -1.0), shoulder + QPointF(-3.5, 2.0), 3.0, tunic.darker(125), 0.0);
+    // The belt and its buckle, and the strap of the pack.
     const QPointF waist = hip + (shoulder - hip) * 0.15;
     outlinedLine(p, waist + QPointF(-5, 0), waist + QPointF(5, 0), 2.5, boot, 0.0);
+    outlinedLine(p, waist + QPointF(1.5, 0), waist + QPointF(3.0, 0), 2.6, kGold.darker(115), 0.0);
+    outlinedLine(p, shoulder + QPointF(-3.5, 1), waist + QPointF(2.0, -2.0), 1.8, pack.darker(120), 0.0);
     outlinedLine(p, shoulder + QPointF(-4, 0), shoulder + QPointF(4, 0), 5.0, scarf, 0.0);
 
+    // A tail of hair that bounces with the stride.
+    {
+        const double bounce = running ? std::sin(phase * 2.0) * 2.5 : std::sin(m_time * 2.0) * 0.8;
+        QPainterPath tail;
+        tail.moveTo(head + QPointF(-5.5, -3.5));
+        tail.quadTo(head + QPointF(-12.0, -4.0 + bounce * 0.5), head + QPointF(-14.0, 2.0 + bounce));
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(kOutline, 4.0 + 2.0 * outline, Qt::SolidLine, Qt::RoundCap));
+        p.drawPath(tail);
+        p.setPen(QPen(hair, 4.0, Qt::SolidLine, Qt::RoundCap));
+        p.drawPath(tail);
+    }
     p.setPen(QPen(kOutline, outline));
     p.setBrush(skin);
     p.drawEllipse(head, 7.5, 7.5);
-    // Hair over the back and top of the head.
+    // Hair over the back and top of the head, with a band.
     QPainterPath cap;
     cap.moveTo(head + QPointF(4, -5));
     cap.arcTo(QRectF(head.x() - 8, head.y() - 8, 16, 16), 50, 170);
@@ -935,12 +855,58 @@ void RunnerView::paintRunner(QPainter& p) const
     p.setBrush(hair);
     p.drawPath(cap);
     p.setPen(Qt::NoPen);
+    p.setBrush(hair.lighter(150));
+    p.drawEllipse(head + QPointF(-1.0, -5.5), 3.0, 1.2);
+    // An ear, the eye with a glint, a brow and a mouth.
+    p.setPen(QPen(kOutline, outline * 0.6));
+    p.setBrush(skin.darker(108));
+    p.drawEllipse(head + QPointF(-1.5, 0.5), 1.8, 2.3);
+    p.setPen(Qt::NoPen);
     p.setBrush(kOutline);
     p.drawEllipse(head + QPointF(3.5, -0.5), 1.4, 1.6);
+    p.setBrush(Qt::white);
+    p.drawEllipse(head + QPointF(3.9, -1.0), 0.5, 0.5);
+    p.setPen(QPen(hair, 1.1, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(head + QPointF(2.0, -3.2), head + QPointF(5.2, -3.0));
+    p.setPen(QPen(skin.darker(150), 0.9, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(head + QPointF(4.0, 3.6), head + QPointF(6.0, 3.2));
 
     leg(1);
     arm(1);
+    p.restore();
     p.setOpacity(1.0);
+}
+
+void RunnerView::paintAir(QPainter& p) const
+{
+    // Motes drifting in the low sun, and now and then a falling leaf. They
+    // follow the clock, so a held shot shows them still.
+    const double scroll = m_course.distance();
+    const RunnerArt::Palette& colours = RunnerArt::jungle();
+    const auto wrap = [](double v, double span) { return v - span * std::floor(v / span); };
+    for (int i = 0; i < 34; ++i) {
+        const double depth = 0.4 + 0.6 * tileHash(i, 50);
+        const double x = wrap(tileHash(i, 51) * 700.0 + m_time * (6.0 + 10.0 * tileHash(i, 52)) - scroll * 0.3 * depth,
+                              700.0) - 30.0;
+        const double y = 40.0 + 230.0 * tileHash(i, 53) + std::sin(m_time * 0.8 + i) * 6.0;
+        const double twinkle = 0.5 + 0.5 * std::sin(m_time * 1.7 + i * 2.1);
+        const double size = (2.0 + 3.0 * tileHash(i, 54)) * depth;
+        p.setOpacity((0.12 + 0.4 * twinkle) * depth);
+        p.drawImage(QRectF(x - size, y - size, size * 2.0, size * 2.0), m_layers.mote);
+    }
+    p.setOpacity(1.0);
+    p.setPen(Qt::NoPen);
+    for (int i = 0; i < 6; ++i) {
+        const double fall = 14.0 + 10.0 * tileHash(i, 60);
+        const double y = wrap(m_time * fall + tileHash(i, 61) * 400.0, 400.0) - 30.0;
+        const double x = wrap(tileHash(i, 62) * 700.0 - scroll * 0.9 + std::sin(m_time * 1.3 + i) * 14.0, 700.0) - 30.0;
+        p.save();
+        p.translate(x, y);
+        p.rotate(std::sin(m_time * 2.0 + i) * 70.0);
+        p.setBrush(i % 2 ? colours.leafLight : QColor(0xb0, 0x8a, 0x3a));
+        p.drawEllipse(QPointF(0, 0), 3.4, 1.4);
+        p.restore();
+    }
 }
 
 void RunnerView::paintWarnings(QPainter& p) const
@@ -989,6 +955,10 @@ void RunnerView::paintEffects(QPainter& p) const
         p.setBrush(c);
         p.drawEllipse(q.at, q.size * (0.5 + 0.5 * share), q.size * (0.5 + 0.5 * share));
     }
+}
+
+void RunnerView::paintPopups(QPainter& p) const
+{
     QFont f = font();
     f.setBold(true);
     f.setPixelSize(Legibility::instance().enabled() ? 18 : 14);

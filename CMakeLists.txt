@@ -238,6 +238,8 @@ set(GAME_VIEW_SOURCES
     src/mahjong/mahjongtablewords.cpp
     src/holdline/holdlineview.cpp
     src/runner/runnerview.cpp
+    src/runner/runnerart.cpp
+    src/runner/bands.cpp
     src/runner/framepacer.cpp
     src/runner/laneart.cpp
     src/runner/laneview.cpp

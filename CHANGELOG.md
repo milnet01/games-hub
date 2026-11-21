@@ -135,6 +135,17 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Ruin Runner and Ruin Runner Lanes look richer** (GHUB-0262)
+  The side-on run now has layers of scenery that pass at different
+  speeds: mountains, temples and ruins in the haze, jungle, and ferns in
+  front. Shafts of low sun and drifting motes light it. The path is laid in
+  worn, cracked and mossed stones over earth. Stones, roots and walls are
+  carved, mossed and shadowed, coins glint, and the runner carries a pack,
+  kicks up dust and lands with a squash. In Lanes the runner gains the
+  pack, a swinging tail of hair and the landing squash, motes drift in the
+  sunlight, and the near flagstones catch the light. Every obstacle keeps
+  its dark outline and its own colour.
+
 - **2048 saves your best score the moment you pass it** (GHUB-0231)
   Before, the best was saved only when the board got stuck, so a game
   left with New Game lost the best the status line had been showing.

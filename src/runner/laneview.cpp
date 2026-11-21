@@ -1,6 +1,7 @@
 #include "laneview.h"
 
 #include "legibility.h"
+#include "runner/bands.h"
 #include "runner/framepacer.h"
 #include "runner/laneart.h"
 #include "runner/runnerview.h"
@@ -13,22 +14,16 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QRadialGradient>
-#include <QThread>
-#include <QtConcurrent/QtConcurrentMap>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <numbers>
-#include <numeric>
 
 namespace {
 // The sharpest the scene is painted, in pixels to a canvas unit: 1920 by
 // 1080. A frame costs by the pixel, and painted at 4K one took about 50 ms.
 constexpr double kSceneScaleCap = 3.0;
-// The most bands the scene is painted in at once: past this, a band is too
-// short for another core to earn its keep.
-constexpr int kMostBands = 8;
 using Course = LaneCourse;
 using LaneArt::kHaze;
 
@@ -169,6 +164,7 @@ void LaneView::newGame()
     m_cameraX = laneX(m_course.lane()) * kCameraFollow;
     m_stride = 0.0;
     m_bannerAge = 10.0;
+    m_landAge = 10.0;
     m_banner.clear();
     releaseKeys();
     m_pause->setChecked(false);
@@ -256,6 +252,7 @@ bool LaneView::advanceForShot(int turns)
     m_popups.clear();
     m_shake = m_flash = 0.0;
     m_bannerAge = 10.0;
+    m_landAge = 10.0;
     m_cameraX = laneX(m_course.lane()) * kCameraFollow;
     m_stride = m_course.distance() / 0.9;
     if (m_course.over())
@@ -284,6 +281,7 @@ void LaneView::tick(double dt)
     m_course.setSlide(m_slideKey || m_slideButton);
     m_course.advance(dt);
     readEvents();
+    m_landAge += dt;
 
     m_cameraX += (laneX(m_course.lane()) * kCameraFollow - m_cameraX) * std::min(1.0, dt * 8.0);
 
@@ -349,6 +347,7 @@ void LaneView::readEvents()
             burst(at, kPath, 8, 60.0, 0.0);
             break;
         case Course::EventKind::Landed:
+            m_landAge = 0.0;
             burst(at, kPath.lighter(110), 10, 70.0, 0.0);
             break;
         case Course::EventKind::Coin:
@@ -589,20 +588,9 @@ void LaneView::paintEvent(QPaintEvent*)
     // made under a lock. The picture matches one painter's but for a few
     // shades of rounding in a gradient. Nothing here draws text.
     LaneArt::art(); // built on first use; done here, before any band reads it
-    uchar* bits = m_scene.bits();
-    const qsizetype stride = m_scene.bytesPerLine();
-    const int rows = m_scene.height();
-    std::vector<int> bands(size_t(std::clamp(QThread::idealThreadCount(), 1, kMostBands)));
-    std::iota(bands.begin(), bands.end(), 0);
-    QtConcurrent::blockingMap(bands, [&](int band) {
-        const int count = int(bands.size());
-        const int top = rows * band / count;
-        const int bottom = rows * (band + 1) / count;
-        QImage part(bits + top * stride, m_scene.width(), bottom - top, stride, m_scene.format());
-        QPainter q(&part);
+    Bands::paint(m_scene, [&](QPainter& q) {
         q.setRenderHint(QPainter::Antialiasing, true);
         q.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        q.translate(0, -top);
         q.drawImage(0, 0, m_sceneSky);
         q.translate(shake);
         q.scale(m_scenePixels, m_scenePixels);
@@ -620,6 +608,7 @@ void LaneView::paintEvent(QPaintEvent*)
         q.scale(m_scenePixels, m_scenePixels);
         q.setClipRect(QRectF(0, 0, kCanvasW, kCanvasH));
         paintEffects(q);
+        paintAir(q);
         paintLeaves(q);
         q.restore();
         q.drawImage(0, 0, m_sceneOverlay);
@@ -705,6 +694,14 @@ void LaneView::paintGround(QPainter& p) const
             p.drawPolygon(flag);
             if (z0 > 30.0)
                 continue;
+            // The near lip of the stone catches the light; its far edge is
+            // in its own shadow.
+            p.setBrush(hazed(stone.lighter(122), fog));
+            p.drawPolygon(quad(project(x0 + gap, 0, ga), project(x1 - gap, 0, ga), project(x1 - gap, 0, ga + 0.09),
+                               project(x0 + gap, 0, ga + 0.09)));
+            p.setBrush(QColor(0, 0, 0, int(45 * clear)));
+            p.drawPolygon(quad(project(x0 + gap, 0, gb - 0.12), project(x1 - gap, 0, gb - 0.12),
+                               project(x1 - gap, 0, gb), project(x0 + gap, 0, gb)));
             // A worn, lighter middle where feet have passed.
             const double mx = (x0 + x1) / 2.0;
             p.setBrush(hazed(stone.lighter(104), fog));
@@ -1080,6 +1077,10 @@ void LaneView::paintRunner(QPainter& p) const
     p.translate(project(x, m_course.height(), 0));
     p.scale(k, -k);
     p.rotate(std::clamp((m_course.targetLane() - m_course.lane()) * 14.0, -10.0, 10.0));
+    if (m_landAge < 0.16 && !sliding) {
+        const double squash = 1.0 - m_landAge / 0.16;
+        p.scale(1.0 + 0.08 * squash, 1.0 - 0.12 * squash);
+    }
     const double o = outline / k;
     const auto limb = [&](QPointF a, QPointF b, double w, const QColor& c) {
         p.setPen(QPen(kOutline, w + 2.0 * o, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
@@ -1156,6 +1157,30 @@ void LaneView::paintRunner(QPainter& p) const
     p.setBrush(leather);
     p.drawRoundedRect(QRectF(0.11, hipY - 0.1, 0.13, 0.13), 0.03, 0.03);
 
+    // The pack on its back, a rolled blanket strapped over it.
+    {
+        const double mid = (hipY + shoulderY) / 2.0 + 0.03;
+        p.setPen(QPen(kOutline, o));
+        QLinearGradient hide(QPointF(-0.16, 0), QPointF(0.16, 0));
+        hide.setColorAt(0.0, leather.darker(120));
+        hide.setColorAt(0.7, leather);
+        hide.setColorAt(1.0, leather.lighter(122));
+        p.setBrush(hide);
+        p.drawRoundedRect(QRectF(-0.16, mid - 0.2, 0.32, 0.4), 0.06, 0.06);
+        p.setBrush(leather.lighter(112));
+        p.drawRoundedRect(QRectF(-0.15, mid + 0.04, 0.3, 0.15), 0.05, 0.05);
+        p.setBrush(kGold.darker(115));
+        p.drawRect(QRectF(-0.025, mid + 0.02, 0.05, 0.05));
+        QLinearGradient roll(QPointF(0, shoulderY - 0.02), QPointF(0, shoulderY + 0.1));
+        roll.setColorAt(0.0, QColor(0xa8, 0x94, 0x6c));
+        roll.setColorAt(1.0, QColor(0xd8, 0xc8, 0xa0));
+        p.setBrush(roll);
+        p.drawRoundedRect(QRectF(-0.2, shoulderY - 0.03, 0.4, 0.11), 0.055, 0.055);
+        p.setPen(QPen(leather.darker(140), 0.025));
+        p.drawLine(QPointF(-0.1, shoulderY - 0.03), QPointF(-0.1, shoulderY + 0.08));
+        p.drawLine(QPointF(0.1, shoulderY - 0.03), QPointF(0.1, shoulderY + 0.08));
+    }
+
     // The scarf, streaming back towards the camera, which from behind is
     // down and out to one side.
     QPainterPath tail;
@@ -1180,6 +1205,20 @@ void LaneView::paintRunner(QPainter& p) const
     sheen.setColorAt(1.0, hair);
     p.setBrush(sheen);
     p.drawEllipse(QPointF(0, headY), 0.13, 0.14);
+    // A tail of hair that swings with the stride.
+    {
+        const double swing = running && !sliding ? std::sin(stride) * 0.05 : std::sin(m_time * 2.0) * 0.01;
+        QPainterPath tail;
+        tail.moveTo(0.0, headY - 0.06);
+        tail.quadTo(QPointF(swing * 0.5, headY - 0.16), QPointF(swing, headY - 0.25));
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(kOutline, 0.07 + 2.0 * o, Qt::SolidLine, Qt::RoundCap));
+        p.drawPath(tail);
+        p.setPen(QPen(hair, 0.07, Qt::SolidLine, Qt::RoundCap));
+        p.drawPath(tail);
+        p.setPen(QPen(hair.lighter(160), 0.02, Qt::SolidLine, Qt::RoundCap));
+        p.drawPath(tail.translated(0.015, 0));
+    }
 
     p.restore();
     p.setOpacity(1.0);
@@ -1197,6 +1236,26 @@ void LaneView::paintLeaves(QPainter& p) const
         p.setPen(QPen(l.colour.darker(150), 0.6));
         p.drawLine(QPointF(-4, 0), QPointF(4, 0));
         p.restore();
+    }
+}
+
+void LaneView::paintAir(QPainter& p) const
+{
+    // Motes drifting in the shafts of low sun. They follow the clock, so a
+    // held shot shows them still.
+    const auto wrap = [](double v, double span) { return v - span * std::floor(v / span); };
+    p.setPen(Qt::NoPen);
+    for (int i = 0; i < 40; ++i) {
+        const double depth = 0.4 + 0.6 * tileHash(i, 70);
+        const double x = wrap(tileHash(i, 71) * 680.0 + m_time * (5.0 + 9.0 * tileHash(i, 72)), 680.0) - 20.0;
+        const double y = kHorizon - 60.0 + 230.0 * tileHash(i, 73) + std::sin(m_time * 0.8 + i) * 5.0;
+        const double twinkle = 0.5 + 0.5 * std::sin(m_time * 1.7 + i * 2.1);
+        const double r = (0.8 + 1.6 * tileHash(i, 74)) * depth;
+        QRadialGradient mote(QPointF(x, y), r);
+        mote.setColorAt(0.0, QColor(255, 236, 190, int(200 * (0.15 + 0.45 * twinkle) * depth)));
+        mote.setColorAt(1.0, QColor(255, 236, 190, 0));
+        p.setBrush(mote);
+        p.drawEllipse(QPointF(x, y), r, r);
     }
 }
 
