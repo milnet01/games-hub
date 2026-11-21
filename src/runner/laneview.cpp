@@ -1293,16 +1293,16 @@ void LaneView::paintRunner(QPainter& p) const
     // A tail of hair that swings with the stride.
     {
         const double swing = running && !sliding ? std::sin(stride) * 0.05 : std::sin(m_time * 2.0) * 0.01;
-        QPainterPath tail;
-        tail.moveTo(0.0, headY - 0.06);
-        tail.quadTo(QPointF(swing * 0.5, headY - 0.16), QPointF(swing, headY - 0.25));
+        QPainterPath hairTail;
+        hairTail.moveTo(0.0, headY - 0.06);
+        hairTail.quadTo(QPointF(swing * 0.5, headY - 0.16), QPointF(swing, headY - 0.25));
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(kOutline, 0.07 + 2.0 * o, Qt::SolidLine, Qt::RoundCap));
-        p.drawPath(tail);
+        p.drawPath(hairTail);
         p.setPen(QPen(hair, 0.07, Qt::SolidLine, Qt::RoundCap));
-        p.drawPath(tail);
+        p.drawPath(hairTail);
         p.setPen(QPen(hair.lighter(160), 0.02, Qt::SolidLine, Qt::RoundCap));
-        p.drawPath(tail.translated(0.015, 0));
+        p.drawPath(hairTail.translated(0.015, 0));
     }
 
     p.restore();
