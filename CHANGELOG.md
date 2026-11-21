@@ -144,6 +144,12 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Changed
 
+- **Ruin Runner Lanes gets harder as a run goes on** (GHUB-0259)
+  Past the first few hundred metres, rows of obstacles come closer
+  together and more of them fill two or three lanes, until about 1,500
+  metres in. There is still always a way through, and still time to cross
+  two lanes after each row.
+
 - **Ruin Runner and Ruin Runner Lanes look richer** (GHUB-0262)
   The side-on run now has layers of scenery that pass at different
   speeds: mountains, temples and ruins in the haze, jungle, and ferns in

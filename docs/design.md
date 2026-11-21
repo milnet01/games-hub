@@ -1327,6 +1327,15 @@ so a runner who has just got past one can cross two lanes before the next.
 `pilot()` steers to the cheapest lane of the next row, then jumps or slides.
 The self-test runs it as Ruin Runner's is run, and fails on a single hit.
 
+**The run gets harder as it goes on** (GHUB-0259). The pace rises to a cap,
+but rows are spaced in seconds, so pace alone never asks a player to decide
+any faster. So `LaneCourse::hardness()` rises from where wide rows begin to
+`kHardestMetres`. As it does, the time between rows shrinks towards
+`kHardRecoverSeconds` and `kHardSpreadSeconds`, and more rows fill two or
+three lanes. The shortest gap still leaves time to cross two lanes. The
+self-test checks that late rows come closer together and wider than early
+ones, and the pilot still runs past the hardest point without a hit.
+
 **Depth is faked with one projection**, `LaneView::project()`: a camera
 behind and above the runner, onto a fixed 640 by 360 canvas. Scenery,
 obstacles, coins and the runner are drawn in one list sorted far to near, so

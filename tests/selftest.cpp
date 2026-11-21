@@ -10200,6 +10200,73 @@ void laneStartsReadyAndMoves()
           "lane runner: a jump clears a root and never a block");
 }
 
+// GHUB-0259: a lane run gets harder as it goes on. Rows met late come
+// closer together in time, and more of them fill two or three lanes, than
+// rows met early, once wide rows have begun. Measured over the pilot's runs.
+void laneRunGetsHarder()
+{
+    struct Window {
+        double seconds = 0.0;
+        int gaps = 0;
+        int rows = 0;
+        int wide = 0;
+    };
+    Window early;
+    Window late;
+    for (unsigned seed = 1; seed <= 6; ++seed) {
+        pinDealSeed(seed);
+        LaneCourse course;
+        course.start();
+        // Each row as first seen: a row is laid whole, so then it is all
+        // there. Where it lies on the course, how wide it is, and the pace.
+        struct Row {
+            double at = 0.0;
+            int width = 0;
+            double pace = 0.0;
+        };
+        std::map<int, Row> seen;
+        for (int f = 0; f < 240 * 60 && !course.over(); ++f) {
+            laneFrame(course, course.pilot());
+            std::map<int, Row> now;
+            for (const LaneCourse::Obstacle& o : course.obstacles()) {
+                Row& r = now[o.row];
+                r.at = course.distance() + o.z;
+                ++r.width;
+                r.pace = course.speed();
+            }
+            for (const auto& [row, r] : now)
+                seen.try_emplace(row, r);
+            course.takeEvents();
+        }
+        const auto windowFor = [&](double at) -> Window* {
+            if (at >= 400.0 && at < 900.0)
+                return &early;
+            return at >= 1600.0 ? &late : nullptr;
+        };
+        const Row* before = nullptr;
+        for (const auto& [row, r] : seen) {
+            if (Window* w = windowFor(r.at)) {
+                ++w->rows;
+                w->wide += r.width >= 2 ? 1 : 0;
+                if (before != nullptr && windowFor(before->at) == w) {
+                    w->seconds += (r.at - before->at) / r.pace;
+                    ++w->gaps;
+                }
+            }
+            before = &r;
+        }
+    }
+    unpinDealSeed();
+    const double earlyGap = early.seconds / std::max(1, early.gaps);
+    const double lateGap = late.seconds / std::max(1, late.gaps);
+    const double earlyWide = double(early.wide) / std::max(1, early.rows);
+    const double lateWide = double(late.wide) / std::max(1, late.rows);
+    std::printf("      rows 400-900 m: %.2f s apart, %.0f%% wide; past 1600 m: %.2f s apart, %.0f%% wide\n", earlyGap,
+                100.0 * earlyWide, lateGap, 100.0 * lateWide);
+    check(late.gaps > 20 && lateGap < earlyGap * 0.8, "lane runner: rows come closer together as a run goes on");
+    check(late.rows > 20 && lateWide > earlyWide + 0.1, "lane runner: and more of them fill two or three lanes");
+}
+
 void lanePilotIsNeverHit()
 {
     bool clean = true;
@@ -10731,6 +10798,7 @@ int main()
 
     laneStartsReadyAndMoves();
     lanePilotIsNeverHit();
+    laneRunGetsHarder();
     laneHitsCostHearts();
 
     pyramidDealsAWholePack();

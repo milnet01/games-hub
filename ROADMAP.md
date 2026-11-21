@@ -10239,10 +10239,17 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: investigate.
   Source: user-report-2026-11-18.
 
-- 📋 [GHUB-0259] **Ruin Runner Lanes never gets harder.**
+- ✅ [GHUB-0259] **Ruin Runner Lanes never gets harder.**
   Owner's report: the game does not seem to get any more difficult
   as a run goes on. Read what GHUB-0241 built for pace before
   deciding what rises and how fast.
+  2026-11-21: the pace already rose, but rows were spaced in seconds, so
+  decisions never came faster. Now LaneCourse::hardness() shortens the
+  gap between rows and widens more rows from 350 m to 1500 m. Self-test,
+  six seeds: rows met at 400 to 900 m were 1.91 s apart and 54% wide;
+  past 1600 m, 1.34 s apart and 75% wide (before the change, 2.08 s and
+  60% against 2.02 s and 50%). The pilot still runs four minutes with no
+  hit.
   **Layman:** The three-lane runner should speed up or crowd its obstacles as a run goes on.
   Kind: enhancement.
   Source: user-report-2026-11-18.

@@ -1244,6 +1244,8 @@ QString RunnerView::rulesText() const
         "<li>The run waits until you press Space.</li>"
         "<li>The runner keeps running on its own. The pace starts gently and rises "
         "the longer the run lasts, up to a top speed.</li>"
+        "<li>Every few hundred metres the season changes: the jungle, autumn woods, "
+        "snowfall and the dry season. The obstacles look the same in every one.</li>"
         "<li>Jump over roots, carved stones and pits.</li>"
         "<li>Duck under the walls that come down from above. "
         "Each has a gold band along its lower edge.</li>"

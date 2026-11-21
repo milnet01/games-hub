@@ -324,6 +324,11 @@ LaneCourse::Kind LaneCourse::pickKind(bool allowBlock)
     return open[m_rng() % open.size()];
 }
 
+double LaneCourse::hardness(double metres)
+{
+    return std::clamp((metres - kTwoWideFromMetres) / double(kHardestMetres - kTwoWideFromMetres), 0.0, 1.0);
+}
+
 void LaneCourse::spawnAhead()
 {
     while (m_nextZ < kSightDepth) {
@@ -335,10 +340,14 @@ void LaneCourse::spawnAhead()
 
         // How many lanes this row fills. A full row is never a block, so
         // every row leaves a way through.
+        // How hard the course is where this row lies (GHUB-0259).
+        const double hard = hardness(m_distance + z);
         int count = 1;
         if (metres() >= kTwoWideFromMetres) {
-            const unsigned roll = m_rng() % 6;
-            count = roll == 0 ? 3 : roll < 3 ? 2 : 1;
+            const double full = 1.0 / 6.0 + (kHardFull - 1.0 / 6.0) * hard;
+            const double two = 1.0 / 3.0 + (kHardTwoWide - 1.0 / 3.0) * hard;
+            const double roll = unit();
+            count = roll < full ? 3 : roll < full + two ? 2 : 1;
         }
         bool taken[kLanes] = {};
         const int first = int(m_rng() % kLanes);
@@ -386,8 +395,11 @@ void LaneCourse::spawnAhead()
                 m_coins.push_back({ open, from + i * kCoinPitch, kCoinHeight, false });
         }
 
-        // Past this row, landed, recovered, and then a while longer at random.
-        m_nextZ = rowFar + v * (kAirTime / 2.0 + kRecoverSeconds) + unit() * v * kSpreadSeconds;
+        // Past this row, landed, recovered, and then a while longer at random:
+        // both shorter the harder the course is here.
+        const double recover = kRecoverSeconds + (kHardRecoverSeconds - kRecoverSeconds) * hard;
+        const double spread = kSpreadSeconds + (kHardSpreadSeconds - kSpreadSeconds) * hard;
+        m_nextZ = rowFar + v * (kAirTime / 2.0 + recover) + unit() * v * spread;
     }
 }
 

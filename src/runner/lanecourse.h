@@ -87,6 +87,18 @@ public:
     // And up to this much longer, at random.
     static constexpr double kSpreadSeconds = 1.2;
 
+    // The run gets harder from where wide rows begin until this far in
+    // (GHUB-0259): rows come closer together in time and more fill two or
+    // three lanes. At the hardest, a row is at least kHardRecoverSeconds
+    // after the last and up to kHardSpreadSeconds longer; a row fills two
+    // lanes kHardTwoWide of the time and all three kHardFull of it, against
+    // a third and a sixth where wide rows begin.
+    static constexpr int kHardestMetres = 1500;
+    static constexpr double kHardRecoverSeconds = 0.7;
+    static constexpr double kHardSpreadSeconds = 0.25;
+    static constexpr double kHardTwoWide = 0.45;
+    static constexpr double kHardFull = 0.3;
+
     static constexpr double kCoinPitch = 2.4;
     static constexpr double kCoinHeight = 0.8;
 
@@ -176,6 +188,9 @@ public:
 
     // A pit's depth at a given pace: always well short of one jump.
     static double pitDepth(double speed);
+    // How hard the course is laid `metres` into a run: 0 until wide rows
+    // begin, rising evenly to 1 at kHardestMetres.
+    static double hardness(double metres);
     // How far ahead an obstacle's middle is when a jump should start, so the
     // top of the jump comes over it.
     static double jumpLead(double speed) { return speed * kAirTime / 2.0; }
