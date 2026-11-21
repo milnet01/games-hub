@@ -10313,6 +10313,10 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   saved nothing, since it adds a whole extra 4K copy. Try painting the
   score and words cheaper, or an exact 2x stretch, and judge on the
   desktop as well as the bench.
+  2026-11-21, under a quiet-machine hold (load 2.8; another session's
+  pre-push gate still running), three bench runs after
+  GHUB-0259/0260/0262: side-on 4K 15.4 to 15.8 ms, Lanes 4K 16.6 to 18.1
+  ms. Side-on is now just inside 16.7 ms; Lanes is just over.
   **Layman:** Full-screen on a 4K monitor, both runners draw a little under 60 pictures a second.
   Kind: perf.
   Source: measured-2026-11-21.
