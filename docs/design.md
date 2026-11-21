@@ -1359,7 +1359,10 @@ for the last `kSignSeconds` before it arrives. A clear lane has no sign.
 1080, and stretched over the canvas** (`kSceneScaleCap`). A frame costs by
 the pixel: filling a 4K screen, the view from behind took about 50 ms a frame
 before the cap and about 24 after, on 2026-11-20 on a busy machine. The score
-panel and other words are painted over it at the window's own sharpness.
+panel and other words are painted over it at the window's own sharpness. At
+4K they are about 100 pixels tall, past the 64 at which Qt stops keeping
+letters ready-made, so `keepLargeGlyphs()` raises that limit at startup
+(GHUB-0263).
 
 **The sky, ground and world are painted in bands of rows, one to a core, at
 once** (`Bands::paint`), and the effects, leaves and signs after them on one painter. Nothing a

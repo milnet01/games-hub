@@ -184,6 +184,13 @@ Started 2026-08-11, so it does not reach back to the first fourteen games —
 
 ### Fixed
 
+- **Ruin Runner and Ruin Runner Lanes keep up with a 4K screen** (GHUB-0263)
+  On a 4K screen the score and words are about 100 pixels tall, and the
+  letters were drawn from their outlines every frame. They are now kept
+  ready-made, as smaller text always was. A 4K frame takes about 12.6 ms
+  side-on and 14.6 ms in Lanes, down from 15.4 and 17.6, so both now
+  draw 60 frames a second.
+
 - **Ruin Runner and Ruin Runner Lanes run smoothly at 60 frames a second** (GHUB-0261)
   Both runners ticked 62.5 times a second against a 60 Hz screen, so a
   frame landed late several times a second and the picture stuttered. On

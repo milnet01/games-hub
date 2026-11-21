@@ -10305,7 +10305,7 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   Kind: enhancement.
   Source: user-report-2026-11-21.
 
-- 📋 [GHUB-0263] **Both Ruin Runners take about 20 ms a frame filling a 4K screen.**
+- ✅ [GHUB-0263] **Both Ruin Runners take about 20 ms a frame filling a 4K screen.**
   Bench, 2026-11-21, 3840x2100, under moderate load: side-on about
   19 to 22 ms, Lanes about 21 to 28. A timed side-on frame split as:
   scene painted in bands about 6 ms, stretching it to the window and
@@ -10317,6 +10317,18 @@ text: an owner decision, a measurement, or a better approach than the one tried.
   pre-push gate still running), three bench runs after
   GHUB-0259/0260/0262: side-on 4K 15.4 to 15.8 ms, Lanes 4K 16.6 to 18.1
   ms. Side-on is now just inside 16.7 ms; Lanes is just over.
+  2026-11-21, shipped. Qt draws text over 64 pixels tall from outlines on
+  every paint; at 4K the HUD is about 100 pixels. keepLargeGlyphs()
+  (src/legiblefont.h) raises the limit to 256 before QApplication.
+  Bench, quiet machine (load about 3), median of five, old v new
+  alternated: side-on 4K 15.35 -> 12.57 ms, Lanes 4K 17.62 -> 14.64 ms;
+  owner's window unchanged. Shots at 4K: 1375 pixels of 8 million
+  differ, all letter edges.
+  Tried and rejected: an exact 2x stretch done by hand in bands. Qt's
+  smooth stretch costs about 5 ms at 4K, and a plain copy of a 4K
+  picture costs about the same, so nothing that still copies can win.
+  Not measured: frame times on the desktop; the bench is the only
+  measure.
   **Layman:** Full-screen on a 4K monitor, both runners draw a little under 60 pictures a second.
   Kind: perf.
   Source: measured-2026-11-21.

@@ -1,6 +1,7 @@
 #include "donate.h"
 #include "donatedialog.h"
 #include "dealseed.h"
+#include "legiblefont.h"
 #include "gameview.h"
 #include "hubwindow.h"
 #include "legibility.h"
@@ -137,6 +138,7 @@ int main(int argc, char* argv[])
         }
     }
 
+    keepLargeGlyphs();
     QApplication app(argc, argv);
     // QSettings derives its file from these, so best scores land in a stable
     // place across launches.

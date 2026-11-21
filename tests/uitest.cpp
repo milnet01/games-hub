@@ -4,6 +4,7 @@
 
 #include "donate.h"
 #include "donatedialog.h"
+#include "legiblefont.h"
 #include "preferencesdialog.h"
 #include "funding.h"
 #include "gameview.h"
@@ -4463,6 +4464,8 @@ void canastaTakesTheKeyboard()
 
 int main(int argc, char* argv[])
 {
+    // As the game does, so --bench times what a player sees.
+    keepLargeGlyphs();
     QApplication app(argc, argv);
 
     // A test-only settings identity, so running the suite never touches the

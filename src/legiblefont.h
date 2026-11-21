@@ -26,3 +26,16 @@ inline void growByPoints(QFont& f, double points)
         f.setPixelSize(f.pixelSize() + int(std::lround(points * 4.0 / 3.0)));
     }
 }
+
+// Lets Qt keep text up to 256 pixels tall as ready-made letters, where its
+// own limit is 64. Past the limit every letter is filled from its outline on
+// every paint: on a 4K screen a runner's score is about 100 pixels tall, and
+// raising the limit took about 3 ms off each 4K frame (GHUB-0263). Call before
+// the QApplication exists, since Qt reads this once; a value already set in
+// the environment is left alone.
+inline void keepLargeGlyphs()
+{
+    constexpr const char* name = "QT_MAX_CACHED_GLYPH_SIZE"; // untranslated: an environment variable
+    if (!qEnvironmentVariableIsSet(name))
+        qputenv(name, "256");
+}
